@@ -50,13 +50,24 @@ function colorPicker(name, current) {
     <label class="swatch swatch-add" title="Escolher outra cor">+<input type="color" value="${cur.toLowerCase()}" data-color-free aria-label="Escolher outra cor"></label>
     <input type="hidden" name="${name}" value="${cur}"></div>`;
 }
+/* arrastar no seletor nativo dispara 'input' a cada tom: mostra só uma bolinha de prévia (.live),
+   sem gravar nem criar uma bolinha por tom intermediário */
 document.addEventListener('input', (e) => {
   const inp = e.target.closest?.('[data-color-free]'); if (!inp) return;
   const wrap = inp.closest('.swatches'); const hex = inp.value.toUpperCase();
-  $$('.swatch.on', wrap).forEach(s => s.classList.remove('on'));
+  let live = $('.swatch.live', wrap);
+  if (!live) { live = document.createElement('button'); live.type = 'button'; live.className = 'swatch fill live'; live.dataset.act = 'pick-swatch'; inp.closest('label').before(live); }
+  live.dataset.color = hex; live.style.cssText = cssTb(hex); live.title = 'Personalizada ' + hex;
+  $$('.swatch.on', wrap).forEach(s => s.classList.remove('on')); live.classList.add('on');
+});
+/* 'change' só ao fechar o seletor: confirma a cor escolhida (uma vez) */
+document.addEventListener('change', (e) => {
+  const inp = e.target.closest?.('[data-color-free]'); if (!inp) return;
+  const wrap = inp.closest('.swatches'); const hex = inp.value.toUpperCase();
+  const live = $('.swatch.live', wrap); if (live) live.remove();
   let sw = $$('.swatch[data-color]', wrap).find(s => s.dataset.color === hex);
   if (!sw) { sw = document.createElement('button'); sw.type = 'button'; sw.className = 'swatch fill'; sw.dataset.act = 'pick-swatch'; sw.dataset.color = hex; sw.style.cssText = cssTb(hex); sw.title = 'Personalizada ' + hex; inp.closest('label').before(sw); }
-  sw.classList.add('on');
+  $$('.swatch.on', wrap).forEach(s => s.classList.remove('on')); sw.classList.add('on');
   const h = wrap.querySelector('input[type=hidden]'); h.value = hex; h.dispatchEvent(new Event('change', { bubbles: true }));
 });
 
