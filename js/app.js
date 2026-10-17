@@ -47,7 +47,7 @@ function sidebarHTML() {
     `<button class="nav-btn ${S.route === n.id ? 'active' : ''}" data-act="go" data-route="${n.id}" ${S.route === n.id ? 'aria-current="page"' : ''}>${icon(n.icon)}<span>${n.label}</span>${n.count ? `<span class="count">${n.count()}</span>` : ''}</button>`).join('')}
   <div class="sidebar-foot">
     ${a ? `<button class="mini-timer" data-act="go" data-route="timesheet"><span class="row small"><span class="dot ${a.state === 'running' ? 'live' : 'paused'}"></span>${a.state === 'running' ? 'Registrando' : 'Pausado'}</span><span class="t" data-tick="${a.id}">${fmtClock(entryMs(a))}</span><span class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(entryTitle(a))}</span>${pausesOf(a.id).length ? `<span class="small" style="color:var(--warn);font-weight:600">${pausesOf(a.id).length} pausa(s) para revisar</span>` : ''}</button>` : ''}
-    <div class="data-mode"><span class="dot ${db.adapter.persistent ? 'live' : 'mem'}"></span>${db.syncError ? 'Falha de sincronização' : db.adapter.persistent ? 'Sincronizado' : 'Em memória · some ao recarregar'} · v2.01</div>
+    <div class="data-mode"><span class="dot ${db.adapter.persistent ? 'live' : 'mem'}"></span>${db.syncError ? 'Falha de sincronização' : db.adapter.persistent ? 'Sincronizado' : 'Em memória · some ao recarregar'} · v2.01${db.adapter.persistent ? ` · <a href="#" data-act="signout">Sair</a>` : ''}</div>
   </div>`;
 }
 
@@ -244,12 +244,30 @@ function applyAppearance() {
 }
 
 /* ---------- inicialização ---------- */
+ACTIONS.signout = async () => {
+  try { await window.tempoClient?.auth.signOut(); } catch (e) { /* segue mesmo assim */ }
+  location.reload();
+};
+
 async function boot() {
-  await db.init(new MemoryAdapter());
+  const online = !!(TEMPO_CFG.supabaseUrl && window.supabase);
+  let adapter = new MemoryAdapter();
+  if (online) {
+    const client = window.supabase.createClient(TEMPO_CFG.supabaseUrl, TEMPO_CFG.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true } });
+    window.tempoClient = client;
+    await authGate(client);
+    adapter = new SupabaseAdapter(client);
+  }
+  await db.init(adapter);
+  if (db.syncError) {
+    // não semeia nem mostra nada por cima: evita duplicar dados se a leitura falhou
+    document.querySelector('.content').innerHTML = `<div class="banner warn">${icon('alert', 'ico')}<span class="grow"><b>Não consegui ler seus dados.</b> ${esc(db.syncError)}</span><button class="btn sm" onclick="location.reload()">Tentar de novo</button></div>`;
+    return;
+  }
   if (!db.all('tempo_work_types').length) seedConfig();
   ensureStatusKinds();
   ensureMonthSheets();
-  if (!db.all('tempo_projects').length && !db.setting('startedEmpty', false)) seedDemo();
+  if (!online && !db.all('tempo_projects').length && !db.setting('startedEmpty', false)) seedDemo();
   const now = new Date().toISOString();
   db.all('tempo_reminders').forEach(r => { if (r.freq === 'interval' && !r.lastFired) remState[r.id] = now; });
   const h = (location.hash || '').slice(1); if (NAV.some(n => n.id === h)) S.route = h;

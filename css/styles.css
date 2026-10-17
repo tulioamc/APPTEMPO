@@ -575,3 +575,12 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 .rb-table .rb-name .rb-in { font-weight: 500; }
 .rb-table tfoot td { padding-top: 6px; }
 @media (max-width: 860px) { .rb-cols { grid-template-columns: 1fr; } }
+
+/* ---------- v2.01: login ---------- */
+.login-wrap { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg, #F4F5F8); padding: 16px; z-index: 50; }
+.login-card { width: min(380px, 100%); background: var(--surface, #fff); border: 1px solid var(--line); border-radius: var(--radius, 12px); padding: 24px; display: grid; gap: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.06); }
+.login-brand { display: flex; align-items: center; gap: 10px; font-size: 1.2em; color: var(--accent, #2E43D6); }
+.login-field { display: grid; gap: 6px; font-size: .9em; color: var(--fg-2); }
+.login-field input { border: 1px solid var(--line-strong, #CDD2DC); border-radius: var(--radius-sm, 8px); padding: 10px 12px; font: inherit; background: var(--surface, #fff); color: var(--fg); }
+.login-msg { min-height: 1.2em; font-size: .88em; color: var(--warn, #b5532a); }
+.login-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }

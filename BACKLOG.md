@@ -181,3 +181,11 @@ Achados no CSV (67 projetos, 12 subitens): R$ 335.100 recebidos em 53 projetos p
 - Totais do mês: pago por você, já reembolsado, saldo líquido (custo real) e ainda a reembolsar.
 - Importação do CSV do Notion (mês pela coluna Data; linhas sem data seguem o mês anterior). Os dados não ficam no código: são importados dentro do app.
 - Pendente: levar o saldo líquido de reembolsos para o balanço mensal do Financeiro (2.02) e persistir no Supabase.
+
+### Banco online e login (2.01)
+- Login por e-mail e senha (Supabase Auth). Sem sessão, aparece a tela de entrar. "Sair" fica no rodapé da barra lateral.
+- Dados gravados no Supabase (tabelas tempo_*, com RLS por usuário). Gravações são enfileiradas na ordem em que acontecem, para respeitar as chaves estrangeiras.
+- Sem login (ou sem a biblioteca do Supabase), o app continua em modo memória com dados fictícios.
+- Chave pública em src/config.js. Nunca colocar a service_role no repositório.
+- Campos sem coluna no banco aparecem no console como aviso; tabela tempo_reminders guarda o conteúdo em jsonb.
+- Pendente: migração completa do Notion (Terapias e Freelas) e teste real com a conta no navegador.
