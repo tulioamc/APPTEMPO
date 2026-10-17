@@ -214,22 +214,11 @@ function checkReminders() {
     }
   });
 }
-setInterval(checkReminders, 30000);
-setInterval(scanAlerts, 300000);
-setInterval(ensureMonthSheets, 3600000);
+setInterval(() => checkReminders(), 30000);
+setInterval(() => scanAlerts(), 300000);
+setInterval(() => ensureMonthSheets(), 3600000);
 
 /* ---------- aparência ---------- */
-const ACCENTS = {
-  cobalto: ['#2E43D6', '#7487FF'], verde: ['#1D7A4A', '#5CCB8E'], laranja: ['#C2560F', '#F59A5B'],
-  rosa: ['#C42E78', '#F07DB5'], roxo: ['#6B3FD0', '#A98BFF'], grafite: ['#2F3542', '#C9CED9']
-};
-const FONTS = {
-  sonoma: ['BR Sonoma (se instalada no aparelho)', '"BR Sonoma", "Manrope", -apple-system, BlinkMacSystemFont, sans-serif'],
-  manrope: ['Manrope', '"Manrope", -apple-system, BlinkMacSystemFont, sans-serif'],
-  sora: ['Sora', '"Sora", -apple-system, BlinkMacSystemFont, sans-serif'],
-  system: ['Fonte do sistema (SF Pro no Mac/iPhone)', '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif']
-};
-const DEFAULT_RADIUS = 10;
 function applyAppearance() {
   const root = document.documentElement;
   const theme = db.setting('theme', 'system');
