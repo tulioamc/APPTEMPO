@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/icons/favicon.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Tempo">
+<title>Tempo</title>
+<meta name="theme-color" content="#2E43D6">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<style id="accent-style"></style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" aria-label="Navegação"></aside>
+  <div class="scrim" data-act="toggle-nav"></div>
+  <main class="main">
+    <header class="topbar">
+      <button class="btn icon ghost menu-btn" data-act="toggle-nav" aria-label="Abrir menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <div class="grow"><div class="crumb"></div><h1 class="page-title">Time Sheet</h1></div>
+      <div class="row top-actions"></div>
+    </header>
+    <div class="content"></div>
+  </main>
+  <div class="mobile-timer"></div>
+</div>
+<script src="/js/store.js"></script>
+<script src="/js/colors.js"></script>
+<script src="/js/domain.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/combo.js"></script>
+<script src="/js/table.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/notices.js"></script>
+<script src="/js/view-reimb.js"></script>
+<script src="/js/view-timesheet.js"></script>
+<script src="/js/view-projects.js"></script>
+<script src="/js/view-project-detail.js"></script>
+<script src="/js/view-tasks-quotes.js"></script>
+<script src="/js/view-finance-reports.js"></script>
+<script src="/js/view-registry.js"></script>
+<script src="/js/view-prefs.js"></script>
+<script src="/js/view-import.js"></script>
+<script>
+boot();
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+</script>
+</body>
+</html>
