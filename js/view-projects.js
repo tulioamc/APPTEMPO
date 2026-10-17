@@ -67,7 +67,7 @@ function filterBar(f, ns, { situ = false, extra = '' } = {}) {
   const active = ['agency', 'client', 'status', 'pay', 'wt', 'year', 'month', 'from', 'to'].filter(k => f[k]).length + (f.q ? 1 : 0);
   return `<div class="filters ${S.fltOpen?.[ns] ? 'open' : ''}">
     ${'q' in f ? `<input id="${ns}-q" class="input search" placeholder="Buscar projeto, cliente ou agência" value="${esc(f.q)}" data-input="flt" data-ns="${ns}" data-k="q">` : ''}
-    <button class="btn sm flt-toggle" data-act="flt-toggle" data-ns="${ns}" aria-expanded="${S.fltOpen?.[ns] ? 'true' : 'false'}">${icon('sort')} Filtros${active ? ` (${active})` : ''}</button>
+    <div class="flt-wrap"><button class="btn sm flt-toggle" data-act="flt-toggle" data-ns="${ns}" aria-expanded="${S.fltOpen?.[ns] ? 'true' : 'false'}">${icon('sort')} Filtros${active ? ` (${active})` : ''}</button>
     <div class="flt-more">
     ${situ ? `<div class="seg">${[['all', 'Todos'], ['active', 'Ativos'], ['done', 'Concluídos']].map(([v, l]) => `<button class="${f.situ === v ? 'on' : ''}" data-act="flt-set" data-ns="${ns}" data-k="situ" data-v="${v}">${l}</button>`).join('')}</div>` : ''}
     <select id="${ns}-agency" class="input" data-on="flt" data-ns="${ns}" data-k="agency" aria-label="Agência">${options(agencies(), f.agency, { empty: true, emptyLabel: 'Todas as agências' })}<option value="__none" ${f.agency === '__none' ? 'selected' : ''}>Sem agência (direto)</option></select>
@@ -79,7 +79,7 @@ function filterBar(f, ns, { situ = false, extra = '' } = {}) {
     <select id="${ns}-month" class="input" style="min-width:110px" data-on="flt" data-ns="${ns}" data-k="month" aria-label="Mês">${options(MONTHS.map((m, i) => ({ id: pad(i + 1), name: m[0].toUpperCase() + m.slice(1) })), f.month, { empty: true, emptyLabel: 'Mês' })}</select>
     <span class="row" style="gap:4px"><input id="${ns}-from" type="date" class="input" style="min-width:0;width:140px" value="${f.from}" data-on="flt" data-ns="${ns}" data-k="from" aria-label="De"><span class="faint">–</span><input id="${ns}-to" type="date" class="input" style="min-width:0;width:140px" value="${f.to}" data-on="flt" data-ns="${ns}" data-k="to" aria-label="Até"></span>
     ${active ? `<button class="btn sm ghost" data-act="flt-clear" data-ns="${ns}">${icon('x')} Limpar filtros (${active})</button>` : ''}
-    </div>
+    </div></div>
     ${extra}
   </div>`;
 }

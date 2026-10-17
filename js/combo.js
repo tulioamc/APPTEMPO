@@ -22,7 +22,7 @@ function openCombo(anchor, { kind, value, onPick, allowEmpty = false }) {
     pop.innerHTML = `<input class="input sm combo-q" placeholder="Buscar ou criar…" value="${esc(q)}" aria-label="Buscar">
       <div class="combo-list">${rows.map((r, i) => `<button type="button" class="combo-opt ${i === hi ? 'hi' : ''} ${r.id === value ? 'cur' : ''}" data-i="${i}">${r.html}${r.id === value ? `<span class="grow"></span>${icon('check', 'ico')}` : ''}</button>`).join('') || '<div class="faint small" style="padding:8px">Nada encontrado.</div>'}</div>`;
     pop._rows = rows;
-    const inp = $('.combo-q', pop); inp.focus(); inp.setSelectionRange(q.length, q.length);
+    const inp = $('.combo-q', pop); inp.focus({ preventScroll: true }); inp.setSelectionRange(q.length, q.length);
   };
   const pick = async (r) => {
     if (!r) return;

@@ -558,8 +558,8 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 .kpi.neg .v { color: var(--warn, #b5532a); }
 .rb-head { padding: 10px 14px; }
 .rb-table-wrap { padding: 0; overflow-x: auto; }
-.rb-table { width: 100%; border-collapse: collapse; font-size: .92em; }
-.rb-table th, .rb-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; white-space: nowrap; }
+.rb-table { width: 100%; border-collapse: collapse; font-size: .92em; table-layout: fixed; }
+.rb-table th, .rb-table td { overflow: hidden; padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; white-space: nowrap; }
 .rb-table th { font-size: .78em; text-transform: uppercase; letter-spacing: .05em; color: var(--fg-3); font-weight: 600; }
 .rb-table tfoot td { font-weight: 600; border-bottom: 0; }
 .rb-table .num, .rb-table th.num { text-align: right; }
@@ -605,9 +605,10 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 
 /* filtros: sempre escondidos atrás do botão Filtros (janelinha flutuante) */
 .filters { position: relative; }
+.flt-wrap { position: relative; margin-left: auto; }
 .flt-toggle { display: inline-flex; }
 .flt-more { display: none; }
-.filters.open .flt-more { display: flex; flex-direction: column; gap: 8px; position: absolute; top: calc(100% + 6px); right: 16px; width: min(320px, calc(100% - 32px)); z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0,0,0,.16); padding: 14px; }
+.filters.open .flt-more { display: flex; flex-direction: column; gap: 8px; position: absolute; top: calc(100% + 6px); right: 0; width: min(320px, calc(100vw - 32px)); z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0,0,0,.16); padding: 14px; }
 .filters.open .flt-more > * { width: 100%; max-width: none; flex: none; }
 .filters.open .flt-more .row { width: 100%; }
 .filters.open .flt-more input[type=date] { flex: 1 1 0; width: auto; min-width: 0; }

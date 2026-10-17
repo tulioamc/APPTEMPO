@@ -259,4 +259,4 @@ Adendo ao item de reembolsos acima. Tudo que o app lê ou sugere vai para a fila
 - Pendente: "Cancelado" no campo de pagamento ficou sem status de pagamento (o app só tem o status do projeto "Cancelado").
 
 ## Bugs (reportados pelo Tulio, 17/10/2026)
-- [ ] Ao clicar em "Pago" para mudar o status, abre a janelinha mas a página rola até o fim (base). Provável foco/scroll em um elemento da base ao abrir o popover de status (combo). Investigar.
+- [x] Ao clicar em "Pago" para mudar o status, abre a janelinha mas a página rola até o fim (base). Corrigido: o foco do campo de busca do combo rolava a página; agora usa preventScroll. Provável foco/scroll em um elemento da base ao abrir o popover de status (combo). Investigar.

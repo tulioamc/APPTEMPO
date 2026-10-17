@@ -161,7 +161,7 @@ VIEWS.reimb = () => {
     </tr>`;
     return `<details class="rb-month" open>
       <summary><span class="rb-mt">${rbLabel(ym)}</span><span class="rb-mtot">${money(total)}</span><span class="small muted">pago ${money(p)} · reembolsado ${money(rf)} · pendente ${money(pend)}</span></summary>
-      <div class="card rb-table-wrap"><table class="rb-table">
+      <div class="card rb-table-wrap"><table class="rb-table"><colgroup><col style="width:22%"><col style="width:11%"><col style="width:13%"><col style="width:15%"><col style="width:11%"><col style="width:12%"><col><col style="width:44px"></colgroup>
         <thead><tr><th>Despesa</th><th>Data</th><th>Pagamento</th><th>Requerimento</th><th class="num">Valor</th><th>Reembolso</th><th>Anotação</th><th></th></tr></thead>
         <tbody>${rows.map(tr).join('') || `<tr><td colspan="8" class="faint">Sem linhas neste mês.</td></tr>`}</tbody>
         <tfoot><tr><td colspan="4">Total do mês</td><td class="num"><b>${money(total)}</b></td><td colspan="3"><button class="btn sm ghost" data-act="rb-add" data-m="${ym}">${icon('plus')} Linha</button></td></tr></tfoot>
