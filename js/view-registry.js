@@ -47,6 +47,10 @@ CHANGES['reg-q'] = (el) => { S.reg.q = el.value; render(); };
 CHANGES['reg-arch'] = (el) => { S.reg.arch = el.checked; render(); };
 ACTIONS['party-new'] = (el) => openPartyForm(el.dataset.kind, null);
 ACTIONS['party-open'] = (el) => openParty(el.dataset.kind, el.dataset.id);
+ACTIONS['party-color'] = (el) => {
+  const T = el.dataset.kind === 'agency' ? 'tempo_agencies' : 'tempo_clients'; const id = el.dataset.id;
+  openColorPop(el, db.get(T, id).color, (c) => db.update(T, id, { color: c }));
+};
 
 function openPartyForm(kind, id, cb, preset = {}) {
   const T = kind === 'agency' ? 'tempo_agencies' : 'tempo_clients';
@@ -100,7 +104,9 @@ function openParty(kind, id) {
       const ps = partyProjects(kind, id); const ms = ps.reduce((s, p) => s + projectMs(p.id), 0);
       const sum = (fn) => ps.reduce((s, p) => s + (fn(p) || 0), 0);
       const ag = kind === 'client' ? db.get('tempo_agencies', x.agency_id) : null;
-      return `<div class="dh"><div class="grow"><div class="small muted">${kind === 'agency' ? 'Agência contratante' : 'Cliente' + (ag ? ' · ' + esc(ag.name) : ' direto')}</div><h2 class="row" style="gap:8px;margin-top:2px">${kind === 'agency' ? tag(x.name, x.color, { upper: true }) + ` <span class="tag tg abbr mono small" style="${cssTb(x.color)}">${esc(agencyAbbr(x))}</span>` : clientTag(x)}</h2></div><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+      return `<div class="dh"><div class="grow"><div class="small muted">${kind === 'agency' ? 'Agência contratante' : 'Cliente' + (ag ? ' · ' + esc(ag.name) : ' direto')}</div>${kind === 'agency'
+  ? `<h2 class="party-name">${esc(x.name)}</h2><button type="button" class="party-color row" style="gap:8px" data-act="party-color" data-kind="${kind}" data-id="${id}" title="Mudar cor" aria-label="Mudar cor">${tag(x.name, x.color, { upper: true })}<span class="tag tg abbr mono small" style="${cssTb(x.color)}">${esc(agencyAbbr(x))}</span></button>`
+  : `<h2 class="row" style="gap:8px;margin-top:2px"><button type="button" class="party-color" data-act="party-color" data-kind="${kind}" data-id="${id}" title="Mudar cor" aria-label="Mudar cor">${clientTag(x)}</button></h2>`}</div><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
       <div class="db">
         <div class="kpis"><div class="kpi"><span class="k">Projetos</span><span class="v">${ps.length}</span></div><div class="kpi"><span class="k">Horas</span><span class="v">${fmtH(ms)}</span></div><div class="kpi"><span class="k">Orçado</span><span class="v">${fmtMoney0(sum(p => Number(p.budget)))}</span></div><div class="kpi"><span class="k">Em aberto</span><span class="v">${fmtMoney0(sum(remainingOf))}</span></div></div>
         <div class="props"><span class="k">CNPJ</span><span class="mono">${esc(x.cnpj || '—')}</span><span class="k">Contato</span><span>${esc(x.contact || '—')}</span><span class="k">Endereço</span><span>${esc(x.address || '—')}</span><span class="k">Observações</span><span class="muted">${esc(x.notes || '—')}</span><span class="k">Cadastrado em</span><span>${fmtDate(x.created_at)}</span></div>

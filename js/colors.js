@@ -13,7 +13,24 @@ const LEGACY_COLOR = { gray: '#D9DCE2', brown: '#E6CDB9', orange: '#F7C6A0', yel
 const COLORS = PRESET_COLORS.map(c => c[0]);
 const COLOR_NAMES = Object.fromEntries(PRESET_COLORS);
 function hexOf(c) { if (!c) return '#D9DCE2'; if (c[0] === '#') return c.toUpperCase(); return LEGACY_COLOR[c] || '#D9DCE2'; }
-const cssTb = (c) => `--tb:${hexOf(c)}`;
+/* texto da etiqueta: mesmo matiz e saturação da cor, luminosidade oposta.
+   caixa clara (L 100%→50%): texto 50%→0%; caixa escura (L 50%→0%): texto 100%→50% */
+function relLum(hex) {
+  const n = parseInt(hexOf(hex).slice(1), 16);
+  const [r, g, b] = [n >> 16, n >> 8 & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); });
+  return .2126 * r + .7152 * g + .0722 * b;
+}
+function contrastOf(a, b) { const x = relLum(a), y = relLum(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); }
+function textOn(hex) {
+  const [h, s, l] = hexToHsl(hex);
+  /* regra: mesmo matiz e saturação, luminosidade oposta */
+  const rule = hslToHex(h, s, l > .5 ? l - .5 : l + .5);
+  if (contrastOf(hex, rule) >= 4.5) return rule;
+  /* HSL engana em azul e roxo (50% parece escuro): se a regra não contrastar, usa o lado oposto */
+  const cands = [rule, hslToHex(h, s, .08), hslToHex(h, s, .97)];
+  return cands.reduce((best, c) => contrastOf(hex, c) > contrastOf(hex, best) ? c : best);
+}
+const cssTb = (c) => { const h = hexOf(c); return `--tb:${h};--tt:${textOn(h)}`; };
 const presetAt = (i) => COLORS[i % COLORS.length];
 
 /* conversões para gerar variações (cor do cliente a partir da agência) */
