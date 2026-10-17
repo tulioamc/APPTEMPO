@@ -5,10 +5,11 @@ function comboItems(kind) {
   if (['work', 'payment', 'quote'].includes(kind)) return statuses(kind).map(s => ({ id: s.id, name: s.name, color: s.color, html: tag(s.name, s.color, { pill: kind !== 'payment' }) }));
   if (kind.startsWith('reimb_')) return statuses(kind).map(s => ({ id: s.id, name: s.name, color: s.color, html: tag(s.name, s.color, { pill: true }) }));
   if (kind === 'wt') return workTypes().map(w => ({ id: w.id, name: w.name, color: w.color, html: tag(w.name, w.color) }));
+  if (kind === 'agency') return agencies().map(a => ({ id: a.id, name: a.name, color: a.color, html: tag(a.name, a.color, { upper: true }) }));
   if (kind === 'client') return clients().map(c => ({ id: c.id, name: c.name + ' ' + (db.get('tempo_agencies', c.agency_id)?.name || ''), html: clientTag(c) }));
   return [];
 }
-function openCombo(anchor, { kind, value, onPick, allowEmpty = false }) {
+function openCombo(anchor, { kind, value, onPick, allowEmpty = false, emptyLabel = 'Nenhum' }) {
   $('.combo-pop')?.remove();
   const pop = document.createElement('div'); pop.className = 'colormenu combo-pop'; pop.setAttribute('role', 'listbox');
   let q = '', hi = 0;
@@ -16,7 +17,7 @@ function openCombo(anchor, { kind, value, onPick, allowEmpty = false }) {
   const draw = () => {
     const items = comboItems(kind).filter(x => !q || norm(x.name).includes(norm(q)));
     const exact = comboItems(kind).some(x => norm(x.name.split(' ')[0]) === norm(q) || norm(x.name) === norm(q));
-    const rows = [...(allowEmpty && !q ? [{ id: '', html: '<span class="faint">Nenhum</span>' }] : []), ...items];
+    const rows = [...(allowEmpty && !q ? [{ id: '', html: `<span class="faint">${esc(emptyLabel)}</span>` }] : []), ...items];
     if (canCreate && q.trim() && !exact) rows.push({ create: true, id: '__new', html: `${icon('plus')} Criar <b>${esc(q.trim())}</b>` });
     hi = Math.min(hi, rows.length - 1);
     pop.innerHTML = `<input class="input sm combo-q" placeholder="Buscar ou criar…" value="${esc(q)}" aria-label="Buscar">

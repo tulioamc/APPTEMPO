@@ -123,7 +123,7 @@ ACTIONS.cell = (td, e) => {
   if (td.querySelector('.cell-input')) return;
   const def = TABLE_DEFS[td.dataset.table]; const col = def.cols[td.dataset.col]; const row = def.rowById(td.dataset.id); const ed = col.edit;
   if (!row || !ed) return;
-  if (ed.type === 'combo') return openCombo(td, { kind: typeof ed.kind === 'function' ? ed.kind(row) : ed.kind, value: ed.get(row), allowEmpty: ed.allowEmpty, onPick: (v) => { ed.set(row, v); propagateEdit(td.dataset.table, td.dataset.col, row, v); } });
+  if (ed.type === 'combo') return openCombo(td, { kind: typeof ed.kind === 'function' ? ed.kind(row) : ed.kind, value: ed.get(row), allowEmpty: ed.allowEmpty, emptyLabel: ed.emptyLabel, onPick: (v) => { ed.set(row, v); propagateEdit(td.dataset.table, td.dataset.col, row, v); } });
   const cur = ed.get(row);
   const w = td.getBoundingClientRect().width;
   const attrs = ed.type === 'money' ? moneyAttrs(cur) : ed.type === 'date' ? `type="date" value="${cur || ''}"` : ed.type === 'number' ? `type="number" step="0.5" value="${cur ?? ''}"` : `type="text" value="${esc(cur || '')}"`;

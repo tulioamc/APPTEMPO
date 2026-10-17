@@ -34,7 +34,7 @@ const AGCOLS = {
 };
 const CLCOLS = {
   name: { label: 'Cliente', ico: 'text', w: 260, sort: c => c.name, cell: c => `<span class="cell-name"><span class="ct">${clientTag(c)}${c.archived ? ' <span class="inh">arquivado</span>' : ''}</span>${openBtn('party-open', c.id, 'data-kind="client"')}</span>`, edit: txtEdit('tempo_clients', 'name', true) },
-  agency: { label: 'Agência', ico: 'spin', w: 150, sort: c => db.get('tempo_agencies', c.agency_id)?.name || '~', cell: c => agencyTag(db.get('tempo_agencies', c.agency_id)) },
+  agency: { label: 'Agência', ico: 'spin', w: 150, sort: c => db.get('tempo_agencies', c.agency_id)?.name || '~', cell: c => agencyTag(db.get('tempo_agencies', c.agency_id)), edit: { type: 'combo', kind: 'agency', allowEmpty: true, emptyLabel: 'Direto (sem agência)', get: c => c.agency_id, set: (c, v) => db.update('tempo_clients', c.id, { agency_id: v || null }) } },
   contact: { label: 'Contato', ico: 'users', w: 220, cls: 'obs', sort: c => c.contact || '', cell: c => esc(c.contact || ''), edit: txtEdit('tempo_clients', 'contact') },
   nprojects: { label: 'Projetos', ico: 'hash', w: 90, money: true, sort: c => partyProjects('client', c.id).length, cell: c => partyProjects('client', c.id).length },
   hours: { label: 'Horas', ico: 'clock', w: 100, money: true, sort: c => pSum('client', c.id, p => projectMs(p.id)), val: c => pSum('client', c.id, p => projectMs(p.id)), fmt: v => fmtH(v), cell: c => fmtH(pSum('client', c.id, p => projectMs(p.id))) },
