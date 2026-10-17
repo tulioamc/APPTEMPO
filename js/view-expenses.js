@@ -41,18 +41,32 @@ function exCopyMonth(target, src) {
 }
 /* Chamado ao abrir o app: cria os meses que faltam até o atual, copiando o último existente. */
 function exEnsureMonths() {
-  const months = exMonths(); if (!months.length) return;
-  const now = ymd(new Date()).slice(0, 7); let cur = months[0], guard = 0, changed = false;
+  const now = ymd(new Date()).slice(0, 7);
+  const months = exMonths().filter(m => m <= now); if (!months.length) return;
+  let cur = months[0], guard = 0, changed = false;
   while (cur < now && guard++ < 24) { const t = rbAddMonth(cur, 1); if (exCopyMonth(t, cur)) changed = true; cur = t; }
   if (changed) db.emit();
 }
 
-ACTIONS['ex-month'] = (el) => { S.exMonth = rbAddMonth(S.exMonth || ymd(new Date()).slice(0, 7), Number(el.dataset.d)); render(); };
-ACTIONS['ex-create'] = () => {
-  const ym = S.exMonth || ymd(new Date()).slice(0, 7);
+const exNow = () => ymd(new Date()).slice(0, 7);
+/* intervalo mostrado: de (mês inicial) até (mês final), o mais recente em cima */
+const exRange = () => { let from = S.exFrom || rbAddMonth(exNow(), -2), to = S.exTo || exNow(); if (from > to) [from, to] = [to, from]; return { from, to }; };
+ACTIONS['ex-create'] = (el) => {
+  const ym = el.dataset.m;
   const prev = exMonths().find(m => m < ym);
   if (!exCopyMonth(ym, prev)) { exAddRow(ym, 'out'); }
   db.emit(); toast(prev ? `Mês criado a partir de ${rbLabel(prev)}` : 'Mês criado');
+};
+ACTIONS['ex-preset'] = (el) => {
+  const now = exNow(); const m = el.dataset.p;
+  if (m === 'all') { const all = exMonths(); S.exFrom = all[all.length - 1] || now; S.exTo = now; }
+  else { S.exTo = now; S.exFrom = rbAddMonth(now, -(Number(m) - 1)); }
+  render();
+};
+CHANGES['ex-range'] = (el) => {
+  if (!el.value) return;
+  if (el.dataset.k === 'from') S.exFrom = el.value; else S.exTo = el.value;
+  render();
 };
 function exAddRow(ym, kind) {
   db.insert('tempo_expenses', { month: ym, kind, name: '', cat: '', note: '', amount: null, due_date: exDateIn(ym, 10), paid_on: null, status: EX_OPEN[kind], inst_no: null, inst_total: null, order: exRows(ym).length });
@@ -101,61 +115,78 @@ CHANGES['ex-import'] = async (el) => {
 const exCatOptions = (cur) => `<option value="">Sem categoria</option>` + Object.entries(EX_CATS).map(([main, subs]) =>
   `<optgroup label="${main}">${subs.map(s => { const v = main + '/' + s; return `<option value="${v}" ${v === cur ? 'selected' : ''}>${s}</option>`; }).join('')}</optgroup>`).join('');
 
-VIEWS.expenses = () => {
-  const ym = S.exMonth || ymd(new Date()).slice(0, 7); S.exMonth = ym;
-  const months = exMonths();
-  const exists = exRows(ym).length > 0 || months.includes(ym);
+/* resumo de um mês: previsto e realizado */
+function exMonthTotals(ym) {
   const ins = exRows(ym, 'in'), outs = exRows(ym, 'out');
   const live = (rows) => rows.filter(r => r.status !== EX_OFF);
-  const inPrev = exSum(live(ins)), inDone = exSum(ins.filter(r => r.status === EX_DONE.in));
-  const outPrev = exSum(live(outs)), outDone = exSum(outs.filter(r => r.status === EX_DONE.out));
-  const money = (v) => fmtMoney0(v);
-  const fmt = (v) => fmtMoney(v);
-
-  const tr = (r) => {
-    const sign = r.kind === 'in' ? '+' : '−';
-    return `<tr class="${r.status === EX_OFF ? 'ex-off' : ''}">
-      <td><select class="rb-in" data-on="ex-field" data-id="${r.id}" data-k="cat" aria-label="Categoria">${exCatOptions(r.cat)}</select></td>
-      <td><input class="rb-in" value="${esc(r.name || '')}" data-on="ex-field" data-id="${r.id}" data-k="name" aria-label="Nome"></td>
-      <td><input class="rb-in" type="date" value="${r.due_date || ''}" data-on="ex-field" data-id="${r.id}" data-k="due_date" aria-label="Vencimento"></td>
-      <td class="num"><span class="ex-sign">${sign}</span><input class="rb-in num" ${moneyAttrs(r.amount)} data-on="ex-field" data-id="${r.id}" data-k="amount" aria-label="Valor"></td>
-      <td><select class="rb-in" data-on="ex-status" data-id="${r.id}" aria-label="Status">${EX_STATUS[r.kind].map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
-      <td><input class="rb-in" type="date" value="${r.paid_on || ''}" data-on="ex-field" data-id="${r.id}" data-k="paid_on" aria-label="Paga em"></td>
-      <td><input class="rb-in" value="${exInstLabel(r)}" placeholder="—" data-on="ex-field" data-id="${r.id}" data-k="inst" aria-label="Parcela"></td>
-      <td><input class="rb-in" value="${esc(r.note || '')}" data-on="ex-field" data-id="${r.id}" data-k="note" aria-label="Anotação"></td>
-      <td><button class="icon-btn ghost" data-act="ex-del" data-id="${r.id}" title="Remover linha">×</button></td>
-    </tr>`;
+  return {
+    inPrev: exSum(live(ins)), inDone: exSum(ins.filter(r => r.status === EX_DONE.in)),
+    outPrev: exSum(live(outs)), outDone: exSum(outs.filter(r => r.status === EX_DONE.out))
   };
-  const section = (kind, rows, title, total) => `<div class="ex-sec">
-    <div class="ex-sec-h"><b>${title}</b><span class="grow"></span><span class="mono ${kind === 'in' ? 'ex-plus' : 'ex-minus'}">${kind === 'in' ? '+' : '−'} ${fmt(total)}</span></div>
+}
+function exSectionHTML(ym, kind) {
+  const rows = exRows(ym, kind); const total = exSum(rows.filter(r => r.status !== EX_OFF));
+  const title = kind === 'in' ? 'Entradas' : 'Saídas';
+  return `<div class="ex-sec">
+    <div class="ex-sec-h"><b>${title}</b><span class="grow"></span><span class="mono ${kind === 'in' ? 'ex-plus' : 'ex-minus'}">${kind === 'in' ? '+' : '−'} ${fmtMoney(total)}</span></div>
     <div class="card rb-table-wrap"><table class="rb-table ex-table"><colgroup><col style="width:15%"><col style="width:16%"><col style="width:11%"><col style="width:14%"><col style="width:15%"><col style="width:11%"><col style="width:7%"><col><col style="width:44px"></colgroup>
       <thead><tr><th>Categoria</th><th>Nome</th><th>Vencimento</th><th class="num">Valor</th><th>Status</th><th>Paga em</th><th>Parcela</th><th>Anotação</th><th></th></tr></thead>
-      <tbody>${rows.map(tr).join('') || `<tr><td colspan="9" class="faint">${kind === 'in' ? 'Nenhuma entrada' : 'Nenhuma saída'} neste mês.</td></tr>`}</tbody>
+      <tbody>${rows.map(exRowHTML).join('') || `<tr><td colspan="9" class="faint">${kind === 'in' ? 'Nenhuma entrada' : 'Nenhuma saída'} neste mês.</td></tr>`}</tbody>
       <tfoot><tr><td colspan="8"><button class="btn sm ghost" data-act="ex-add" data-kind="${kind}" data-m="${ym}">${icon('plus')} ${kind === 'in' ? 'Entrada' : 'Saída'}</button></td><td></td></tr></tfoot>
     </table></div></div>`;
+}
+function exRowHTML(r) {
+  const sign = r.kind === 'in' ? '+' : '−';
+  return `<tr class="${r.status === EX_OFF ? 'ex-off' : ''}">
+    <td><select class="rb-in" data-on="ex-field" data-id="${r.id}" data-k="cat" aria-label="Categoria">${exCatOptions(r.cat)}</select></td>
+    <td><input class="rb-in" value="${esc(r.name || '')}" data-on="ex-field" data-id="${r.id}" data-k="name" aria-label="Nome"></td>
+    <td><input class="rb-in" type="date" value="${r.due_date || ''}" data-on="ex-field" data-id="${r.id}" data-k="due_date" aria-label="Vencimento"></td>
+    <td class="num"><span class="ex-sign">${sign}</span><input class="rb-in num" ${moneyAttrs(r.amount)} data-on="ex-field" data-id="${r.id}" data-k="amount" aria-label="Valor"></td>
+    <td><select class="rb-in" data-on="ex-status" data-id="${r.id}" aria-label="Status">${EX_STATUS[r.kind].map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
+    <td><input class="rb-in" type="date" value="${r.paid_on || ''}" data-on="ex-field" data-id="${r.id}" data-k="paid_on" aria-label="Paga em"></td>
+    <td><input class="rb-in" value="${exInstLabel(r)}" placeholder="—" data-on="ex-field" data-id="${r.id}" data-k="inst" aria-label="Parcela"></td>
+    <td><input class="rb-in" value="${esc(r.note || '')}" data-on="ex-field" data-id="${r.id}" data-k="note" aria-label="Anotação"></td>
+    <td><button class="icon-btn ghost" data-act="ex-del" data-id="${r.id}" title="Remover linha">×</button></td>
+  </tr>`;
+}
 
-  const nav = `<div class="ex-nav">
-      <button class="icon-btn ghost" data-act="ex-month" data-d="-1" aria-label="Mês anterior">‹</button>
-      <b class="ex-title">${rbLabel(ym)}</b>
-      <button class="icon-btn ghost" data-act="ex-month" data-d="1" aria-label="Próximo mês">›</button>
-    </div>`;
-  const summary = `<div class="rb-top ex-top">
-      <div class="card rb-hero"><span class="k">Saldo previsto do mês</span><b class="v">${money(inPrev - outPrev)}</b><span class="small muted">entradas ${money(inPrev)} · saídas ${money(outPrev)}</span></div>
-      <div class="card rb-avg"><span class="k">Saldo realizado</span><b class="v">${money(inDone - outDone)}</b><span class="small muted">recebido ${money(inDone)} · pago ${money(outDone)}</span></div>
-      <div class="rb-side">
-        <div class="card rb-mini"><span>Falta receber</span><b>${money(inPrev - inDone)}</b></div>
-        <div class="card rb-mini"><span>Falta pagar</span><b>${money(outPrev - outDone)}</b></div>
+VIEWS.expenses = () => {
+  const { from, to } = exRange(); S.exFrom = from; S.exTo = to;
+  const now = exNow();
+  const existing = exMonths().filter(m => m >= from && m <= to); // mais recente primeiro
+  const missing = !existing.includes(to) && to <= now ? to : null; // mês final ainda não existe
+
+  const controls = `<div class="ex-controls">
+      <label class="ex-pick">De <input class="input" type="month" value="${from}" data-on="ex-range" data-k="from" aria-label="Mês inicial"></label>
+      <label class="ex-pick">Até <input class="input" type="month" value="${to}" data-on="ex-range" data-k="to" aria-label="Mês final"></label>
+      <div class="seg ex-presets">
+        <button data-act="ex-preset" data-p="1">Este mês</button>
+        <button data-act="ex-preset" data-p="3">Últimos 3</button>
+        <button data-act="ex-preset" data-p="6">Últimos 6</button>
+        <button data-act="ex-preset" data-p="all">Tudo</button>
       </div>
     </div>`;
 
-  const body = exists
-    ? `${summary}${section('in', ins, 'Entradas', inPrev)}${section('out', outs, 'Saídas', outPrev)}`
-    : `<div class="empty">${icon('money')}<b>${rbLabel(ym)} ainda não existe</b><span>Cria copiando o último mês cadastrado, com as mesmas linhas e vencimentos.</span><button class="btn primary" data-act="ex-create">${icon('plus')} Criar este mês</button></div>`;
+  const block = (ym) => {
+    const t = exMonthTotals(ym);
+    return `<section class="ex-month">
+      <div class="ex-month-h">
+        <span class="ex-title">${rbLabel(ym)}</span>
+        <span class="small muted">previsto ${fmtMoney0(t.inPrev - t.outPrev)} · realizado ${fmtMoney0(t.inDone - t.outDone)}</span>
+      </div>
+      ${exSectionHTML(ym, 'in')}${exSectionHTML(ym, 'out')}
+    </section>`;
+  };
+
+  const body = existing.length
+    ? existing.map(block).join('')
+    : `<div class="empty">${icon('money')}<b>Nenhum mês nesse intervalo</b><span>Escolha outro período acima.</span></div>`;
+  const createBtn = missing ? `<div class="ex-missing"><span class="small muted">${rbLabel(missing)} ainda não existe.</span> <button class="btn sm" data-act="ex-create" data-m="${missing}">${icon('plus')} Criar ${rbLabel(missing)}</button></div>` : '';
 
   return {
     title: 'Despesas',
     actions: `<label class="btn sm">${icon('upload')} Importar CSV do Notion<input type="file" accept=".csv,text/csv" hidden data-on="ex-import"></label>`,
-    html: `${nav}${body}
-      <p class="small faint">Valores sempre positivos: entradas aparecem com + e saídas com −. Saldo previsto = todas as linhas exceto "Não teve". Saldo realizado = só o que já foi recebido ou pago.</p>`
+    html: `${controls}${createBtn}${body}
+      <p class="small faint">Valores sempre positivos: entradas com + e saídas com −. Previsto = todas as linhas exceto "Não teve". Realizado = só o que já foi recebido ou pago.</p>`
   };
 };
