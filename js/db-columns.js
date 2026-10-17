@@ -226,5 +226,23 @@ window.DB_COLUMNS = {
   "order",
   "created_at",
   "updated_at"
+ ],
+ "tempo_expenses": [
+  "id",
+  "user_id",
+  "month",
+  "kind",
+  "name",
+  "cat",
+  "note",
+  "amount",
+  "due_date",
+  "paid_on",
+  "status",
+  "inst_no",
+  "inst_total",
+  "order",
+  "created_at",
+  "updated_at"
  ]
 };

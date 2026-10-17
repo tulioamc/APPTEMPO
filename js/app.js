@@ -22,6 +22,7 @@ const NAV = [
   { id: 'tasks', label: 'Tarefas', icon: 'check', count: () => db.all('tempo_tasks').length },
   { id: 'quotes', label: 'Orçamentos', icon: 'doc', count: () => db.all('tempo_quotes').length },
   { id: 'finance', label: 'Financeiro', icon: 'money' },
+  { id: 'expenses', label: 'Despesas', icon: 'money', count: () => exRows(S.exMonth || ymd(new Date()).slice(0, 7)).filter(r => r.status !== 'Não teve' && r.status !== 'Pago' && r.status !== 'Recebido').length },
   { id: 'reimb', label: 'Reembolsos', icon: 'layers', count: () => db.all('tempo_reimb_rows').filter(r => r.refund_id !== rbStatusId('reimb_refund', 'Feito!')).length },
   { id: 'notices', label: 'Avisos', icon: 'bell', count: () => db.all('tempo_notices').filter(n => n.status === 'pending' && n.kind !== 'todo').length },
   { id: 'reports', label: 'Relatórios', icon: 'chart' },
@@ -257,6 +258,7 @@ async function boot() {
   ensureStatusKinds();
   ensureDirectAgency();
   ensureMonthSheets();
+  exEnsureMonths();
   if (!online && !db.all('tempo_projects').length && !db.setting('startedEmpty', false)) seedDemo();
   const now = new Date().toISOString();
   db.all('tempo_reminders').forEach(r => { if (r.freq === 'interval' && !r.lastFired) remState[r.id] = now; });

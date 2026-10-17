@@ -5,7 +5,7 @@
    são registradas para sempre e aparecem na aba Avisos, ordenadas por data.
    ===================================================================== */
 
-const NOTICE_KINDS = { pause: ['Pausa', 'alert'], prazo: ['Prazo', 'clock'], cobranca: ['Cobrança', 'money'], orcamento: ['Orçamento', 'doc'], reminder: ['Lembrete', 'bell'], todo: ['To-do', 'check'] };
+const NOTICE_KINDS = { conta: ['Conta a pagar', 'money'], pause: ['Pausa', 'alert'], prazo: ['Prazo', 'clock'], cobranca: ['Cobrança', 'money'], orcamento: ['Orçamento', 'doc'], reminder: ['Lembrete', 'bell'], todo: ['To-do', 'check'] };
 const noticeKind = (k) => NOTICE_KINDS[k] || [k, 'bell'];
 
 /* Cria um aviso pendente. A chave evita duplicar o mesmo aviso (ex.: mesmo prazo no mesmo dia). */
@@ -68,6 +68,11 @@ function scanAlerts() {
   db.all('tempo_quotes').filter(q => q.valid_until && !['Aprovado', 'Recusado', 'Vencido'].includes(statusName(q.status_id))).forEach(q => {
     const d = daysBetween(today, q.valid_until); if (d === null || d < 0 || d > 3) return;
     addNotice({ kind: 'orcamento', key: `orc:${q.id}:${q.valid_until}`, title: `Orçamento vence em ${d === 0 ? 'hoje' : d + ' dia(s)'}: ${q.name}`, body: 'Faça o follow-up com o cliente.', entity: 'quote', entity_id: q.id, data: {} }, true);
+  });
+  /* despesas com vencimento passado e ainda não pagas/recebidas */
+  db.all('tempo_expenses').filter(r => r.month === today.slice(0, 7) && r.due_date && r.due_date < today && !['Pago', 'Recebido', 'Não teve'].includes(r.status)).forEach(r => {
+    const inc = r.kind === 'in';
+    addNotice({ kind: inc ? 'cobranca' : 'conta', key: `ex:${r.id}:${r.due_date}`, title: `${inc ? 'Recebimento atrasado' : 'Conta vencida'}: ${r.name || 'sem nome'}`, body: `Venceu em ${fmtDate(r.due_date)}${r.amount ? ` · ${fmtMoney(r.amount)}` : ''}.`, entity: 'expense', entity_id: r.id, data: {} }, true);
   });
   db.all('tempo_notices').filter(n => n.status === 'snoozed' && n.snooze_until && n.snooze_until <= today).forEach(n => db.update('tempo_notices', n.id, { status: 'pending', snooze_until: null }, true));
   db.emit();

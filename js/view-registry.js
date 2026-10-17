@@ -6,7 +6,7 @@ VIEWS.registry = () => {
   const r = S.reg; const q = r.q.toLowerCase().trim();
   const ma = (x) => !q || [x.name, x.cnpj, x.contact].some(s => (s || '').toLowerCase().includes(q));
   const showArch = r.arch;
-  const ags = db.all('tempo_agencies').filter(a => (showArch || !a.archived) && ma(a)).sort((a, b) => a.name.localeCompare(b.name));
+  const ags = db.all('tempo_agencies').filter(a => (showArch || !a.archived) && ma(a)).sort(agencySort);
   const cls = db.all('tempo_clients').filter(c => (showArch || !c.archived) && (ma(c) || (db.get('tempo_agencies', c.agency_id)?.name || '').toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
   const sumP = (ps, fn) => ps.reduce((s, p) => s + (fn(p) || 0), 0);
   let body;

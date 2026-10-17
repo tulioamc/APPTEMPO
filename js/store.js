@@ -16,7 +16,7 @@ const TABLES = [
   'tempo_agencies', 'tempo_clients', 'tempo_projects', 'tempo_tasks',
   'tempo_time_entries', 'tempo_revisions', 'tempo_quotes', 'tempo_payments',
   'tempo_deadline_changes', 'tempo_work_types', 'tempo_status_options',
-  'tempo_reminders', 'tempo_status_history', 'tempo_settings', 'tempo_notices', 'tempo_reimb_rows'
+  'tempo_reminders', 'tempo_status_history', 'tempo_settings', 'tempo_notices', 'tempo_reimb_rows', 'tempo_expenses'
 ];
 
 class MemoryAdapter {

@@ -73,7 +73,8 @@ function ensureDirectAgency() {
   db.all('tempo_time_entries').filter(e => !e.agency_id && e.client_id).forEach(e => db.update('tempo_time_entries', e.id, { agency_id: d.id }, true));
   return d;
 }
-const agencies = () => db.all('tempo_agencies').filter(a => !a.archived).sort((a, b) => a.name.localeCompare(b.name));
+const agencySort = (a, b) => (isDirectAgency(b) - isDirectAgency(a)) || a.name.localeCompare(b.name);
+const agencies = () => db.all('tempo_agencies').filter(a => !a.archived).sort(agencySort);
 const clients = (agencyId) => db.all('tempo_clients').filter(c => !c.archived && (agencyId === undefined || (agencyId === '__none' ? !c.agency_id : c.agency_id === agencyId))).sort((a, b) => a.name.localeCompare(b.name));
 const projects = () => db.all('tempo_projects').filter(p => !p.archived);
 const tasksOf = (projectId) => db.where('tempo_tasks', t => t.project_id === projectId && !t.parent_id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));

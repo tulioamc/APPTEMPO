@@ -151,8 +151,7 @@ Achados no CSV (67 projetos, 12 subitens): R$ 335.100 recebidos em 53 projetos p
 - S19. Relatório de horas por cliente/agência para enviar (PDF).
 
 ### Dúvidas a confirmar antes de implementar o item 3
-- BV e imposto incidem sobre o quê: só A, ou A + B? E o imposto inclui o BV (A + B + C)?
-- O cálculo é "por fora" (soma o % ao valor) ou "por dentro" (o % sai do valor final, como em nota fiscal: total = líquido ÷ (1 − %))?
+- [x] DECIDIDO (17/10/2026): BV sobre A+B; imposto sobre A+B+C. Cálculo "por dentro", como nota fiscal: total = líquido ÷ (1 − %).
 
 ---
 
@@ -173,7 +172,7 @@ Achados no CSV (67 projetos, 12 subitens): R$ 335.100 recebidos em 53 projetos p
 - Financeiro: parcelas a receber (R1), contas a pagar com terceiros (R2), fluxo de caixa (R3), bruto × líquido (R4), valor original/desconto, tipo principal, gastos fixos (F2).
 - Relatórios e orçamentos: RP1–RP7, O2–O8, R5–R8.
 - Importação do Notion mais inteligente (cliente pelo prefixo, datas de pagamento na observação, "Era X" como valor original, terceiros, LIQUIDO, tipo por palavra-chave) — tudo como sugestão a aprovar.
-- Decisões que dependem de você: base do BV/imposto e "por dentro"; modelo de reembolso do plano de saúde e de custos fixos pessoais (você explica a partir do seu Notion); desenho detalhado do to-do.
+- Decisões: base do BV/imposto e "por dentro" já decididas (ver item 3). Pendentes: modelo de reembolso do plano de saúde e de custos fixos pessoais (o Tulio explica a partir do Notion); desenho detalhado do to-do.
 - Login e sincronização com Supabase (o schema existe, a ligação não).
 
 ### Adicionado na 2.01 (depois da primeira entrega)
@@ -260,3 +259,34 @@ Adendo ao item de reembolsos acima. Tudo que o app lê ou sugere vai para a fila
 
 ## Bugs (reportados pelo Tulio, 17/10/2026)
 - [x] Ao clicar em "Pago" para mudar o status, abre a janelinha mas a página rola até o fim (base). Corrigido: o foco do campo de busca do combo rolava a página; agora usa preventScroll. Provável foco/scroll em um elemento da base ao abrir o popover de status (combo). Investigar.
+
+## Custos pessoais — modelo (Notion "DESPESAS", explicado pelo Tulio em 17/10/2026)
+- Uma tabela por mês, como Reembolsos: Despesa (nome com emoji), Valor, Pagamento (Pago / a Pagar), Data, Anotação. Total do mês por soma.
+- Sinal do Valor: positivo = saída (gasto); negativo = entrada (ex.: Salário, parte que outra pessoa paga do plano). Total do mês = soma (negativo = sobra).
+- Exemplo set/2025 (total −R$ 8.950): Imposto Simples 1.370, Fenix 200, Michele 180, Plano de Saúde 2.300, Energia 260, Diarista 800, Escola + taxa 100, Claro (celular e net) 190, Cartão Nubank 7.900, Aluguel 3.500; entradas: Salário −23.400, Plano de Saúde Amanda −2.350.
+- Freela pode aparecer sem valor (linha de lembrete do mês).
+- Layout: entradas em cima (+), saídas embaixo (−), cada uma com subtotal. Resumo do mês: previsto, realizado e saldo.
+- Sinal fixo: valor guardado positivo + tipo (entrada/saída); a tela mostra + ou − fixo.
+- Repetir todo mês: copia o mês anterior, mantém a data, Pagamento volta para "Não pago" (saída) ou "Não recebido" (entrada). Valores editáveis por mês.
+- Parcelas: "parcela X de Y", com fim. Status "Não teve" pula o mês sem apagar histórico.
+- Coluna "Paga em" (data do pagamento/recebimento), para ligar ao Open Finance depois.
+- Vencimento: quando passa do dia sem pagamento, entra como aviso de atrasado (sistema de avisos).
+- Plano de Saúde: NÃO é reembolsado. Fica como saída comum, sem ligação com Reembolsos. Os reembolsos são só das terapias do filho (tela de Reembolsos).
+- Pendente: categorias (opcional) e quais itens são da empresa.
+
+## Categorias dos custos (confirmado pelo Tulio, 17/10/2026)
+- Categoria principal: PESSOAL ou EMPRESA. Dentro de cada uma, subcategorias.
+- PESSOAL
+  - Moradia: Aluguel
+  - Contas da casa: Energia, Claro (celular e net)
+  - Casa e serviços: Diarista
+  - Saúde: Plano de Saúde (não reembolsado; reembolsos são só das terapias do filho)
+  - Educação: Escola + taxa
+  - Cartão e dívidas: Cartão Nubank
+  - Renda: Pró-labore fixo (entrada), Plano de Saúde Amanda (entrada)
+- EMPRESA
+  - Impostos: Imposto Simples
+  - Contabilidade: Fenix (contador)
+  - Assinaturas e programas: Dropbox, Adobe, Cinema 4D
+  - Freelas (entrada): Freela (PEDRO, BOTICARIO/REBU, TAL PIET)
+- Pró-labore: tratado como entrada pessoal fixa. Confirmar se a empresa também registra como saída.
