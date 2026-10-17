@@ -189,3 +189,71 @@ Achados no CSV (67 projetos, 12 subitens): R$ 335.100 recebidos em 53 projetos p
 - Chave pública em src/config.js. Nunca colocar a service_role no repositório.
 - Campos sem coluna no banco aparecem no console como aviso; tabela tempo_reminders guarda o conteúdo em jsonb.
 - Pendente: migração completa do Notion (Terapias e Freelas) e teste real com a conta no navegador.
+
+## Terapias — notas fiscais, comprovantes e reembolso (pedido do Tulio, 17/10/2026)
+Adendo ao item de reembolsos acima. Tudo que o app lê ou sugere vai para a fila de avisos; nada muda a tabela sem confirmação, exceto onde indicado.
+
+### Upload de nota fiscal
+- Área para subir o PDF da nota fiscal. O app lê o **valor** e identifica a **terapeuta** (pelo CNPJ ou pelo nome no documento).
+- Se identificar: preenche a linha daquela terapeuta no mês de referência com o valor. O valor pode ser editado depois.
+- Se não identificar: aviso pedindo para você informar quem é a terapeuta. Na primeira vez, você escolhe; depois, o app reconhece aquele CNPJ ou nome como a terapia X ou Y e não pergunta de novo.
+- O PDF fica anexado à linha da terapia no mês.
+
+### Mês de referência (janela de datas)
+- Notas enviadas de **20 do mês anterior até 19 do mês atual** entram no **mês atual**.
+  - Exemplo: nota enviada entre 20/09 e 19/10 → Outubro. Nota enviada a partir de 20/10 → Novembro.
+- Confirmado pelo Tulio: o mês do nome do arquivo é o mês da **janela** (o mês que será pago), não o mês em que a nota foi enviada.
+
+### Arquivo no iCloud
+- Pasta: `iCloud/Terapias/Ano_Mes` (ex.: `Terapias/2026_11`).
+- Nota fiscal renomeada para `NotaFiscal_Ano_Mes_NomeDaTerapeuta.pdf`.
+- Comprovante de pagamento renomeado para `Comprovante_Ano_Mes_NomeDaTerapeuta.png`, salvo na mesma pasta do mês. Ao subir o comprovante, a linha vai para **Pagamento: Pago**.
+- Decidido: o app de Mac faz a gravação na pasta do iCloud. A versão web não grava em pasta do iCloud, então sem o Mac o salvamento seria manual.
+
+### Leitura de documentos (OCR)
+- Nem todas as notas são texto: algumas vêm como imagem ou PDF escaneado. Os comprovantes de pagamento vêm sempre como PNG.
+- Por isso a leitura precisa de OCR como caminho padrão, com texto nativo do PDF como atalho quando existir.
+- Sugestão: no app de Mac, usar o reconhecimento de texto nativo do macOS (Vision), que roda localmente e não envia documentos para fora. Decisão a confirmar.
+- Campos a extrair: valor, CNPJ, nome da terapeuta, data de emissão e, no comprovante, data do pagamento e valor pago.
+- Se a leitura tiver baixa confiança, o app não preenche sozinho: cria aviso para você confirmar.
+
+### Requerimento
+- Continua manual. O app não preenche "Requerimento" sozinho.
+
+### Reembolso (futuro, com Open Finance)
+- O app identifica os pagamentos do plano (ex.: Aloma 2000, Raquel 3000, Patrícia 1000) e sugere como o reembolso foi feito, inclusive combinações (Aloma + Raquel = 5000; Patrícia = 1000; ou Raquel 3000 + Aloma e Patrícia somadas).
+- Se houver uma combinação óbvia, marca automaticamente.
+- Se não for óbvia, cria aviso perguntando qual foi feita, para você confirmar.
+- Exemplos de valores são apenas referência.
+- Depende do Open Finance, que ainda será projetado.
+
+### Ordem sugerida (quando formos implementar)
+1. Cadastro de terapeutas com CNPJ e nomes alternativos (aprendidos com a confirmação).
+2. Leitura de PDF e PNG: texto nativo quando houver, OCR (Vision, no Mac) quando não houver; extração de valor, CNPJ e nome.
+3. Avisos de "não identificado" e confirmação.
+4. Renomear e salvar na pasta do mês no iCloud (app de Mac).
+5. Comprovante → status Pago.
+6. Sugestão de reembolso via Open Finance.
+
+### Exemplos reais recebidos (17/10/2026) — para testar a leitura
+- Identificação pelo conteúdo do documento, nunca pelo nome do arquivo (o arquivo enviado se chamava "Homero_Nota" mas a nota é da Raquel).
+- Nota fiscal de Raquel Barreto Gama de Oliveira (psicopedagoga), NFS-e nº 77, emitida em 31/08/2026, R$ 2.250,00, veio como foto de impresso (precisa de OCR). Mês de referência: Setembro (janela 20/08–19/09).
+- Pix de R$ 1.250,00 em 14/09/2026 para Homero Pedrosa Almeida, da equipe Funcional. Não se relaciona com a nota de Raquel: é outra terapia, com outro fornecedor.
+- Próximo passo: receber uma nota e um comprovante do mesmo mês, da mesma terapeuta, para testar a correspondência completa.
+- Par de teste (mesmo mês): nota nº 77 da Raquel (R$ 2.250,00, emitida 31/08) e Pix de 14/09/2026 de R$ 2.250,00 para Raquel Barreto Gama de Oliveira. Resultado esperado: valor exato e nome do emitente igual ao destinatário do Pix, então a linha de Raquel em Setembro fica Pago. Nomes de arquivo esperados: NotaFiscal_2026_09_Raquel.pdf e Comprovante_2026_09_Raquel.png.
+
+### Migração do Notion — TERAPIAS (feita em 17/10/2026)
+- Importadas 149 linhas com data, de 2024-06 a 2026-10 (29 meses). Soma R$ 393.140,04, igual ao Notion menos as linhas excluídas abaixo.
+- Excluídas: 7 linhas-modelo sem data (Homero (2), Claudiane (2), AT (2), Patrícia (2), Raquel (2), Aloma (2), Dentista (2)); a linha "Feito em 15.09" (só observação); "EXTRA HOMERO DE MARCO" (R$ 500, a própria nota pede para apagar quando pago); 3 linhas em branco.
+- Pendente de confirmação: "Dentista (2)" (R$ 255, sem data) e "EXTRA HOMERO DE MARCO".
+- Bug corrigido: a coluna `kind` de tempo_status_options não aceitava os status de reembolso (reimb_pay, reimb_refund, reimb_req). Corrigido no banco e no db/schema.sql. Os status foram criados na conta.
+- Nomes mantidos como no Notion (ex.: "Patricia (1)"). Limpeza do sufixo "(n)" fica para depois.
+- FREELAS ainda não migrado.
+
+### Migração do Notion — FREELAS (feita em 17/10/2026)
+- 67 projetos (agência, status, orçamento, prazo, observação) e 12 subtarefas viradas em tarefas dentro do projeto pai (NUVEM SHOP V01, V02 e V03).
+- Valor Pago gravado como um pagamento por projeto, sem data (53 pagamentos, soma R$ 335.100, igual ao Notion). Valor Restante foi para "remaining_override".
+- Conferido: 67 projetos, orçamento total R$ 83.300 (igual ao Notion). Um projeto sem agência (FILME SATYROS), que fica sem cliente.
+- Suposição a validar: cada agência virou também um cliente de mesmo nome. Se a agência e o cliente final forem coisas diferentes, o ajuste é renomear ou separar depois.
+- Mapeamento de status: Standby → "Stand by"; Não iniciada → "A fazer"; Pagamento "Nota Fiscal Emitida" → não tinha equivalente (nenhuma linha usava). Pagamento vazio em "NETFLIX BTS 2026 - AP 01" → "Não faturado" (confirmar).
+- Pendente: "Cancelado" no campo de pagamento ficou sem status de pagamento (o app só tem o status do projeto "Cancelado").

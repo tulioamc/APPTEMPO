@@ -36,7 +36,7 @@ create table if not exists tempo_clients (
 create table if not exists tempo_status_options (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  kind text not null check (kind in ('work','payment','quote')),
+  kind text not null check (kind in ('work','payment','quote','reimb_pay','reimb_refund','reimb_req')),
   name text not null,
   color text,
   category text not null,          -- work: todo/active/done/cancelled · payment: open/closed · quote: open/won/lost
