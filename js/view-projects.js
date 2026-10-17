@@ -67,9 +67,9 @@ function filterBar(f, ns, { situ = false, extra = '' } = {}) {
   const active = ['agency', 'client', 'status', 'pay', 'wt', 'year', 'month', 'from', 'to'].filter(k => f[k]).length + (f.q ? 1 : 0);
   return `<div class="filters ${S.fltOpen?.[ns] ? 'open' : ''}">
     ${'q' in f ? `<input id="${ns}-q" class="input search" placeholder="Buscar projeto, cliente ou agência" value="${esc(f.q)}" data-input="flt" data-ns="${ns}" data-k="q">` : ''}
-    <button class="btn sm flt-toggle" data-act="flt-toggle" data-ns="${ns}">${icon('sort')} Filtros${active ? ` (${active})` : ''}</button>
-    ${situ ? `<div class="seg">${[['all', 'Todos'], ['active', 'Ativos'], ['done', 'Concluídos']].map(([v, l]) => `<button class="${f.situ === v ? 'on' : ''}" data-act="flt-set" data-ns="${ns}" data-k="situ" data-v="${v}">${l}</button>`).join('')}</div>` : ''}
+    <button class="btn sm flt-toggle" data-act="flt-toggle" data-ns="${ns}" aria-expanded="${S.fltOpen?.[ns] ? 'true' : 'false'}">${icon('sort')} Filtros${active ? ` (${active})` : ''}</button>
     <div class="flt-more">
+    ${situ ? `<div class="seg">${[['all', 'Todos'], ['active', 'Ativos'], ['done', 'Concluídos']].map(([v, l]) => `<button class="${f.situ === v ? 'on' : ''}" data-act="flt-set" data-ns="${ns}" data-k="situ" data-v="${v}">${l}</button>`).join('')}</div>` : ''}
     <select id="${ns}-agency" class="input" data-on="flt" data-ns="${ns}" data-k="agency" aria-label="Agência">${options(agencies(), f.agency, { empty: true, emptyLabel: 'Todas as agências' })}<option value="__none" ${f.agency === '__none' ? 'selected' : ''}>Sem agência (direto)</option></select>
     <select id="${ns}-client" class="input" data-on="flt" data-ns="${ns}" data-k="client" aria-label="Cliente">${options(f.agency ? clients(f.agency) : clients(), f.client, { empty: true, emptyLabel: 'Todos os clientes' })}</select>
     <select id="${ns}-status" class="input" data-on="flt" data-ns="${ns}" data-k="status" aria-label="Status">${options(statuses('work'), f.status, { empty: true, emptyLabel: 'Todos os status' })}</select>
@@ -78,14 +78,19 @@ function filterBar(f, ns, { situ = false, extra = '' } = {}) {
     <select id="${ns}-year" class="input" style="min-width:96px" data-on="flt" data-ns="${ns}" data-k="year" aria-label="Ano">${options(years().map(y => ({ id: y, name: y })), f.year, { empty: true, emptyLabel: 'Ano' })}</select>
     <select id="${ns}-month" class="input" style="min-width:110px" data-on="flt" data-ns="${ns}" data-k="month" aria-label="Mês">${options(MONTHS.map((m, i) => ({ id: pad(i + 1), name: m[0].toUpperCase() + m.slice(1) })), f.month, { empty: true, emptyLabel: 'Mês' })}</select>
     <span class="row" style="gap:4px"><input id="${ns}-from" type="date" class="input" style="min-width:0;width:140px" value="${f.from}" data-on="flt" data-ns="${ns}" data-k="from" aria-label="De"><span class="faint">–</span><input id="${ns}-to" type="date" class="input" style="min-width:0;width:140px" value="${f.to}" data-on="flt" data-ns="${ns}" data-k="to" aria-label="Até"></span>
-    </div>
     ${active ? `<button class="btn sm ghost" data-act="flt-clear" data-ns="${ns}">${icon('x')} Limpar filtros (${active})</button>` : ''}
+    </div>
     ${extra}
   </div>`;
 }
 const fltState = (ns) => ({ proj: S.proj, fin: S.fin })[ns];
 CHANGES.flt = (el) => { const f = fltState(el.dataset.ns); f[el.dataset.k] = el.value; if (el.dataset.k === 'agency') f.client = ''; render(); };
 ACTIONS['flt-toggle'] = (el) => { S.fltOpen = S.fltOpen || {}; S.fltOpen[el.dataset.ns] = !S.fltOpen[el.dataset.ns]; render(); };
+document.addEventListener('mousedown', (e) => {
+  if (!S.fltOpen || !Object.values(S.fltOpen).some(Boolean)) return;
+  if (e.target.closest?.('.filters')) return;
+  S.fltOpen = {}; render();
+});
 ACTIONS['flt-set'] = (el) => { fltState(el.dataset.ns)[el.dataset.k] = el.dataset.v; render(); };
 ACTIONS['flt-clear'] = (el) => { const f = fltState(el.dataset.ns); ['q', 'agency', 'client', 'status', 'pay', 'wt', 'year', 'month', 'from', 'to'].forEach(k => { if (k in f) f[k] = ''; }); render(); };
 
