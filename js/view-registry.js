@@ -22,8 +22,8 @@ VIEWS.registry = () => {
 const pSum = (kind, id, fn) => partyProjects(kind, id).reduce((s, p) => s + (fn(p) || 0), 0);
 const txtEdit = (t, k, req) => ({ type: 'text', required: req, get: x => x[k], set: (x, v) => db.update(t, x.id, { [k]: v }) });
 const AGCOLS = {
-  name: { label: 'Agência contratante', ico: 'text', w: 260, sort: a => a.name, cell: a => `<span class="cell-name"><span class="ct row" style="gap:4px;flex-wrap:nowrap"><span class="tag tg abbr" style="${cssTb(a.color)}">${esc(agencyAbbr(a))}</span>${tag(a.name, a.color, { upper: true })}${a.archived ? ' <span class="inh">arquivada</span>' : ''}</span>${openBtn('party-open', a.id, 'data-kind="agency"')}</span>`, edit: txtEdit('tempo_agencies', 'name', true) },
-  abbr: { label: 'Sigla', ico: 'tag', w: 80, sort: a => agencyAbbr(a), cell: a => `<span class="mono">${esc(agencyAbbr(a))}</span>`, edit: { type: 'text', get: a => agencyAbbr(a), set: (a, v) => { const ab = v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); if (!ab) return; if (db.all('tempo_agencies').some(x => x.id !== a.id && (x.abbr || '').toUpperCase() === ab)) return toast(`A sigla ${ab} já é usada.`); db.update('tempo_agencies', a.id, { abbr: ab }); } } },
+  name: { label: 'Agência contratante', ico: 'text', w: 260, sort: a => a.name, cell: a => `<span class="cell-name"><span class="ct row" style="gap:4px;flex-wrap:nowrap">${agencyAbbr(a) ? `<span class="tag tg abbr" style="${cssTb(a.color)}">${esc(agencyAbbr(a))}</span>` : ''}${tag(a.name, a.color, { upper: true })}${a.archived ? ' <span class="inh">arquivada</span>' : ''}</span>${openBtn('party-open', a.id, 'data-kind="agency"')}</span>`, edit: { ...txtEdit('tempo_agencies', 'name', true), when: a => !isDirectAgency(a) } },
+  abbr: { label: 'Sigla', ico: 'tag', w: 80, sort: a => agencyAbbr(a), cell: a => `<span class="mono">${esc(agencyAbbr(a))}</span>`, edit: { type: 'text', when: a => !isDirectAgency(a), get: a => agencyAbbr(a), set: (a, v) => { const ab = v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); if (!ab) return; if (db.all('tempo_agencies').some(x => x.id !== a.id && (x.abbr || '').toUpperCase() === ab)) return toast(`A sigla ${ab} já é usada.`); db.update('tempo_agencies', a.id, { abbr: ab }); } } },
   cnpj: { label: 'CNPJ', ico: 'hash', w: 170, cls: 'mono', sort: a => a.cnpj || '', cell: a => esc(a.cnpj || ''), edit: txtEdit('tempo_agencies', 'cnpj') },
   contact: { label: 'Contato', ico: 'users', w: 240, cls: 'obs', sort: a => a.contact || '', cell: a => esc(a.contact || ''), edit: txtEdit('tempo_agencies', 'contact') },
   nclients: { label: 'Clientes', ico: 'hash', w: 90, money: true, sort: a => clients(a.id).length, cell: a => clients(a.id).length },
@@ -34,7 +34,7 @@ const AGCOLS = {
 };
 const CLCOLS = {
   name: { label: 'Cliente', ico: 'text', w: 260, sort: c => c.name, cell: c => `<span class="cell-name"><span class="ct">${clientTag(c)}${c.archived ? ' <span class="inh">arquivado</span>' : ''}</span>${openBtn('party-open', c.id, 'data-kind="client"')}</span>`, edit: txtEdit('tempo_clients', 'name', true) },
-  agency: { label: 'Agência', ico: 'spin', w: 150, sort: c => db.get('tempo_agencies', c.agency_id)?.name || '~', cell: c => agencyTag(db.get('tempo_agencies', c.agency_id)), edit: { type: 'combo', kind: 'agency', allowEmpty: true, emptyLabel: 'Direto (sem agência)', get: c => c.agency_id, set: (c, v) => db.update('tempo_clients', c.id, { agency_id: v || null }) } },
+  agency: { label: 'Agência', ico: 'spin', w: 150, sort: c => db.get('tempo_agencies', c.agency_id)?.name || '~', cell: c => agencyTag(db.get('tempo_agencies', c.agency_id)), edit: { type: 'combo', kind: 'agency', get: c => c.agency_id, set: (c, v) => db.update('tempo_clients', c.id, { agency_id: v || directAgency()?.id || null }) } },
   contact: { label: 'Contato', ico: 'users', w: 220, cls: 'obs', sort: c => c.contact || '', cell: c => esc(c.contact || ''), edit: txtEdit('tempo_clients', 'contact') },
   nprojects: { label: 'Projetos', ico: 'hash', w: 90, money: true, sort: c => partyProjects('client', c.id).length, cell: c => partyProjects('client', c.id).length },
   hours: { label: 'Horas', ico: 'clock', w: 100, money: true, sort: c => pSum('client', c.id, p => projectMs(p.id)), val: c => pSum('client', c.id, p => projectMs(p.id)), fmt: v => fmtH(v), cell: c => fmtH(pSum('client', c.id, p => projectMs(p.id))) },
@@ -60,7 +60,7 @@ function openPartyForm(kind, id, cb, preset = {}) {
     <form class="db" id="ptf">
       <div class="field"><label for="pt-n">Nome *</label><input id="pt-n" class="input" name="name" value="${esc(x?.name || preset.name || '')}" autofocus><span class="hint" id="pt-dup"></span></div>
       ${kind === 'agency' ? `<div class="field"><label for="pt-ab">Sigla</label><input id="pt-ab" class="input mono" name="abbr" maxlength="4" style="max-width:120px;text-transform:uppercase" value="${esc(x?.abbr || '')}" placeholder="${esc(abbrFor(x?.name || '', id))}"><span class="hint">Aparece antes do nome do cliente, ex.: <b>[${esc(x?.abbr || 'BR')}][ABA]</b>. Vazio = automática (2 primeiras letras, sem repetir outra agência).</span></div>` : ''}
-      ${kind === 'client' ? `<div class="field"><label for="pt-a">Agência contratante</label><select id="pt-a" class="input" name="agency_id">${options(agencies(), x?.agency_id || preset.agency_id, { empty: true, emptyLabel: 'Nenhuma — cliente direto' })}</select></div>` : ''}
+      ${kind === 'client' ? `<div class="field"><label for="pt-a">Agência contratante</label><select id="pt-a" class="input" name="agency_id">${options(agencies(), x?.agency_id || preset.agency_id || directAgency()?.id)}</select></div>` : ''}
       <div class="grid2"><div class="field"><label for="pt-c">CNPJ</label><input id="pt-c" class="input" name="cnpj" value="${esc(x?.cnpj || '')}" inputmode="numeric" placeholder="00.000.000/0000-00"></div>
       <div class="field"><label for="pt-ct">Contato</label><input id="pt-ct" class="input" name="contact" value="${esc(x?.contact || '')}" placeholder="Nome, e-mail, telefone"></div></div>
       <div class="field"><label for="pt-e">Endereço</label><input id="pt-e" class="input" name="address" value="${esc(x?.address || '')}"></div>
@@ -89,7 +89,7 @@ function openPartyForm(kind, id, cb, preset = {}) {
       if (ab && db.all('tempo_agencies').some(a => a.id !== id && (a.abbr || '').toUpperCase() === ab)) return toast(`A sigla ${ab} já é usada por outra agência.`);
       data.abbr = ab || abbrFor(data.name, id);
     }
-    if (kind === 'client') data.agency_id = f.agency_id || null;
+    if (kind === 'client') data.agency_id = f.agency_id || directAgency()?.id || null;
     let row; if (x) row = db.update(T, x.id, data); else row = db.insert(T, { ...data, archived: false });
     l.close(); toast(x ? 'Cadastro atualizado' : `${lab[0].toUpperCase() + lab.slice(1)} cadastrad${kind === 'agency' ? 'a' : 'o'}`); cb && cb(row);
   });
@@ -113,7 +113,7 @@ function openParty(kind, id) {
         ${kind === 'agency' ? `<div class="stack" style="gap:6px"><div class="row between"><span class="lbl">Clientes</span><button class="btn sm" data-x="new-client">${icon('plus')} Cliente desta agência</button></div><div class="row">${clients(id).map(c => `<button class="btn sm ghost" data-x="open-client" data-id="${c.id}" style="padding:2px">${clientTag(c)}</button>`).join('') || '<span class="small muted">Nenhum cliente vinculado.</span>'}</div></div>` : ''}
         <div class="panel"><div class="panel-h"><h3>Projetos</h3><span class="grow"></span>${kind === 'client' ? `<button class="btn sm" data-act="proj-new" data-client="${id}">${icon('plus')} Projeto</button>` : ''}</div><div class="panel-b tight">${ps.length ? `<div class="list">${ps.sort((a, b) => b.created_at.localeCompare(a.created_at)).map(p => `<div class="li" data-x="open-proj" data-id="${p.id}"><div class="grow"><div class="t">${esc(p.name)}</div><div class="meta">${kind === 'agency' ? esc(clientOf(p)?.name || '') + ' · ' : ''}${fmtH(projectMs(p.id))}${p.deadline ? ' · prazo ' + fmtDate(p.deadline) : ''}</div></div><div class="meta">${statusTag(p.status_id)}${statusTag(p.payment_status_id, false)}<span class="mono">${fmtMoney(p.budget)}</span></div></div>`).join('')}</div>` : '<div class="empty small">Nenhum projeto.</div>'}</div></div>
       </div>
-      <div class="df"><button class="btn danger left" data-x="del">${icon('trash')} Excluir</button><button class="btn" data-x="arch">${x.archived ? 'Desarquivar' : 'Arquivar'}</button><button class="btn primary" data-x="edit">${icon('edit')} Editar</button></div>`;
+      ${kind === 'agency' && isDirectAgency(x) ? `<div class="df"><span class="small muted grow">Agência interna: clientes sem agência contratante. Não pode ser editada nem excluída.</span></div>` : `<div class="df"><button class="btn danger left" data-x="del">${icon('trash')} Excluir</button><button class="btn" data-x="arch">${x.archived ? 'Desarquivar' : 'Arquivar'}</button><button class="btn primary" data-x="edit">${icon('edit')} Editar</button></div>`}`;
     }
   });
   l.live = true;
@@ -128,8 +128,8 @@ function openParty(kind, id) {
       const ps = partyProjects(kind, id).length + db.all('tempo_projects').filter(p => p.archived && (kind === 'agency' ? agencyOf(p)?.id === id : p.client_id === id)).length;
       const cs = kind === 'agency' ? db.all('tempo_clients').filter(c => c.agency_id === id).length : 0;
       if (ps || (kind === 'client' && db.all('tempo_quotes').some(q => q.client_id === id))) return confirmBox({ title: 'Não dá para excluir', body: `Há projetos ou propostas vinculados. Use <b>Arquivar</b> para tirar das listas sem perder o histórico.`, ok: 'Entendi' });
-      if (!await confirmBox({ title: `Excluir ${x.name}?`, body: cs ? `${cs} cliente(s) desta agência passarão a ser clientes diretos.` : 'Esta ação não pode ser desfeita.', ok: 'Excluir', danger: true })) return;
-      if (kind === 'agency') db.all('tempo_clients').filter(c => c.agency_id === id).forEach(c => db.update('tempo_clients', c.id, { agency_id: null }, true));
+      if (!await confirmBox({ title: `Excluir ${x.name}?`, body: cs ? `${cs} cliente(s) desta agência passarão para a agência Cliente Direto.` : 'Esta ação não pode ser desfeita.', ok: 'Excluir', danger: true })) return;
+      if (kind === 'agency') db.all('tempo_clients').filter(c => c.agency_id === id).forEach(c => db.update('tempo_clients', c.id, { agency_id: directAgency()?.id || null }, true));
       l.close(); db.remove(T, id); toast('Excluído');
     }
   });

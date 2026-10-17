@@ -63,6 +63,16 @@ function seedConfig() {
 const statuses = (kind) => db.where('tempo_status_options', s => s.kind === kind).sort((a, b) => a.order - b.order);
 const statusByCat = (kind, cat) => statuses(kind).find(s => s.category === cat);
 const workTypes = (all) => db.all('tempo_work_types').filter(w => all || !w.archived).sort((a, b) => a.order - b.order);
+const directAgency = () => db.all('tempo_agencies').find(isDirectAgency);
+/* garante a agência "Cliente Direto" e move para ela os clientes/entradas/propostas sem agência */
+function ensureDirectAgency() {
+  let d = directAgency();
+  if (!d) d = db.insert('tempo_agencies', { name: DIRECT_AGENCY, abbr: '', color: '#D9DCE2', cnpj: '', contact: '', address: '', notes: 'Agência interna: clientes sem agência contratante.', archived: false }, true);
+  db.all('tempo_clients').filter(c => !c.agency_id).forEach(c => db.update('tempo_clients', c.id, { agency_id: d.id }, true));
+  db.all('tempo_quotes').filter(q => !q.agency_id && q.client_id).forEach(q => db.update('tempo_quotes', q.id, { agency_id: d.id }, true));
+  db.all('tempo_time_entries').filter(e => !e.agency_id && e.client_id).forEach(e => db.update('tempo_time_entries', e.id, { agency_id: d.id }, true));
+  return d;
+}
 const agencies = () => db.all('tempo_agencies').filter(a => !a.archived).sort((a, b) => a.name.localeCompare(b.name));
 const clients = (agencyId) => db.all('tempo_clients').filter(c => !c.archived && (agencyId === undefined || (agencyId === '__none' ? !c.agency_id : c.agency_id === agencyId))).sort((a, b) => a.name.localeCompare(b.name));
 const projects = () => db.all('tempo_projects').filter(p => !p.archived);
@@ -211,7 +221,7 @@ function seedDemo() {
   const cl = {};
   [['Cervejaria Capibaribe','Estúdio Maré','orange'],['Banco Arrecife','Estúdio Maré','blue'],['Festival Frevo Novo','Coletivo Farol','red'],
    ['Livraria Sebo Azul','Coletivo Farol','purple'],['Sorveteria Tropix','Agência Pitanga','yellow'],['Café Olinda Alta',null,'brown'],['Ateliê Casa Amarela',null,'yellow']]
-    .forEach(([name, a, color]) => cl[name] = db.insert('tempo_clients', { name, agency_id: a ? ag[a].id : null, color: a ? colorVariant(ag[a].color, db.all('tempo_clients').filter(x => x.agency_id === ag[a].id).map(x => x.color)) : hexOf(color), cnpj: '', contact: '', address: '', notes: a ? '' : 'Cliente direto, sem agência.', archived: false }, true));
+    .forEach(([name, a, color]) => cl[name] = db.insert('tempo_clients', { name, agency_id: a ? ag[a].id : directAgency().id, color: a ? colorVariant(ag[a].color, db.all('tempo_clients').filter(x => x.agency_id === ag[a].id).map(x => x.color)) : hexOf(color), cnpj: '', contact: '', address: '', notes: a ? '' : 'Cliente direto, sem agência.', archived: false }, true));
 
   const pr = {};
   const P = (key, client, o) => pr[key] = db.insert('tempo_projects', {

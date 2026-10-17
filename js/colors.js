@@ -108,7 +108,10 @@ function abbrFor(name, excludeId) {
   for (let i = 2; i < 10; i++) { const c = L[0] + i; if (!used.has(c)) return c; }
   return L.slice(0, 2);
 }
-const agencyAbbr = (a) => a ? (a.abbr || a.name.slice(0, 2).toUpperCase()) : '';
+/* agência interna: clientes sem agência contratante ficam nela (cinza, sem sigla, não pode ser editada nem excluída) */
+const DIRECT_AGENCY = 'Cliente Direto';
+const isDirectAgency = (a) => !!a && a.name === DIRECT_AGENCY;
+const agencyAbbr = (a) => a ? (isDirectAgency(a) ? '' : (a.abbr || a.name.slice(0, 2).toUpperCase())) : '';
 
 /* aparência (fica aqui para carregar antes de app.js) */
 const ACCENTS = {

@@ -255,6 +255,7 @@ async function boot() {
   }
   if (!db.all('tempo_work_types').length) seedConfig();
   ensureStatusKinds();
+  ensureDirectAgency();
   ensureMonthSheets();
   if (!online && !db.all('tempo_projects').length && !db.setting('startedEmpty', false)) seedDemo();
   const now = new Date().toISOString();
