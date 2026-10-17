@@ -38,10 +38,14 @@ function gridTable({ id, cols, rows, rowAttrs = () => '', defHidden = [], defSor
   const total = vis.reduce((s, k) => s + W(k), 0);
   const head = vis.map(k => { const c = cols[k]; const s = t.sort?.key === k;
     return `<th draggable="true" data-col="${k}" data-table="${id}" class="${sortable && c.sort ? 'sortable' : ''} ${c.money ? 'money' : ''}" ${sortable && c.sort ? `data-act="tsort"` : ''} aria-sort="${s ? (t.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><span class="th-in">${c.ico ? `<span class="ico">${icon(c.ico)}</span>` : ''}<span class="th-l">${c.label}</span>${s ? (t.sort.dir > 0 ? ' ↑' : ' ↓') : ''}</span><span class="rz" data-rz="${k}" aria-hidden="true"></span></th>`; }).join('');
-  const body = list.map(r => `<tr ${rowAttrs(r)}>${vis.map(k => { const c = cols[k]; const ed = c.edit && (!c.edit.when || c.edit.when(r));
+  const body = list.map(r => `<tr ${rowAttrs(r)}>${selCell(id, r)}${vis.map(k => { const c = cols[k]; const ed = c.edit && (!c.edit.when || c.edit.when(r));
     return `<td class="${c.cls ? (typeof c.cls === 'function' ? c.cls(r) : c.cls) : ''} ${c.money ? 'money' : ''} ${ed ? 'editable' : ''}" ${ed ? `data-act="cell" data-table="${id}" data-col="${k}" data-id="${r.id}"` : ''}>${c.cell(r)}</td>`; }).join('')}</tr>`).join('');
-  const foot = footer ? `<tfoot><tr>${vis.map((k, i) => { const c = cols[k]; if (c.val) { const s = list.reduce((a, r) => a + (c.val(r) || 0), 0); return `<td class="money">${i === 0 ? `Contagem <b>${list.length}</b> · ` : ''}Soma <b>${c.fmt ? c.fmt(s) : fmtMoney0(s)}</b></td>`; } return i === 0 ? `<td>Contagem <b>${list.length}</b></td>` : '<td></td>'; }).join('')}</tr></tfoot>` : '';
-  return `<div class="table-wrap"><table class="grid fixed ${cls}" data-table="${id}" style="width:${total}px"><colgroup>${vis.map(k => `<col data-col="${k}" style="width:${W(k)}px">`).join('')}</colgroup><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table></div>`;
+  const foot = footer ? `<tfoot><tr><td class="sel-col"></td>${vis.map((k, i) => { const c = cols[k]; if (c.val) { const s = list.reduce((a, r) => a + (c.val(r) || 0), 0); return `<td class="money">${i === 0 ? `Contagem <b>${list.length}</b> · ` : ''}Soma <b>${c.fmt ? c.fmt(s) : fmtMoney0(s)}</b></td>`; } return i === 0 ? `<td>Contagem <b>${list.length}</b></td>` : '<td></td>'; }).join('')}</tr></tfoot>` : '';
+  const sel = selOf(id); const pick = list.filter(r => sel.has(r.id)).length;
+  const allSel = list.length > 0 && pick === list.length;
+  const headSel = `<th class="sel-col"><input type="checkbox" data-on="tsel-all" data-table="${id}" data-ids="${list.map(r => r.id).join(',')}" ${allSel ? 'checked' : ''} aria-label="Selecionar todas"></th>`;
+  const bar = sel.size ? `<div class="sel-bar small"><b>${sel.size}</b> selecionada(s). Edite uma célula de uma delas e a mudança vai para todas <button class="btn sm ghost" data-act="tsel-clear" data-table="${id}">Limpar seleção</button></div>` : '';
+  return `${bar}<div class="table-wrap"><table class="grid fixed ${cls}" data-table="${id}" style="width:${total + 34}px"><colgroup><col class="sel-col" style="width:34px">${vis.map(k => `<col data-col="${k}" style="width:${W(k)}px">`).join('')}</colgroup><thead><tr>${headSel}${head}</tr></thead><tbody>${body}</tbody>${foot}</table></div>`;
 }
 
 let justResized = 0;
@@ -91,12 +95,35 @@ document.addEventListener('pointerdown', (e) => {
 });
 document.addEventListener('dblclick', (e) => { const rz = e.target.closest?.('.rz'); if (!rz) return; const id = rz.closest('table').dataset.table; delete S.tables[id].widths[rz.dataset.rz]; saveTables(); });
 
+/* ---------- seleção de linhas (várias de uma vez) ---------- */
+const TSEL = {};
+function selOf(id) { return (TSEL[id] = TSEL[id] || new Set()); }
+function selCell(id, r) { return `<td class="sel-col"><input type="checkbox" data-on="tsel" data-table="${id}" data-id="${r.id}" ${selOf(id).has(r.id) ? 'checked' : ''} aria-label="Selecionar linha"></td>`; }
+/* a caixinha não deve abrir a linha (ficha) */
+document.addEventListener('click', (e) => { if (e.target.closest?.('.sel-col')) e.stopPropagation(); }, true);
+CHANGES.tsel = (el) => { const s = selOf(el.dataset.table); el.checked ? s.add(el.dataset.id) : s.delete(el.dataset.id); render(); };
+CHANGES['tsel-all'] = (el) => { const s = selOf(el.dataset.table); el.dataset.ids.split(',').filter(Boolean).forEach(x => el.checked ? s.add(x) : s.delete(x)); render(); };
+ACTIONS['tsel-clear'] = (el) => { delete TSEL[el.dataset.table]; render(); };
+/* uma edição feita numa linha selecionada vai para as demais selecionadas (mesma coluna) */
+function propagateEdit(tid, col, row, v) {
+  const s = TSEL[tid]; if (!s || s.size < 2 || !s.has(row.id)) return 0;
+  const def = TABLE_DEFS[tid]; const ed = def?.cols[col]?.edit; if (!ed) return 0;
+  let n = 0;
+  for (const rid of [...s]) {
+    if (rid === row.id) continue;
+    const r = def.rowById(rid); if (!r || (ed.when && !ed.when(r))) continue;
+    ed.set(r, v); n++;
+  }
+  if (n) toast(`Aplicado em ${n} linha(s)`);
+  return n;
+}
+
 /* ---------- edição na célula ---------- */
 ACTIONS.cell = (td, e) => {
   if (td.querySelector('.cell-input')) return;
   const def = TABLE_DEFS[td.dataset.table]; const col = def.cols[td.dataset.col]; const row = def.rowById(td.dataset.id); const ed = col.edit;
   if (!row || !ed) return;
-  if (ed.type === 'combo') return openCombo(td, { kind: typeof ed.kind === 'function' ? ed.kind(row) : ed.kind, value: ed.get(row), allowEmpty: ed.allowEmpty, onPick: (v) => ed.set(row, v) });
+  if (ed.type === 'combo') return openCombo(td, { kind: typeof ed.kind === 'function' ? ed.kind(row) : ed.kind, value: ed.get(row), allowEmpty: ed.allowEmpty, onPick: (v) => { ed.set(row, v); propagateEdit(td.dataset.table, td.dataset.col, row, v); } });
   const cur = ed.get(row);
   const w = td.getBoundingClientRect().width;
   const attrs = ed.type === 'money' ? moneyAttrs(cur) : ed.type === 'date' ? `type="date" value="${cur || ''}"` : ed.type === 'number' ? `type="number" step="0.5" value="${cur ?? ''}"` : `type="text" value="${esc(cur || '')}"`;
@@ -109,7 +136,7 @@ ACTIONS.cell = (td, e) => {
     const v = ed.type === 'money' ? moneyVal(inp) : ed.type === 'number' ? numIn(inp.value) : ed.type === 'date' ? (inp.value || null) : inp.value.trim();
     if (ed.type === 'text' && ed.required && !v) { render(); return; }
     if (String(v ?? '') === String(cur ?? '')) { render(); return; }
-    await ed.set(row, v); render();
+    await ed.set(row, v); propagateEdit(td.dataset.table, td.dataset.col, row, v); render();
   };
   inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); commit(); } if (ev.key === 'Escape') { done = true; ev.stopPropagation(); render(); } });
   inp.addEventListener('blur', () => setTimeout(commit, ed.type === 'date' ? 150 : 0));
