@@ -182,12 +182,25 @@ create table if not exists tempo_notices (
 );
 create index if not exists tempo_notices_status on tempo_notices (user_id, status, created_at desc);
 
+create table if not exists tempo_reimb_rows (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  month text not null,                  -- YYYY-MM (uma tabela por mês)
+  name text, note text, date date, amount numeric(14,2),
+  pay_id uuid references tempo_status_options(id) on delete set null,
+  refund_id uuid references tempo_status_options(id) on delete set null,
+  req_id uuid references tempo_status_options(id) on delete set null,
+  "order" int not null default 0,
+  created_at timestamptz not null default now(), updated_at timestamptz
+);
+create index if not exists tempo_reimb_rows_month on tempo_reimb_rows (user_id, month, "order");
+
 -- Segurança: cada usuário só lê e escreve as próprias linhas
 do $$
 declare t text;
 begin
   foreach t in array array['tempo_agencies','tempo_clients','tempo_status_options','tempo_work_types','tempo_projects','tempo_tasks',
-    'tempo_revisions','tempo_time_entries','tempo_payments','tempo_deadline_changes','tempo_quotes','tempo_status_history','tempo_reminders','tempo_settings','tempo_notices']
+    'tempo_revisions','tempo_time_entries','tempo_payments','tempo_deadline_changes','tempo_quotes','tempo_status_history','tempo_reminders','tempo_settings','tempo_notices','tempo_reimb_rows']
   loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists own_rows on %I', t);
