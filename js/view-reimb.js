@@ -41,6 +41,7 @@ function ensureMonthSheets() {
 }
 
 ACTIONS['rb-new-month'] = () => { const t = rbCreateNextMonth(); if (!t) return toast('Não há mês anterior para copiar ou o mês já existe.'); S.rbMonth = t; toast(`Tabela de ${rbLabel(t)} criada`); render(); };
+ACTIONS['rb-filter'] = (el) => { S.rbFilter = el.dataset.f; render(); };
 ACTIONS['rb-month'] = (el) => { const m = rbMonths(); const cur = S.rbMonth || m[0]; S.rbMonth = rbAddMonth(cur, Number(el.dataset.d)); render(); };
 ACTIONS['rb-add'] = (el) => {
   const ym = el.dataset.m || rbMonths()[0]; const order = rbRows(ym).length;
@@ -102,31 +103,52 @@ VIEWS.reimb = () => {
   const li = (txt) => `<li>${txt}</li>`;
   const money = (v) => fmtMoney0(v);
 
+  /* Filtros de pendência (clicáveis): filtram as linhas das tabelas */
+  const now = ymd(new Date()).slice(0, 7);
+  const FILTERS = {
+    all: { label: 'Tudo', test: () => true },
+    plano: { label: 'Falta o plano pagar', test: r => payOf(r) === 'Pago' && !['Feito!', 'Negado'].includes(refOf(r)) && amt(r) > 0 },
+    requer: { label: 'Falta requerer', test: r => ['a Fazer', 'Falta Nota'].includes(reqOf(r)) && amt(r) > 0 },
+    refazer: { label: 'Negado / refazer', test: r => ['Negado', 'Parcial (Errado)'].includes(refOf(r)) },
+    profis: { label: 'A pagar a profissionais', test: r => payOf(r) === 'a Pagar' && amt(r) > 0 }
+  };
+  const f = FILTERS[S.rbFilter] ? S.rbFilter : 'all'; S.rbFilter = f;
+  const countOf = (k) => { const rs = all.filter(FILTERS[k].test); return `${rbN(rs)} · ${money(rbSum(rs))}`; };
+
+  /* Média mensal dos últimos 6 meses fechados (o mês atual ainda não conta) */
+  const closed = months.filter(m => m < now).slice(0, 6);
+  const monthPaid = (m) => rbSum(rbRows(m).filter(r => payOf(r) === 'Pago'));
+  const monthRef = (m) => rbSum(rbRows(m).filter(r => refOf(r) === 'Feito!'));
+  const avgPaid = closed.length ? closed.reduce((t, m) => t + monthPaid(m), 0) / closed.length : 0;
+  const avgNet = closed.length ? closed.reduce((t, m) => t + monthPaid(m) - monthRef(m), 0) / closed.length : 0;
+
   const summary = all.length ? `
-    <div class="kpi-row">
-      <div class="kpi"><span class="k">Pago por você (total)</span><b class="v">${money(rbSum(paid))}</b></div>
-      <div class="kpi pos"><span class="k">Já reembolsado</span><b class="v">${money(rbSum(refunded))}</b></div>
-      <div class="kpi ${net > 0 ? 'neg' : ''}"><span class="k">Saldo líquido (custo real)</span><b class="v">${money(net)}</b></div>
-      <div class="kpi"><span class="k">Ainda a reembolsar</span><b class="v">${money(rbSum(toRefund))}</b></div>
-    </div>
-    <div class="card rb-summary">
-      <div class="rb-cols">
-        <div><b>Feito</b>
-          <ul>${li(`${rbN(refunded)} reembolsada(s), ${money(rbSum(refunded))}`)}${li(`${rbN(paid)} paga(s) por você, ${money(rbSum(paid))}`)}</ul></div>
-        <div><b>Falta</b>
-          <ul>
-            ${notRequested.length ? li(`Requerimento a fazer ou sem nota: ${rbN(notRequested)}, ${money(rbSum(notRequested))}`) : li('Todos os requerimentos estão feitos')}
-            ${toRefund.length ? li(`Aguardando reembolso do plano: ${rbN(toRefund)}, ${money(rbSum(toRefund))}`) : ''}
-            ${refused.length ? li(`Negados ou pagos errado (refazer): ${rbN(refused)}, ${money(rbSum(refused))}`) : ''}
-            ${toPayThird.length ? li(`A pagar a profissionais: ${rbN(toPayThird)}, ${money(rbSum(toPayThird))}`) : ''}
-          </ul></div>
+    <div class="rb-top">
+      <div class="card rb-hero">
+        <span class="k">Falta o plano pagar</span>
+        <b class="v">${money(rbSum(toRefund))}</b>
+        <span class="small muted">${rbN(toRefund)} aguardando reembolso</span>
       </div>
+      <div class="card rb-avg">
+        <span class="k">Média mensal · últimos ${closed.length} ${closed.length === 1 ? 'mês fechado' : 'meses fechados'}</span>
+        <b class="v">${money(avgPaid)}</b>
+        <span class="small muted">pago por você · custo líquido ${money(avgNet)}/mês</span>
+      </div>
+      <div class="rb-side">
+        <div class="card rb-mini"><span>Pago por você (total)</span><b>${money(rbSum(paid))}</b></div>
+        <div class="card rb-mini"><span>Já reembolsado</span><b>${money(rbSum(refunded))}</b></div>
+        <div class="card rb-mini"><span>Saldo líquido</span><b>${money(net)}</b></div>
+      </div>
+    </div>
+    <div class="seg rb-filters" role="group" aria-label="Filtrar pendências">
+      ${Object.keys(FILTERS).map(k => `<button class="${f === k ? 'on' : ''}" data-act="rb-filter" data-f="${k}">${FILTERS[k].label}${k === 'all' ? '' : ` <span class="faint">${countOf(k)}</span>`}</button>`).join('')}
     </div>` : '';
 
   const monthBlock = (ym) => {
-    const rows = rbRows(ym);
-    const total = rbSum(rows), p = rbSum(rows.filter(r => payOf(r) === 'Pago')), rf = rbSum(rows.filter(r => refOf(r) === 'Feito!'));
-    const pend = rbSum(rows.filter(r => payOf(r) === 'Pago' && !['Feito!', 'Negado'].includes(refOf(r))));
+    const all_rows = rbRows(ym); const rows = all_rows.filter(FILTERS[f].test);
+    if (f !== 'all' && !rows.length) return '';
+    const total = rbSum(all_rows), p = rbSum(all_rows.filter(r => payOf(r) === 'Pago')), rf = rbSum(all_rows.filter(r => refOf(r) === 'Feito!'));
+    const pend = rbSum(all_rows.filter(r => payOf(r) === 'Pago' && !['Feito!', 'Negado'].includes(refOf(r))));
     const tr = (r) => `<tr>
       <td class="rb-name"><input class="rb-in" value="${esc(r.name || '')}" data-on="rb-field" data-id="${r.id}" data-k="name"></td>
       <td><input class="rb-in" type="date" value="${r.date || ''}" data-on="rb-field" data-id="${r.id}" data-k="date"></td>
@@ -147,7 +169,7 @@ VIEWS.reimb = () => {
   };
 
   const html = `${summary}
-    ${months.map(monthBlock).join('') || '<div class="empty">' + icon('layers') + '<b>Nenhum reembolso cadastrado</b><span>Importe o CSV do Notion ou comece pelo botão Linha.</span></div>'}
+    ${f !== 'all' && months.every(m => !rbRows(m).some(FILTERS[f].test)) ? '<div class="empty">' + icon('check') + '<b>Nada nesse filtro</b><span>Tudo resolvido por aqui.</span></div>' : ''}${months.map(monthBlock).join('') || '<div class="empty">' + icon('layers') + '<b>Nenhum reembolso cadastrado</b><span>Importe o CSV do Notion ou comece pelo botão Linha.</span></div>'}
     <p class="small faint">Pago por você = Pagamento "Pago". Já reembolsado = Reembolso "Feito!". Saldo líquido = pago − reembolsado. Negados não entram em "ainda a reembolsar".</p>`;
   return {
     title: 'Reembolsos',

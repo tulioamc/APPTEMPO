@@ -257,3 +257,6 @@ Adendo ao item de reembolsos acima. Tudo que o app lê ou sugere vai para a fila
 - Suposição a validar: cada agência virou também um cliente de mesmo nome. Se a agência e o cliente final forem coisas diferentes, o ajuste é renomear ou separar depois.
 - Mapeamento de status: Standby → "Stand by"; Não iniciada → "A fazer"; Pagamento "Nota Fiscal Emitida" → não tinha equivalente (nenhuma linha usava). Pagamento vazio em "NETFLIX BTS 2026 - AP 01" → "Não faturado" (confirmar).
 - Pendente: "Cancelado" no campo de pagamento ficou sem status de pagamento (o app só tem o status do projeto "Cancelado").
+
+## Bugs (reportados pelo Tulio, 17/10/2026)
+- [ ] Ao clicar em "Pago" para mudar o status, abre a janelinha mas a página rola até o fim (base). Provável foco/scroll em um elemento da base ao abrir o popover de status (combo). Investigar.

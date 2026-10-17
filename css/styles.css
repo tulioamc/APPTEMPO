@@ -571,6 +571,17 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 .rb-summary { display: grid; gap: 8px; }
 .rb-summary ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: .92em; }
 .rb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.rb-top { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,1fr) minmax(0,.9fr); gap: 12px; align-items: stretch; }
+.rb-hero, .rb-avg { display: flex; flex-direction: column; gap: 6px; justify-content: center; padding: 18px 20px; }
+.rb-hero .v, .rb-avg .v { font-family: var(--font-mono); font-size: 2.1em; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.rb-hero .v { color: var(--warn, #B45309); }
+.rb-side { display: grid; gap: 6px; }
+.rb-mini { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 12px; font-size: .85em; }
+.rb-mini span { color: var(--fg-3); }
+.rb-mini b { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.rb-filters { margin: 14px 0 4px; flex-wrap: wrap; }
+.rb-filters button .faint { font-size: .85em; }
+@media (max-width: 860px) { .rb-top { grid-template-columns: 1fr; } }
 .rb-month { margin-top: 18px; }
 .rb-month > summary { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; cursor: pointer; list-style: none; padding: 6px 2px 10px; }
 .rb-month > summary::-webkit-details-marker { display: none; }
