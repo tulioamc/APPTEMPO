@@ -88,7 +88,7 @@ function sidePanelHTML() {
       <div class="todo-list">${todos.length ? todos.map(t => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}><span class="grow">${esc(t.title)}</span><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`).join('') : '<span class="faint small">Nada por enquanto.</span>'}</div>
     </div>
     <div class="card"><div class="row between"><b>Avisos</b><button class="btn sm ghost" data-act="go" data-route="notices">Ver todos</button></div>
-      ${pend.length ? pend.map(n => `<div class="sug"><div class="grow small"><b>${esc(n.title)}</b>${n.kind === 'pause' ? '' : `<div class="faint">${esc(n.body || '')}</div>`}</div></div>${noticeButtons(n)}`).join('') : '<span class="faint small">Sem avisos pendentes.</span>'}
+      ${pend.length ? pend.map(n => `<div class="side-notice"><div class="small"><b>${esc(n.title)}</b>${n.kind === 'pause' ? '' : `<div class="faint">${esc(n.body || '')}</div>`}</div>${noticeButtons(n)}</div>`).join('') : '<span class="faint small">Sem avisos pendentes.</span>'}
     </div></aside>`;
 }
 

@@ -290,3 +290,14 @@ Adendo ao item de reembolsos acima. Tudo que o app lê ou sugere vai para a fila
   - Assinaturas e programas: Dropbox, Adobe, Cinema 4D
   - Freelas (entrada): Freela (PEDRO, BOTICARIO/REBU, TAL PIET)
 - Pró-labore: tratado como entrada pessoal fixa. Confirmar se a empresa também registra como saída.
+
+## Próximos — avisos (pedido do Tulio, 17/10/2026)
+- [ ] **Botão "Resolver" nos avisos**: leva até o item que causou o aviso (ex.: a conta ou o recebimento em Despesas, o projeto, a sessão). Não altera nada no aviso; ele só muda para "resolvido" quando o Tulio volta e clica em "Ok, visto".
+- [ ] **Conta sem nome em Despesas**: a linha de 10/10/2026 aparece como "Conta vencida: sem nome". É uma linha vazia importada; apagar ou preencher. Também conferir se há outras linhas sem nome.
+
+## Regra das pausas automáticas (definida pelo Tulio, 17/10/2026)
+- Qualquer parada (tela bloqueada, mouse/teclado inativo, WhatsApp em primeiro plano) vira **sugestão de pausa** na lista de Avisos. Nada para o cronômetro sozinho.
+- **Aceitar:** a pausa fica registrada na sessão e aparece como um intervalo vazio na linha do tempo.
+- **Ignorar:** o tempo continua contando normalmente.
+- O WhatsApp gera o aviso depois do fato ("WhatsApp: X min, pausar?"), não em tempo real.
+- Mac: incluir detecção de tela bloqueada e de app em primeiro plano (WhatsApp) no monitor; o site já cria e registra a pausa aceita.

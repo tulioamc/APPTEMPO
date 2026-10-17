@@ -625,3 +625,16 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 .ex-sign { font-weight:600; margin-right:4px; color:var(--fg-3); }
 .ex-off { opacity:.45; }
 .ex-table select.rb-in { padding-right:6px; }
+
+/* avisos na lateral: cada um em uma caixinha */
+.side-notice { border: 1px solid var(--line, rgba(0,0,0,.08)); border-radius: 10px; padding: 10px 12px; margin-top: 8px; display: grid; gap: 8px; background: var(--bg-2, rgba(0,0,0,.02)); }
+.side-notice .sug { padding: 0; }
+
+/* intervalos da sessão agrupados por dia, com caixas de horário */
+.seg-day { display: flex; flex-direction: column; gap: 6px; }
+.seg-day-h { font-size: 12px; font-weight: 600; color: var(--fg-3, #888); }
+.tbox { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--line, rgba(0,0,0,.12)); border-radius: 8px; background: transparent; font: inherit; font-family: var(--mono, monospace); font-size: 12px; color: inherit; cursor: pointer; width: fit-content; }
+.tbox.gap { cursor: default; opacity: .7; border-style: dashed; }
+.tbox.on { border-color: var(--accent, #2E43D6); }
+.tbox .tlabel { font-family: inherit; margin-left: 6px; color: var(--fg-3, #888); }
+.seg-edit { margin-top: 4px; }

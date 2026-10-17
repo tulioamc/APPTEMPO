@@ -230,6 +230,31 @@ function openEntryModal(id) {
   const today = S.tsDay || ymd(new Date());
   let segs = e ? clone(e.segments) : [{ s: new Date(`${today}T09:00`).toISOString(), e: new Date(`${today}T10:00`).toISOString() }];
   let showPicker = !e;
+  let openSeg = null; // intervalo com a caixa aberta para edição
+  const hm = (iso) => `${pad(new Date(iso).getHours())}:${pad(new Date(iso).getMinutes())}`;
+  const segBox = (i) => {
+    const s = segs[i];
+    const head = `<button type="button" class="tbox ${openSeg === i ? 'on' : ''}" data-x="edit-seg" data-i="${i}"><span>${hm(s.s)}</span><span class="faint">→</span><span>${s.e ? hm(s.e) : 'agora'}</span><span class="tlabel">Trabalhado</span></button>`;
+    if (openSeg !== i) return head;
+    const aberto = !s.e && e && e.state !== 'done' && i === segs.length - 1;
+    return head + `<div class="seg-edit row" style="flex-wrap:nowrap">
+      <input type="datetime-local" class="input sm" data-seg="${i}" data-k="s" value="${toLocalInput(s.s)}" aria-label="Início do intervalo ${i + 1}">
+      <span class="faint">→</span>
+      <input type="datetime-local" class="input sm" data-seg="${i}" data-k="e" value="${toLocalInput(s.e)}" aria-label="Fim do intervalo ${i + 1}" ${aberto ? 'placeholder="em andamento"' : ''}>
+      ${segs.length > 1 ? `<button class="btn sm icon ghost" data-x="delseg" data-i="${i}" aria-label="Remover intervalo">${icon('x')}</button>` : ''}
+    </div>`;
+  };
+  const segDaysHTML = () => {
+    const items = [];
+    segs.forEach((s, i) => {
+      if (i > 0 && segs[i - 1].e && s.s && new Date(s.s) > new Date(segs[i - 1].e)) items.push({ gap: true, from: segs[i - 1].e, to: s.s, day: ymd(new Date(segs[i - 1].e)) });
+      items.push({ i, day: ymd(new Date(s.s)) });
+    });
+    const days = [...new Set(items.map(x => x.day))];
+    return days.map(day => `<div class="seg-day"><div class="seg-day-h">${fmtDate(day)}</div>${items.filter(x => x.day === day).map(x => x.gap
+      ? `<div class="tbox gap"><span>${hm(x.from)}</span><span class="faint">→</span><span>${hm(x.to)}</span><span class="tlabel">Pausa</span></div>`
+      : segBox(x.i)).join('')}</div>`).join('');
+  };
   const render_ = () => {
     const p = db.get('tempo_projects', sel.project_id);
     const revs = p ? db.where('tempo_revisions', r => r.project_id === p.id) : [];
@@ -243,12 +268,7 @@ function openEntryModal(id) {
       </div>
       <div class="stack" style="gap:8px">
         <div class="row between"><span class="lbl">Intervalos trabalhados</span><span class="mono small">Total ${fmtDur(total)}</span></div>
-        ${segs.map((s, i) => `<div class="row" style="flex-wrap:nowrap">
-          <input type="datetime-local" class="input sm" data-seg="${i}" data-k="s" value="${toLocalInput(s.s)}" aria-label="Início do intervalo ${i + 1}">
-          <span class="faint">→</span>
-          <input type="datetime-local" class="input sm" data-seg="${i}" data-k="e" value="${toLocalInput(s.e)}" aria-label="Fim do intervalo ${i + 1}" ${!s.e && e && e.state !== 'done' && i === segs.length - 1 ? 'placeholder="em andamento"' : ''}>
-          ${segs.length > 1 ? `<button class="btn sm icon ghost" data-x="delseg" data-i="${i}" aria-label="Remover intervalo">${icon('x')}</button>` : ''}
-        </div>`).join('')}
+        ${segDaysHTML()}
         <div class="row"><button class="btn sm" data-x="addseg">${icon('plus')} Adicionar intervalo (após pausa)</button>${e && e.state !== 'done' ? '<span class="small muted">Deixe o último fim vazio para continuar contando.</span>' : ''}</div>
       </div>
       <div class="field"><label for="em-notes">Notas</label><textarea id="em-notes" class="input" name="notes">${esc(e?.notes || '')}</textarea></div>
@@ -273,9 +293,10 @@ function openEntryModal(id) {
   l.box.addEventListener('click', async (ev) => {
     const b = ev.target.closest('[data-x]'); if (!b) return;
     const x = b.dataset.x;
+    if (x === 'edit-seg') { const i = Number(b.dataset.i); openSeg = openSeg === i ? null : i; redraw(); return; }
     if (x === 'pick') { showPicker = true; redraw(); }
     if (x === 'addseg') { const last = segs[segs.length - 1]; const base = last.e ? new Date(last.e) : new Date(); const s = new Date(base.getTime() + 30 * 60000); segs.push({ s: s.toISOString(), e: new Date(s.getTime() + 3600000).toISOString() }); redraw(); }
-    if (x === 'delseg') { segs.splice(Number(b.dataset.i), 1); redraw(); }
+    if (x === 'delseg') { segs.splice(Number(b.dataset.i), 1); openSeg = null; redraw(); }
     if (x === 'del') {
       if (!await confirmBox({ title: 'Excluir sessão?', body: `A sessão de ${fmtDur(entryMs(e))} sai dos totais e relatórios. Não dá para desfazer.`, ok: 'Excluir', danger: true })) return;
       db.remove('tempo_time_entries', e.id); l.close(); toast('Sessão excluída');
