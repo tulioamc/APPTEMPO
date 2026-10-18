@@ -55,7 +55,7 @@ function wtTag(id) { const w = db.get('tempo_work_types', id); return w ? tag(w.
 function clientTag(c, opts = {}) {
   if (!c) return '<span class="faint">—</span>';
   const a = db.get('tempo_agencies', c.agency_id);
-  return `<span class="ctag">${a && agencyAbbr(a) ? `<span class="tag tg abbr" style="${cssTb(a.color)}" title="${esc(a.name)}">${esc(agencyAbbr(a))}</span>` : ''}<span class="tag tg" style="${cssTb(c.color)}">${esc(c.name)}</span></span>`;
+  return `<span class="ctag">${a && agencyAbbr(a) ? `<span class="tag tg abbr" style="${cssTb(a.color)}" title="${esc(a.name)}">${esc(agencyAbbr(a))}</span>` : `<span class="tag tg abbr" style="background:var(--surface-2);color:var(--fg-3)" title="Cliente direto">&nbsp;&nbsp;</span>`}<span class="tag tg" style="${cssTb(c.color)}">${esc(c.name)}</span></span>`;
 }
 function agencyTag(a) { return a ? tag(a.name, a.color, { upper: true }) : '<span class="faint small">Direto</span>'; }
 

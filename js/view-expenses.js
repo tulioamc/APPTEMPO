@@ -139,7 +139,7 @@ function exSetStatus(r, v) {
   db.update('tempo_expenses', r.id, { status: v, paid_on: done ? (r.paid_on || ymd(new Date())) : (v === EX_OFF ? r.paid_on : null) });
 }
 const EX_COLS = {
-  cat: { label: 'Categoria', ico: 'layers', w: 170, cell: r => { if (!r.cat) return '<span class="faint">—</span>'; const [m, sub] = r.cat.split('/'); return `<span class="faint small">${esc(m)} · </span>${esc(sub || r.cat)}`; }, edit: { type: 'combo', kind: 'ex_cat', allowEmpty: true, emptyLabel: 'Sem categoria', get: r => r.cat, set: (r, v) => db.update('tempo_expenses', r.id, { cat: v || null }) } },
+  cat: { label: 'Categoria', ico: 'layers', w: 170, cell: r => r.cat ? exCatTags(r.cat) : '<span class="faint">—</span>', edit: { type: 'combo', kind: 'ex_cat', allowEmpty: true, emptyLabel: 'Sem categoria', get: r => r.cat, set: (r, v) => db.update('tempo_expenses', r.id, { cat: v || null }) } },
   name: { label: 'Nome', ico: 'text', cls: 'name', sort: r => r.name || '', w: 220, cell: r => esc(r.name || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.name, set: (r, v) => db.update('tempo_expenses', r.id, { name: (v || '').trim() }) } },
   due_date: { label: 'Vencimento', ico: 'cal', w: 120, cell: r => r.due_date ? fmtDate(r.due_date) : '<span class="faint">—</span>', sort: r => r.due_date || '', edit: { type: 'date', get: r => r.due_date, set: (r, v) => db.update('tempo_expenses', r.id, { due_date: v || null }) } },
   amount: { label: 'Valor', ico: 'money', sort: r => r.amount || 0, money: true, w: 130, cell: r => `<span class="ex-sign">${r.kind === 'in' ? '+' : '−'}</span> ${fmtMoney(r.amount || 0)}`, val: r => (r.status === EX_OFF ? 0 : (r.amount || 0)), edit: { type: 'money', get: r => r.amount, set: (r, v) => db.update('tempo_expenses', r.id, { amount: Math.abs(v || 0) }) } },
@@ -149,6 +149,27 @@ const EX_COLS = {
   note: { label: 'Anotação', ico: 'text', w: 240, cell: r => esc(r.note || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.note, set: (r, v) => db.update('tempo_expenses', r.id, { note: (v || '').trim() }) } },
   del: { label: '', w: 44, cell: r => `<button class="icon-btn ghost" data-act="ex-del" data-id="${r.id}" title="Remover linha">×</button>` }
 };
+/* Categoria em etiquetas: [PF] [Renda]. PF roxo, PJ amarelo. Entradas em cores frias, saídas em cores quentes. Clique para mudar a cor. */
+const EX_IN_CATS = ['PESSOAL/Renda', 'EMPRESA/Freelas'];
+const EX_GROUP_LABEL = { PESSOAL: 'PF', EMPRESA: 'PJ' };
+const EX_GROUP_DEF = { PESSOAL: '#D6C1F2', EMPRESA: '#F4DE8C' };
+const exDefColor = (key) => EX_GROUP_DEF[key] || (EX_IN_CATS.includes(key) ? '#AFCBF3' : '#F7C6A0');
+const exColor = (key) => (db.setting('ex_colors', {}) || {})[key] || exDefColor(key);
+const exCatTags = (cat) => { const [g, sub] = cat.split('/');
+  return `<span class="ctag"><span class="tag tg abbr" style="${cssTb(exColor(g))}" data-act="ex-color" data-key="${esc(g)}" title="Mudar cor">${esc(EX_GROUP_LABEL[g] || g)}</span><span class="tag tg" style="${cssTb(exColor(cat))}" data-act="ex-color" data-key="${esc(cat)}" title="Mudar cor">${esc(sub || cat)}</span></span>`; };
+function exSetColor(key, hex) {
+  const m = { ...(db.setting('ex_colors', {}) || {}) };
+  if (hex) m[key] = hex; else delete m[key];
+  db.setSetting('ex_colors', m); db.emit();
+}
+ACTIONS['ex-color'] = (el) => {
+  const key = el.dataset.key; const cur = exColor(key);
+  openLayer({ html: `<div class="dh">${icon('layers')}<h2>Cor de ${esc(key.replace('/', ' › '))}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db"><div class="row wrap" style="gap:8px">${PRESET_COLORS.map(([hex, name]) => `<button class="btn sm" data-act="ex-color-set" data-key="${esc(key)}" data-c="${hex}" style="${cssTb(hex)}" title="${name}">${name}</button>`).join('')}</div>
+    <div class="row" style="gap:8px;margin-top:12px"><label class="small muted">Cor livre</label><input type="color" value="${cur}" data-on="ex-free" data-key="${esc(key)}" aria-label="Cor livre"><button class="btn sm ghost" data-act="ex-color-set" data-key="${esc(key)}" data-c="">Padrão</button></div></div>` });
+};
+ACTIONS['ex-color-set'] = (el) => { exSetColor(el.dataset.key, el.dataset.c || null); document.querySelector('[data-act="close-layer"]')?.click(); };
+CHANGES['ex-free'] = (el) => exSetColor(el.dataset.key, el.value);
 function exSectionHTML(ym, kind) {
   const rows = exRows(ym, kind); const total = exSum(rows.filter(r => r.status !== EX_OFF));
   const title = kind === 'in' ? 'Entradas' : 'Saídas';
