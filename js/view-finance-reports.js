@@ -659,7 +659,7 @@ function bankRowExtra(t) {
   if (t.reimb_row_id) { const r = db.get('tempo_reimb_rows', t.reimb_row_id); return r ? `<span class="small muted">→ Terapia: ${esc(r.name)}</span>` : ''; }
   if (t.expense_id) { const e = db.get('tempo_expenses', t.expense_id); return e ? `<span class="small muted">→ ${esc(e.name)}</span>` : ''; }
   if (t.flow !== 'out' && t.category === 'Reembolso') return `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
-  if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : ''; }
+  if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`; }
   const e = bankFixedMatch(t);
   if (e) return `<button class="btn sm" data-act="bank-link" data-id="${t.id}" data-eid="${e.id}">Vincular a ${esc(e.name)}</button>`;
   const rr = bankTherapyMatch(t);
