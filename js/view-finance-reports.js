@@ -13,7 +13,7 @@ VIEWS.finance = () => {
   const pids = new Set(list.map(p => p.id));
   const pays = db.all('tempo_payments').filter(x => pids.has(x.project_id) && ((!f.year && !f.month && !f.from && !f.to) || x.date) && (!f.year || x.date.slice(0, 4) === f.year) && (!f.month || x.date.slice(5, 7) === f.month) && (!f.from || x.date >= f.from) && (!f.to || x.date <= f.to)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   bankRefresh();
-  const html = `${bankPanel('pj')}<div class="panel">${filterBar(f, 'fin')}<div class="panel-b small muted" style="padding:8px 16px">Ano, mês e período filtram projetos pelo prazo (ou data de criação) e pagamentos pela data do recebimento.</div></div>
+  const html = `${bankSummaryHTML('pj')}${bankPanel('pj')}<div class="panel">${filterBar(f, 'fin')}<div class="panel-b small muted" style="padding:8px 16px">Ano, mês e período filtram projetos pelo prazo (ou data de criação) e pagamentos pela data do recebimento.</div></div>
   <div class="kpis">
     <div class="kpi"><span class="k">Orçado</span><span class="v">${fmtMoney0(budget)}</span><span class="s">${list.length} projeto(s)</span></div>
     <div class="kpi"><span class="k">Valor pago</span><span class="v">${fmtMoney0(paid)}</span><span class="s">${budget ? Math.round(paid / budget * 100) + '% do orçado' : ''}</span></div>
@@ -172,7 +172,7 @@ ACTIONS['csv-copy'] = async (el) => {
    EXTRATOS BANCÁRIOS (Gmail → Nubank). Lançamentos vêm de tempo_bank_txns,
    separados por entidade (pf / pj) e marcados "novo" até você revisar.
    ===================================================================== */
-const BANK = { status: null, txns: { pf: [], pj: [] }, mode: { pf: 'novo', pj: 'novo' }, busy: false, checkedAt: 0, msg: '' };
+const BANK = { status: null, txns: { pf: [], pj: [] }, all: { pf: [], pj: [] }, mode: { pf: 'novo', pj: 'novo' }, busy: false, checkedAt: 0, msg: '' };
 async function bankToken() {
   const { data } = await db.adapter.client.auth.getSession();
   return data && data.session ? data.session.access_token : null;
@@ -190,7 +190,26 @@ async function bankLoadTxns() {
       .eq('entity', entity).eq('review_status', BANK.mode[entity]).order('posted_on', { ascending: false }).limit(300);
     if (error) throw error;
     BANK.txns[entity] = data || [];
+    const { data: every } = await db.adapter.client.from('tempo_bank_txns').select('*')
+      .eq('entity', entity).order('posted_on', { ascending: false }).limit(2000);
+    BANK.all[entity] = every || [];
   }
+}
+// Resumo geral: entradas, saídas e sobra (sem movimentos internos) e onde o dinheiro saiu.
+function bankSummaryHTML(entity) {
+  const all = (BANK.all[entity] || []).filter(t => t.scope === 'externa');
+  const ent = all.filter(t => t.flow === 'in').reduce((s, t) => s + Number(t.amount), 0);
+  const sai = all.filter(t => t.flow === 'out').reduce((s, t) => s + Number(t.amount), 0);
+  const byCp = {};
+  all.filter(t => t.flow === 'out').forEach(t => { const k = t.counterpart || '—'; byCp[k] = (byCp[k] || 0) + Math.abs(Number(t.amount)); });
+  const top = Object.entries(byCp).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const max = Math.max(1, ...top.map(x => x[1]));
+  return `<div class="kpis">
+    <div class="kpi"><span class="k">Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas</span></div>
+    <div class="kpi"><span class="k">Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">externas</span></div>
+    <div class="kpi"><span class="k">Sobra</span><span class="v">${fmtMoney0(ent + sai)}</span><span class="s">entradas − saídas</span></div>
+  </div>
+  <div class="panel"><div class="panel-h"><h3>Para onde foi o dinheiro</h3></div><div class="panel-b">${top.length ? `<div class="bars">${top.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(k)}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / max * 100}%"></div></div><span class="mono small">${fmtMoney0(v)}</span></div>`).join('')}</div>` : '<div class="empty small">Sem saídas ainda.</div>'}</div></div>`;
 }
 // Sincroniza ao abrir a tela se a última leitura tiver mais de 2h.
 // checkedAt evita loop: render() chama a tela de novo, e a checagem não roda de novo por 60s.
@@ -252,5 +271,5 @@ ACTIONS['bank-review-all'] = async (el) => {
 };
 VIEWS.financepf = () => {
   bankRefresh();
-  return { title: 'Financeiro PF', actions: '', html: `${bankPanel('pf')}` };
+  return { title: 'Financeiro PF', actions: '', html: `${bankSummaryHTML('pf')}${bankPanel('pf')}` };
 };
