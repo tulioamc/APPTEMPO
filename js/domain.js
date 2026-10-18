@@ -110,9 +110,10 @@ function revisionMs(pid) { return db.where('tempo_time_entries', e => e.project_
 const paymentsOf = (pid) => db.where('tempo_payments', p => p.project_id === pid).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 const paidOf = (p) => paymentsOf(p.id).reduce((s, x) => s + (Number(x.amount) || 0), 0);
 function remainingOf(p) {
+  if (statusCat(p.status_id) === 'cancelled') return 0; // trabalho cancelado nunca será pago
   if (p.remaining_override !== null && p.remaining_override !== undefined && p.remaining_override !== '') return Number(p.remaining_override);
   if (p.budget === null || p.budget === undefined || p.budget === '') return null;
-  if (statusCat(p.status_id) === 'cancelled' || db.get('tempo_status_options', p.payment_status_id)?.category === 'closed') return 0;
+  if (db.get('tempo_status_options', p.payment_status_id)?.category === 'closed') return 0;
   return Math.max(0, Number(p.budget) - paidOf(p));
 }
 function effectiveRate(p) {

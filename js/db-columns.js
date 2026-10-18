@@ -270,6 +270,7 @@ window.DB_COLUMNS = {
   "counterpart_doc",
   "flow",
   "scope",
+  "category",
   "review_status",
   "expense_id",
   "created_at",

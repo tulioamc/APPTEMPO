@@ -347,3 +347,45 @@ Adendo ao item de reembolsos acima. Tudo que o app lê ou sugere vai para a fila
 ## Decisão atual (2026-10-18)
 - Conciliação financeira via e-mail da Nubank por enquanto (OFX da Nu Empresas e da conta PF, PDF da fatura do cartão).
 - Organizze fica para reavaliar depois de 14/11/2026 (lembrete agendado).
+
+## Pendências consolidadas (anotado 2026-10-18)
+
+### Financeiro PF (Conta, Investimentos, Cartão, Visão geral)
+- Abas do Financeiro PF: Conta Corrente, Investimentos, Cartão e Visão geral (resumão, relatório e gráfico de gastos por categoria). Hoje existe só a lista única com filtro Tudo / Conta / Cartão.
+- Investimentos: um card por caixinha do Nubank com saldo e entradas/saídas do mês. Caixinhas: Giro, Reserva, Especial (aviso do teto de R$ 10 mil) e Freelas. Caixinha nova criada no Nubank aparece sozinha.
+- Movimentos de caixinha (RDB, Resgate, Aplicação, Caixinha, Rendimento) seguem como "Interna", fora dos totais.
+- Cartão: ler o PDF da fatura mensal (precisa de biblioteca de PDF no servidor e de um PDF de exemplo para testar). Os itens entram como gastos no lugar do débito "Pagamento de fatura", que já fica fora das saídas (scope "cartao").
+- Conta de cartão (final d660) já vai para PF; a regra está no servidor (api/gmail/sync.js).
+- Confirmar transferências da conta PJ: "Tulio de Azevedo Melo Couceiro" (3 movimentos, R$ -46.791) e "BRENDA" (2 movimentos, R$ 40.396). Se for transferência para você ou entre empresas, marcar como interna.
+- Categorias: padrão + criação livre. Ao definir a categoria de uma contraparte, vale para todos os lançamentos com esse nome. Falta sugerir categoria automaticamente.
+- Mostrar "onde foi" também pelo vínculo automático com gastos (hoje o vínculo é manual, como o do Dentista).
+- Fechar mês: decidir se trava edições no mês fechado.
+
+### Sincronização automática do Gmail (a cada 2 horas, app fechado)
+- Criar SYNC_SECRET (uma string longa e aleatória) e colocar no Vercel (variável de ambiente) e no GitHub (Settings > Secrets and variables > Actions).
+- Ativar o workflow de agendamento: arquivo pronto em /tmp/claude-0/-home-claude/7ff19e21-23d4-5897-a91a-cb413343fd03/scratchpad/.github/workflows/sync-email.yml. Mover para repo-extra/.github/workflows/ depois que o segredo existir. O Vercel no plano gratuito só roda cron uma vez por dia, por isso o GitHub Actions.
+- Testar ponta a ponta: conexão, leitura de OFX e recarga com o app fechado.
+
+### Custos fixos e reembolsos
+- Conciliação automática de fixos (regras por favorecido, casamento por valor com tolerância, validade pelo Gmail): ver seção "Fixos e conciliação automática".
+- Reembolso da SulAmérica: hoje a data é marcada à mão ("Reembolsado em"). Falta sugerir o lote quando entrar um crédito da SulAmérica.
+- Dentista: recorrência mensal (só outubro/2026 foi criado).
+- Cliente REBU CONSULTORIA LTDA (CNPJ 38.540.017/0001-04, R$ 6.000 em 23/09): aguardando confirmação para cadastrar.
+- Organizze: decidir depois de 14/11/2026 (lembrete agendado).
+
+### Integração com e-mail
+- Ver seção "Integração com e-mail" (E1 a E7). Próxima etapa depois do financeiro.
+
+### Tipos de trabalho e preferências
+- Verificar em uso: Arquivar / Mesclar / Apagar com destino / Arquivados (V2.01.55).
+- Verificar visualmente: largura automática das colunas, editor de notas crescente, prévias de altura das linhas (geral e financeiro).
+
+### Geral
+- Rotacionar a chave secreta do Supabase (recomendado, não confirmado).
+- Conferir o schema.sql contra o banco (tempo_bank_txns já tem category e scope "cartao"; tempo_integrations e tempo_reimb_rows.refunded_on também).
+
+### Status em 2026-10-18 (V2.01.55)
+- Feito: abas do Financeiro PF (Visão geral, Conta corrente, Cartão, Investimentos); separação conta × cartão; cartão em PF; cancelados fora do restante; linhas do financeiro mais finas, com preferência separada; tipos de trabalho com Mesclar / Arquivar / Apagar com destino; categorias por contraparte; lista completa de "Para onde foi o dinheiro".
+- Bloqueado por você: SYNC_SECRET (Vercel e GitHub) e ativação do workflow; PDF de exemplo da fatura; decisão sobre travar o mês fechado; confirmação das transferências PJ→"Tulio de Azevedo Melo Couceiro" e "BRENDA"; confirmação do cliente REBU; chave do Supabase.
+- Bloqueado pelo extrato: o OFX só diz "Resgate RDB", sem a caixinha. Para separar Giro, Reserva, Especial e Freelas, preciso que você informe de qual caixinha é cada movimento ou outra fonte de dados.
+- Não iniciado: conciliação automática de fixos, sugestão de reembolso SulAmérica, recorrência do Dentista, integração de e-mail (E1–E7).

@@ -23,7 +23,8 @@ async function syncOne(integ) {
     for (const a of collectOfx(msg.payload)) {
       const att = await gmail(token, `messages/${m.id}/attachments/${a.attachmentId}`);
       const text = Buffer.from(att.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
-      const rows = parseOfx(text).map((t) => ({ ...classify(t), user_id: integ.user_id, source: 'nubank', entity }));
+      // o cartão é pessoal (PF), mesmo que o e-mail venha com o nome da empresa
+      const rows = parseOfx(text).map((t) => { const r = classify(t); const ent = /d660$/.test(r.account_tail || '') ? 'pf' : entity; return { ...r, user_id: integ.user_id, source: 'nubank', entity: ent }; });
       lidas += rows.length;
       if (rows.length) {
         await rest('tempo_bank_txns?on_conflict=user_id,fitid', {

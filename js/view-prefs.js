@@ -9,7 +9,7 @@ VIEWS.prefs = () => {
 ACTIONS['pref-tab'] = (el) => { S.pref = el.dataset.v; render(); };
 
 function prefAppearance() {
-  const th = db.setting('theme', 'system'), ac = db.setting('accent', 'cobalto'), fo = db.setting('font', 'sonoma'), fs = db.setting('fontSize', 14), rd = db.setting('radius', DEFAULT_RADIUS), rp = db.setting('rowPad', 3);
+  const th = db.setting('theme', 'system'), ac = db.setting('accent', 'cobalto'), fo = db.setting('font', 'sonoma'), fs = db.setting('fontSize', 14), rd = db.setting('radius', DEFAULT_RADIUS), rp = db.setting('rowPad', 3), rf = db.setting('rowPadFin', 0);
   return `<div class="panel"><div class="panel-h"><h3>Tema</h3></div><div class="panel-b stack">
     <div class="seg">${[['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Escuro']].map(([k, l]) => `<button class="${th === k ? 'on' : ''}" data-act="set" data-k="theme" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="field"><span class="lbl">Cor de destaque</span><div class="row">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="swatch ${ac === k ? 'on' : ''}" style="background:${c};width:30px;height:30px" data-act="set" data-k="accent" data-v="${k}" title="${k}" aria-label="${k}"></button>`).join('')}</div></div>
@@ -18,7 +18,7 @@ function prefAppearance() {
     <div class="field"><label for="pf-font">Fonte</label><select id="pf-font" class="input" style="max-width:360px" data-on="set" data-k="font">${Object.entries(FONTS).map(([k, [l]]) => `<option value="${k}" ${fo === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <span class="hint">A BR Sonoma é uma fonte paga da Brink e não está no Google Fonts. Ela aparece se estiver instalada no aparelho; senão, o app usa a Manrope, que tem desenho parecido. Na versão publicada dá para incluir a BR Sonoma se você tiver a licença web.</span></div>
     <div class="field"><label for="pf-fs">Tamanho do texto: <span class="mono">${fs}px</span></label><input id="pf-fs" type="range" min="12" max="18" step="1" value="${fs}" data-on="set" data-k="fontSize" style="max-width:360px;accent-color:var(--accent)"></div>
-    <div class="field"><label for="pf-rp">Altura das linhas das tabelas: <span class="mono">${rp}px</span></label><input id="pf-rp" type="range" min="0" max="12" step="1" value="${rp}" data-on="set" data-k="rowPad" style="max-width:360px;accent-color:var(--accent)"><span class="hint">0 = bem compacta, 3 = padrão, 12 = bem espaçosa.</span></div>
+    <div class="field"><label for="pf-rp">Altura das linhas: clientes, trabalhos e geral <span class="mono">${rp}px</span></label><input id="pf-rp" type="range" min="0" max="12" step="1" value="${rp}" data-on="set" data-k="rowPad" style="max-width:360px;accent-color:var(--accent)"><span class="hint">3 = padrão.</span><div class="field"><span class="lbl">Prévia</span><div style="max-width:420px;border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden"><table class="grid" style="width:100%"><thead><tr><th>Cliente</th><th>Trabalho</th><th>Status</th></tr></thead><tbody><tr><td>LEAN</td><td>KV Magrão</td><td>Em andamento</td></tr><tr><td>BAQUESOLTO</td><td>FILME</td><td>Concluído</td></tr></tbody></table></div></div></div><div class="field"><label for="pf-rf">Altura das linhas: financeiro <span class="mono">${rf}px</span></label><input id="pf-rf" type="range" min="0" max="12" step="1" value="${rf}" data-on="set" data-k="rowPadFin" style="max-width:360px;accent-color:var(--accent)"><span class="hint">0 = bem fina, para ver mais lançamentos na tela.</span><div class="field"><span class="lbl">Prévia</span><div style="max-width:420px;border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden"><table class="grid fin" style="width:100%"><thead><tr><th>Data</th><th>Projeto</th><th>Valor</th></tr></thead><tbody><tr><td>13/10</td><td>KV Magrão</td><td>R$ 19.700,00</td></tr><tr><td>15/10</td><td>Enxoval de Motion</td><td>R$ 8.000,00</td></tr></tbody></table></div></div></div>
     <div class="field"><span class="lbl">Prévia</span><div style="max-width:420px;border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden"><table class="grid" style="width:100%"><thead><tr><th>Nome</th><th>Data</th><th>Valor</th></tr></thead><tbody><tr><td>Aloma</td><td class="mono small">13/10</td><td class="num">R$ 1.960,00</td></tr><tr><td>Homero</td><td class="mono small">13/10</td><td class="num">R$ 1.250,00</td></tr><tr><td>Raquel</td><td class="mono small">13/10</td><td class="num">R$ 1.500,00</td></tr></tbody></table></div></div>
   </div></div>
   <div class="panel"><div class="panel-h"><h3>Cards</h3></div><div class="panel-b stack">
@@ -26,8 +26,8 @@ function prefAppearance() {
     <div class="row"><div class="kpi" style="width:200px"><span class="k">Exemplo</span><span class="v">12,5 h</span><span class="s">prévia do card</span></div></div>
   </div></div>`;
 }
-ACTIONS.set = (el) => { let v = el.dataset.v; if (['radius', 'fontSize', 'rowPad'].includes(el.dataset.k)) v = Number(v); db.setSetting(el.dataset.k, v); };
-CHANGES.set = (el) => { let v = el.value; if (['radius', 'fontSize', 'rowPad', 'idleMinutes'].includes(el.dataset.k)) v = Math.max(0, Number(v) || 0); db.setSetting(el.dataset.k, v); };
+ACTIONS.set = (el) => { let v = el.dataset.v; if (['radius', 'fontSize', 'rowPad', 'rowPadFin'].includes(el.dataset.k)) v = Number(v); db.setSetting(el.dataset.k, v); };
+CHANGES.set = (el) => { let v = el.value; if (['radius', 'fontSize', 'rowPad', 'rowPadFin', 'idleMinutes'].includes(el.dataset.k)) v = Math.max(0, Number(v) || 0); db.setSetting(el.dataset.k, v); };
 
 function optionRows(list, kind) {
   return list.map((o, i) => `<div class="opt-row${kind === 'wt' ? ' wt' : ''}">
@@ -40,24 +40,92 @@ function optionRows(list, kind) {
     ${kind === 'wt' ? `<button class="btn sm ghost" data-act="wt-arch" data-id="${o.id}">${o.archived ? 'Reativar' : 'Arquivar'}</button>` : `<button class="btn sm icon ghost" data-act="opt-del" data-id="${o.id}" aria-label="Excluir">${icon('trash')}</button>`}
   </div>`).join('');
 }
+function wtRows(list) {
+  return list.map((o, i) => `<div class="opt-row wt">
+    <button class="swatch fill" style="${cssTb(o.color)};flex:none" data-act="opt-color" data-t="tempo_work_types" data-id="${o.id}" title="Mudar cor" aria-label="Mudar cor"></button>
+    <span style="white-space:nowrap;overflow:hidden">${tag(o.name, o.color, { pill: false })}</span>
+    <input class="input sm" value="${esc(o.name)}" data-on="opt" data-t="tempo_work_types" data-id="${o.id}" data-k="name" aria-label="Nome">
+    <button class="btn sm icon ghost" data-act="opt-move" data-kind="wt" data-id="${o.id}" data-d="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">${icon('chevU')}</button>
+    <button class="btn sm icon ghost" data-act="opt-move" data-kind="wt" data-id="${o.id}" data-d="1" ${i === list.length - 1 ? 'disabled' : ''} aria-label="Descer">${icon('chevD')}</button>
+    <button class="btn sm" data-act="wt-merge" data-id="${o.id}">Mesclar</button>
+    <button class="btn sm" data-act="wt-arch" data-id="${o.id}">Arquivar</button>
+  </div>`).join('');
+}
 function prefTypes() {
-  return `<div class="panel"><div class="panel-h"><h3>Tipos de trabalho</h3><span class="small muted">usados nas sessões, tarefas e relatórios</span></div><div class="panel-b">${optionRows(workTypes(true), 'wt')}
-    <form class="row" style="margin:12px 0 0 194px" data-form="add-opt" data-kind="wt"><input class="input" style="max-width:300px" name="name" placeholder="Novo tipo de trabalho" aria-label="Novo tipo"><button class="btn primary">${icon('plus')} Adicionar</button></form></div></div>`;
+  const arch = db.all('tempo_work_types').filter(w => w.archived).sort((a, b) => a.order - b.order);
+  const archPanel = arch.length ? `<div class="panel"><div class="panel-h"><h3>Arquivados</h3><span class="small muted">somem das listas; os registros antigos continuam com eles</span></div><div class="panel-b">${arch.map(o => `<div class="opt-row arch">
+    <button class="swatch fill" style="${cssTb(o.color)};flex:none" data-act="opt-color" data-t="tempo_work_types" data-id="${o.id}" title="Mudar cor" aria-label="Mudar cor"></button>
+    <span style="white-space:nowrap;overflow:hidden">${tag(o.name, o.color, { pill: false })}</span><span></span>
+    <button class="btn sm" data-act="wt-merge" data-id="${o.id}">Mesclar</button>
+    <button class="btn sm danger" data-act="wt-delete" data-id="${o.id}">Apagar</button>
+    <button class="btn sm" data-act="wt-arch" data-id="${o.id}">Desarquivar</button>
+  </div>`).join('')}</div></div>` : '';
+  return `<div class="panel"><div class="panel-h"><h3>Tipos de trabalho</h3><span class="small muted">usados nas sessões, tarefas e relatórios</span></div><div class="panel-b">${wtRows(workTypes())}
+    <form class="row" style="margin:12px 0 0 244px" data-form="add-opt" data-kind="wt"><input class="input" style="max-width:300px" name="name" placeholder="Novo tipo de trabalho" aria-label="Novo tipo"><button class="btn primary">${icon('plus')} Adicionar</button></form></div></div>` + archPanel;
 }
 function prefStatus() {
   const block = (kind, title, hint) => `<div class="panel"><div class="panel-h"><h3>${title}</h3><span class="small muted">${hint}</span></div><div class="panel-b">${optionRows(statuses(kind), kind)}
-    <form class="row" style="margin:12px 0 0 194px" data-form="add-opt" data-kind="${kind}"><input class="input" style="max-width:300px" name="name" placeholder="Novo status" aria-label="Novo status"><button class="btn primary">${icon('plus')} Adicionar</button></form></div></div>`;
+    <form class="row" style="margin:12px 0 0 244px" data-form="add-opt" data-kind="${kind}"><input class="input" style="max-width:300px" name="name" placeholder="Novo status" aria-label="Novo status"><button class="btn primary">${icon('plus')} Adicionar</button></form></div></div>`;
   return block('work', 'Status do trabalho', 'projetos, tarefas e subtarefas') + block('payment', 'Status de pagamento', 'independente do status do trabalho') + block('quote', 'Status de orçamento', 'propostas enviadas') +
     `<div class="small muted">O “significado” diz ao app como tratar cada status: quais contam como ativos, concluídos ou em aberto nos filtros e relatórios.</div>`;
 }
 ACTIONS['opt-color'] = (el) => { const t = el.dataset.t, id = el.dataset.id; openColorPop(el, db.get(t, id).color, (c) => db.update(t, id, { color: c })); };
 CHANGES.opt = (el) => { if (el.dataset.k === 'name' && !el.value.trim()) return render(); db.update(el.dataset.t, el.dataset.id, { [el.dataset.k]: el.dataset.k === 'name' ? el.value.trim() : el.value }); };
 ACTIONS['opt-move'] = (el) => {
-  const list = el.dataset.kind === 'wt' ? workTypes(true) : statuses(el.dataset.kind); const T = el.dataset.kind === 'wt' ? 'tempo_work_types' : 'tempo_status_options';
+  const list = el.dataset.kind === 'wt' ? workTypes() : statuses(el.dataset.kind); const T = el.dataset.kind === 'wt' ? 'tempo_work_types' : 'tempo_status_options';
   const i = list.findIndex(o => o.id === el.dataset.id); const j = i + Number(el.dataset.d); if (j < 0 || j >= list.length) return;
   [list[i], list[j]] = [list[j], list[i]]; list.forEach((o, k) => db.update(T, o.id, { order: k }, true)); db.emit();
 };
 ACTIONS['wt-arch'] = (el) => { const w = db.get('tempo_work_types', el.dataset.id); db.update('tempo_work_types', w.id, { archived: !w.archived }); };
+// Escolhe o tipo que recebe os registros de outro (existente ou novo). Retorna o id do destino ou null.
+function wtDialog({ title, intro, src, okLabel, allowNew, danger }) {
+  return new Promise(res => {
+    let done = false;
+    const others = db.all('tempo_work_types').filter(w => w.id !== src.id).sort((a, b) => (a.archived - b.archived) || a.order - b.order);
+    const opts = others.map(w => `<option value="${w.id}">${esc(w.name)}${w.archived ? ' (arquivado)' : ''}</option>`).join('');
+    const newOpt = allowNew ? '<option value="__new">+ Criar nova…</option>' : '';
+    const l = openLayer({
+      html: `<div class="dh"><h2>${esc(title)}</h2></div><div class="db"><p style="margin:0">${intro}</p>
+        <div class="field"><label for="wtd-to">Registros de “${esc(src.name)}” vão para</label><select id="wtd-to" class="input">${opts}${newOpt}</select></div>
+        <div class="field" id="wtd-newbox" style="${others.length ? 'display:none' : ''}"><label for="wtd-new">Nome do novo tipo</label><input id="wtd-new" class="input" placeholder="Ex.: Ilustração 3D"></div></div>
+        <div class="df"><button class="btn" data-x="no">Cancelar</button><button class="btn ${danger ? 'danger solid' : 'primary'}" data-x="yes">${esc(okLabel)}</button></div>`,
+      onClose: () => { if (!done) res(null); }
+    });
+    const sel = $('#wtd-to', l.box);
+    if (!others.length && sel.options.length) sel.value = '__new';
+    l.box.addEventListener('change', (e) => { if (e.target.id === 'wtd-to') $('#wtd-newbox', l.box).style.display = e.target.value === '__new' ? '' : 'none'; });
+    l.box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-x]'); if (!b) return;
+      if (b.dataset.x === 'no') { done = true; res(null); return l.close(); }
+      let target = sel.value;
+      if (target === '__new') {
+        const name = $('#wtd-new', l.box).value.trim();
+        if (!name) return toast('Dê um nome ao novo tipo.');
+        const n = workTypes(true).length;
+        target = db.insert('tempo_work_types', { name, color: presetAt(n), order: n, archived: false }, true).id;
+      }
+      done = true; res(target); l.close();
+    });
+  });
+}
+// Move os registros de um tipo para outro e remove o de origem.
+function wtMerge(srcId, targetId) {
+  ['tempo_quotes', 'tempo_tasks', 'tempo_time_entries'].forEach(t => db.all(t).filter(r => r.work_type_id === srcId).forEach(r => db.update(t, r.id, { work_type_id: targetId }, true)));
+  db.emit();
+  db.remove('tempo_work_types', srcId);
+}
+ACTIONS['wt-merge'] = async (el) => {
+  const src = db.get('tempo_work_types', el.dataset.id);
+  if (db.all('tempo_work_types').length < 2) return toast('Não há outro tipo para mesclar.');
+  const target = await wtDialog({ title: 'Mesclar tipo', src, okLabel: 'Mesclar', intro: `Junta “${esc(src.name)}” com outro tipo existente. Os registros passam para ele e “${esc(src.name)}” some da lista.` });
+  if (target) wtMerge(src.id, target);
+};
+ACTIONS['wt-delete'] = async (el) => {
+  const src = db.get('tempo_work_types', el.dataset.id);
+  if (!await confirmBox({ title: 'Você tem certeza?', body: `Apagar “${esc(src.name)}” é permanente e não tem como desfazer.`, ok: 'Continuar', danger: true })) return;
+  const target = await wtDialog({ title: 'Apagar tipo', src, okLabel: 'Apagar definitivamente', danger: true, allowNew: true, intro: `Antes de apagar, escolha para onde vão os registros de “${esc(src.name)}”: outro tipo existente ou um novo.` });
+  if (target) wtMerge(src.id, target);
+};
 ACTIONS['opt-del'] = async (el) => {
   const o = db.get('tempo_status_options', el.dataset.id);
   const used = db.all('tempo_projects').some(p => p.status_id === o.id || p.payment_status_id === o.id) || db.all('tempo_tasks').some(t => t.status_id === o.id) || db.all('tempo_quotes').some(q => q.status_id === o.id);

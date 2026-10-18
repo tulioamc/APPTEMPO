@@ -231,6 +231,7 @@ function applyAppearance() {
   root.style.setProperty('--font-ui', (FONTS[db.setting('font', 'sonoma')] || FONTS.sonoma)[1]);
   root.style.setProperty('--fs', db.setting('fontSize', 14) + 'px');
   root.style.setProperty('--row-pad', db.setting('rowPad', 3) + 'px');
+  root.style.setProperty('--row-pad-fin', db.setting('rowPadFin', 0) + 'px');
   const r = Number(db.setting('radius', DEFAULT_RADIUS));
   root.style.setProperty('--radius', r + 'px'); root.style.setProperty('--radius-sm', Math.max(0, Math.round(r * .6)) + 'px');
 }

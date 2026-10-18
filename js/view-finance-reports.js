@@ -22,10 +22,17 @@ VIEWS.finance = () => {
   </div>
   <div class="grid2" style="align-items:start">
     <div class="panel"><div class="panel-h"><h3>Em aberto por agência</h3></div><div class="panel-b">${ags.length ? `<div class="bars">${ags.map(x => `<div class="bar-row"><span class="lab">${x.a ? esc(x.a.name) : 'Clientes diretos'} <span class="faint small">· ${x.n}</span></span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf(x.a?.color || 'gray')};width:${x.v / maxAg * 100}%"></div></div><span class="val">${fmtMoney0(x.v)}</span></div>`).join('')}</div>` : '<div class="muted small">Nada em aberto com esses filtros.</div>'}</div></div>
-    <div class="panel"><div class="panel-h"><h3>Pagamentos recebidos</h3><span class="grow"></span><span class="mono small">${fmtMoney0(pays.reduce((s, x) => s + Number(x.amount), 0))}</span></div><div class="panel-b tight" style="max-height:260px;overflow:auto">${pays.length ? `<table class="grid compact"><tbody>${pays.map(x => { const p = db.get('tempo_projects', x.project_id); return `<tr data-act="proj-open" data-id="${p.id}"><td class="nowrap">${x.date ? fmtDate(x.date) : '<span class="faint">sem data</span>'}</td><td>${esc(p.name)}<span class="faint small"> · ${esc(clientOf(p)?.name || '')}</span></td><td class="money">${fmtMoney(x.amount)}</td></tr>`; }).join('')}</tbody></table>` : '<div class="empty small">Nenhum pagamento no período.</div>'}</div></div>
+    <div class="panel"><div class="panel-h"><h3>Pagamentos recebidos</h3><span class="grow"></span><span class="mono small">${fmtMoney0(pays.reduce((s, x) => s + Number(x.amount), 0))}</span></div><div class="panel-b tight" style="max-height:260px;overflow:auto">${pays.length ? gridTable({ id: 'finpays', cls: 'fin', cols: PAYCOLS, rows: pays, defSort: null, sortable: false, footer: false, rowAttrs: x => `data-act="fin-open" data-id="${x.project_id}"`, rowById: (id) => db.get('tempo_payments', id) }) : '<div class="empty small">Nenhum pagamento no período.</div>'}</div></div>
   </div>
-  <div class="panel"><div class="panel-h"><h3>Projetos</h3><span class="grow"></span>${colsBtn('finance')}<button class="btn sm" data-act="csv-copy" data-kind="finance">${icon('copy')} Copiar CSV</button></div><div class="panel-b tight">${list.length ? gridTable({ id: 'finance', cols: FCOLS, rows: list, defHidden: ['status'], defSort: null, rowAttrs: p => `data-act="fin-open" data-id="${p.id}"`, rowById: (id) => db.get('tempo_projects', id) }) : `<div class="empty">${icon('money')}<b>Nenhum projeto com esses filtros</b></div>`}</div></div>`;
+  <div class="panel"><div class="panel-h"><h3>Projetos</h3><span class="grow"></span>${colsBtn('finance')}<button class="btn sm" data-act="csv-copy" data-kind="finance">${icon('copy')} Copiar CSV</button></div><div class="panel-b tight">${list.length ? gridTable({ id: 'finance', cls: 'fin', cols: FCOLS, rows: list, defHidden: ['status'], defSort: null, rowAttrs: p => `data-act="fin-open" data-id="${p.id}"`, rowById: (id) => db.get('tempo_projects', id) }) : `<div class="empty">${icon('money')}<b>Nenhum projeto com esses filtros</b></div>`}</div></div>`;
   return { title: 'Financeiro PJ', actions: '', html };
+};
+const PAYCOLS = {
+  date: { label: 'Data', ico: 'cal', w: 100, sort: x => x.date || '', cell: x => x.date ? fmtDate(x.date) : '<span class="faint">sem data</span>' },
+  name: { label: 'Projeto', ico: 'list', w: 240, sort: x => db.get('tempo_projects', x.project_id)?.name || '', cell: x => { const p = db.get('tempo_projects', x.project_id); return p ? `<b>${esc(p.name)}</b>` : ''; } },
+  client: { label: 'Cliente', ico: 'users', w: 160, sort: x => clientOf(db.get('tempo_projects', x.project_id))?.name || '', cell: x => { const c = clientOf(db.get('tempo_projects', x.project_id)); return c ? tag(c.name, c.color || 'gray') : ''; } },
+  work: { label: 'Status do trabalho', ico: 'list', w: 150, sort: x => statusCat(db.get('tempo_projects', x.project_id)?.status_id) || '', cell: x => statusTag(db.get('tempo_projects', x.project_id)?.status_id) },
+  amount: { label: 'Valor', ico: 'money', w: 110, money: true, sort: x => Number(x.amount) || 0, cell: x => fmtMoney(x.amount) },
 };
 const FCOLS = {
   agency: PCOLS.agency, client: PCOLS.client,
@@ -203,11 +210,19 @@ function bankSummaryHTML(entity) {
   const all = (BANK.all[entity] || []).filter(t => t.scope === 'externa' && (t.posted_on || '').slice(0, 7) === ym);
   const ent = all.filter(t => t.flow === 'in').reduce((s, t) => s + Number(t.amount), 0);
   const sai = all.filter(t => t.flow === 'out').reduce((s, t) => s + Number(t.amount), 0);
+  const origin = entity === 'pf' ? (BANK.origin || 'all') : 'all';
+  const originOf = (t) => (/d660$/.test(t.account_tail || '') ? 'cartao' : 'conta');
   const byCp = {};
-  all.filter(t => t.flow === 'out').forEach(t => { const k = t.counterpart || '—'; byCp[k] = (byCp[k] || 0) + Math.abs(Number(t.amount)); });
+  all.filter(t => t.flow === 'out' && (origin === 'all' || originOf(t) === origin)).forEach(t => {
+    const k = t.counterpart || '—';
+    const g = (byCp[k] ||= { v: 0, cat: null, expense: null });
+    g.v += Math.abs(Number(t.amount));
+    g.cat = g.cat || t.category || null;
+    g.expense = g.expense || t.expense_id || null;
+  });
   const cartao = Math.abs((BANK.all[entity] || []).filter(t => t.scope === 'cartao' && (t.posted_on || '').slice(0, 7) === ym).reduce((s, t) => s + Number(t.amount), 0));
-  const top = Object.entries(byCp).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const max = Math.max(1, ...top.map(x => x[1]));
+  const top = Object.entries(byCp).sort((a, b) => b[1].v - a[1].v);
+  const max = Math.max(1, ...top.map(x => x[1].v));
   const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">
     ${closed ? `<span class="tag tg" style="background:var(--surface-2)">Mês fechado em ${fmtDate(closed.closed_at)}</span><button class="btn sm ghost" data-act="bank-reopen" data-entity="${entity}" data-ym="${ym}">Reabrir</button>` : `<button class="btn sm" data-act="bank-close" data-entity="${entity}" data-ym="${ym}">Fechar mês</button>`}</div>`;
   return `${bar}<div class="kpis">
@@ -216,9 +231,47 @@ function bankSummaryHTML(entity) {
     <div class="kpi"><span class="k">Sobra</span><span class="v">${fmtMoney0(ent + sai)}</span><span class="s">entradas − saídas</span></div>
     ${cartao ? `<div class="kpi"><span class="k">Fatura do cartão</span><span class="v">${fmtMoney0(cartao)}</span><span class="s">paga · conta uma vez, pelos itens</span></div>` : ''}
   </div>
-  <div class="panel"><div class="panel-h"><h3>Para onde foi o dinheiro</h3></div><div class="panel-b">${top.length ? `<div class="bars">${top.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(k)}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / max * 100}%"></div></div><span class="mono small">${fmtMoney0(v)}</span></div>`).join('')}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'}</div></div>`;
+  <div class="panel"><div class="panel-h"><h3>Para onde foi o dinheiro</h3></div><div class="panel-b">${entity === 'pf' ? `<div class="seg" style="margin-bottom:10px">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${top.length ? `<div class="bank-rows" style="max-height:520px;overflow:auto">${top.map(([k, g]) => {
+      const ex = g.expense ? db.get('tempo_expenses', g.expense) : null;
+      return `<div class="bank-row"><span class="bn" title="${esc(k)}">${esc(k)}</span><span class="mono small">${fmtMoney0(g.v)}</span>
+        <span>${g.cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${entity}" data-cp="${esc(k)}">${tag(g.cat, 'gray')}</button>` : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${entity}" data-cp="${esc(k)}">Definir categoria</button>`}</span>
+        <span class="small muted bm">${ex ? '→ ' + esc(ex.name) : ''}</span>
+        <span class="bar-track"><span class="bar-fill fill" style="display:block;width:${g.v / max * 100}%"></span></span></div>`; }).join('')}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'}</div></div>`;
 }
 CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
+ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };
+// Categorias de gasto: as padrão mais as que o Tulio criar.
+const BANK_CATS = ['Alimentação', 'Casa', 'Transporte', 'Saúde', 'Lazer', 'Compras', 'Assinaturas', 'Impostos', 'Outros'];
+const bankCats = () => [...new Set([...BANK_CATS, ...db.setting('bankCats', [])])];
+function bankCatDialog(cp) {
+  return new Promise(res => {
+    let done = false;
+    const l = openLayer({
+      html: `<div class="dh"><h2>Categoria</h2></div><div class="db"><p style="margin:0">“${esc(cp)}”. Vale para todos os lançamentos com esse nome.</p>
+        <div class="row" style="flex-wrap:wrap;gap:6px">${bankCats().map(c => `<button class="btn sm" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+        <div class="field"><label for="bcat-new">Outra categoria</label><div class="row"><input id="bcat-new" class="input" placeholder="Nova categoria"><button class="btn sm" data-cat="__new">Usar</button></div></div></div>`,
+      onClose: () => { if (!done) res(null); }
+    });
+    l.box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-cat]'); if (!b) return;
+      let v = b.dataset.cat;
+      if (v === '__new') v = $('#bcat-new', l.box).value.trim();
+      if (!v) return toast('Digite o nome da categoria.');
+      done = true; res(v); l.close();
+    });
+  });
+}
+ACTIONS['bank-cat'] = async (el) => {
+  const entity = el.dataset.entity, cp = el.dataset.cp;
+  const cat = await bankCatDialog(cp);
+  if (!cat) return;
+  const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, updated_at: new Date().toISOString() }).eq('entity', entity);
+  const { error } = cp === '—' ? await q.is('counterpart', null) : await q.eq('counterpart', cp);
+  if (error) return toast('Erro: ' + error.message);
+  (BANK.all[entity] || []).forEach(t => { if ((t.counterpart || '—') === cp) t.category = cat; });
+  if (!BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
+  render();
+};
 ACTIONS['bank-close'] = (el) => {
   const entity = el.dataset.entity, ym = el.dataset.ym, key = entity + ':' + ym;
   const all = (BANK.all[entity] || []).filter(t => t.scope === 'externa' && (t.posted_on || '').slice(0, 7) === ym);
@@ -267,7 +320,7 @@ function bankPanel(entity) {
     : `<div class="panel-b small muted" style="padding:8px 16px">Conecte o Gmail que recebe os extratos da Nubank. Nada entra no Financeiro sem você revisar.</div>`;
   const rows = BANK.txns[entity] || [];
   const body = rows.length
-    ? `<table class="grid compact"><tbody>${rows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.counterpart || t.memo)}</td><td class="num">${fmtMoney(t.amount)}</td><td>${t.scope === 'interna' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Interna</span>' : t.scope === 'cartao' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Cartão</span>' : '<span class="tag tg">Externa</span>'}</td></tr>`).join('')}</tbody></table>`
+    ? `<table class="grid compact fin"><tbody>${rows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.counterpart || t.memo)}</td><td class="num">${fmtMoney(t.amount)}</td><td>${t.scope === 'interna' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Interna</span>' : t.scope === 'cartao' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Cartão</span>' : '<span class="tag tg">Externa</span>'}</td></tr>`).join('')}</tbody></table>`
     : `<div class="empty small">${reviewedNow ? 'Nenhuma movimentação revisada.' : 'Nenhuma movimentação nova.'}</div>`;
   const reviewed = BANK.mode[entity] === 'revisado';
   const foot = `<div class="panel-b" style="padding:8px 16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn sm ghost" data-act="bank-mode" data-entity="${entity}">${reviewed ? 'Ver novas' : 'Ver revisadas'}</button>${rows.length && !reviewed ? `<button class="btn sm" data-act="bank-review-all" data-entity="${entity}">Marcar como revisadas</button>` : ''}</div>`;
@@ -292,7 +345,27 @@ ACTIONS['bank-review-all'] = async (el) => {
   if (error) return toast('Erro: ' + error.message);
   BANK.txns[entity] = []; render();
 };
+// Abas do Financeiro PF: Visão geral, Conta, Cartão e Investimentos (caixinhas).
+const PF_TABS = [['geral', 'Visão geral'], ['conta', 'Conta corrente'], ['cartao', 'Cartão'], ['invest', 'Investimentos']];
+function pfInvestHTML() {
+  const ym = BANK.month || ymd(new Date()).slice(0, 7);
+  const rows = (BANK.all.pf || []).filter(t => t.scope === 'interna' && (t.posted_on || '').slice(0, 7) === ym);
+  const aplic = rows.filter(t => t.flow === 'out').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const resg = rows.filter(t => t.flow === 'in').reduce((s, t) => s + Number(t.amount), 0);
+  return `<div class="kpis">
+    <div class="kpi"><span class="k">Resgates</span><span class="v">${fmtMoney0(resg)}</span><span class="s">entraram na conta</span></div>
+    <div class="kpi"><span class="k">Aplicações</span><span class="v">${fmtMoney0(aplic)}</span><span class="s">saíram para as caixinhas</span></div>
+  </div>
+  <div class="panel"><div class="panel-h"><h3>Movimentos de caixinhas</h3><span class="small muted">Giro, Reserva, Especial, Freelas</span></div>
+  <div class="panel-b small muted" style="padding:8px 16px">O extrato diz “Resgate RDB”, mas não diz de qual caixinha. Por isso ainda não separo por caixinha: o saldo de cada uma depende de você informar ou de outra fonte.</div>
+  <div class="panel-b tight" style="max-height:420px;overflow:auto">${rows.length ? `<table class="grid compact fin"><tbody>${rows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.memo || '')}</td><td class="num">${fmtMoney(t.amount)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty small">Nenhum movimento de caixinha neste mês.</div>'}</div></div>`;
+}
 VIEWS.financepf = () => {
   bankRefresh();
-  return { title: 'Financeiro PF', actions: '', html: `${bankSummaryHTML('pf')}${bankPanel('pf')}` };
+  const tab = BANK.pfTab || 'geral';
+  if (tab === 'conta') BANK.origin = 'conta'; else if (tab === 'cartao') BANK.origin = 'cartao'; else if (BANK.origin !== undefined && tab === 'geral') BANK.origin = 'all';
+  const body = tab === 'invest' ? pfInvestHTML() : `${bankSummaryHTML('pf')}${bankPanel('pf')}`;
+  const tabs = `<div class="seg" style="margin-bottom:12px">${PF_TABS.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="pf-tab" data-v="${k}">${l}</button>`).join('')}</div>`;
+  return { title: 'Financeiro PF', actions: '', html: tabs + body };
 };
+ACTIONS['pf-tab'] = (el) => { BANK.pfTab = el.dataset.v; render(); };

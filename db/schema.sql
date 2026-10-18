@@ -244,7 +244,7 @@ create table if not exists tempo_bank_txns (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   fitid text not null, source text not null default 'nubank', account_tail text,
   posted_on date not null, amount numeric not null, memo text, counterpart text, counterpart_doc text,
-  flow text not null check (flow in ('in','out')), scope text not null check (scope in ('externa','interna')),
+  flow text not null check (flow in ('in','out')), scope text not null check (scope in ('externa','interna','cartao')), category text,
   review_status text not null default 'novo' check (review_status in ('novo','revisado','ignorado')),
   expense_id uuid, created_at timestamptz not null default now(), updated_at timestamptz,
   unique (user_id, fitid)
