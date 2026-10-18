@@ -360,7 +360,7 @@ function bankSummaryHTML(entity) {
   // Estorno "Estorno→Categoria" abate essa categoria
   (BANK.all[entity] || []).filter(t => t.flow === 'in' && /^Estorno→/.test(t.category || '') && (t.posted_on || '').slice(0, 7) === ym).forEach(t => { const tg = t.category.split('→')[1]; catSums[tg] = (catSums[tg] || 0) - Math.abs(Number(t.amount)); });
   const byCat = Object.entries(catSums).filter(([k, v]) => k !== THER_LABEL && v > 0 && (BANK.reemb !== false || k !== 'Reembolso')).sort((a, b) => b[1] - a[1]);
-  if (catSums[THER_LABEL]) byCat.push([THER_LABEL, catSums[THER_LABEL]]);
+  if (catSums[THER_LABEL] && BANK.reemb !== false) byCat.push([THER_LABEL, catSums[THER_LABEL]]);
   const byMeth = Object.entries(sum(monthOuts, bankMethod)).sort((a, b) => b[1] - a[1]);
   const byCp = Object.entries(sum(monthOuts, t => t.counterpart || '—')).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const bars = (arr) => { const mx = Math.max(1, ...arr.map(x => x[1])); return arr.length ? `<div class="bars">${arr.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(k)}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / mx * 100}%"></div></div><span class="mono small">${fmtMoney0(v)}</span></div>`).join('')}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'; };
@@ -384,7 +384,7 @@ function bankSummaryHTML(entity) {
     ${cartao ? `<div class="kpi"><span class="k">Fatura do cartão</span><span class="v">${fmtMoney0(cartao)}</span><span class="s">paga · conta uma vez, pelos itens</span></div>` : ''}
   </div>
   <div class="bank-layout">
-    <div class="panel bank-list"><div class="panel-h"><h3>Saídas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · por mês</span><span class="grow"></span><button class="btn sm ${fOn ? 'on' : ''}" data-act="bank-f-toggle">${icon('search')} Filtrar${bankFilterOn() ? ' · ativo' : ''}</button></div>
+    <div class="panel bank-list"><div class="panel-h"><h3>Saídas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · por mês</span><span class="grow"></span><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)"><button class="btn sm ${BANK.cmp ? 'on' : 'ghost'}" data-act="bank-cmp">${BANK.cmp ? 'Voltar ao mês' : 'Comparar meses'}</button><button class="btn sm ${fOn ? 'on' : ''}" data-act="bank-f-toggle">${icon('search')} Filtrar${bankFilterOn() ? ' · ativo' : ''}</button></div>
       ${fOn ? bankFilterHTML(catBy) : ''}
       <div class="panel-b"><div style="display:flex;flex-wrap:wrap;gap:28px;align-items:center;margin-bottom:10px">${entity === 'pf' ? `<div class="seg">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${`<div class="seg">${[['tudo', 'Tudo'], ['in', 'Entradas'], ['out', 'Saídas']].map(([k, l]) => `<button class="${lst === k ? 'on' : ''}" data-act="bank-lst" data-v="${k}">${l}</button>`).join('')}</div>`}</div><div style="max-height:65vh;overflow:auto">${groups || '<div class="empty small">Nenhum lançamento.</div>'}</div></div></div>
     ${report}
@@ -875,9 +875,14 @@ ACTIONS['bank-biz'] = async (el) => {
   if (error) return toast('Erro: ' + error.message);
   await bankLoadTxns(); render();
 };
+// Conectar Gmail abre o login do Google numa janela pequena; o app continua aberto.
+window.addEventListener('message', (e) => { if (e.data === 'gmail-ok') { toast('Gmail conectado'); render(); } });
 ACTIONS['bank-connect'] = async () => {
-  try { const r = await bankApi('start'); location.href = r.url; }
-  catch (e) { toast('Não consegui conectar: ' + e.message); }
+  const w = window.open('about:blank', 'tempo-gmail', 'width=480,height=680');
+  try {
+    const r = await bankApi('start');
+    if (w && !w.closed) w.location.href = r.url; else location.href = r.url;
+  } catch (e) { if (w) w.close(); toast('Não consegui conectar: ' + e.message); }
 };
 ACTIONS['bank-sync'] = () => bankRefresh(true);
 ACTIONS['bank-mode'] = async (el) => {

@@ -39,5 +39,7 @@ module.exports = async (req, res) => {
       updated_at: new Date().toISOString(),
     }),
   });
-  res.redirect(302, '/?gmail=ok');
+  // janela pequena do login: avisa o app e fecha; se não for janela, segue para o app
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.end(`<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;padding:24px">Gmail conectado. Pode fechar esta janela.<script>try{window.opener&&window.opener.postMessage('gmail-ok','*')}catch(e){}window.close();setTimeout(function(){location.href='/?gmail=ok'},400)</script>`);
 };
