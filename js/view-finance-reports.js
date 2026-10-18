@@ -483,7 +483,7 @@ function bankCatDialog(cp, bulk) {
     const l = openLayer({
       html: `<div class="dh"><h2>Categoria</h2></div><div class="db"><p style="margin:0">${bulk ? `“${esc(cp)}”. Só os lançamentos selecionados.` : `“${esc(cp)}”. Vale para todos os lançamentos com esse nome.`}</p>
         <div class="field"><span class="lbl">Conta</span><div class="seg" id="bcat-biz"><button data-biz="pf" class="on">PF</button><button data-biz="pj">PJ</button></div></div>
-        <div class="row" style="flex-wrap:wrap;gap:6px">${bankCats().map(c => `<button class="btn sm" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+        <div class="row" style="flex-wrap:wrap;gap:6px">${bankCats().map(c => `<button class="btn sm tg" data-cat="${esc(c)}" style="${cssTb(exColor(exKeyOf(c)))}">${esc(c)}</button>`).join('')}</div>
         <div class="field"><label for="bcat-new">Outra categoria</label><div class="row"><input id="bcat-new" class="input" placeholder="Nova categoria"><button class="btn sm" data-cat="__new">Usar</button></div></div></div>`,
       onClose: () => { if (!done) res(null); }
     });

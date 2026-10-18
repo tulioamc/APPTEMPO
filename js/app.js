@@ -63,9 +63,23 @@ function mobileTimerHTML() {
 }
 
 let lastHTML = '';
+/* Guarda a rolagem da página e das áreas com rolagem própria, para a tela não "subir" ao redesenhar. */
+function keepScroll() {
+  const content = $('.content');
+  const anc = [...document.querySelectorAll('body *')].filter(e => e.scrollTop > 0 && !(content && content.contains(e))).map(e => [e, e.scrollTop]);
+  const inner = content ? [...content.querySelectorAll('[style*="overflow"]')].map(e => e.scrollTop) : [];
+  return { win: window.scrollY, anc, inner };
+}
+function restoreScroll(k) {
+  k.anc.forEach(([e, t]) => { e.scrollTop = t; });
+  const content = $('.content');
+  if (content) [...content.querySelectorAll('[style*="overflow"]')].forEach((e, i) => { if (k.inner[i]) e.scrollTop = k.inner[i]; });
+  window.scrollTo(0, k.win);
+}
 function render() {
   const view = VIEWS[S.route] || VIEWS.timesheet;
   const v = view();
+  const scrollKeep = keepScroll();
   // preserva foco/cursor quando a tela é redesenhada durante a digitação
   const ae = document.activeElement; const fid = ae && ae.id && $('.content')?.contains(ae) ? ae.id : null; const sel = fid && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null;
   $('.sidebar').innerHTML = sidebarHTML();
@@ -76,6 +90,7 @@ function render() {
   const banner = demo ? `<div class="banner info">${icon('db', 'ico')}<span class="grow"><b>Dados fictícios</b> para testar as telas. Nada é salvo: ao recarregar, o app volta a este exemplo.</span><button class="btn sm" data-act="demo-clear">Começar vazio</button></div>` : '';
   $('.content').innerHTML = banner + v.html;
   $('.mobile-timer').innerHTML = mobileTimerHTML();
+  restoreScroll(scrollKeep);
   document.title = 'Tempo';
   v.after && v.after();
   if (fid) { const el = document.getElementById(fid); if (el) { el.focus(); if (sel && el.setSelectionRange) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
