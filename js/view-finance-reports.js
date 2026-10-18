@@ -191,18 +191,27 @@ async function bankApi(path, opts = {}) {
   if (!r.ok) throw new Error(j.error || ('falha ' + r.status));
   return j;
 }
-async function bankLoadTxns() {
-  for (const entity of ['pf', 'pj']) {
-    const { data, error } = await db.adapter.client.from('tempo_bank_txns').select('*')
-      .eq('entity', entity).eq('review_status', BANK.mode[entity]).order('posted_on', { ascending: false }).limit(300);
+// Busca todas as linhas em páginas: o servidor corta cada resposta em 1000 linhas, então um limite fixo escondia os meses mais antigos.
+async function bankFetchAll(build) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build().range(from, from + 999);
     if (error) throw error;
-    BANK.txns[entity] = data || [];
+    out.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+async function bankLoadTxns() {
+  const cl = db.adapter.client;
+  const sorted = (q) => q.order('posted_on', { ascending: false }).order('id');
+  for (const entity of ['pf', 'pj']) {
+    BANK.txns[entity] = await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*').eq('entity', entity).eq('review_status', BANK.mode[entity])));
   }
   // resumo: lançamento conta para PJ se marcado como PJ, senão para a conta de origem
-  const { data: every } = await db.adapter.client.from('tempo_bank_txns').select('*')
-    .order('posted_on', { ascending: false }).limit(3000);
-  for (const e of ['pf', 'pj']) BANK.all[e] = (every || []).filter(t => (t.biz_entity || t.entity) === e);
-  BANK.every = every || [];
+  const every = await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*')));
+  for (const e of ['pf', 'pj']) BANK.all[e] = every.filter(t => (t.biz_entity || t.entity) === e);
+  BANK.every = every;
 }
 // Resumo geral: entradas, saídas e sobra (sem movimentos internos) e onde o dinheiro saiu.
 // Filtro escondido das saídas (busca por nome, categoria, meio, conta e valor).
@@ -273,6 +282,7 @@ function bankSummaryHTML(entity) {
     const info = t.counterpart_doc && cnpjCache()[String(t.counterpart_doc).replace(/\D/g, '')];
     const eff = t.biz_entity || t.entity;
     return `<div class="bank-row">
+      <span><input type="checkbox" data-on="bank-sel" data-id="${t.id}" ${BANK.sel && BANK.sel[t.id] ? 'checked' : ''} aria-label="Selecionar lançamento"></span>
       <span class="mono small">${fmtDateShort(t.posted_on)}</span>
       <span class="bn" title="${esc(info?.nome || k)}">${esc(k)}</span>
       <span class="mono small">${dotHTML(t.scope === 'interna' ? '#2563eb' : t.flow === 'in' ? '#22a06b' : '#d64545', t.scope === 'interna' ? 'Interna' : t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
@@ -299,7 +309,7 @@ function bankSummaryHTML(entity) {
     const headTxt = lst === 'in' ? `entradas ${fmtMoney0(totIn)}` : lst === 'out' ? fmtMoney0(tot) : `↑ ${fmtMoney0(totIn)} · ↓ ${fmtMoney0(tot)}`;
     return `<div class="bank-group">
       <button class="bank-ghead" data-act="bank-mtoggle" data-k="${entity}:${m}"><span>${open ? '▾' : '▸'} ${rbLabel(m)}</span><span class="mono small muted">${real.length} · ${headTxt}${trf ? ` · transferências para PF ${fmtMoney0(trf)} (fora do total)` : ''}</span></button>
-      ${open ? `<div class="bank-rows bank-head"><span>Data</span><span>Descrição</span><span>Valor</span><span>Meio</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div>${items.map(rowHTML).join('')}` : ''}
+      ${open ? `<div class="bank-rows bank-head"><span></span><span>Data</span><span>Descrição</span><span>Valor</span><span>Meio</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div>${items.map(rowHTML).join('')}` : ''}
     </div>`;
   }).join('');
   const sum = (arr, fn) => arr.reduce((acc, x) => { const k = fn(x); acc[k] = (acc[k] || 0) + Math.abs(Number(x.amount)); return acc; }, {});
@@ -322,7 +332,9 @@ function bankSummaryHTML(entity) {
   const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
   const GREEN = '#22a06b', RED = '#d64545';
   const fOn = bankFilterOn() || BANK.fOpen;
-  return `${bar}<div class="kpis">
+  const nSel = Object.keys(BANK.sel || {}).length;
+  const selBar = nSel ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-2);border-radius:10px"><b class="small">${nSel} selecionado(s)</b><button class="btn sm primary" data-act="bank-bulk-cat">Mudar categoria</button><button class="btn sm ghost" data-act="bank-bulk-clear">Limpar seleção</button></div>` : '';
+  return `${bar}${selBar}<div class="kpis">
     <div class="kpi"><span class="k">${dot(GREEN)}Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas, sem reembolsos</span></div>
     <div class="kpi"><span class="k">${dot(RED)}Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">${entity === 'pf' ? 'PF + PJ, sem terapias' : 'só PJ, sem terapias'}</span></div>
     <div class="kpi"><span class="k">${dot(GREEN)}Reembolsos recebidos</span><span class="v">${fmtMoney0(reimbIn)}</span><span class="s">plano de saúde</span></div>
@@ -465,11 +477,11 @@ function bankEstornoTarget(cp) {
     });
   });
 }
-function bankCatDialog(cp) {
+function bankCatDialog(cp, bulk) {
   return new Promise(res => {
     let done = false;
     const l = openLayer({
-      html: `<div class="dh"><h2>Categoria</h2></div><div class="db"><p style="margin:0">“${esc(cp)}”. Vale para todos os lançamentos com esse nome.</p>
+      html: `<div class="dh"><h2>Categoria</h2></div><div class="db"><p style="margin:0">${bulk ? `“${esc(cp)}”. Só os lançamentos selecionados.` : `“${esc(cp)}”. Vale para todos os lançamentos com esse nome.`}</p>
         <div class="field"><span class="lbl">Conta</span><div class="seg" id="bcat-biz"><button data-biz="pf" class="on">PF</button><button data-biz="pj">PJ</button></div></div>
         <div class="row" style="flex-wrap:wrap;gap:6px">${bankCats().map(c => `<button class="btn sm" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
         <div class="field"><label for="bcat-new">Outra categoria</label><div class="row"><input id="bcat-new" class="input" placeholder="Nova categoria"><button class="btn sm" data-cat="__new">Usar</button></div></div></div>`,
@@ -504,6 +516,26 @@ ACTIONS['bank-cat'] = async (el) => {
   if (error) return toast('Erro: ' + error.message);
   await bankLoadTxns();
   if (!cat.startsWith('Estorno') && !BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
+  render();
+};
+CHANGES['bank-sel'] = (el) => {
+  BANK.sel = { ...(BANK.sel || {}) };
+  if (el.checked) BANK.sel[el.dataset.id] = true; else delete BANK.sel[el.dataset.id];
+  render();
+};
+ACTIONS['bank-bulk-clear'] = () => { BANK.sel = {}; render(); };
+ACTIONS['bank-bulk-cat'] = async () => {
+  const ids = Object.keys(BANK.sel || {});
+  if (!ids.length) return;
+  const pick = await bankCatDialog(`${ids.length} lançamento(s)`, true);
+  if (!pick) return;
+  const { cat, biz } = pick;
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), updated_at: new Date().toISOString() }).in('id', ids);
+  if (error) return toast('Erro: ' + error.message);
+  await bankLoadTxns();
+  if (!cat.startsWith('Estorno') && !BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
+  BANK.sel = {};
+  toast(`${ids.length} lançamento(s) atualizados`);
   render();
 };
 ACTIONS['bank-close'] = (el) => {
