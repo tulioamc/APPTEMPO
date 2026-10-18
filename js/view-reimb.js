@@ -175,12 +175,12 @@ VIEWS.reimb = () => {
 /* colunas da tabela de reembolsos (mesmo componente da lista de Freelas) */
 const rbTagOf = (kind, id) => { const st = statuses(kind).find(x => x.id === id); return st ? tag(st.name, st.color, { pill: true }) : '<span class="faint">—</span>'; };
 const RB_COLS = {
-  name: { label: 'Despesa', w: 230, cell: r => esc(r.name || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.name, set: (r, v) => db.update('tempo_reimb_rows', r.id, { name: (v || '').trim() }) } },
-  date: { label: 'Data', w: 110, cell: r => r.date ? fmtDate(r.date) : '<span class="faint">—</span>', sort: r => r.date || '', edit: { type: 'date', get: r => r.date, set: (r, v) => db.update('tempo_reimb_rows', r.id, { date: v || null }) } },
-  pay: { label: 'Pagamento', w: 130, cell: r => rbTagOf('reimb_pay', r.pay_id), edit: { type: 'combo', kind: 'reimb_pay', get: r => r.pay_id, set: (r, v) => db.update('tempo_reimb_rows', r.id, { pay_id: v }) } },
-  req: { label: 'Requerimento', w: 170, cell: r => rbTagOf('reimb_req', r.req_id), edit: { type: 'combo', kind: 'reimb_req', get: r => r.req_id, set: (r, v) => db.update('tempo_reimb_rows', r.id, { req_id: v }) } },
-  amount: { label: 'Valor', money: true, w: 120, cell: r => r.amount ? fmtMoney(r.amount) : '<span class="faint">—</span>', val: r => r.amount || 0, edit: { type: 'money', get: r => r.amount, set: (r, v) => db.update('tempo_reimb_rows', r.id, { amount: v ?? null }) } },
-  refund: { label: 'Reembolso', w: 150, cell: r => rbTagOf('reimb_refund', r.refund_id), edit: { type: 'combo', kind: 'reimb_refund', get: r => r.refund_id, set: (r, v) => db.update('tempo_reimb_rows', r.id, { refund_id: v }) } },
-  note: { label: 'Anotação', w: 240, cell: r => esc(r.note || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.note, set: (r, v) => db.update('tempo_reimb_rows', r.id, { note: (v || '').trim() }) } },
+  name: { label: 'Despesa', ico: 'text', cls: 'name', sort: r => r.name || '', w: 230, cell: r => esc(r.name || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.name, set: (r, v) => db.update('tempo_reimb_rows', r.id, { name: (v || '').trim() }) } },
+  date: { label: 'Data', ico: 'cal', w: 110, cell: r => r.date ? fmtDate(r.date) : '<span class="faint">—</span>', sort: r => r.date || '', edit: { type: 'date', get: r => r.date, set: (r, v) => db.update('tempo_reimb_rows', r.id, { date: v || null }) } },
+  pay: { label: 'Pagamento', ico: 'spin', w: 130, cell: r => rbTagOf('reimb_pay', r.pay_id), edit: { type: 'combo', kind: 'reimb_pay', get: r => r.pay_id, set: (r, v) => db.update('tempo_reimb_rows', r.id, { pay_id: v }) } },
+  req: { label: 'Requerimento', ico: 'spin', w: 170, cell: r => rbTagOf('reimb_req', r.req_id), edit: { type: 'combo', kind: 'reimb_req', get: r => r.req_id, set: (r, v) => db.update('tempo_reimb_rows', r.id, { req_id: v }) } },
+  amount: { label: 'Valor', ico: 'money', money: true, w: 120, cell: r => r.amount ? fmtMoney(r.amount) : '<span class="faint">—</span>', val: r => r.amount || 0, edit: { type: 'money', get: r => r.amount, set: (r, v) => db.update('tempo_reimb_rows', r.id, { amount: v ?? null }) } },
+  refund: { label: 'Reembolso', ico: 'spin', w: 150, cell: r => rbTagOf('reimb_refund', r.refund_id), edit: { type: 'combo', kind: 'reimb_refund', get: r => r.refund_id, set: (r, v) => db.update('tempo_reimb_rows', r.id, { refund_id: v }) } },
+  note: { label: 'Anotação', ico: 'text', w: 240, cell: r => esc(r.note || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.note, set: (r, v) => db.update('tempo_reimb_rows', r.id, { note: (v || '').trim() }) } },
   del: { label: '', w: 44, cell: r => `<button class="icon-btn ghost" data-act="rb-del" data-id="${r.id}" title="Remover linha">×</button>` }
 };

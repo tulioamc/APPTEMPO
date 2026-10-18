@@ -301,3 +301,20 @@ Adendo ao item de reembolsos acima. Tudo que o app lê ou sugere vai para a fila
 - **Ignorar:** o tempo continua contando normalmente.
 - O WhatsApp gera o aviso depois do fato ("WhatsApp: X min, pausar?"), não em tempo real.
 - Mac: incluir detecção de tela bloqueada e de app em primeiro plano (WhatsApp) no monitor; o site já cria e registra a pausa aceita.
+
+## Integração com e-mail (pedido do Tulio, 17/10/2026)
+- E1. **Demanda por e-mail**: e-mail que chega num endereço/etiqueta dedicado vira projeto ou tarefa em rascunho (cliente e agência pelo remetente; assunto vira o nome; corpo vira notas). Nada é criado sem aprovação.
+- E2. **Sugestão de orçamento**: e-mail com pedido de cotação ("quanto custaria…", "pode orçar…") vira um orçamento em rascunho na calculadora, com o cliente já preenchido.
+- E3. **Lembrete de retorno**: orçamento enviado sem resposta há X dias gera aviso de follow-up com texto pronto para copiar.
+- E4. **Confirmação de pagamento**: e-mail de comprovante ou aviso de recebimento sugere a baixa do pagamento do projeto.
+- E5. **Notas fiscais e cobranças**: NF emitida por e-mail anexa o PDF ao projeto/terapia certa (ligação com o item de Terapias).
+- E6. **Atualização de prazo**: cliente pede mudança de prazo por e-mail → aviso com a data proposta para o Tulio aceitar.
+- E7. **Resumo diário**: e-mails não respondidos de clientes e agências listados no fim do dia, junto com o To-do.
+- Cuidados: só ler as pastas/etiquetas escolhidas; nunca enviar e-mail sozinho; tudo que vier por e-mail passa pela fila de Avisos com Aceitar/Ignorar.
+- Caminho técnico a avaliar: Gmail API (conector já disponível) com webhook ou leitura periódica.
+
+## Padrão estético (pedido do Tulio, 17/10/2026)
+- Controles compactos, sem poluição visual: dropdowns pequenos, nada gigante.
+- Nomes de meses com inicial maiúscula (ex.: "Outubro de 2026").
+- Tabelas no mesmo padrão da lista de Projetos: ícone no cabeçalho, nome em negrito, etiquetas coloridas.
+- Esse padrão vale para tudo que for feito daqui para frente.
