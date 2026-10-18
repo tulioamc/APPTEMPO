@@ -23,6 +23,7 @@ const NAV = [
   { id: 'quotes', label: 'Orçamentos', icon: 'doc', count: () => db.all('tempo_quotes').length },
   { id: 'finance', label: 'Financeiro PJ', icon: 'money' },
   { id: 'financepf', label: 'Financeiro PF', icon: 'money' },
+  { id: 'shared', label: 'Despesas do filho', icon: 'users' },
   { id: 'expenses', label: 'Despesas', icon: 'money', count: () => exRows(S.exMonth || ymd(new Date()).slice(0, 7)).filter(r => r.status !== 'Não teve' && r.status !== 'Pago' && r.status !== 'Recebido').length },
   { id: 'reimb', label: 'Reembolsos', icon: 'layers', count: () => db.all('tempo_reimb_rows').filter(r => r.refund_id !== rbStatusId('reimb_refund', 'Feito!')).length },
   { id: 'notices', label: 'Avisos', icon: 'bell', count: () => db.all('tempo_notices').filter(n => n.status === 'pending' && n.kind !== 'todo').length },

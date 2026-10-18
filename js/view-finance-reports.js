@@ -529,6 +529,7 @@ function bankReimbMatch(t) {
 function bankRowExtra(t) {
   if (t.reimb_row_id) { const r = db.get('tempo_reimb_rows', t.reimb_row_id); return r ? `<span class="small muted">→ Terapia: ${esc(r.name)}</span>` : ''; }
   if (t.expense_id) { const e = db.get('tempo_expenses', t.expense_id); return e ? `<span class="small muted">→ ${esc(e.name)}</span>` : ''; }
+  if (t.flow !== 'out' && t.category === 'Reembolso') return `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
   if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : ''; }
   const e = bankFixedMatch(t);
   if (e) return `<button class="btn sm" data-act="bank-link" data-id="${t.id}" data-eid="${e.id}">Vincular a ${esc(e.name)}</button>`;
@@ -568,6 +569,30 @@ ACTIONS['bank-tpick'] = async (el) => {
   const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;
   const pick = await bankPickDialog(t); if (!pick) return;
   await linkBankTxn(t, pick.kind, pick.id);
+};
+// Reembolso recebido ligado a um custo do mesmo mês. Não altera o valor nem o status do custo.
+function bankExpPick(t) {
+  const ym = (t.posted_on || '').slice(0, 7);
+  const exps = db.all('tempo_expenses').filter(e => e.month === ym && e.kind === 'out').sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const html = `<div class="dh"><h2>Reembolso de qual gasto?</h2></div><div class="db">
+    <p style="margin:0">${esc(t.counterpart || t.memo)} · ${fmtMoney(Math.abs(Number(t.amount)))} · ${fmtDate(t.posted_on)}</p>
+    <div class="field"><span class="lbl">Custos de ${ym}</span><div class="stack" style="gap:6px">${exps.length ? exps.map(e => `<button class="btn sm" style="justify-content:space-between;width:100%" data-id="${e.id}">${esc(e.name)} <span class="mono small">${fmtMoney(e.amount)}</span></button>`).join('') : '<span class="small muted">Nenhum custo neste mês.</span>'}</div></div>
+    </div><div class="df"><button class="btn" data-x="no">Cancelar</button></div>`;
+  return new Promise(res => {
+    let done = false;
+    const l = openLayer({ html, onClose: () => { if (!done) res(null); } });
+    l.box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-id]'); if (b) { done = true; res(b.dataset.id); l.close(); return; }
+      if (e.target.closest('[data-x]')) { done = true; res(null); l.close(); }
+    });
+  });
+}
+ACTIONS['bank-rexp'] = async (el) => {
+  const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;
+  const id = await bankExpPick(t); if (!id) return;
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ expense_id: id, updated_at: new Date().toISOString() }).eq('id', t.id);
+  if (error) return toast('Erro: ' + error.message);
+  await bankLoadTxns(); toast('Reembolso vinculado'); render();
 };
 ACTIONS['bank-tlink'] = async (el) => {
   const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;

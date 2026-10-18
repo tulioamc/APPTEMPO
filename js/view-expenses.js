@@ -8,7 +8,7 @@
    ===================================================================== */
 
 const EX_CATS = {
-  PESSOAL: ['Moradia', 'Contas da casa', 'Casa e serviços', 'Saúde', 'Educação', 'Cartão e dívidas', 'Renda'],
+  PESSOAL: ['Moradia', 'Contas da casa', 'Casa e serviços', 'Saúde', 'Educação', 'Cartão e dívidas', 'Renda', 'Filho'],
   EMPRESA: ['Impostos', 'Contabilidade', 'Assinaturas e programas', 'Freelas']
 };
 const EX_STATUS = { out: ['Não pago', 'Pago', 'Não teve'], in: ['Não recebido', 'Recebido', 'Não teve'] };
