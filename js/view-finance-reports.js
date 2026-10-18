@@ -315,7 +315,7 @@ function bankSummaryHTML(entity) {
   // Saídas: PF mostra tudo (contas PF e PJ); PJ mostra só o que é PJ
   const poolOut = (entity === 'pf' ? (BANK.every || []) : (BANK.all.pj || [])).filter(t => t.scope === 'externa' && t.flow === 'out');
   const isTher = (t) => t.flow === 'out' && !!t.reimb_row_id;
-  const isReimb = (t) => t.flow === 'in' && t.category === 'Reembolso';
+  const isReimb = (t) => t.flow === 'in' && isReembCat(t.category);
   const isExt = (t) => t.flow === 'in' && /^Estorno/.test(t.category || '');
   const extSum = inBase.filter(t => isExt(t) && (t.posted_on || '').slice(0, 7) === ym).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
   const ent = inMonth.filter(t => t.flow === 'in' && !isReimb(t) && !isExt(t)).reduce((s, t) => s + Number(t.amount), 0);
@@ -345,8 +345,8 @@ function bankSummaryHTML(entity) {
   const listPool = entity === 'pj' && BANK.showT !== false ? poolOut.concat((BANK.all.pj || []).filter(t => t.flow === 'out' && t.scope === 'interna')) : poolOut;
   const outsAll = listPool.filter(passes).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
   const showTBtn = entity === 'pj' ? `<button class="btn sm ghost" data-act="bank-showt">${BANK.showT !== false ? 'Ocultar' : 'Mostrar'} transferências para PF</button>` : '';
-  const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><button class="btn sm ghost" data-act="bank-cmp">${BANK.cmp ? 'Voltar ao mês' : 'Comparar meses'}</button><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">${showTBtn}
-    ${closed ? `<span class="tag tg" style="background:var(--surface-2)">Mês fechado em ${fmtDate(closed.closed_at)}</span><button class="btn sm ghost" data-act="bank-reopen" data-entity="${entity}" data-ym="${ym}">Reabrir</button>` : `<button class="btn sm" data-act="bank-close" data-entity="${entity}" data-ym="${ym}">Fechar mês</button>`}</div>`;
+  const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">${BANK.cmp ? '<button class="btn sm ghost" data-act="bank-cmp">Voltar ao mês</button>' : ''}<input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">${showTBtn}</div>`;
+  const closeRow = `<div class="row" style="gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;flex-wrap:wrap">${closed ? `<span class="tag tg" style="background:var(--surface-2)">Mês fechado em ${fmtDate(closed.closed_at)}</span><button class="btn sm ghost" data-act="bank-reopen" data-entity="${entity}" data-ym="${ym}">Reabrir</button>` : `<button class="btn sm ghost" data-act="bank-close" data-entity="${entity}" data-ym="${ym}">Fechar mês</button>`}</div>`;
   const rowHTML = (t) => {
     const k = t.counterpart || '—';
     const cat = catBy[k] || null;
@@ -392,8 +392,8 @@ function bankSummaryHTML(entity) {
   const catKey = (t) => (isTher(t) ? THER_LABEL : (catBy[t.counterpart || '—'] || 'Sem categoria'));
   const catSums = sum(monthOuts, catKey);
   // Estorno "Estorno→Categoria" abate essa categoria
-  (BANK.all[entity] || []).filter(t => t.flow === 'in' && /^Estorno→/.test(t.category || '') && (t.posted_on || '').slice(0, 7) === ym).forEach(t => { const tg = t.category.split('→')[1]; catSums[tg] = (catSums[tg] || 0) - Math.abs(Number(t.amount)); });
-  const byCat = Object.entries(catSums).filter(([k, v]) => k !== THER_LABEL && v > 0 && (BANK.reemb !== false || k !== 'Reembolso')).sort((a, b) => b[1] - a[1]);
+  (BANK.all[entity] || []).filter(t => t.flow === 'in' && abatesCat(t.category) && (t.posted_on || '').slice(0, 7) === ym).forEach(t => { const tg = t.category.split('→')[1]; catSums[tg] = (catSums[tg] || 0) - Math.abs(Number(t.amount)); });
+  const byCat = Object.entries(catSums).filter(([k, v]) => k !== THER_LABEL && v > 0 && (BANK.reemb !== false || !isReembCat(k))).sort((a, b) => b[1] - a[1]);
   if (catSums[THER_LABEL] && BANK.reemb !== false) byCat.push([THER_LABEL, catSums[THER_LABEL]]);
   const byMeth = Object.entries(sum(monthOuts, bankMethod)).sort((a, b) => b[1] - a[1]);
   const byCp = Object.entries(sum(monthOuts, t => t.counterpart || '—')).sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -422,7 +422,7 @@ function bankSummaryHTML(entity) {
       ${fOn ? bankFilterHTML(catBy) : ''}
       <div class="panel-b"><div style="display:flex;flex-wrap:wrap;gap:28px;align-items:center;margin-bottom:10px">${entity === 'pf' ? `<div class="seg">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${`<div class="seg">${[['tudo', 'Tudo'], ['in', 'Entradas'], ['out', 'Saídas']].map(([k, l]) => `<button class="${lst === k ? 'on' : ''}" data-act="bank-lst" data-v="${k}">${l}</button>`).join('')}</div>`}</div><div style="max-height:65vh;overflow:auto">${groups || '<div class="empty small">Nenhum lançamento.</div>'}</div></div></div>
     ${report}
-  </div>`;
+  </div>${closeRow}`;
 }
 CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
 ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };
@@ -558,7 +558,13 @@ function bankEstornoTarget(cp) {
   });
 }
 // Entrada só mostra opções de entrada; Estorno continua aqui e, ao escolher, pede a saída a abater.
-const BANK_IN_CATS = ['Renda', 'Freelas', 'Reembolso', 'Estorno'];
+// Reembolsos recebidos: de terapia (liga à tabela de terapias) ou de outras coisas que você pagou (liga a um gasto).
+const REEMB_TER = 'Reembolso Terapias', REEMB_OUT = 'Reembolso Outros';
+// Reembolso Outros aponta a categoria que abate ("Reembolso Outros→Lazer"), como o Estorno.
+const isReembOut = (c) => c === REEMB_OUT || /^Reembolso Outros→/.test(c || '');
+const isReembCat = (c) => c === REEMB_TER || isReembOut(c) || c === 'Reembolso';
+const abatesCat = (c) => /^Estorno→/.test(c || '') || (isReembOut(c) && BANK.reemb !== false && /→/.test(c));
+const BANK_IN_CATS = ['Renda', 'Freelas', REEMB_TER, REEMB_OUT, 'Estorno'];
 function bankCatDialog(cp, bulk, flow) {
   const cats = (flow === 'in' ? BANK_IN_CATS : bankCats()).slice().sort((a, b) => a.localeCompare(b, 'pt-BR'));
   return new Promise(res => {
@@ -579,10 +585,10 @@ function bankCatDialog(cp, bulk, flow) {
       if (v === '__new') v = $('#bcat-new', l.box).value.trim();
       if (!v) return toast('Digite o nome da categoria.');
       let biz = bizTouched ? (l.box.querySelector('#bcat-biz button.on')?.dataset.biz || 'pf') : 'pf';
-      if (v === 'Estorno') {
+      if (v === 'Estorno' || v === REEMB_OUT) {
         const target = await bankEstornoTarget(cp);
         if (!target) return;
-        v = 'Estorno→' + target;
+        v = (v === 'Estorno' ? 'Estorno→' : REEMB_OUT + '→') + target;
         if (!bizTouched) biz = null;   // estorno fica na conta de origem, a não ser que você troque
       }
       done = true; res({ cat: v, biz }); l.close();
@@ -621,7 +627,7 @@ ACTIONS['bank-cat'] = async (el) => {
   if (error) return toast('Erro: ' + error.message);
   bankMarkCats([cp], cat, false);
   await bankLoadTxns();
-  if (!cat.startsWith('Estorno') && !BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
+  if (!/^(Estorno|Reembolso Outros)→/.test(cat) && !BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
   render();
 };
 CHANGES['bank-sel'] = (el) => {
@@ -641,9 +647,9 @@ function monthSnap(entity, ym) {
   (BANK.all[entity] || []).forEach(t => {
     if (t.scope === 'interna' || !t.posted_on || t.posted_on.slice(0, 7) !== ym) return;
     const v = Math.abs(Number(t.amount)), c = t.category || 'Sem categoria';
-    if (!withRe && (c === 'Reembolso' || c === 'Terapia')) return;
+    if (!withRe && (isReembCat(c) || c === 'Terapia')) return;
     if (t.flow === 'in') {
-      if (/^Estorno→/.test(c)) { const tg = c.split('→')[1]; cats[tg] = (cats[tg] || 0) - v; return; }   // estorno abate a categoria
+      if (abatesCat(c)) { const tg = c.split('→')[1]; cats[tg] = (cats[tg] || 0) - v; return; }   // estorno abate a categoria
       if (/^Estorno/.test(c)) return;
       ent += v; return;
     }
@@ -723,11 +729,11 @@ function trendHTML(entity) {
     const ym = t.posted_on.slice(0, 7), v = Math.abs(Number(t.amount)), c = t.category || 'Sem categoria';
     if (t.flow === 'in') {
       if (/^Estorno/.test(c)) return;                       // estorno não é entrada
-      if (!withRe && c === 'Reembolso') return;
+      if (!withRe && isReembCat(c)) return;
       add(ent, 'Entradas', ym, v);
     } else {
-      if (!withRe && c === 'Reembolso') return;
-      if (/^Estorno→/.test(c)) { add(cats, c.split('→')[1], ym, -v); add(sai, 'Saídas', ym, v); return; }
+      if (!withRe && isReembCat(c)) return;
+      if (abatesCat(c)) { add(cats, c.split('→')[1], ym, -v); add(sai, 'Saídas', ym, v); return; }
       add(cats, c, ym, v); add(sai, 'Saídas', ym, v);
     }
   });
@@ -758,7 +764,7 @@ ACTIONS['bank-bulk-cat'] = async () => {
   if (error) return toast('Erro: ' + error.message);
   bankMarkCats(ids.map(id => ((BANK.every || []).find(x => x.id === id) || {}).counterpart || '—'), cat, false);
   await bankLoadTxns();
-  if (!cat.startsWith('Estorno') && !BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
+  if (!/^(Estorno|Reembolso Outros)→/.test(cat) && !BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
   BANK.sel = {};
   toast(`${ids.length} lançamento(s) atualizados`);
   render();
@@ -861,13 +867,14 @@ function bankRowExtra(t) {
   }
   if (t.reimb_row_id) { const r = db.get('tempo_reimb_rows', t.reimb_row_id); return r ? `<span class="small muted">→ Terapia: ${esc(r.name)}</span>` : ''; }
   if (t.expense_id) { const e = db.get('tempo_expenses', t.expense_id); return e ? `<span class="small muted">→ ${esc(e.name)}</span>` : ''; }
-  if (t.flow !== 'out' && t.category === 'Reembolso') {
-    // reembolso pode ser de terapia (linha da tabela de terapias) ou de um custo (plano de saúde etc.)
+  if (t.flow !== 'out' && isReembOut(t.category)) return `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
+  if (t.flow !== 'out' && isReembCat(t.category)) {
+    // reembolso de terapia: linha da tabela de terapias (ou um custo, como plano de saúde)
     const rr = bankTherapyMatch(t);
     const tb = rr ? `<button class="btn sm" data-act="bank-tlink" data-id="${t.id}" data-kind="reimb" data-target="${rr.id}">Vincular a terapia ${esc(rr.name)}</button>` : `<button class="btn sm ghost" data-act="bank-rlink" data-id="${t.id}">Vincular a terapia…</button>`;
     return `${tb} <button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
   }
-  if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">${t.category === 'Reembolso' ? 'Vincular a gasto…' : 'Vincular a entrada…'}</button>`; }
+  if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">${isReembCat(t.category) ? 'Vincular a gasto…' : 'Vincular a entrada…'}</button>`; }
   const e = bankFixedMatch(t);
   if (e) return `<button class="btn sm" data-act="bank-link" data-id="${t.id}" data-eid="${e.id}">Vincular a ${esc(e.name)}</button>`;
   const rr = bankTherapyMatch(t);
@@ -913,7 +920,7 @@ ACTIONS['bank-tpick'] = async (el) => {
 function bankExpPick(t) {
   const ym = (t.posted_on || '').slice(0, 7);
   // entrada que não é reembolso se vincula a um recebimento; reembolso e saídas, a um custo
-  const want = (t.flow === 'in' && t.category !== 'Reembolso') ? 'in' : 'out';
+  const want = (t.flow === 'in' && !isReembCat(t.category)) ? 'in' : 'out';
   const exps = db.all('tempo_expenses').filter(e => e.month === ym && e.kind === want).sort((a, b) => String(a.name).localeCompare(String(b.name)));
   const html = `<div class="dh"><h2>${want === 'in' ? 'Entrada de qual recebimento?' : 'Reembolso de qual gasto?'}</h2></div><div class="db">
     <p style="margin:0">${esc(t.counterpart || t.memo)} · ${fmtMoney(Math.abs(Number(t.amount)))} · ${fmtDate(t.posted_on)}</p>
@@ -982,7 +989,7 @@ ACTIONS['bank-link'] = async (el) => {
 ACTIONS['bank-reimb'] = async (el) => {
   const t = (BANK.all.pj || []).concat(BANK.all.pf || []).find(x => x.id === el.dataset.id); if (!t) return;
   const m = el.dataset.month;
-  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: 'Reembolso', updated_at: new Date().toISOString() }).eq('id', t.id);
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: REEMB_TER, updated_at: new Date().toISOString() }).eq('id', t.id);
   if (error) return toast('Erro: ' + error.message);
   db.all('tempo_reimb_rows').filter(r => r.month === m && !r.refunded_on && Number(r.amount) > 0)
     .forEach(r => db.update('tempo_reimb_rows', r.id, { refunded_on: t.posted_on }, true));
