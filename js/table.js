@@ -36,12 +36,21 @@ function gridTable({ id, cols, rows, rowAttrs = () => '', defHidden = [], defSor
   const vis = t.order.filter(k => !t.hidden.includes(k));
   let list = rows;
   if (sortable && t.sort && cols[t.sort.key]?.sort) { const g = cols[t.sort.key].sort; list = [...rows].sort((a, b) => { const x = g(a), y = g(b); return (x > y ? 1 : x < y ? -1 : 0) * t.sort.dir; }); }
-  const W = (k) => wt.widths[k] || cols[k].w || 140;
+  // largura padrão = conteúdo mais largo da coluna (sem espaço sobrando); notas/observações ficam com largura fixa
+  const isLong = (k) => /note|obs|anota/i.test(k) || cols[k].long;
+  const stripTxt = (h) => String(h ?? '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+  const fitW = (k) => {
+    const c = cols[k]; if (isLong(k)) return c.w || 240;
+    let max = stripTxt(c.label).length * 8 + 40;
+    for (const r of list) { try { const n = stripTxt(c.cell(r)).length * 7.4 + 26; if (n > max) max = n; } catch (e) {} }
+    return Math.round(Math.max(60, Math.min(max, 360)));
+  };
+  const W = (k) => wt.widths[k] || (cols[k].w && isLong(k) ? cols[k].w : fitW(k));
   const total = vis.reduce((s, k) => s + W(k), 0);
   const head = vis.map(k => { const c = cols[k]; const s = t.sort?.key === k;
     return `<th draggable="true" data-col="${k}" data-table="${id}" class="${sortable && c.sort ? 'sortable' : ''} ${c.money ? 'money' : ''}" ${sortable && c.sort ? `data-act="tsort"` : ''} aria-sort="${s ? (t.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><span class="th-in">${c.ico ? `<span class="ico">${icon(c.ico)}</span>` : ''}<span class="th-l">${c.label}</span>${s ? (t.sort.dir > 0 ? ' ↑' : ' ↓') : ''}</span><span class="rz" data-rz="${k}" aria-hidden="true"></span></th>`; }).join('');
   const body = list.map(r => `<tr ${rowAttrs(r)}>${selCell(id, r)}${vis.map(k => { const c = cols[k]; const ed = c.edit && (!c.edit.when || c.edit.when(r));
-    return `<td class="${c.cls ? (typeof c.cls === 'function' ? c.cls(r) : c.cls) : ''} ${c.money ? 'money' : ''} ${ed ? 'editable' : ''}" ${ed ? `data-act="cell" data-table="${id}" data-col="${k}" data-id="${r.id}"` : ''}>${c.cell(r)}</td>`; }).join('')}</tr>`).join('');
+    return `<td class="${c.cls ? (typeof c.cls === 'function' ? c.cls(r) : c.cls) : ''} ${c.money ? 'money' : ''} ${isLong(k) ? 'obs' : ''} ${ed ? 'editable' : ''}" ${ed ? `data-act="cell" data-table="${id}" data-col="${k}" data-id="${r.id}"` : ''}>${c.cell(r)}</td>`; }).join('')}</tr>`).join('');
   const foot = footer ? `<tfoot><tr><td class="sel-col"></td>${vis.map((k, i) => { const c = cols[k]; if (c.val) { const s = list.reduce((a, r) => a + (c.val(r) || 0), 0); return `<td class="money">${i === 0 ? `Contagem <b>${list.length}</b> · ` : ''}Soma <b>${c.fmt ? c.fmt(s) : fmtMoney0(s)}</b></td>`; } return i === 0 ? `<td>Contagem <b>${list.length}</b></td>` : '<td></td>'; }).join('')}</tr></tfoot>` : '';
   const sel = selOf(id); const pick = list.filter(r => sel.has(r.id)).length;
   const allSel = list.length > 0 && pick === list.length;
@@ -120,11 +129,34 @@ function propagateEdit(tid, col, row, v) {
   return n;
 }
 
+/* ---------- editor de texto longo: abre um quadro que cresce enquanto escreve ---------- */
+function openLongEditor(td, col, row, ed) {
+  document.querySelectorAll('.longpop').forEach(x => x.remove());
+  const r = td.getBoundingClientRect(); const cur = ed.get(row) || '';
+  const pop = document.createElement('div'); pop.className = 'longpop';
+  const left = Math.min(Math.max(8, r.left), window.innerWidth - 380);
+  pop.style.cssText = `position:fixed;left:${left}px;top:${Math.min(r.top, window.innerHeight - 160)}px;width:${Math.max(340, Math.min(480, r.width * 2))}px;z-index:60;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:8px 10px;`;
+  pop.innerHTML = `<div class="small muted" style="margin-bottom:4px">${esc(col.label)}</div><textarea class="longta" rows="1" style="width:100%;resize:none;border:0;outline:0;background:transparent;font:inherit;color:inherit;line-height:1.4;overflow:hidden"></textarea><div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px"><button class="btn sm ghost" data-x="cancel">Cancelar</button><button class="btn sm primary" data-x="ok">OK</button></div>`;
+  document.body.appendChild(pop);
+  const ta = pop.querySelector('textarea'); ta.value = cur;
+  const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.max(22, ta.scrollHeight) + 'px'; };
+  ta.addEventListener('input', grow); grow(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+  let done = false;
+  const save = async () => { if (done) return; done = true; const v = ta.value.trim(); pop.remove(); document.removeEventListener('pointerdown', outside, true); if (v !== String(cur).trim()) { await ed.set(row, v || null); propagateEdit(td.dataset.table, td.dataset.col, row, v); } render(); };
+  const cancel = () => { if (done) return; done = true; pop.remove(); document.removeEventListener('pointerdown', outside, true); render(); };
+  const outside = (ev) => { if (!pop.contains(ev.target)) save(); };
+  pop.querySelector('[data-x="ok"]').addEventListener('click', save);
+  pop.querySelector('[data-x="cancel"]').addEventListener('click', cancel);
+  ta.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); cancel(); } if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); save(); } });
+  setTimeout(() => document.addEventListener('pointerdown', outside, true), 0);
+}
+
 /* ---------- edição na célula ---------- */
 ACTIONS.cell = (td, e) => {
   if (td.querySelector('.cell-input')) return;
   const def = TABLE_DEFS[td.dataset.table]; const col = def.cols[td.dataset.col]; const row = def.rowById(td.dataset.id); const ed = col.edit;
   if (!row || !ed) return;
+  if (ed.type === 'text' && /note|obs|anota/i.test(td.dataset.col) || ed.type === 'long') return openLongEditor(td, col, row, ed);
   if (ed.type === 'combo') return openCombo(td, { kind: typeof ed.kind === 'function' ? ed.kind(row) : ed.kind, value: ed.get(row), allowEmpty: ed.allowEmpty, emptyLabel: ed.emptyLabel, onPick: (v) => { ed.set(row, v); propagateEdit(td.dataset.table, td.dataset.col, row, v); } });
   const cur = ed.get(row);
   const w = td.getBoundingClientRect().width;

@@ -172,7 +172,7 @@ ACTIONS['csv-copy'] = async (el) => {
    EXTRATOS BANCÁRIOS (Gmail → Nubank). Lançamentos vêm de tempo_bank_txns,
    separados por entidade (pf / pj) e marcados "novo" até você revisar.
    ===================================================================== */
-const BANK = { status: null, txns: { pf: [], pj: [] }, all: { pf: [], pj: [] }, mode: { pf: 'novo', pj: 'novo' }, busy: false, checkedAt: 0, msg: '' };
+const BANK = { status: null, txns: { pf: [], pj: [] }, all: { pf: [], pj: [] }, month: null, mode: { pf: 'novo', pj: 'novo' }, busy: false, checkedAt: 0, msg: '' };
 async function bankToken() {
   const { data } = await db.adapter.client.auth.getSession();
   return data && data.session ? data.session.access_token : null;
@@ -197,20 +197,41 @@ async function bankLoadTxns() {
 }
 // Resumo geral: entradas, saídas e sobra (sem movimentos internos) e onde o dinheiro saiu.
 function bankSummaryHTML(entity) {
-  const all = (BANK.all[entity] || []).filter(t => t.scope === 'externa');
+  const ym = BANK.month || ymd(new Date()).slice(0, 7);
+  const key = entity + ':' + ym;
+  const closed = db.setting('closedMonths', {})[key];
+  const all = (BANK.all[entity] || []).filter(t => t.scope === 'externa' && (t.posted_on || '').slice(0, 7) === ym);
   const ent = all.filter(t => t.flow === 'in').reduce((s, t) => s + Number(t.amount), 0);
   const sai = all.filter(t => t.flow === 'out').reduce((s, t) => s + Number(t.amount), 0);
   const byCp = {};
   all.filter(t => t.flow === 'out').forEach(t => { const k = t.counterpart || '—'; byCp[k] = (byCp[k] || 0) + Math.abs(Number(t.amount)); });
   const top = Object.entries(byCp).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const max = Math.max(1, ...top.map(x => x[1]));
-  return `<div class="kpis">
+  const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">
+    ${closed ? `<span class="tag tg" style="background:var(--surface-2)">Mês fechado em ${fmtDate(closed.closed_at)}</span><button class="btn sm ghost" data-act="bank-reopen" data-entity="${entity}" data-ym="${ym}">Reabrir</button>` : `<button class="btn sm" data-act="bank-close" data-entity="${entity}" data-ym="${ym}">Fechar mês</button>`}</div>`;
+  return `${bar}<div class="kpis">
     <div class="kpi"><span class="k">Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas</span></div>
     <div class="kpi"><span class="k">Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">externas</span></div>
     <div class="kpi"><span class="k">Sobra</span><span class="v">${fmtMoney0(ent + sai)}</span><span class="s">entradas − saídas</span></div>
   </div>
-  <div class="panel"><div class="panel-h"><h3>Para onde foi o dinheiro</h3></div><div class="panel-b">${top.length ? `<div class="bars">${top.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(k)}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / max * 100}%"></div></div><span class="mono small">${fmtMoney0(v)}</span></div>`).join('')}</div>` : '<div class="empty small">Sem saídas ainda.</div>'}</div></div>`;
+  <div class="panel"><div class="panel-h"><h3>Para onde foi o dinheiro</h3></div><div class="panel-b">${top.length ? `<div class="bars">${top.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(k)}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / max * 100}%"></div></div><span class="mono small">${fmtMoney0(v)}</span></div>`).join('')}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'}</div></div>`;
 }
+CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
+ACTIONS['bank-close'] = (el) => {
+  const entity = el.dataset.entity, ym = el.dataset.ym, key = entity + ':' + ym;
+  const all = (BANK.all[entity] || []).filter(t => t.scope === 'externa' && (t.posted_on || '').slice(0, 7) === ym);
+  const ent = all.filter(t => t.flow === 'in').reduce((s, t) => s + Number(t.amount), 0);
+  const sai = all.filter(t => t.flow === 'out').reduce((s, t) => s + Number(t.amount), 0);
+  const closed = db.setting('closedMonths', {});
+  db.setSetting('closedMonths', { ...closed, [key]: { entradas: ent, saidas: Math.abs(sai), sobra: ent + sai, closed_at: new Date().toISOString() } });
+  toast('Mês fechado: ' + ym);
+  render();
+};
+ACTIONS['bank-reopen'] = (el) => {
+  const closed = { ...db.setting('closedMonths', {}) };
+  delete closed[el.dataset.entity + ':' + el.dataset.ym];
+  db.setSetting('closedMonths', closed); render();
+};
 // Sincroniza ao abrir a tela se a última leitura tiver mais de 2h.
 // checkedAt evita loop: render() chama a tela de novo, e a checagem não roda de novo por 60s.
 async function bankRefresh(force) {
