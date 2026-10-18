@@ -365,10 +365,10 @@ function bankSummaryHTML(entity) {
   const byCp = Object.entries(sum(monthOuts, t => t.counterpart || '—')).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const bars = (arr) => { const mx = Math.max(1, ...arr.map(x => x[1])); return arr.length ? `<div class="bars">${arr.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(k)}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / mx * 100}%"></div></div><span class="mono small">${fmtMoney0(v)}</span></div>`).join('')}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'; };
   const byAcc = Object.entries(sum(monthOuts, t => (t.biz_entity || t.entity).toUpperCase())).sort((a, b) => b[1] - a[1]);
-  const views = { cat: ['Categoria', () => donutHTML(byCat, 'Por categoria', chartCat)], meio: ['Meio', () => donutHTML(byMeth, 'Por meio')], conta: ['PF / PJ', () => donutHTML(byAcc, 'PF e PJ', (k) => exColor(k === 'PJ' ? 'EMPRESA' : 'PESSOAL'))], onde: ['Onde foi', () => bars(byCp)] };
+  const views = { cat: ['Categoria', () => donutHTML(byCat, 'Por categoria', chartCat, true)], meio: ['Meio', () => donutHTML(byMeth, 'Por meio')], conta: ['PF / PJ', () => donutHTML(byAcc, 'PF e PJ', (k) => exColor(k === 'PJ' ? 'EMPRESA' : 'PESSOAL'))], onde: ['Onde foi', () => bars(byCp)] };
   const cur = views[BANK.rep] ? BANK.rep : 'cat';
   const tabs = `<div class="seg" style="margin-bottom:12px;flex-wrap:wrap">${Object.entries(views).map(([k, [l]]) => `<button class="${cur === k ? 'on' : ''}" data-act="bank-rep" data-v="${k}">${l}</button>`).join('')}</div>`;
-  const report = `<div class="panel bank-report"><div class="panel-h"><h3>Relatório de ${rbLabel(ym)}</h3></div><div class="panel-b"><label class="row" style="gap:6px;margin-bottom:10px;align-items:center"><input type="checkbox" data-on="bank-reemb" ${BANK.reemb !== false ? 'checked' : ''}> Mostrar reembolsos no relatório</label>${tabs}${views[cur][1]()}</div></div>`;
+  const report = `<div class="panel bank-report"><div class="panel-h"><h3 class="row" style="gap:6px;align-items:center;flex-wrap:wrap">Relatório de <select data-on="bank-rmonth" class="input" style="width:auto;font:inherit;font-weight:600;padding:4px 8px">${[...new Set([ym, ...(BANK.all[entity] || []).filter(t => t.posted_on).map(t => t.posted_on.slice(0, 7))])].sort().reverse().map(m => `<option value="${m}" ${m === ym ? 'selected' : ''}>${rbLabel(m)}</option>`).join('')}</select></h3></div><div class="panel-b"><label class="row" style="gap:6px;margin-bottom:10px;align-items:center"><input type="checkbox" data-on="bank-reemb" ${BANK.reemb !== false ? 'checked' : ''}> Mostrar reembolsos no relatório</label>${tabs}${views[cur][1]()}</div></div>`;
   const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
   const GREEN = '#22a06b', RED = '#d64545';
   const fOn = bankFilterOn() || BANK.fOpen;
@@ -384,7 +384,7 @@ function bankSummaryHTML(entity) {
     ${cartao ? `<div class="kpi"><span class="k">Fatura do cartão</span><span class="v">${fmtMoney0(cartao)}</span><span class="s">paga · conta uma vez, pelos itens</span></div>` : ''}
   </div>
   <div class="bank-layout">
-    <div class="panel bank-list"><div class="panel-h"><h3>Saídas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · por mês</span><span class="grow"></span><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)"><button class="btn sm ${BANK.cmp ? 'on' : 'ghost'}" data-act="bank-cmp">${BANK.cmp ? 'Voltar ao mês' : 'Comparar meses'}</button><button class="btn sm ${fOn ? 'on' : ''}" data-act="bank-f-toggle">${icon('search')} Filtrar${bankFilterOn() ? ' · ativo' : ''}</button></div>
+    <div class="panel bank-list"><div class="panel-h"><h3>Saídas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · por mês</span><span class="grow"></span><span class="row" style="gap:4px;align-items:center"><button class="btn sm ghost" data-act="bank-mprev" title="Mês anterior">‹</button><button class="btn sm" data-act="bank-mnow" style="min-width:150px">${rbLabel(ym)}</button><button class="btn sm ghost" data-act="bank-mnext" title="Próximo mês">›</button></span><button class="btn sm ${BANK.cmp ? 'on' : ''}" data-act="bank-cmp" style="margin-left:6px">${BANK.cmp ? 'Voltar ao mês' : 'Comparar meses'}</button><button class="btn sm ${fOn ? 'on' : ''}" data-act="bank-f-toggle" style="margin-left:6px">${icon('search')} Filtrar${bankFilterOn() ? ' · ativo' : ''}</button></div>
       ${fOn ? bankFilterHTML(catBy) : ''}
       <div class="panel-b"><div style="display:flex;flex-wrap:wrap;gap:28px;align-items:center;margin-bottom:10px">${entity === 'pf' ? `<div class="seg">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${`<div class="seg">${[['tudo', 'Tudo'], ['in', 'Entradas'], ['out', 'Saídas']].map(([k, l]) => `<button class="${lst === k ? 'on' : ''}" data-act="bank-lst" data-v="${k}">${l}</button>`).join('')}</div>`}</div><div style="max-height:65vh;overflow:auto">${groups || '<div class="empty small">Nenhum lançamento.</div>'}</div></div></div>
     ${report}
@@ -460,18 +460,23 @@ const palColor = (name) => { let h = 0; for (const c of String(name)) h = (h * 3
 const dotHTML = (c, title = '') => `<span title="${esc(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle;flex:none"></span>`;
 // Rosca centralizada com chips claros na legenda (mesmas cores das categorias)
 const chipHTML = (c, label, val, pct, hex) => `<span class="tag tg" style="${cssTb(hex)}">${esc(label)} <span class="mono">${fmtMoney0(val)}</span>${pct !== undefined ? ` <span style="opacity:.7">${pct}%</span>` : ''}</span>`;
-function donutHTML(arr, centerLabel = 'Total', colorFn = (k) => palColor(k)) {
+function donutHTML(arr, centerLabel = 'Total', colorFn = (k) => palColor(k), legendBelow = false) {
   const tot = arr.reduce((a, x) => a + x[1], 0);
   if (!tot) return '<div class="empty small">Sem saídas neste mês.</div>';
   const R = 70, C = 2 * Math.PI * R; let acc = 0; const gap = arr.length > 1 ? 2 : 0;
   const colorOf = (k) => (k === THER_LABEL ? '#cbd5e1' : colorFn(k));
   const segs = arr.map(([k, v]) => { const f = v / tot; const len = Math.max(0, f * C - gap); const seg = `<circle data-seg="${esc(k)}" r="${R}" cx="110" cy="110" fill="none" stroke="${colorOf(k)}" stroke-width="26" stroke-dasharray="${len} ${C}" stroke-dashoffset="${-acc * C}" transform="rotate(-90 110 110)" style="transition:opacity .15s"><title>${esc(k)}: ${fmtMoney0(v)} (${Math.round(f * 100)}%)</title></circle>`; acc += f; return seg; }).join('');
   const legend = arr.map(([k, v]) => { const pct = Math.round(v / tot * 100); return `<div data-seg="${esc(k)}" data-val="${esc(fmtMoney0(v) + ' · ' + pct + '%')}" style="transition:opacity .15s">${chipHTML(colorOf(k), k, v, pct, colorOf(k))}</div>`; }).join('');
+  const svg = `<svg viewBox="0 0 220 220" width="220" height="220" role="img" aria-label="${esc(centerLabel)}">${segs}
+      <text class="dc1" x="110" y="104" text-anchor="middle" font-size="12" fill="var(--fg-3)">${esc(centerLabel)}</text>
+      <text class="dc2" x="110" y="126" text-anchor="middle" font-size="17" font-weight="600" fill="currentColor">${fmtMoney0(tot)}</text></svg>`;
+  if (legendBelow) return `<div data-donut data-d1="${esc(centerLabel)}" data-d2="${esc(fmtMoney0(tot))}" style="display:flex;flex-direction:column;align-items:center;gap:18px">
+    ${svg}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px 18px;width:100%;max-width:680px">${legend}</div>
+  </div>`;
   return `<div data-donut data-d1="${esc(centerLabel)}" data-d2="${esc(fmtMoney0(tot))}" style="display:flex;gap:28px;align-items:center;justify-content:center;flex-wrap:wrap">
     <div style="display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:300px">${legend}</div>
-    <svg viewBox="0 0 220 220" width="220" height="220" role="img" aria-label="${esc(centerLabel)}">${segs}
-      <text class="dc1" x="110" y="104" text-anchor="middle" font-size="12" fill="var(--fg-3)">${esc(centerLabel)}</text>
-      <text class="dc2" x="110" y="126" text-anchor="middle" font-size="17" font-weight="600" fill="currentColor">${fmtMoney0(tot)}</text></svg>
+    ${svg}
   </div>`;
 }
 // Ao passar o mouse numa categoria (no gráfico ou na legenda), destaca só ela.
@@ -591,9 +596,89 @@ CHANGES['bank-sel'] = (el) => {
 };
 ACTIONS['bank-bulk-clear'] = () => { BANK.sel = {}; render(); };
 ACTIONS['bank-cmp'] = () => { BANK.cmp = !BANK.cmp; render(); };
+CHANGES['bank-cmpa'] = (el) => { BANK.cmpA = el.value; render(); };
+CHANGES['bank-cmpb'] = (el) => { BANK.cmpB = el.value; render(); };
+CHANGES['bank-rmonth'] = (el) => { BANK.month = el.value; render(); };
+// Soma de um mês: entradas, saídas (sem terapias), sobra e saídas por categoria.
+function monthSnap(entity, ym) {
+  const withRe = BANK.reemb !== false;
+  const cats = {}; let ent = 0, sai = 0;
+  (BANK.all[entity] || []).forEach(t => {
+    if (t.scope === 'interna' || !t.posted_on || t.posted_on.slice(0, 7) !== ym) return;
+    const v = Math.abs(Number(t.amount)), c = t.category || 'Sem categoria';
+    if (!withRe && (c === 'Reembolso' || c === 'Terapia')) return;
+    if (t.flow === 'in') {
+      if (/^Estorno→/.test(c)) { const tg = c.split('→')[1]; cats[tg] = (cats[tg] || 0) - v; return; }   // estorno abate a categoria
+      if (/^Estorno/.test(c)) return;
+      ent += v; return;
+    }
+    if (c === 'Terapia') { cats['Terapia reembolsável'] = (cats['Terapia reembolsável'] || 0) + v; return; }
+    sai += v; cats[c] = (cats[c] || 0) + v;
+  });
+  return { ent, sai, sobra: ent - sai, cats };
+}
+// Comparador: escolhe dois meses e mostra lado a lado (números, barras e tabela).
+function compareHTML(entity) {
+  const A_C = '#2563eb', B_C = '#f59e0b', GREEN = '#22a06b', RED = '#d64545';
+  const months = [...new Set((BANK.all[entity] || []).filter(t => t.scope !== 'interna' && t.posted_on).map(t => t.posted_on.slice(0, 7)))].sort().reverse();
+  const cur = BANK.month || ymd(new Date()).slice(0, 7);
+  const A = BANK.cmpA || cur, B = BANK.cmpB || bankPrevYm(A);
+  const all = [...new Set([...months, A, B])].sort().reverse();
+  const sa = monthSnap(entity, A), sb = monthSnap(entity, B);
+  const opts = (sel) => all.map(m => `<option value="${m}" ${m === sel ? 'selected' : ''}>${rbLabel(m)}</option>`).join('');
+  const diff = (a, b, inverse) => {
+    const d = a - b, pct = b ? Math.round(d / Math.abs(b) * 100) : null;
+    const good = inverse ? d <= 0 : d >= 0;
+    return `<span style="color:${d === 0 ? 'var(--fg-2)' : good ? GREEN : RED};font-weight:600">${d === 0 ? '—' : (d > 0 ? '▲ ' : '▼ ') + fmtMoney0(Math.abs(d))}${pct !== null && d !== 0 ? ` <span class="small">(${pct > 0 ? '+' : ''}${pct}%)</span>` : ''}</span>`;
+  };
+  const kpi = (label, a, b, inverse) => `<div class="kpi" style="flex:1;min-width:200px">
+      <span class="k">${label}</span>
+      <span class="v" style="color:${A_C}">${fmtMoney0(a)}</span>
+      <span class="s"><span style="color:${B_C}">● ${fmtMoney0(b)}</span> · ${diff(a, b, inverse)}</span></div>`;
+  const keys = [...new Set([...Object.keys(sa.cats), ...Object.keys(sb.cats)])]
+    .filter(k => Math.abs(sa.cats[k] || 0) + Math.abs(sb.cats[k] || 0) > 0)
+    .sort((x, y) => Math.max(Math.abs(sb.cats[y] || 0), Math.abs(sa.cats[y] || 0)) - Math.max(Math.abs(sb.cats[x] || 0), Math.abs(sa.cats[x] || 0)));
+  const mx = Math.max(1, ...keys.map(k => Math.max(Math.abs(sa.cats[k] || 0), Math.abs(sb.cats[k] || 0))));
+  const bar = (v, c) => `<div style="height:9px;border-radius:5px;background:${c};width:${Math.max(0, Math.abs(v) / mx * 100)}%;min-width:${v ? 2 : 0}px"></div>`;
+  const rows = keys.map(k => {
+    const a = sa.cats[k] || 0, b = sb.cats[k] || 0;
+    return `<div style="display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)">
+      <span style="font-size:.92em">${esc(k)}</span>
+      <div style="display:grid;gap:4px">
+        <div class="row" style="gap:8px;align-items:center">${bar(a, A_C)}<span class="mono small" style="white-space:nowrap;color:${A_C}">${fmtMoney0(a)}</span></div>
+        <div class="row" style="gap:8px;align-items:center">${bar(b, B_C)}<span class="mono small" style="white-space:nowrap;color:${B_C}">${fmtMoney0(b)}</span></div>
+      </div></div>`;
+  }).join('');
+  const tableRows = keys.map(k => {
+    const a = sa.cats[k] || 0, b = sb.cats[k] || 0;
+    return `<tr><td>${esc(k)}</td><td class="num" style="color:${A_C}">${fmtMoney0(a)}</td><td class="num" style="color:${B_C}">${fmtMoney0(b)}</td><td class="num">${diff(a, b, true)}</td></tr>`;
+  }).join('');
+  return `<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>Comparar dois meses</h3><span class="faint small">${BANK.reemb !== false ? 'com reembolsos' : 'sem reembolsos'}</span></div>
+    <div class="panel-b">
+      <div class="row" style="gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+        <label class="row small" style="gap:6px;align-items:center"><span style="width:10px;height:10px;border-radius:50%;background:${A_C}"></span>Mês 1 <select data-on="bank-cmpa" class="input" style="width:auto;min-width:170px">${opts(A)}</select></label>
+        <span class="faint">vs</span>
+        <label class="row small" style="gap:6px;align-items:center"><span style="width:10px;height:10px;border-radius:50%;background:${B_C}"></span>Mês 2 <select data-on="bank-cmpb" class="input" style="width:auto;min-width:170px">${opts(B)}</select></label>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+        ${kpi('Entradas', sa.ent, sb.ent, false)}
+        ${kpi('Saídas', sa.sai, sb.sai, true)}
+        ${kpi('Sobra', sa.sobra, sb.sobra, false)}
+      </div>
+      <div class="row small" style="gap:16px;margin-bottom:6px"><b>Saídas por categoria</b><span style="color:${A_C}">● ${rbLabel(A)}</span><span style="color:${B_C}">● ${rbLabel(B)}</span></div>
+      ${keys.length ? rows : '<div class="empty small">Nenhuma saída nesses meses.</div>'}
+      <div style="margin-top:16px;overflow:auto"><table class="grid compact"><thead><tr><th>Categoria</th><th class="num" style="color:${A_C}">${rbLabel(A)}</th><th class="num" style="color:${B_C}">${rbLabel(B)}</th><th class="num">Diferença</th></tr></thead><tbody>${tableRows}</tbody></table></div>
+      <details style="margin-top:16px"><summary class="small" style="cursor:pointer"><b>Todos os meses</b></summary><div style="margin-top:10px">${trendHTML(entity)}</div></details>
+    </div></div>`;
+}
+// Troca de mês pelos botões ‹ ›; o nome do mês volta ao mês atual ao clicar nele.
+const bankShiftMonth = (d) => { const [y, m] = (BANK.month || ymd(new Date()).slice(0, 7)).split('-').map(Number); const dt = new Date(y, m - 1 + d, 1); BANK.month = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`; render(); };
+ACTIONS['bank-mprev'] = () => bankShiftMonth(-1);
+ACTIONS['bank-mnext'] = () => bankShiftMonth(1);
+ACTIONS['bank-mnow'] = () => { BANK.month = null; render(); };
 CHANGES['bank-reemb'] = (el) => { BANK.reemb = el.checked; render(); };
 // Comparar meses: categorias (saídas) e totais de entrada, saída e sobra, mês a mês. Mostra até 12 meses.
-function compareHTML(entity) {
+function trendHTML(entity) {
   const withRe = BANK.reemb !== false;
   const txns = (BANK.all[entity] || []).filter(t => t.scope !== 'interna' && t.posted_on);
   const months = [...new Set(txns.map(t => t.posted_on.slice(0, 7)))].sort().slice(-12);
