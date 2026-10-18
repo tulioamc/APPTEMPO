@@ -9,7 +9,7 @@ VIEWS.prefs = () => {
 ACTIONS['pref-tab'] = (el) => { S.pref = el.dataset.v; render(); };
 
 function prefAppearance() {
-  const th = db.setting('theme', 'system'), ac = db.setting('accent', 'cobalto'), fo = db.setting('font', 'sonoma'), fs = db.setting('fontSize', 14), rd = db.setting('radius', DEFAULT_RADIUS);
+  const th = db.setting('theme', 'system'), ac = db.setting('accent', 'cobalto'), fo = db.setting('font', 'sonoma'), fs = db.setting('fontSize', 14), rd = db.setting('radius', DEFAULT_RADIUS), rp = db.setting('rowPad', 3);
   return `<div class="panel"><div class="panel-h"><h3>Tema</h3></div><div class="panel-b stack">
     <div class="seg">${[['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Escuro']].map(([k, l]) => `<button class="${th === k ? 'on' : ''}" data-act="set" data-k="theme" data-v="${k}">${l}</button>`).join('')}</div>
     <div class="field"><span class="lbl">Cor de destaque</span><div class="row">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="swatch ${ac === k ? 'on' : ''}" style="background:${c};width:30px;height:30px" data-act="set" data-k="accent" data-v="${k}" title="${k}" aria-label="${k}"></button>`).join('')}</div></div>
@@ -18,14 +18,15 @@ function prefAppearance() {
     <div class="field"><label for="pf-font">Fonte</label><select id="pf-font" class="input" style="max-width:360px" data-on="set" data-k="font">${Object.entries(FONTS).map(([k, [l]]) => `<option value="${k}" ${fo === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <span class="hint">A BR Sonoma é uma fonte paga da Brink e não está no Google Fonts. Ela aparece se estiver instalada no aparelho; senão, o app usa a Manrope, que tem desenho parecido. Na versão publicada dá para incluir a BR Sonoma se você tiver a licença web.</span></div>
     <div class="field"><label for="pf-fs">Tamanho do texto: <span class="mono">${fs}px</span></label><input id="pf-fs" type="range" min="12" max="18" step="1" value="${fs}" data-on="set" data-k="fontSize" style="max-width:360px;accent-color:var(--accent)"></div>
+    <div class="field"><label for="pf-rp">Altura das linhas das tabelas: <span class="mono">${rp}px</span></label><input id="pf-rp" type="range" min="0" max="12" step="1" value="${rp}" data-on="set" data-k="rowPad" style="max-width:360px;accent-color:var(--accent)"><span class="hint">0 = bem compacta, 3 = padrão, 12 = bem espaçosa.</span></div>
   </div></div>
   <div class="panel"><div class="panel-h"><h3>Cards</h3></div><div class="panel-b stack">
     <div class="field"><label for="pf-rd">Raio das bordas (px)</label><div class="row"><input id="pf-rd" type="number" min="0" max="28" step="1" class="input" style="width:100px" value="${rd}" data-on="set" data-k="radius"><button class="btn sm" data-act="set" data-k="radius" data-v="${DEFAULT_RADIUS}">Restaurar padrão (${DEFAULT_RADIUS}px)</button></div></div>
     <div class="row"><div class="kpi" style="width:200px"><span class="k">Exemplo</span><span class="v">12,5 h</span><span class="s">prévia do card</span></div></div>
   </div></div>`;
 }
-ACTIONS.set = (el) => { let v = el.dataset.v; if (el.dataset.k === 'radius' || el.dataset.k === 'fontSize') v = Number(v); db.setSetting(el.dataset.k, v); };
-CHANGES.set = (el) => { let v = el.value; if (['radius', 'fontSize', 'idleMinutes'].includes(el.dataset.k)) v = Math.max(0, Number(v) || 0); db.setSetting(el.dataset.k, v); };
+ACTIONS.set = (el) => { let v = el.dataset.v; if (['radius', 'fontSize', 'rowPad'].includes(el.dataset.k)) v = Number(v); db.setSetting(el.dataset.k, v); };
+CHANGES.set = (el) => { let v = el.value; if (['radius', 'fontSize', 'rowPad', 'idleMinutes'].includes(el.dataset.k)) v = Math.max(0, Number(v) || 0); db.setSetting(el.dataset.k, v); };
 
 function optionRows(list, kind) {
   return list.map((o, i) => `<div class="opt-row">
