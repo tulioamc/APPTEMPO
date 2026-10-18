@@ -172,7 +172,7 @@ ACTIONS['csv-copy'] = async (el) => {
    EXTRATOS BANCÁRIOS (Gmail → Nubank). Lançamentos vêm de tempo_bank_txns,
    separados por entidade (pf / pj) e marcados "novo" até você revisar.
    ===================================================================== */
-const BANK = { status: null, txns: { pf: [], pj: [] }, busy: false, checkedAt: 0, msg: '' };
+const BANK = { status: null, txns: { pf: [], pj: [] }, mode: { pf: 'novo', pj: 'novo' }, busy: false, checkedAt: 0, msg: '' };
 async function bankToken() {
   const { data } = await db.adapter.client.auth.getSession();
   return data && data.session ? data.session.access_token : null;
@@ -187,7 +187,7 @@ async function bankApi(path, opts = {}) {
 async function bankLoadTxns() {
   for (const entity of ['pf', 'pj']) {
     const { data, error } = await db.adapter.client.from('tempo_bank_txns').select('*')
-      .eq('entity', entity).eq('review_status', 'novo').order('posted_on', { ascending: false }).limit(300);
+      .eq('entity', entity).eq('review_status', BANK.mode[entity]).order('posted_on', { ascending: false }).limit(300);
     if (error) throw error;
     BANK.txns[entity] = data || [];
   }
@@ -216,7 +216,8 @@ async function bankRefresh(force) {
 function bankPanel(entity) {
   const st = BANK.status, connected = !!(st && st.connected);
   const label = entity === 'pf' ? 'PF' : 'PJ';
-  const head = `<div class="panel-h"><h3>Extratos ${label}</h3><span class="grow"></span>${connected
+  const reviewedNow = BANK.mode[entity] === 'revisado';
+  const head = `<div class="panel-h"><h3>Extratos ${label}${reviewedNow ? ' · revisadas' : ''}</h3><span class="grow"></span>${connected
     ? `<button class="btn sm" data-act="bank-sync">Atualizar</button>`
     : `<button class="btn sm primary" data-act="bank-connect">Conectar Gmail</button>`}</div>`;
   const sub = connected
@@ -225,8 +226,9 @@ function bankPanel(entity) {
   const rows = BANK.txns[entity] || [];
   const body = rows.length
     ? `<table class="grid compact"><tbody>${rows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.counterpart || t.memo)}</td><td class="num">${fmtMoney(t.amount)}</td><td>${t.scope === 'interna' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Interna</span>' : '<span class="tag tg">Externa</span>'}</td></tr>`).join('')}</tbody></table>`
-    : `<div class="empty small">Nenhuma movimentação nova.</div>`;
-  const foot = rows.length ? `<div class="panel-b" style="padding:8px 16px;text-align:right"><button class="btn sm" data-act="bank-review-all" data-entity="${entity}">Marcar como revisadas</button></div>` : '';
+    : `<div class="empty small">${reviewedNow ? 'Nenhuma movimentação revisada.' : 'Nenhuma movimentação nova.'}</div>`;
+  const reviewed = BANK.mode[entity] === 'revisado';
+  const foot = `<div class="panel-b" style="padding:8px 16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn sm ghost" data-act="bank-mode" data-entity="${entity}">${reviewed ? 'Ver novas' : 'Ver revisadas'}</button>${rows.length && !reviewed ? `<button class="btn sm" data-act="bank-review-all" data-entity="${entity}">Marcar como revisadas</button>` : ''}</div>`;
   return `<div class="panel">${head}${sub}<div class="panel-b tight" style="max-height:320px;overflow:auto">${body}</div>${foot}</div>`;
 }
 ACTIONS['bank-connect'] = async () => {
@@ -234,6 +236,11 @@ ACTIONS['bank-connect'] = async () => {
   catch (e) { toast('Não consegui conectar: ' + e.message); }
 };
 ACTIONS['bank-sync'] = () => bankRefresh(true);
+ACTIONS['bank-mode'] = async (el) => {
+  const entity = el.dataset.entity;
+  BANK.mode[entity] = BANK.mode[entity] === 'novo' ? 'revisado' : 'novo';
+  await bankLoadTxns(); render();
+};
 ACTIONS['bank-review-all'] = async (el) => {
   const entity = el.dataset.entity;
   const ids = (BANK.txns[entity] || []).map(t => t.id);
