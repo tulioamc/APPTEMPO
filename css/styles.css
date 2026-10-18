@@ -370,7 +370,11 @@ table.grid.static tbody tr:hover td { background: transparent; }
 .rem-card.off { opacity: .6; }
 .opt-row { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .opt-row:last-child { border-bottom: 0; }
-.opt-row .input { flex: 1; min-width: 140px; }
+.opt-row .input { flex: 0 1 300px; min-width: 140px; }
+.opt-row select.input, select.input {
+  -webkit-appearance: none; appearance: none; padding-right: 30px; cursor: pointer;
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%236b7280' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 9px center;
+}
 .pref-layout { display: grid; grid-template-columns: 200px minmax(0,1fr); gap: 18px; align-items: start; }
 .pref-nav { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 80px; }
 .import-drop { border: 2px dashed var(--line-strong); border-radius: var(--radius); padding: 28px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--fg-2); }
