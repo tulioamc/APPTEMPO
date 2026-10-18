@@ -51,6 +51,7 @@ ACTIONS['rb-del'] = (el) => { db.remove('tempo_reimb_rows', el.dataset.id); };
 CHANGES['rb-field'] = (el) => {
   const k = el.dataset.k; let v = el.dataset.money !== undefined ? moneyVal(el) : el.value;
   if (k === 'name' || k === 'note') v = (v || '').trim();
+  if (k === 'date') { const iso = parseDataBR(v); if (!iso && String(v).trim()) { toast('Use a data dd/mm/aaaa.'); return render(); } v = iso || null; }
   db.update('tempo_reimb_rows', el.dataset.id, { [k]: v });
 };
 
@@ -96,8 +97,7 @@ VIEWS.reimb = () => {
   const paid = all.filter(r => payOf(r) === 'Pago');
   const refunded = all.filter(r => refOf(r) === 'Feito!');
   const net = rbSum(paid) - rbSum(refunded);
-  const toRefund = all.filter(r => payOf(r) === 'Pago' && !['Feito!', 'Negado'].includes(refOf(r)) && amt(r) > 0);
-  const notRequested = all.filter(r => ['a Fazer', 'Falta Nota'].includes(reqOf(r)) && amt(r) > 0);
+    const notRequested = all.filter(r => ['a Fazer', 'Falta Nota'].includes(reqOf(r)) && amt(r) > 0);
   const refused = all.filter(r => ['Negado', 'Parcial (Errado)'].includes(refOf(r)));
   const toPayThird = all.filter(r => payOf(r) === 'a Pagar' && amt(r) > 0);
   const li = (txt) => `<li>${txt}</li>`;
@@ -105,12 +105,20 @@ VIEWS.reimb = () => {
 
   /* Filtros de pendência (clicáveis): filtram as linhas das tabelas */
   const now = ymd(new Date()).slice(0, 7);
+  /* Três etapas, cada linha em uma só: pagar -> requerer -> receber (depois do Feito!/Negado, sai da lista) */
+  const etapa = (r) => {
+    if (amt(r) <= 0) return null;
+    if (payOf(r) !== 'Pago') return 'pagar';
+    if (reqOf(r) !== 'Feito') return 'requerer';
+    if (!['Feito!', 'Negado'].includes(refOf(r))) return 'receber';
+    return null;
+  };
   const FILTERS = {
     all: { label: 'Tudo', test: () => true },
-    plano: { label: 'Falta o plano pagar', test: r => payOf(r) === 'Pago' && !['Feito!', 'Negado'].includes(refOf(r)) && amt(r) > 0 },
-    requer: { label: 'Falta requerer', test: r => ['a Fazer', 'Falta Nota'].includes(reqOf(r)) && amt(r) > 0 },
-    refazer: { label: 'Negado / refazer', test: r => ['Negado', 'Parcial (Errado)'].includes(refOf(r)) },
-    profis: { label: 'A pagar a profissionais', test: r => payOf(r) === 'a Pagar' && amt(r) > 0 }
+    pagar: { label: 'Falta você pagar', test: r => etapa(r) === 'pagar' },
+    requer: { label: 'Falta você requerer', test: r => etapa(r) === 'requerer' },
+    receber: { label: 'Falta você receber', test: r => etapa(r) === 'receber' },
+    refazer: { label: 'Negado / refazer', test: r => ['Negado', 'Parcial (Errado)'].includes(refOf(r)) }
   };
   const f = FILTERS[S.rbFilter] ? S.rbFilter : 'all'; S.rbFilter = f;
   const countOf = (k) => { const rs = all.filter(FILTERS[k].test); return `${rbN(rs)} · ${money(rbSum(rs))}`; };
@@ -124,10 +132,8 @@ VIEWS.reimb = () => {
 
   const summary = all.length ? `
     <div class="rb-top">
-      <div class="card rb-hero">
-        <span class="k">Falta o plano pagar</span>
-        <b class="v">${money(rbSum(toRefund))}</b>
-        <span class="small muted">${rbN(toRefund)} aguardando reembolso</span>
+      <div class="rb-etapas">
+        ${[['pagar', 'Falta você pagar'], ['requer', 'Falta você requerer'], ['receber', 'Falta você receber']].map(([k, lab]) => { const rs = all.filter(FILTERS[k].test); return `<button class="card rb-etapa ${f === k ? 'on' : ''}" data-act="rb-filter" data-f="${k}"><span class="k">${lab}</span><b class="v">${money(rbSum(rs))}</b><span class="small muted">${rbN(rs)}</span></button>`; }).join('')}
       </div>
       <div class="card rb-avg">
         <span class="k">Média mensal · últimos ${closed.length} ${closed.length === 1 ? 'mês fechado' : 'meses fechados'}</span>
@@ -149,23 +155,11 @@ VIEWS.reimb = () => {
     if (f !== 'all' && !rows.length) return '';
     const total = rbSum(all_rows), p = rbSum(all_rows.filter(r => payOf(r) === 'Pago')), rf = rbSum(all_rows.filter(r => refOf(r) === 'Feito!'));
     const pend = rbSum(all_rows.filter(r => payOf(r) === 'Pago' && !['Feito!', 'Negado'].includes(refOf(r))));
-    const tr = (r) => `<tr>
-      <td class="rb-name"><input class="rb-in" value="${esc(r.name || '')}" data-on="rb-field" data-id="${r.id}" data-k="name"></td>
-      <td><input class="rb-in" type="date" value="${r.date || ''}" data-on="rb-field" data-id="${r.id}" data-k="date"></td>
-      <td>${comboBtn('reimb_pay', r.pay_id, 'rb-pay', r.id)}</td>
-      <td>${comboBtn('reimb_req', r.req_id, 'rb-req', r.id)}</td>
-      <td class="num"><input class="rb-in num" ${moneyAttrs(r.amount)} data-on="rb-field" data-id="${r.id}" data-k="amount"></td>
-      <td>${comboBtn('reimb_refund', r.refund_id, 'rb-refund', r.id)}</td>
-      <td><input class="rb-in" value="${esc(r.note || '')}" data-on="rb-field" data-id="${r.id}" data-k="note"></td>
-      <td><button class="icon-btn ghost" data-act="rb-del" data-id="${r.id}" title="Remover linha">×</button></td>
-    </tr>`;
     return `<details class="rb-month" open>
       <summary><span class="rb-mt">${rbLabel(ym)}</span><span class="rb-mtot">${money(total)}</span><span class="small muted">pago ${money(p)} · reembolsado ${money(rf)} · pendente ${money(pend)}</span></summary>
-      <div class="card rb-table-wrap"><table class="rb-table"><colgroup><col style="width:22%"><col style="width:11%"><col style="width:13%"><col style="width:15%"><col style="width:11%"><col style="width:12%"><col><col style="width:44px"></colgroup>
-        <thead><tr><th>Despesa</th><th>Data</th><th>Pagamento</th><th>Requerimento</th><th class="num">Valor</th><th>Reembolso</th><th>Anotação</th><th></th></tr></thead>
-        <tbody>${rows.map(tr).join('') || `<tr><td colspan="8" class="faint">Sem linhas neste mês.</td></tr>`}</tbody>
-        <tfoot><tr><td colspan="4">Total do mês</td><td class="num"><b>${money(total)}</b></td><td colspan="3"><button class="btn sm ghost" data-act="rb-add" data-m="${ym}">${icon('plus')} Linha</button></td></tr></tfoot>
-      </table></div></details>`;
+      <div class="panel-b tight">${rows.length ? gridTable({ id: 'reimb', cols: RB_COLS, rows, rowById: (rid) => db.get('tempo_reimb_rows', rid) }) : '<div class="faint small" style="padding:10px">Sem linhas neste mês.</div>'}</div>
+      <div class="row" style="padding:8px 2px"><button class="btn sm ghost" data-act="rb-add" data-m="${ym}">${icon('plus')} Linha</button></div>
+    </details>`;
   };
 
   const html = `${summary}
@@ -176,4 +170,17 @@ VIEWS.reimb = () => {
     actions: `<label class="btn sm">${icon('upload')} Importar CSV do Notion<input type="file" accept=".csv,text/csv" hidden data-on="rb-import"></label><button class="btn sm primary" data-act="rb-new-month">${icon('plus')} Novo mês</button>`,
     html
   };
+};
+
+/* colunas da tabela de reembolsos (mesmo componente da lista de Freelas) */
+const rbTagOf = (kind, id) => { const st = statuses(kind).find(x => x.id === id); return st ? tag(st.name, st.color, { pill: true }) : '<span class="faint">—</span>'; };
+const RB_COLS = {
+  name: { label: 'Despesa', w: 230, cell: r => esc(r.name || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.name, set: (r, v) => db.update('tempo_reimb_rows', r.id, { name: (v || '').trim() }) } },
+  date: { label: 'Data', w: 110, cell: r => r.date ? fmtDate(r.date) : '<span class="faint">—</span>', sort: r => r.date || '', edit: { type: 'date', get: r => r.date, set: (r, v) => db.update('tempo_reimb_rows', r.id, { date: v || null }) } },
+  pay: { label: 'Pagamento', w: 130, cell: r => rbTagOf('reimb_pay', r.pay_id), edit: { type: 'combo', kind: 'reimb_pay', get: r => r.pay_id, set: (r, v) => db.update('tempo_reimb_rows', r.id, { pay_id: v }) } },
+  req: { label: 'Requerimento', w: 170, cell: r => rbTagOf('reimb_req', r.req_id), edit: { type: 'combo', kind: 'reimb_req', get: r => r.req_id, set: (r, v) => db.update('tempo_reimb_rows', r.id, { req_id: v }) } },
+  amount: { label: 'Valor', money: true, w: 120, cell: r => r.amount ? fmtMoney(r.amount) : '<span class="faint">—</span>', val: r => r.amount || 0, edit: { type: 'money', get: r => r.amount, set: (r, v) => db.update('tempo_reimb_rows', r.id, { amount: v ?? null }) } },
+  refund: { label: 'Reembolso', w: 150, cell: r => rbTagOf('reimb_refund', r.refund_id), edit: { type: 'combo', kind: 'reimb_refund', get: r => r.refund_id, set: (r, v) => db.update('tempo_reimb_rows', r.id, { refund_id: v }) } },
+  note: { label: 'Anotação', w: 240, cell: r => esc(r.note || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.note, set: (r, v) => db.update('tempo_reimb_rows', r.id, { note: (v || '').trim() }) } },
+  del: { label: '', w: 44, cell: r => `<button class="icon-btn ghost" data-act="rb-del" data-id="${r.id}" title="Remover linha">×</button>` }
 };

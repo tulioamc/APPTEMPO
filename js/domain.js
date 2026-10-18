@@ -338,3 +338,20 @@ function seedDemo() {
   db.setSetting('demo', true);
   db.setSetting('rates', { grande: null, medio: null, pequeno: null });
 }
+
+/* data e hora digitadas livremente: 17/10/2026, 17102026, 17-10-26; hora: 16:30, 1630, 16h30 */
+function parseDataBR(txt) {
+  const t = String(txt || '').trim(); if (!t) return null;
+  const m = t.match(/^(\d{1,2})\D?(\d{1,2})\D?(\d{2}|\d{4})$/) || t.match(/^(\d{2})(\d{2})(\d{4})$/);
+  if (!m) return null;
+  let [, dd, mm, yy] = m; yy = yy.length === 2 ? '20' + yy : yy;
+  const d = new Date(Number(yy), Number(mm) - 1, Number(dd));
+  if (d.getFullYear() !== Number(yy) || d.getMonth() !== Number(mm) - 1 || d.getDate() !== Number(dd)) return null;
+  return `${yy}-${pad(Number(mm))}-${pad(Number(dd))}`;
+}
+function parseHora(txt) {
+  const t = String(txt || '').trim(); if (!t) return null;
+  const m = t.match(/^(\d{1,2})\s*[:hH.]?\s*(\d{2})$/); if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]); if (h > 23 || mi > 59) return null;
+  return `${pad(h)}:${pad(mi)}`;
+}

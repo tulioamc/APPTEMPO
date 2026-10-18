@@ -2,6 +2,7 @@
    DROPDOWN COM BUSCA — selecionar, buscar ou criar opção nova
    ===================================================================== */
 function comboItems(kind) {
+  if (kind.startsWith('ex_')) return exComboItems(kind);
   if (['work', 'payment', 'quote'].includes(kind)) return statuses(kind).map(s => ({ id: s.id, name: s.name, color: s.color, html: tag(s.name, s.color, { pill: kind !== 'payment' }) }));
   if (kind.startsWith('reimb_')) return statuses(kind).map(s => ({ id: s.id, name: s.name, color: s.color, html: tag(s.name, s.color, { pill: true }) }));
   if (kind === 'wt') return workTypes().map(w => ({ id: w.id, name: w.name, color: w.color, html: tag(w.name, w.color) }));

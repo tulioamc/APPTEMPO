@@ -39,6 +39,25 @@ ACTIONS['notice-snooze'] = (el) => {
 ACTIONS['notice-reopen'] = (el) => { db.update('tempo_notices', el.dataset.id, { status: 'pending', decision: '' }, true); db.emit(); };
 ACTIONS['notice-filter'] = (el) => { S.nt = el.dataset.f; render(); };
 
+/* Clique no aviso: leva até onde dá para resolver. Não muda o aviso; ele só muda com "Ok, visto"/Aceitar/Ignorar. */
+function noticeGoto(n) {
+  if (n.kind === 'pause' && n.data && n.data.entry_id) {
+    if (S.route !== 'timesheet') go('timesheet');
+    if (db.get('tempo_time_entries', n.data.entry_id)) openEntryModal(n.data.entry_id);
+    else toast('Essa sessão não existe mais.');
+    return;
+  }
+  if (n.entity === 'project' && n.entity_id) return openProject(n.entity_id);
+  if (n.entity === 'quote') return go('quotes');
+  if (n.entity === 'expense') {
+    const r = db.get('tempo_expenses', n.entity_id);
+    if (r && r.month) { S.exFrom = r.month; S.exTo = r.month; }
+    return go('expenses');
+  }
+  toast('Este aviso não tem para onde ir.');
+}
+ACTIONS['notice-open'] = (el) => { const n = db.get('tempo_notices', el.dataset.id); if (n) noticeGoto(n); };
+
 /* To-do manual */
 ACTIONS['todo-add'] = () => {
   const inp = $('#todo-new'); const t = (inp?.value || '').trim(); if (!t) return;
@@ -88,7 +107,7 @@ function sidePanelHTML() {
       <div class="todo-list">${todos.length ? todos.map(t => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}><span class="grow">${esc(t.title)}</span><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`).join('') : '<span class="faint small">Nada por enquanto.</span>'}</div>
     </div>
     <div class="card"><div class="row between"><b>Avisos</b><button class="btn sm ghost" data-act="go" data-route="notices">Ver todos</button></div>
-      ${pend.length ? pend.map(n => `<div class="side-notice"><div class="small"><b>${esc(n.title)}</b>${n.kind === 'pause' ? '' : `<div class="faint">${esc(n.body || '')}</div>`}</div>${noticeButtons(n)}</div>`).join('') : '<span class="faint small">Sem avisos pendentes.</span>'}
+      ${pend.length ? pend.map(n => `<div class="side-notice" data-act="notice-open" data-id="${n.id}" style="cursor:pointer" title="Ir até o item para resolver"><div class="small"><b>${esc(n.title)}</b>${n.kind === 'pause' ? '' : `<div class="faint">${esc(n.body || '')}</div>`}</div>${noticeButtons(n)}</div>`).join('') : '<span class="faint small">Sem avisos pendentes.</span>'}
     </div></aside>`;
 }
 

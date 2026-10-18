@@ -124,30 +124,35 @@ function exMonthTotals(ym) {
     outPrev: exSum(live(outs)), outDone: exSum(outs.filter(r => r.status === EX_DONE.out))
   };
 }
+/* opções das listas de Despesas (categoria e status), para a tabela e o seletor */
+function exComboItems(kind) {
+  if (kind === 'ex_cat') return Object.entries(EX_CATS).flatMap(([main, subs]) => subs.map(sub => ({ id: `${main}/${sub}`, name: sub, color: main === 'PESSOAL' ? 'blue' : 'purple', html: `<span class="faint small">${main} · </span>${esc(sub)}` })));
+  const k = kind === 'ex_in' ? 'in' : 'out';
+  return EX_STATUS[k].map(s => { const color = s === EX_DONE[k] ? 'green' : s === EX_OFF ? 'gray' : 'red'; return { id: s, name: s, color, html: tag(s, color, { pill: true }) }; });
+}
+function exSetStatus(r, v) {
+  const done = v === EX_DONE[r.kind];
+  db.update('tempo_expenses', r.id, { status: v, paid_on: done ? (r.paid_on || ymd(new Date())) : (v === EX_OFF ? r.paid_on : null) });
+}
+const EX_COLS = {
+  cat: { label: 'Categoria', w: 170, cell: r => { if (!r.cat) return '<span class="faint">—</span>'; const [m, sub] = r.cat.split('/'); return `<span class="faint small">${esc(m)} · </span>${esc(sub || r.cat)}`; }, edit: { type: 'combo', kind: 'ex_cat', allowEmpty: true, emptyLabel: 'Sem categoria', get: r => r.cat, set: (r, v) => db.update('tempo_expenses', r.id, { cat: v || null }) } },
+  name: { label: 'Nome', w: 220, cell: r => esc(r.name || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.name, set: (r, v) => db.update('tempo_expenses', r.id, { name: (v || '').trim() }) } },
+  due_date: { label: 'Vencimento', w: 120, cell: r => r.due_date ? fmtDate(r.due_date) : '<span class="faint">—</span>', sort: r => r.due_date || '', edit: { type: 'date', get: r => r.due_date, set: (r, v) => db.update('tempo_expenses', r.id, { due_date: v || null }) } },
+  amount: { label: 'Valor', money: true, w: 130, cell: r => `<span class="ex-sign">${r.kind === 'in' ? '+' : '−'}</span> ${fmtMoney(r.amount || 0)}`, val: r => (r.status === EX_OFF ? 0 : (r.amount || 0)), edit: { type: 'money', get: r => r.amount, set: (r, v) => db.update('tempo_expenses', r.id, { amount: Math.abs(v || 0) }) } },
+  status: { label: 'Status', w: 150, cell: r => { const c = exComboItems(r.kind === 'in' ? 'ex_in' : 'ex_out').find(x => x.id === r.status); return c ? c.html : esc(r.status || ''); }, edit: { type: 'combo', kind: r => r.kind === 'in' ? 'ex_in' : 'ex_out', get: r => r.status, set: (r, v) => exSetStatus(r, v) } },
+  paid_on: { label: 'Paga em', w: 120, cell: r => r.paid_on ? fmtDate(r.paid_on) : '<span class="faint">—</span>', sort: r => r.paid_on || '', edit: { type: 'date', get: r => r.paid_on, set: (r, v) => db.update('tempo_expenses', r.id, { paid_on: v || null }) } },
+  inst: { label: 'Parcela', w: 90, cell: r => exInstLabel(r) || '<span class="faint">—</span>', edit: { type: 'text', get: r => exInstLabel(r), set: (r, v) => { const m = String(v || '').match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/); db.update('tempo_expenses', r.id, m ? { inst_no: Number(m[1]), inst_total: Number(m[2]) } : { inst_no: null, inst_total: null }); } } },
+  note: { label: 'Anotação', w: 240, cell: r => esc(r.note || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.note, set: (r, v) => db.update('tempo_expenses', r.id, { note: (v || '').trim() }) } },
+  del: { label: '', w: 44, cell: r => `<button class="icon-btn ghost" data-act="ex-del" data-id="${r.id}" title="Remover linha">×</button>` }
+};
 function exSectionHTML(ym, kind) {
   const rows = exRows(ym, kind); const total = exSum(rows.filter(r => r.status !== EX_OFF));
   const title = kind === 'in' ? 'Entradas' : 'Saídas';
   return `<div class="ex-sec">
     <div class="ex-sec-h"><b>${title}</b><span class="grow"></span><span class="mono ${kind === 'in' ? 'ex-plus' : 'ex-minus'}">${kind === 'in' ? '+' : '−'} ${fmtMoney(total)}</span></div>
-    <div class="card rb-table-wrap"><table class="rb-table ex-table"><colgroup><col style="width:15%"><col style="width:16%"><col style="width:11%"><col style="width:14%"><col style="width:15%"><col style="width:11%"><col style="width:7%"><col><col style="width:44px"></colgroup>
-      <thead><tr><th>Categoria</th><th>Nome</th><th>Vencimento</th><th class="num">Valor</th><th>Status</th><th>Paga em</th><th>Parcela</th><th>Anotação</th><th></th></tr></thead>
-      <tbody>${rows.map(exRowHTML).join('') || `<tr><td colspan="9" class="faint">${kind === 'in' ? 'Nenhuma entrada' : 'Nenhuma saída'} neste mês.</td></tr>`}</tbody>
-      <tfoot><tr><td colspan="8"><button class="btn sm ghost" data-act="ex-add" data-kind="${kind}" data-m="${ym}">${icon('plus')} ${kind === 'in' ? 'Entrada' : 'Saída'}</button></td><td></td></tr></tfoot>
-    </table></div></div>`;
-}
-function exRowHTML(r) {
-  const sign = r.kind === 'in' ? '+' : '−';
-  return `<tr class="${r.status === EX_OFF ? 'ex-off' : ''}">
-    <td><select class="rb-in" data-on="ex-field" data-id="${r.id}" data-k="cat" aria-label="Categoria">${exCatOptions(r.cat)}</select></td>
-    <td><input class="rb-in" value="${esc(r.name || '')}" data-on="ex-field" data-id="${r.id}" data-k="name" aria-label="Nome"></td>
-    <td><input class="rb-in" type="date" value="${r.due_date || ''}" data-on="ex-field" data-id="${r.id}" data-k="due_date" aria-label="Vencimento"></td>
-    <td class="num"><span class="ex-sign">${sign}</span><input class="rb-in num" ${moneyAttrs(r.amount)} data-on="ex-field" data-id="${r.id}" data-k="amount" aria-label="Valor"></td>
-    <td><select class="rb-in" data-on="ex-status" data-id="${r.id}" aria-label="Status">${EX_STATUS[r.kind].map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
-    <td><input class="rb-in" type="date" value="${r.paid_on || ''}" data-on="ex-field" data-id="${r.id}" data-k="paid_on" aria-label="Paga em"></td>
-    <td><input class="rb-in" value="${exInstLabel(r)}" placeholder="—" data-on="ex-field" data-id="${r.id}" data-k="inst" aria-label="Parcela"></td>
-    <td><input class="rb-in" value="${esc(r.note || '')}" data-on="ex-field" data-id="${r.id}" data-k="note" aria-label="Anotação"></td>
-    <td><button class="icon-btn ghost" data-act="ex-del" data-id="${r.id}" title="Remover linha">×</button></td>
-  </tr>`;
+    <div class="panel-b tight">${rows.length ? gridTable({ id: kind === 'in' ? 'ex-in' : 'ex-out', cols: EX_COLS, rows, rowById: (rid) => db.get('tempo_expenses', rid), sortable: false }) : `<div class="faint small" style="padding:10px">${kind === 'in' ? 'Nenhuma entrada' : 'Nenhuma saída'} neste mês.</div>`}</div>
+    <div class="row" style="padding:8px 2px"><button class="btn sm ghost" data-act="ex-add" data-kind="${kind}" data-m="${ym}">${icon('plus')} ${kind === 'in' ? 'Entrada' : 'Saída'}</button></div>
+  </div>`;
 }
 
 VIEWS.expenses = () => {

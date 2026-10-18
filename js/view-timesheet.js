@@ -232,16 +232,20 @@ function openEntryModal(id) {
   let showPicker = !e;
   let openSeg = null; // intervalo com a caixa aberta para edição
   const hm = (iso) => `${pad(new Date(iso).getHours())}:${pad(new Date(iso).getMinutes())}`;
+  const partesDe = (iso) => iso ? { d: fmtDate(ymd(new Date(iso))), t: hm(iso) } : { d: '', t: '' };
+  const campoTempo = (i, k, iso, aberto) => {
+    const p = partesDe(iso);
+    return `<input class="input sm seg-d" data-seg="${i}" data-k="${k}" data-part="d" value="${p.d}" placeholder="dd/mm/aaaa" inputmode="numeric" autocomplete="off" aria-label="Data ${k === 's' ? 'de início' : 'de fim'}">
+      <input class="input sm seg-t" data-seg="${i}" data-k="${k}" data-part="t" value="${p.t}" placeholder="${aberto ? 'em andamento' : 'hh:mm'}" inputmode="numeric" autocomplete="off" aria-label="Hora ${k === 's' ? 'de início' : 'de fim'}">`;
+  };
   const segBox = (i) => {
     const s = segs[i];
     const head = `<button type="button" class="tbox ${openSeg === i ? 'on' : ''}" data-x="edit-seg" data-i="${i}"><span>${hm(s.s)}</span><span class="faint">→</span><span>${s.e ? hm(s.e) : 'agora'}</span><span class="tlabel">Trabalhado</span></button>`;
     if (openSeg !== i) return head;
     const aberto = !s.e && e && e.state !== 'done' && i === segs.length - 1;
-    return head + `<div class="seg-edit row" style="flex-wrap:nowrap">
-      <input type="datetime-local" class="input sm" data-seg="${i}" data-k="s" value="${toLocalInput(s.s)}" aria-label="Início do intervalo ${i + 1}">
-      <span class="faint">→</span>
-      <input type="datetime-local" class="input sm" data-seg="${i}" data-k="e" value="${toLocalInput(s.e)}" aria-label="Fim do intervalo ${i + 1}" ${aberto ? 'placeholder="em andamento"' : ''}>
-      ${segs.length > 1 ? `<button class="btn sm icon ghost" data-x="delseg" data-i="${i}" aria-label="Remover intervalo">${icon('x')}</button>` : ''}
+    return head + `<div class="seg-edit">
+      <div class="seg-linha">${campoTempo(i, 's', s.s, false)}<span class="faint">→</span>${campoTempo(i, 'e', s.e, aberto)}</div>
+      ${segs.length > 1 ? `<button class="btn sm ghost" data-x="delseg" data-i="${i}" aria-label="Remover intervalo">${icon('x')} Remover intervalo</button>` : ''}
     </div>`;
   };
   const segDaysHTML = () => {
@@ -288,7 +292,13 @@ function openEntryModal(id) {
   const redraw = () => { const f = keepForm(); l.refresh(); ['work_type_id', 'revision_id', 'notes', 'reason'].forEach(k => { const el = l.box.querySelector(`[name="${k}"]`); if (el && f[k] !== undefined) el.value = f[k]; }); };
   l.box.addEventListener('change', (ev) => {
     const i = ev.target.dataset.seg; if (i === undefined) return;
-    segs[i][ev.target.dataset.k] = fromLocalInput(ev.target.value); redraw();
+    const k = ev.target.dataset.k;
+    const dEl = l.box.querySelector(`[data-seg="${i}"][data-k="${k}"][data-part="d"]`);
+    const tEl = l.box.querySelector(`[data-seg="${i}"][data-k="${k}"][data-part="t"]`);
+    const dia = parseDataBR(dEl.value), hora = parseHora(tEl.value);
+    if (!dia && !hora && k === 'e' && !dEl.value.trim() && !tEl.value.trim()) { segs[i].e = null; return redraw(); }
+    if (!dia || !hora) { toast('Use data dd/mm/aaaa e hora hh:mm.'); return redraw(); }
+    segs[i][k] = new Date(`${dia}T${hora}`).toISOString(); redraw();
   });
   l.box.addEventListener('click', async (ev) => {
     const b = ev.target.closest('[data-x]'); if (!b) return;
