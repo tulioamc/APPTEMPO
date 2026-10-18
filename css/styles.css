@@ -366,7 +366,7 @@ table.grid.static tbody tr:hover td { background: transparent; }
 .colmenu .ci { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 5px; }
 .colmenu .ci:hover { background: var(--surface-2); }
 .colmenu .ci .grow { font-size: .92em; }
-.rem-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 12px; background: var(--surface); }
+.rem-card { max-width: 520px; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 12px; background: var(--surface); }
 .rem-card.off { opacity: .6; }
 .opt-row { display: grid; grid-template-columns: 28px 200px minmax(0,300px) 170px 28px 28px 28px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .opt-row.wt { grid-template-columns: 28px 200px minmax(0,300px) 28px 28px auto; }
