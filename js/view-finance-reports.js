@@ -284,7 +284,7 @@ function bankSummaryHTML(entity) {
     return `<div class="bank-row">
       <span><input type="checkbox" data-on="bank-sel" data-id="${t.id}" ${BANK.sel && BANK.sel[t.id] ? 'checked' : ''} aria-label="Selecionar lançamento"></span>
       <span class="mono small">${fmtDateShort(t.posted_on)}</span>
-      <span class="bn" title="${esc(info?.nome || k)}">${esc(k)}</span>
+      <span class="bn" title="${esc(info?.nome || k)}">${esc(k)}${alias(k) ? ` <span class="faint">· ${esc(alias(k))}</span>` : ''} <button class="bank-cat-btn faint small" data-act="bank-alias" data-cp="${esc(k)}" title="Dar apelido">✎</button></span>
       <span class="mono small">${dotHTML(t.scope === 'interna' ? '#2563eb' : t.flow === 'in' ? '#22a06b' : '#d64545', t.scope === 'interna' ? 'Interna' : t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
       <span class="small muted">${bankMethod(t)}</span>
       <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
@@ -506,6 +506,28 @@ function bankCatDialog(cp, bulk) {
     });
   });
 }
+// Apelido: um nome amigável (ex.: "Diogo Oliveira" → "Kinay") mostrado em cor mais clara ao lado do nome original.
+const alias = (cp) => (db.setting('bankAliases', {}) || {})[cp] || '';
+ACTIONS['bank-alias'] = (el) => {
+  const cp = el.dataset.cp, cur = alias(cp);
+  const l = openLayer({
+    html: `<div class="dh"><h2>Apelido</h2></div><div class="db"><p style="margin:0">“${esc(cp)}” aparece com este apelido ao lado do nome original. Deixe vazio para remover.</p>
+      <div class="field"><label for="bal-v">Apelido</label><input id="bal-v" class="input" value="${esc(cur)}" placeholder="Ex.: Kinay" autocomplete="off"></div>
+      <div class="row" style="gap:8px;justify-content:flex-end"><button class="btn sm ghost" data-t="cancel">Cancelar</button><button class="btn sm primary" data-t="ok">Salvar</button></div></div>`
+  });
+  l.box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-t]'); if (!b) return;
+    if (b.dataset.t === 'ok') {
+      const v = l.box.querySelector('#bal-v').value.trim();
+      const map = { ...(db.setting('bankAliases', {}) || {}) };
+      if (v) map[cp] = v; else delete map[cp];
+      db.setSetting('bankAliases', map);
+      render();
+    }
+    l.close();
+  });
+  setTimeout(() => { const i = l.box.querySelector('#bal-v'); if (i) { i.focus(); i.select(); } }, 0);
+};
 ACTIONS['bank-cat'] = async (el) => {
   const entity = el.dataset.entity, cp = el.dataset.cp;
   const pick = el.dataset.v ? { cat: el.dataset.v, biz: PJ_CATS.includes(el.dataset.v) ? 'pj' : null } : await bankCatDialog(cp);
