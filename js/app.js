@@ -288,6 +288,9 @@ async function boot() {
   const h = (location.hash || '').slice(1); if (NAV.some(n => n.id === h)) S.route = h;
   applyAppearance();
   db.subscribe(applyAppearance);
+  // quando uma despesa, projeto ou orçamento muda, reavalia os avisos (com pequena folga para agrupar mudanças)
+  let scanT = null;
+  db.subscribe(() => { clearTimeout(scanT); scanT = setTimeout(scanAlerts, 1500); });
   scanAlerts();
   if (db.setting('idleDetect', false)) startIdleDetection(false);
   render();

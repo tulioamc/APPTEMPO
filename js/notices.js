@@ -10,7 +10,20 @@ const noticeKind = (k) => NOTICE_KINDS[k] || [k, 'bell'];
 
 /* Cria um aviso pendente. A chave evita duplicar o mesmo aviso (ex.: mesmo prazo no mesmo dia). */
 function addNotice(o, silent) {
-  if (o.key && db.all('tempo_notices').some(n => n.key === o.key)) return null;
+  if (o.key && SCAN_SEEN) SCAN_SEEN.add(o.key);
+  const old = o.key ? db.all('tempo_notices').find(n => n.key === o.key) : null;
+  if (old && !['prazo', 'cobranca', 'orcamento', 'conta'].includes(o.kind)) return null;
+  if (old) {
+    // mesma situação: atualiza o texto no lugar; se já foi resolvida/decidida e o caso voltou ou mudou, reabre como pendente
+    const changed = old.title !== o.title || old.body !== o.body;
+    const back = old.status !== 'pending' && old.status !== 'snoozed' && (changed || String(old.decision || '').startsWith('Resolvido'));
+    if (changed || back) {
+      db.update('tempo_notices', old.id, back ? { title: o.title, body: o.body, data: o.data || {}, status: 'pending', decision: '', decided_at: null, snooze_until: null } : { title: o.title, body: o.body, data: o.data || {} }, true);
+      if (SCAN_SEEN) SCAN_CHANGED = true;
+    }
+    return null;
+  }
+  if (SCAN_SEEN) SCAN_CHANGED = true;
   return db.insert('tempo_notices', { status: 'pending', decision: '', decided_at: null, snooze_until: null, data: {}, ...o }, !!silent);
 }
 /* Registra a decisão do aviso e mantém o histórico. */
@@ -126,8 +139,11 @@ ACTIONS['todo-toggle'] = (el) => {
 ACTIONS['todo-del'] = (el) => { db.remove('tempo_notices', el.dataset.id, true); db.emit(); };
 
 /* Varredura automática: prazos, cobranças e orçamentos com validade próxima. */
+let SCAN_SEEN = null; // chaves geradas nesta varredura
+let SCAN_CHANGED = false; // a varredura criou ou resolveu algum aviso
 function scanAlerts() {
   const today = ymd(new Date());
+  SCAN_SEEN = new Set(); SCAN_CHANGED = false;
   db.all('tempo_projects').filter(p => !p.archived && p.deadline && !['Concluído', 'Cancelado'].includes(statusName(p.status_id))).forEach(p => {
     const d = daysBetween(today, p.deadline); // positivo = faltam dias
     if (d === null || d > 2) return;
@@ -145,10 +161,20 @@ function scanAlerts() {
   /* despesas com vencimento passado e ainda não pagas/recebidas */
   db.all('tempo_expenses').filter(r => r.month === today.slice(0, 7) && r.due_date && r.due_date < today && !['Pago', 'Recebido', 'Não teve'].includes(r.status)).forEach(r => {
     const inc = r.kind === 'in';
-    addNotice({ kind: inc ? 'cobranca' : 'conta', key: `ex:${r.id}:${r.due_date}`, title: `${inc ? 'Recebimento atrasado' : 'Conta vencida'}: ${r.name || 'sem nome'}`, body: `Venceu em ${fmtDate(r.due_date)}${r.amount ? ` · ${fmtMoney(r.amount)}` : ''}.`, entity: 'expense', entity_id: r.id, data: {} }, true);
+    addNotice({ kind: inc ? 'cobranca' : 'conta', key: `ex:${r.id}`, title: `${inc ? 'Recebimento atrasado' : 'Conta vencida'}: ${r.name || 'sem nome'}`, body: `Venceu em ${fmtDate(r.due_date)}${r.amount ? ` · ${fmtMoney(r.amount)}` : ''}.`, entity: 'expense', entity_id: r.id, data: {} }, true);
   });
+  /* avisos automáticos (prazo, cobrança, orçamento, conta) saem sozinhos quando a situação deixa de valer:
+     se a varredura não gerou mais a chave do aviso, a condição acabou (paga, entregue, data trocada, apagada...). */
+  const AUTO_KINDS = ['prazo', 'cobranca', 'orcamento', 'conta'];
+  const SRC_TABLE = { expense: 'tempo_expenses', project: 'tempo_projects', quote: 'tempo_quotes' };
+  db.all('tempo_notices').filter(n => AUTO_KINDS.includes(n.kind) && ['pending', 'snoozed'].includes(n.status) && n.key && !SCAN_SEEN.has(n.key)).forEach(n => {
+    const src = SRC_TABLE[n.entity];
+    if (src && !db.all(src).length) return; // dados ainda não carregados: não resolve nada
+    decideNotice(n, 'accepted', 'Resolvido: a situação mudou'); SCAN_CHANGED = true;
+  });
+  SCAN_SEEN = null;
   db.all('tempo_notices').filter(n => n.status === 'snoozed' && n.snooze_until && n.snooze_until <= today).forEach(n => db.update('tempo_notices', n.id, { status: 'pending', snooze_until: null }, true));
-  db.emit();
+  if (SCAN_CHANGED) db.emit(); // só avisa a tela se algo mudou (evita laço)
 }
 
 /* To-do editável: clique no texto, reescreva (data e hora em linguagem natural) e confirme com Enter ou ao sair do campo. */
