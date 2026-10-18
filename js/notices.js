@@ -58,10 +58,64 @@ function noticeGoto(n) {
 }
 ACTIONS['notice-open'] = (el) => { const n = db.get('tempo_notices', el.dataset.id); if (n) noticeGoto(n); };
 
+/* To-do: entende data e hora no texto. "Pegar Rafa às 16h" → hoje 16h; "até amanhã às 15h"; "sexta 10h"; "dia 25"; "25/10 14h"; "hoje" → até 20h. */
+const TODO_DIAS = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
+function parseTodoText(text) {
+  const orig = String(text || '').trim(); let t = orig; const now = new Date();
+  const hoje = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let day = null, hh = null, mi = 0;
+  const sem = (x) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  // 1) data explícita: 25/10, 25/10/2026, "dia 25"
+  let dm = t.match(/(?<![\p{L}\p{N}\/])(\d{1,2})\/(\d{1,2})(?:\/(\d{4}|\d{2}))?(?![\p{L}\p{N}\/])/u);
+  if (dm) {
+    const y = dm[3] ? (dm[3].length === 2 ? 2000 + Number(dm[3]) : Number(dm[3])) : now.getFullYear();
+    let d = new Date(y, Number(dm[2]) - 1, Number(dm[1]));
+    if (!dm[3] && d < hoje) d = new Date(y + 1, Number(dm[2]) - 1, Number(dm[1]));
+    if (d.getDate() === Number(dm[1])) { day = d; t = t.replace(dm[0], ' '); }
+  } else {
+    dm = t.match(/(?<![\p{L}\p{N}])dia\s+(\d{1,2})(?![\p{L}\p{N}])/iu);
+    if (dm && Number(dm[1]) >= 1 && Number(dm[1]) <= 31) {
+      let d = new Date(now.getFullYear(), now.getMonth(), Number(dm[1]));
+      if (d < hoje) d = new Date(now.getFullYear(), now.getMonth() + 1, Number(dm[1]));
+      if (d.getDate() === Number(dm[1])) { day = d; t = t.replace(dm[0], ' '); }
+    }
+  }
+  // 2) dia da semana: "sexta", "terça-feira" → próxima ocorrência (hoje, se for hoje)
+  if (!day) {
+    const wm = t.match(/(?<![\p{L}\p{N}])(domingo|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado)(?:[\s-]+feira)?(?![\p{L}\p{N}])/iu);
+    if (wm) {
+      const k = TODO_DIAS[sem(wm[1])];
+      const diff = (k - hoje.getDay() + 7) % 7;
+      day = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + diff); t = t.replace(wm[0], ' ');
+    }
+  }
+  // 3) hoje / amanhã / depois de amanhã
+  if (!day) {
+    const rm = t.match(/(?<![\p{L}\p{N}])(depois\s+de\s+amanh[ãa]|amanh[ãa]|hoje)(?![\p{L}\p{N}])/iu);
+    if (rm) { const w = sem(rm[1]); const n = w.startsWith('depois') ? 2 : w.startsWith('amanh') ? 1 : 0; day = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + n); t = t.replace(rm[0], ' '); }
+  }
+  // 4) horário: 16h, 16h30, 16:30, às 16
+  const tm = t.match(/(?<![\p{L}\p{N}])(?:[àa]s?\s+)?(\d{1,2})\s*(?::|h)\s*(\d{2})?(?![\p{L}\p{N}])/iu) || t.match(/(?<![\p{L}\p{N}])[àa]s?\s+(\d{1,2})(?![\p{L}\p{N}])/iu);
+  if (tm && Number(tm[1]) <= 23 && Number(tm[2] || 0) <= 59) { hh = Number(tm[1]); mi = Number(tm[2] || 0); t = t.replace(tm[0], ' '); }
+  const deadline = /(?<![\p{L}\p{N}])at[ée](?![\p{L}\p{N}])/iu.test(orig);
+  const title = t.replace(/\s+/g, ' ').replace(/(?<![\p{L}\p{N}])(at[ée]|[àa]s?|de|do|da|para)\s*$/iu, '').replace(/[\s,.;:-]+$/, '').trim() || orig;
+  if (!day && hh === null) return { title: orig, due: null, deadline: false };
+  const d = day || hoje;
+  const h = hh === null ? 20 : hh, m = hh === null ? 0 : mi;
+  return { title, due: `${ymd(d)}T${pad(h)}:${pad(m)}`, deadline };
+}
+function todoDueLabel(data) {
+  const [ds, ts] = data.due.split('T'); const [h, m] = ts.split(':').map(Number);
+  const hoje = ymd(new Date()), amanha = ymd(new Date(Date.now() + 864e5));
+  const quando = ds === hoje ? 'hoje' : ds === amanha ? 'amanhã' : fmtDateShort(ds);
+  return `${data.deadline ? 'até ' : ''}${quando} ${m ? `${h}h${pad(m)}` : `${h}h`}`;
+}
+
 /* To-do manual */
 ACTIONS['todo-add'] = () => {
-  const inp = $('#todo-new'); const t = (inp?.value || '').trim(); if (!t) return;
-  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: t, body: '', data: {}, decision: '', decided_at: null, snooze_until: null }, true);
+  const inp = $('#todo-new'); const raw = (inp?.value || '').trim(); if (!raw) return;
+  const p = parseTodoText(raw);
+  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: p.due ? { due: p.due, deadline: p.deadline } : {}, decision: '', decided_at: null, snooze_until: null }, true);
   db.emit();
 };
 ACTIONS['todo-toggle'] = (el) => {
@@ -99,12 +153,12 @@ function scanAlerts() {
 
 /* Painel lateral da tela inicial (Time Sheet): to-do + avisos pendentes. */
 function sidePanelHTML() {
-  const todos = db.all('tempo_notices').filter(n => n.kind === 'todo').sort((a, b) => (a.status === 'done') - (b.status === 'done') || (a.created_at || '').localeCompare(b.created_at || ''));
+  const todos = db.all('tempo_notices').filter(n => n.kind === 'todo').sort((a, b) => (a.status === 'done') - (b.status === 'done') || (a.data?.due || '\uffff').localeCompare(b.data?.due || '\uffff') || (a.created_at || '').localeCompare(b.created_at || ''));
   const pend = db.all('tempo_notices').filter(n => n.status === 'pending' && n.kind !== 'reminder').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 6);
   return `<aside class="side-panel">
     <div class="card"><div class="row between"><b>To-do</b><span class="faint small">${todos.filter(t => t.status !== 'done').length} abertas</span></div>
-      <form class="row gap-s" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Nova tarefa…" autocomplete="off"><button class="btn sm" data-act="todo-add">Adicionar</button></form>
-      <div class="todo-list">${todos.length ? todos.map(t => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}><span class="grow">${esc(t.title)}</span><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`).join('') : '<span class="faint small">Nada por enquanto.</span>'}</div>
+      <form class="row gap-s" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h" autocomplete="off"><button class="btn sm" data-act="todo-add">Adicionar</button></form>
+      <div class="todo-list">${todos.length ? todos.map(t => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}><span class="grow">${esc(t.title)}</span>${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`).join('') : '<span class="faint small">Nada por enquanto.</span>'}</div>
     </div>
     <div class="card"><div class="row between"><b>Avisos</b><button class="btn sm ghost" data-act="go" data-route="notices">Ver todos</button></div>
       ${pend.length ? pend.map(n => `<div class="side-notice" data-act="notice-open" data-id="${n.id}" style="cursor:pointer" title="Ir até o item para resolver"><div class="small"><b>${esc(n.title)}</b>${n.kind === 'pause' ? '' : `<div class="faint">${esc(n.body || '')}</div>`}</div>${noticeButtons(n)}</div>`).join('') : '<span class="faint small">Sem avisos pendentes.</span>'}

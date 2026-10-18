@@ -292,7 +292,7 @@ table.grid.static tbody tr:hover td { background: transparent; }
 .timer-card { background: var(--surface); border: 1px solid var(--line); border-radius: calc(var(--radius) + 4px); padding: 22px; display: flex; flex-direction: column; gap: 16px; position: relative; overflow: hidden; }
 .timer-card.running { border-color: var(--accent-line); }
 .timer-state { display: inline-flex; align-items: center; gap: 8px; font-size: .8em; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; color: var(--fg-2); }
-.timer-digits { font-family: var(--font-mono); font-size: clamp(44px, 8vw, 76px); font-weight: 500; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.timer-digits { font-family: var(--font-mono); font-size: clamp(44px, 8vw, 76px); font-weight: 700; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
 .timer-digits .sec { color: var(--fg-3); }
 .timer-path { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: .92em; color: var(--fg-2); }
 .timer-path .sep { color: var(--fg-3); }
@@ -668,3 +668,6 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 .ex-m { border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 5px 0; font: inherit; font-size: 12px; color: inherit; cursor: pointer; }
 .ex-m:hover { background: var(--surface-3, rgba(0,0,0,.05)); }
 .ex-m.on { background: var(--accent, #2E43D6); color: #fff; }
+
+.todo-due { font-size: 12px; color: var(--fg-3); white-space: nowrap; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.todo-due.late { color: var(--danger); font-weight: 600; }

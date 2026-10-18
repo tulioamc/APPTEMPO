@@ -112,8 +112,14 @@ ACTIONS['qt-new'] = () => openQuote(null);
 ACTIONS['qt-open'] = (el) => openQuote(el.dataset.id);
 ACTIONS['calc-open'] = () => openCalculator();
 
+// Projeto ligado à proposta (pelo vínculo da proposta ou pelo quote_id do projeto).
+function linkedProject(x) {
+  if (!x) return null;
+  return (x.project_id && db.get('tempo_projects', x.project_id)) || db.all('tempo_projects').find(p => p.quote_id === x.id) || null;
+}
 function openQuote(id, preset = {}) {
   const x = id ? db.get('tempo_quotes', id) : null; const v = { ...(x || {}), ...preset };
+  const linked = linkedProject(x);
   const l = openLayer({
     wide: true,
     html: `<div class="dh">${icon('doc')}<h2>${x ? esc(x.name) : 'Nova proposta'}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
@@ -138,7 +144,7 @@ function openQuote(id, preset = {}) {
       ${v.calc ? `<div class="subtle-box small">Valor calculado na calculadora: <b>${fmtMoney(v.calc.computed)}</b>${Number(v.value) !== Number(v.calc.computed) ? ` · ajustado manualmente para ${fmtMoney(v.value)}` : ''}</div>` : ''}
     </form>
     <div class="df">${x ? `<button class="btn danger left" data-x="del">${icon('trash')}</button>` : ''}
-      ${x && !x.project_id ? `<button class="btn" data-x="convert">${icon('arrowR')} Converter em projeto</button>` : ''}${x?.project_id ? `<button class="btn" data-x="open-proj">${icon('folder')} Abrir projeto</button>` : ''}
+      ${linked ? `<button class="btn" data-x="sync-proj">${icon('arrowR')} Atualizar projeto</button><button class="btn" data-x="open-proj">${icon('folder')} Abrir projeto</button>` : x ? `<button class="btn" data-x="convert">${icon('arrowR')} Converter em projeto</button>` : ''}
       <button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="save">Salvar</button></div>`
   });
   l.box.addEventListener('submit', e => e.preventDefault());
@@ -148,14 +154,31 @@ function openQuote(id, preset = {}) {
     if (k === 'newclient') return openPartyForm('client', null, (c) => { $('#qf-c', l.box).innerHTML = clientSelectOptions(c.id); });
     if (k === 'fu') { const n = $('#fu-n', l.box).value.trim(); if (!n) return toast('Escreva o que foi conversado.'); db.update('tempo_quotes', x.id, { followups: [...(x.followups || []), { date: $('#fu-d', l.box).value, note: n }] }); l.close(); openQuote(x.id); toast('Contato registrado'); return; }
     if (k === 'del') { if (!await confirmBox({ title: 'Excluir proposta?', body: esc(x.name), ok: 'Excluir', danger: true })) return; db.remove('tempo_quotes', x.id); l.close(); return; }
-    if (k === 'open-proj') { l.close(); openProject(x.project_id); return; }
+    if (k === 'open-proj') { l.close(); openProject(linkedProject(x).id); return; }
     const data = collect();
     if (!data.name || !data.client_id) return toast('Preencha nome e cliente.');
+    if (k === 'sync-proj') {
+      const p = linkedProject(x);
+      const changes = [];
+      if (p.name !== data.name) changes.push(`nome “${esc(p.name)}” → “${esc(data.name)}”`);
+      if (p.client_id !== data.client_id) changes.push('cliente');
+      if (Number(p.budget || 0) !== Number(data.value || 0)) changes.push(`orçamento ${fmtMoney(data.value) || '—'}`);
+      if (Number(p.estimated_hours || 0) !== Number(data.est_hours || 0)) changes.push(`${data.est_hours || 0} h estimadas`);
+      if (Number(p.revisions_included || 0) !== Number(data.revisions_included || 0)) changes.push(`${data.revisions_included ?? 0} rodadas incluídas`);
+      if (!changes.length) { db.update('tempo_quotes', x.id, data, true); l.close(); toast('O projeto já está igual à proposta'); return; }
+      if (!await confirmBox({ title: 'Atualizar projeto?', body: `Atualiza <b>${esc(p.name)}</b> com os dados da proposta: ${changes.join(', ')}. Tarefas, prazos e pagamentos não mudam.`, ok: 'Atualizar projeto' })) return;
+      db.update('tempo_quotes', x.id, data, true);
+      db.update('tempo_projects', p.id, { name: data.name, client_id: data.client_id, budget: data.value, estimated_hours: data.est_hours, revisions_included: data.revisions_included, description: data.notes }, true);
+      logEvent('project', p.id, 'milestone', `Atualizado a partir da proposta: ${changes.join(', ')}`);
+      db.emit(); l.close(); toast('Projeto atualizado com a proposta'); openProject(p.id);
+      return;
+    }
     if (k === 'save') {
       if (x) db.update('tempo_quotes', x.id, data); else db.insert('tempo_quotes', { ...data, followups: [], project_id: null, calc: preset.calc || null });
       l.close(); toast(x ? 'Proposta atualizada' : 'Proposta criada'); if (S.route !== 'quotes') go('quotes');
     }
     if (k === 'convert') {
+      if (linkedProject(x)) { toast('Essa proposta já virou projeto. Use “Atualizar projeto”.'); return; }
       db.update('tempo_quotes', x.id, data, true);
       if (!await confirmBox({ title: 'Converter em projeto?', body: `Cria o projeto <b>${esc(data.name)}</b> para ${esc(db.get('tempo_clients', data.client_id)?.name)} com orçamento ${fmtMoney(data.value) || '—'}, ${data.est_hours || 0} h estimadas e ${data.revisions_included ?? 0} rodadas incluídas. A proposta fica marcada como aprovada.`, ok: 'Criar projeto' })) return;
       const won = statusByCat('quote', 'won');
