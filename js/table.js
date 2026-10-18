@@ -28,13 +28,15 @@ document.addEventListener('input', (e) => {
   try { el.setSelectionRange(el.value.length, el.value.length); } catch (err) {}
 });
 
-function gridTable({ id, cols, rows, rowAttrs = () => '', defHidden = [], defSort = null, sortable = true, footer = true, rowById, cls = '' }) {
+function gridTable({ id, cols, rows, rowAttrs = () => '', defHidden = [], defSort = null, sortable = true, footer = true, rowById, cls = '', group = null }) {
   const t = tableState(id, cols, defHidden, defSort);
+  // group: tabelas irmãs (ex.: Entradas e Saídas) dividem as larguras, para as colunas ficarem alinhadas
+  const gid = group || id; const wt = group ? tableState(group, cols, defHidden, defSort) : t;
   TABLE_DEFS[id] = { cols, rowById: rowById || ((rid) => rows.find(r => r.id === rid)) };
   const vis = t.order.filter(k => !t.hidden.includes(k));
   let list = rows;
   if (sortable && t.sort && cols[t.sort.key]?.sort) { const g = cols[t.sort.key].sort; list = [...rows].sort((a, b) => { const x = g(a), y = g(b); return (x > y ? 1 : x < y ? -1 : 0) * t.sort.dir; }); }
-  const W = (k) => t.widths[k] || cols[k].w || 140;
+  const W = (k) => wt.widths[k] || cols[k].w || 140;
   const total = vis.reduce((s, k) => s + W(k), 0);
   const head = vis.map(k => { const c = cols[k]; const s = t.sort?.key === k;
     return `<th draggable="true" data-col="${k}" data-table="${id}" class="${sortable && c.sort ? 'sortable' : ''} ${c.money ? 'money' : ''}" ${sortable && c.sort ? `data-act="tsort"` : ''} aria-sort="${s ? (t.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><span class="th-in">${c.ico ? `<span class="ico">${icon(c.ico)}</span>` : ''}<span class="th-l">${c.label}</span>${s ? (t.sort.dir > 0 ? ' ↑' : ' ↓') : ''}</span><span class="rz" data-rz="${k}" aria-hidden="true"></span></th>`; }).join('');
@@ -45,7 +47,7 @@ function gridTable({ id, cols, rows, rowAttrs = () => '', defHidden = [], defSor
   const allSel = list.length > 0 && pick === list.length;
   const headSel = `<th class="sel-col"><input type="checkbox" data-on="tsel-all" data-table="${id}" data-ids="${list.map(r => r.id).join(',')}" ${allSel ? 'checked' : ''} aria-label="Selecionar todas"></th>`;
   const bar = sel.size ? `<div class="sel-bar small"><b>${sel.size}</b> selecionada(s). Edite uma célula de uma delas e a mudança vai para todas <button class="btn sm ghost" data-act="tsel-clear" data-table="${id}">Limpar seleção</button></div>` : '';
-  return `${bar}<div class="table-wrap"><table class="grid fixed ${cls}" data-table="${id}" style="width:${total + 34}px"><colgroup><col class="sel-col" style="width:34px">${vis.map(k => `<col data-col="${k}" style="width:${W(k)}px">`).join('')}</colgroup><thead><tr>${headSel}${head}</tr></thead><tbody>${body}</tbody>${foot}</table></div>`;
+  return `${bar}<div class="table-wrap"><table class="grid fixed ${cls}" data-table="${id}" data-group="${gid}" style="width:${total + 34}px"><colgroup><col class="sel-col" style="width:34px">${vis.map(k => `<col data-col="${k}" style="width:${W(k)}px">`).join('')}</colgroup><thead><tr>${headSel}${head}</tr></thead><tbody>${body}</tbody>${foot}</table></div>`;
 }
 
 let justResized = 0;
@@ -85,15 +87,15 @@ document.addEventListener('pointerdown', (e) => {
   const th = rz.closest('th'); const table = th.closest('table'); const id = table.dataset.table; const k = rz.dataset.rz;
   const col = table.querySelector(`col[data-col="${k}"]`); const startX = e.clientX; const startW = col.getBoundingClientRect().width || parseFloat(col.style.width); const startT = table.getBoundingClientRect().width;
   th.draggable = false; rz.classList.add('on'); document.body.classList.add('resizing');
-  const move = (ev) => { const w = Math.max(60, Math.round(startW + ev.clientX - startX)); col.style.width = w + 'px'; table.style.width = (startT - startW + w) + 'px'; };
+  const move = (ev) => { const w = Math.max(60, Math.round(startW + ev.clientX - startX)); col.style.width = w + 'px'; table.style.width = Array.from(table.querySelectorAll('col')).reduce((a, c) => a + (parseFloat(c.style.width) || 0), 0) + 'px'; };
   const up = (ev) => {
     document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up);
     th.draggable = true; rz.classList.remove('on'); document.body.classList.remove('resizing'); justResized = Date.now();
-    S.tables[id].widths[k] = Math.max(60, Math.round(startW + ev.clientX - startX)); saveTables();
+    const gid = table.dataset.group || id; S.tables[gid].widths[k] = Math.max(60, Math.round(startW + ev.clientX - startX)); saveTables();
   };
   document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
 });
-document.addEventListener('dblclick', (e) => { const rz = e.target.closest?.('.rz'); if (!rz) return; const id = rz.closest('table').dataset.table; delete S.tables[id].widths[rz.dataset.rz]; saveTables(); });
+document.addEventListener('dblclick', (e) => { const rz = e.target.closest?.('.rz'); if (!rz) return; const tb = rz.closest('table'); const id = tb.dataset.group || tb.dataset.table; delete S.tables[id].widths[rz.dataset.rz]; saveTables(); });
 
 /* ---------- seleção de linhas (várias de uma vez) ---------- */
 const TSEL = {};

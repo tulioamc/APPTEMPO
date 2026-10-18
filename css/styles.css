@@ -676,9 +676,13 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 #todo-edit { font-size: inherit; padding: 4px 8px; }
 
 /* Despesas e Reembolsos com caixa branca, como Financeiro, Orçamentos e Tarefas */
-.ex-sec { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
-.ex-sec > .ex-sec-h { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.ex-box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
+.ex-box > .ex-sec + .ex-sec { border-top: 1px solid var(--line); }
+.ex-sec { margin-bottom: 0; }
+.ex-sec > .ex-sec-h { margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .ex-sec > .row { padding: 8px 12px !important; }
 .rb-month { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
 .rb-month > summary { padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .rb-month > .row { padding: 8px 12px !important; }
+/* tabelas: a largura só muda na coluna arrastada (sem esticar as outras) */
+table.grid.fixed { min-width: 0; }
