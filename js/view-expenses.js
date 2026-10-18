@@ -170,8 +170,38 @@ ACTIONS['ex-color'] = (el) => {
 };
 ACTIONS['ex-color-set'] = (el) => { exSetColor(el.dataset.key, el.dataset.c || null); document.querySelector('[data-act="close-layer"]')?.click(); };
 CHANGES['ex-free'] = (el) => exSetColor(el.dataset.key, el.value);
+// Filtro escondido: só aparece quando o botão Filtrar está aberto.
+const exFilterState = () => S.exF || {};
+const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function exMatch(r) {
+  const f = exFilterState();
+  if (f.q && !norm(r.name).includes(norm(f.q))) return false;
+  if (f.cat && `${r.cat || ''}` !== f.cat) return false;
+  if (f.st && r.status !== f.st) return false;
+  const a = Math.abs(Number(r.amount) || 0);
+  if (f.min && a < Number(f.min)) return false;
+  if (f.max && a > Number(f.max)) return false;
+  return true;
+}
+function exFilterOn() { const f = exFilterState(); return !!(f.q || f.cat || f.st || f.min || f.max); }
+function exFilterHTML() {
+  const f = exFilterState();
+  const cats = Object.entries(EX_CATS).flatMap(([main, subs]) => subs.map(sub => `${main}/${sub}`));
+  return `<div class="ex-filter panel-b" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end">
+    <div class="field"><label for="exf-q">Nome</label><input id="exf-q" class="input" value="${esc(f.q || '')}" placeholder="Buscar por nome" data-input="ex-f" data-k="q"></div>
+    <div class="field"><label for="exf-cat">Categoria</label><select id="exf-cat" class="input" data-on="ex-f" data-k="cat"><option value="">Todas</option>${cats.map(c => `<option value="${esc(c)}" ${f.cat === c ? 'selected' : ''}>${esc(c.replace('/', ' › '))}</option>`).join('')}</select></div>
+    <div class="field"><label for="exf-st">Status</label><select id="exf-st" class="input" data-on="ex-f" data-k="st"><option value="">Todos</option>${[...new Set([...EX_STATUS.out, ...EX_STATUS.in])].map(x => `<option value="${esc(x)}" ${f.st === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
+    <div class="field"><label for="exf-min">Valor mínimo</label><input id="exf-min" class="input" type="number" min="0" value="${esc(f.min || '')}" data-input="ex-f" data-k="min"></div>
+    <div class="field"><label for="exf-max">Valor máximo</label><input id="exf-max" class="input" type="number" min="0" value="${esc(f.max || '')}" data-input="ex-f" data-k="max"></div>
+    <div class="row"><button class="btn sm ghost" data-act="ex-filter-clear">Limpar filtro</button></div>
+  </div>`;
+}
+CHANGES['ex-f'] = (el) => { S.exF = { ...exFilterState(), [el.dataset.k]: el.value }; render(); };
+ACTIONS['ex-filter-toggle'] = () => { S.exFOpen = !S.exFOpen; render(); };
+ACTIONS['ex-filter-clear'] = () => { S.exF = {}; render(); };
+
 function exSectionHTML(ym, kind) {
-  const rows = exRows(ym, kind); const total = exSum(rows.filter(r => r.status !== EX_OFF));
+  const rows = exRows(ym, kind).filter(exMatch); const total = exSum(rows.filter(r => r.status !== EX_OFF));
   const title = kind === 'in' ? 'Entradas' : 'Saídas';
   return `<div class="ex-sec">
     <div class="ex-sec-h"><b>${title}</b><span class="grow"></span><span class="mono ${kind === 'in' ? 'ex-plus' : 'ex-minus'}">${kind === 'in' ? '+' : '−'} ${fmtMoney(total)}</span></div>
@@ -196,6 +226,7 @@ VIEWS.expenses = () => {
       <div class="ex-meses">${RB_MONTHS.map((nome, i) => { const v = `${y}-${String(i + 1).padStart(2, '0')}`; return `<button class="ex-m ${v === cur ? 'on' : ''}" data-act="ex-pick-set" data-m="${v}">${nome.slice(0, 3)}</button>`; }).join('')}</div>
     </div>`;
   })() : '';
+  const fbtn = `<button class="btn sm ${S.exFOpen || exFilterOn() ? 'on' : ''}" data-act="ex-filter-toggle">${icon('search')} Filtrar${exFilterOn() ? ' · ativo' : ''}</button>`;
   const controls = `<div class="ex-controls">
       <div class="ex-faixa">
         <span class="small muted">De</span>${mesBtn('from', from)}
@@ -209,6 +240,8 @@ VIEWS.expenses = () => {
         </div>
       </div>
       ${grade}
+      ${S.exFOpen || exFilterOn() ? exFilterHTML() : ''}
+      <div class="row" style="justify-content:flex-end">${fbtn}</div>
     </div>`;
 
   const block = (ym) => {

@@ -249,7 +249,9 @@ function bankSummaryHTML(entity) {
 CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
 ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };
 // Categorias de gasto: as padrão mais as que o Tulio criar.
-const BANK_CATS = ['Alimentação', 'Casa', 'Transporte', 'Saúde', 'Lazer', 'Compras', 'Assinaturas', 'Impostos', 'Outros'];
+const BANK_CATS = ['Alimentação', 'Casa', 'Transporte', 'Saúde', 'Lazer', 'Compras', 'Assinaturas', 'Impostos', 'Burocracia', 'Outros'];
+// Categorias que costumam ser da empresa (PJ) por padrão.
+const PJ_CATS = ['Burocracia', 'Impostos'];
 const bankCats = () => [...new Set([...BANK_CATS, ...db.setting('bankCats', [])])];
 // Sugestão automática pelo nome do estabelecimento. Só sugere; quem confirma é você.
 const CAT_RULES = [
@@ -259,6 +261,7 @@ const CAT_RULES = [
   [/\bbar\b|boteco|cervej|chopp|cinema|ingresso|teatro|show|sympla|steam|playstation|xbox|livraria/i, 'Lazer'],
   [/posto|gasolin|combust|ipiranga|shell|petrobras|estacion|uber(?! ?eats)|99app|99 |cabify|pedagio|ped[aá]gio|estacionamento/i, 'Transporte'],
   [/farm[aá]c|drogaria|drogasil|droga|raia|pacheco|laborat|consult[oó]rio|cl[ií]nica|hospital|academ|sua academia|smart fit|dentist/i, 'Saúde'],
+  [/contador|contabil|cart[oó]rio|junta comercial|receita federal|receita|\bdas\b|inss|darf|simples nacional|cnpj|registro|taxa/i, 'Burocracia'],
   [/netflix|spotify|apple|dropbox|google|youtube|adobe|icloud|prime|hbo|disney|notion|chatgpt|openai|anthropic|claude|cinema 4d|linkedin/i, 'Assinaturas'],
   [/celpe|enel|energia|[aá]gua|compesa|sabesp|claro|vivo|tim |oi |internet|gás|gas /i, 'Casa'],
 ];
@@ -305,24 +308,29 @@ function bankCatDialog(cp) {
     let done = false;
     const l = openLayer({
       html: `<div class="dh"><h2>Categoria</h2></div><div class="db"><p style="margin:0">“${esc(cp)}”. Vale para todos os lançamentos com esse nome.</p>
+        <div class="field"><span class="lbl">Conta</span><div class="seg" id="bcat-biz"><button data-biz="pf" class="on">PF</button><button data-biz="pj">PJ</button></div></div>
         <div class="row" style="flex-wrap:wrap;gap:6px">${bankCats().map(c => `<button class="btn sm" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
         <div class="field"><label for="bcat-new">Outra categoria</label><div class="row"><input id="bcat-new" class="input" placeholder="Nova categoria"><button class="btn sm" data-cat="__new">Usar</button></div></div></div>`,
       onClose: () => { if (!done) res(null); }
     });
+    const pickBiz = (b) => { l.box.querySelectorAll('#bcat-biz button').forEach(x => x.classList.toggle('on', x === b)); };
     l.box.addEventListener('click', (e) => {
+      const bz = e.target.closest('#bcat-biz [data-biz]'); if (bz) return pickBiz(bz);
       const b = e.target.closest('[data-cat]'); if (!b) return;
       let v = b.dataset.cat;
       if (v === '__new') v = $('#bcat-new', l.box).value.trim();
       if (!v) return toast('Digite o nome da categoria.');
-      done = true; res(v); l.close();
+      const biz = l.box.querySelector('#bcat-biz button.on')?.dataset.biz || 'pf';
+      done = true; res({ cat: v, biz }); l.close();
     });
   });
 }
 ACTIONS['bank-cat'] = async (el) => {
   const entity = el.dataset.entity, cp = el.dataset.cp;
-  const cat = el.dataset.v || await bankCatDialog(cp);
-  if (!cat) return;
-  const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, updated_at: new Date().toISOString() });
+  const pick = el.dataset.v ? { cat: el.dataset.v, biz: PJ_CATS.includes(el.dataset.v) ? 'pj' : null } : await bankCatDialog(cp);
+  if (!pick) return;
+  const { cat, biz } = pick;
+  const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), updated_at: new Date().toISOString() });
   const { error } = cp === '—' ? await q.is('counterpart', null) : await q.eq('counterpart', cp);
   if (error) return toast('Erro: ' + error.message);
   await bankLoadTxns();
