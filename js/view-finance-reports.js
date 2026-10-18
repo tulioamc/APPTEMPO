@@ -249,9 +249,33 @@ async function bankAutoTherapy() {
   }
   return true;
 }
+// Sugestões por nome/CNAE viram categoria de verdade (só saídas, e só contrapartes ainda sem categoria).
+async function bankAutoCategory() {
+  const every = BANK.every || [];
+  const has = new Set(every.filter(x => x.category).map(x => x.counterpart || '—'));
+  const groups = {};
+  every.forEach(t => {
+    if (t.flow !== 'out' || t.category || t.scope === 'interna') return;
+    const k = t.counterpart || '—';
+    if (has.has(k)) return;
+    const sug = suggestCat(k, t.counterpart_doc);
+    if (!sug) return;
+    (groups[sug] = groups[sug] || []).push(t.id);
+  });
+  const cats = Object.keys(groups);
+  if (!cats.length) return false;
+  const cl = db.adapter.client;
+  for (const c of cats) {
+    const { error } = await cl.from('tempo_bank_txns').update({ category: c, updated_at: new Date().toISOString() }).in('id', groups[c]);
+    if (error) { toast('Erro: ' + error.message); break; }
+  }
+  return true;
+}
 async function bankLoadTxns() {
   await bankLoadRaw();
-  if (await bankAutoTherapy()) await bankLoadRaw();
+  let changed = await bankAutoTherapy();
+  if (await bankAutoCategory()) changed = true;
+  if (changed) await bankLoadRaw();
 }
 // Resumo geral: entradas, saídas e sobra (sem movimentos internos) e onde o dinheiro saiu.
 // Filtro escondido das saídas (busca por nome, categoria, meio, conta e valor).
