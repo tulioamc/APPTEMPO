@@ -318,3 +318,8 @@ Adendo ao item de reembolsos acima. Tudo que o app lê ou sugere vai para a fila
 - Nomes de meses com inicial maiúscula (ex.: "Outubro de 2026").
 - Tabelas no mesmo padrão da lista de Projetos: ícone no cabeçalho, nome em negrito, etiquetas coloridas.
 - Esse padrão vale para tudo que for feito daqui para frente.
+
+## To-do (próximos)
+- Aviso na hora do prazo: to-do com horário gera aviso na lista de Avisos quando chega a hora (hoje só fica vermelho depois de vencido).
+- Duração no to-do: "reunião de 1h às 14h" preenche início e fim.
+- Vínculo com cliente ou projeto: se o texto citar um cliente ou projeto conhecido, o to-do fica ligado a ele.

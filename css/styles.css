@@ -671,3 +671,6 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 
 .todo-due { font-size: 12px; color: var(--fg-3); white-space: nowrap; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .todo-due.late { color: var(--danger); font-weight: 600; }
+.todo-title { cursor: text; }
+.todo-title:hover { text-decoration: underline dotted var(--fg-3); text-underline-offset: 3px; }
+#todo-edit { font-size: inherit; padding: 4px 8px; }
