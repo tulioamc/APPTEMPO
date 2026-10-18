@@ -202,26 +202,64 @@ async function bankLoadTxns() {
   const { data: every } = await db.adapter.client.from('tempo_bank_txns').select('*')
     .order('posted_on', { ascending: false }).limit(3000);
   for (const e of ['pf', 'pj']) BANK.all[e] = (every || []).filter(t => (t.biz_entity || t.entity) === e);
+  BANK.every = every || [];
 }
 // Resumo geral: entradas, saídas e sobra (sem movimentos internos) e onde o dinheiro saiu.
+// Filtro escondido das saídas (busca por nome, categoria, meio, conta e valor).
+const bnorm = (x) => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+function bankFilterOn() { const f = BANK.f || {}; return !!(f.q || f.cat || f.meth || f.acc || f.min || f.max); }
+function bankFilterHTML(catBy) {
+  const f = BANK.f || {};
+  const cats = [...new Set(Object.values(catBy).concat(bankCats()))];
+  return `<div class="panel-b" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;border-bottom:1px solid var(--line)">
+    <div class="field"><label for="bf-q">Nome</label><input id="bf-q" class="input" value="${esc(f.q || '')}" placeholder="Buscar por nome" data-input="bank-f" data-k="q"></div>
+    <div class="field"><label for="bf-cat">Categoria</label><select id="bf-cat" class="input" data-on="bank-f" data-k="cat"><option value="">Todas</option><option value="__none" ${f.cat === '__none' ? 'selected' : ''}>Sem categoria</option>${cats.map(c => `<option value="${esc(c)}" ${f.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+    <div class="field"><label for="bf-meth">Meio</label><select id="bf-meth" class="input" data-on="bank-f" data-k="meth"><option value="">Todos</option>${METHODS.map(x => `<option value="${x}" ${f.meth === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+    <div class="field"><label for="bf-acc">Conta</label><select id="bf-acc" class="input" data-on="bank-f" data-k="acc"><option value="">Todas</option><option value="pf" ${f.acc === 'pf' ? 'selected' : ''}>PF</option><option value="pj" ${f.acc === 'pj' ? 'selected' : ''}>PJ</option></select></div>
+    <div class="field"><label for="bf-min">Valor mínimo</label><input id="bf-min" class="input" type="number" min="0" value="${esc(f.min || '')}" data-input="bank-f" data-k="min"></div>
+    <div class="field"><label for="bf-max">Valor máximo</label><input id="bf-max" class="input" type="number" min="0" value="${esc(f.max || '')}" data-input="bank-f" data-k="max"></div>
+    <div class="row"><button class="btn sm ghost" data-act="bank-f-clear">Limpar filtro</button></div>
+  </div>`;
+}
+CHANGES['bank-f'] = (el) => { BANK.f = { ...(BANK.f || {}), [el.dataset.k]: el.value }; render(); };
+ACTIONS['bank-f-toggle'] = () => { BANK.fOpen = !BANK.fOpen; render(); };
+ACTIONS['bank-f-clear'] = () => { BANK.f = {}; render(); };
 function bankSummaryHTML(entity) {
   const ym = BANK.month || ymd(new Date()).slice(0, 7);
   const key = entity + ':' + ym;
   const closed = db.setting('closedMonths', {})[key];
   const inMonth = (BANK.all[entity] || []).filter(t => t.scope === 'externa' && (t.posted_on || '').slice(0, 7) === ym);
-  const ent = inMonth.filter(t => t.flow === 'in').reduce((s, t) => s + Number(t.amount), 0);
-  const sai = inMonth.filter(t => t.flow === 'out').reduce((s, t) => s + Number(t.amount), 0);
+  // Saídas: PF mostra tudo (contas PF e PJ); PJ mostra só o que é PJ
+  const poolOut = (entity === 'pf' ? (BANK.every || []) : (BANK.all.pj || [])).filter(t => t.scope === 'externa' && t.flow === 'out');
+  const isTher = (t) => t.flow === 'out' && !!t.reimb_row_id;
+  const isReimb = (t) => t.flow === 'in' && t.category === 'Reembolso';
+  const ent = inMonth.filter(t => t.flow === 'in' && !isReimb(t)).reduce((s, t) => s + Number(t.amount), 0);
+  const outMonth = poolOut.filter(t => (t.posted_on || '').slice(0, 7) === ym);
+  const sai = outMonth.filter(t => !isTher(t)).reduce((s, t) => s + Number(t.amount), 0);
+  const reimbIn = inMonth.filter(isReimb).reduce((s, t) => s + Number(t.amount), 0);
+  const ther = Math.abs(outMonth.filter(isTher).reduce((s, t) => s + Number(t.amount), 0));
   const cartao = Math.abs((BANK.all[entity] || []).filter(t => t.scope === 'cartao' && (t.posted_on || '').slice(0, 7) === ym).reduce((s, t) => s + Number(t.amount), 0));
   const origin = entity === 'pf' ? (BANK.origin || 'all') : 'all';
   const originOf = (t) => (/d660$/.test(t.account_tail || '') ? 'cartao' : 'conta');
-  const outs = inMonth.filter(t => t.flow === 'out' && (origin === 'all' || originOf(t) === origin))
-    .sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
-  // categoria vale para o nome inteiro (todas as contas)
+  const f = BANK.f || {};
   const catBy = {};
-  (BANK.all.pf || []).concat(BANK.all.pj || []).forEach(x => { if (x.category) catBy[x.counterpart || '—'] = x.category; });
+  (BANK.every || []).forEach(x => { if (x.category) catBy[x.counterpart || '—'] = x.category; });
+  const passes = (t) => {
+    if (origin !== 'all' && originOf(t) !== origin) return false;
+    const k = t.counterpart || '—';
+    if (f.q && !bnorm(k).includes(bnorm(f.q))) return false;
+    if (f.cat === '__none' ? !!catBy[k] : (f.cat && catBy[k] !== f.cat)) return false;
+    if (f.meth && bankMethod(t) !== f.meth) return false;
+    if (f.acc && t.entity !== f.acc) return false;
+    const a = Math.abs(Number(t.amount) || 0);
+    if (f.min && a < Number(f.min)) return false;
+    if (f.max && a > Number(f.max)) return false;
+    return true;
+  };
+  const outsAll = poolOut.filter(passes).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
   const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">
     ${closed ? `<span class="tag tg" style="background:var(--surface-2)">Mês fechado em ${fmtDate(closed.closed_at)}</span><button class="btn sm ghost" data-act="bank-reopen" data-entity="${entity}" data-ym="${ym}">Reabrir</button>` : `<button class="btn sm" data-act="bank-close" data-entity="${entity}" data-ym="${ym}">Fechar mês</button>`}</div>`;
-  const rowsHTML = outs.map(t => {
+  const rowHTML = (t) => {
     const k = t.counterpart || '—';
     const cat = catBy[k] || null;
     const sug = cat ? null : suggestCat(k, t.counterpart_doc);
@@ -232,22 +270,56 @@ function bankSummaryHTML(entity) {
       <span class="mono small">${fmtDateShort(t.posted_on)}</span>
       <span class="bn" title="${esc(info?.nome || k)}">${esc(k)}</span>
       <span class="mono small">${fmtMoney(Math.abs(Number(t.amount)))}</span>
-      <span><button class="btn sm ghost" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${eff.toUpperCase()}</button></span>
-      <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">${tag(cat, 'gray')}</button>`
-        : sug ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-v="${sug}" title="Sugestão pelo nome. Clique para confirmar">${tag(sug, 'gray')} <span class="faint small">sugerido</span></button>`
+      <span class="small muted">${bankMethod(t)}</span>
+      <span><button class="btn sm ghost" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${dotHTML(eff === 'pj' ? PJ_C : PF_C)}${eff.toUpperCase()}</button></span>
+      <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">${dotHTML(palColor(cat))}${tag(cat, 'gray')}</button>`
+        : sug ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-v="${sug}" title="Sugestão pelo nome. Clique para confirmar">${dotHTML(palColor(sug))}${tag(sug, 'gray')} <span class="faint small">sugerido</span></button>`
         : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">Definir categoria</button>`}</span>
       <span class="small muted bm">${bankRowExtra(t)}</span></div>`;
+  };
+  BANK.openM = BANK.openM || {};
+  const months = [...new Set(outsAll.map(t => (t.posted_on || '').slice(0, 7)))];
+  const groups = months.map(m => {
+    const open = BANK.openM[entity + ':' + m] ?? (m === ym);
+    const items = outsAll.filter(t => (t.posted_on || '').slice(0, 7) === m);
+    const tot = items.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    return `<div class="bank-group">
+      <button class="bank-ghead" data-act="bank-mtoggle" data-k="${entity}:${m}"><span>${open ? '▾' : '▸'} ${rbLabel(m)}</span><span class="mono small muted">${items.length} · ${fmtMoney0(tot)}</span></button>
+      ${open ? `<div class="bank-rows bank-head"><span>Data</span><span>Descrição</span><span>Valor</span><span>Meio</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div>${items.map(rowHTML).join('')}` : ''}
+    </div>`;
   }).join('');
+  const sum = (arr, fn) => arr.reduce((acc, x) => { const k = fn(x); acc[k] = (acc[k] || 0) + Math.abs(Number(x.amount)); return acc; }, {});
+  const monthOuts = outMonth.filter(passes);
+  const byCat = Object.entries(sum(monthOuts, t => catBy[t.counterpart || '—'] || 'Sem categoria')).sort((a, b) => b[1] - a[1]);
+  const byMeth = Object.entries(sum(monthOuts, bankMethod)).sort((a, b) => b[1] - a[1]);
+  const byCp = Object.entries(sum(monthOuts, t => t.counterpart || '—')).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const bars = (arr) => { const mx = Math.max(1, ...arr.map(x => x[1])); return arr.length ? `<div class="bars">${arr.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(k)}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / mx * 100}%"></div></div><span class="mono small">${fmtMoney0(v)}</span></div>`).join('')}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'; };
+  const report = `<div class="panel bank-report"><div class="panel-h"><h3>Relatório de ${rbLabel(ym)}</h3></div><div class="panel-b stack">
+    <div><span class="lbl">Por categoria</span>${donutHTML(byCat)}</div>
+    <div><span class="lbl">Por meio</span>${donutHTML(byMeth)}</div>
+    <div><span class="lbl">Onde foi (top 10)</span>${bars(byCp)}</div>
+  </div></div>`;
+  const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
+  const GREEN = '#22a06b', RED = '#d64545';
+  const fOn = bankFilterOn() || BANK.fOpen;
   return `${bar}<div class="kpis">
-    <div class="kpi"><span class="k">Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas</span></div>
-    <div class="kpi"><span class="k">Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">externas</span></div>
+    <div class="kpi"><span class="k">${dot(GREEN)}Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas, sem reembolsos</span></div>
+    <div class="kpi"><span class="k">${dot(RED)}Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">${entity === 'pf' ? 'PF + PJ, sem terapias' : 'só PJ, sem terapias'}</span></div>
+    <div class="kpi"><span class="k">${dot(GREEN)}Reembolsos recebidos</span><span class="v">${fmtMoney0(reimbIn)}</span><span class="s">plano de saúde</span></div>
+    <div class="kpi"><span class="k">${dot(RED)}Terapias pagas</span><span class="v">${fmtMoney0(ther)}</span><span class="s">pagas pelo PF</span></div>
     <div class="kpi"><span class="k">Sobra</span><span class="v">${fmtMoney0(ent + sai)}</span><span class="s">entradas − saídas</span></div>
     ${cartao ? `<div class="kpi"><span class="k">Fatura do cartão</span><span class="v">${fmtMoney0(cartao)}</span><span class="s">paga · conta uma vez, pelos itens</span></div>` : ''}
   </div>
-  <div class="panel"><div class="panel-h"><h3>Saídas do mês</h3><span class="small muted">${outs.length} lançamento(s)</span></div><div class="panel-b">${entity === 'pf' ? `<div class="seg" style="margin-bottom:10px">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${outs.length ? `<div class="bank-rows bank-head"><span>Data</span><span>Descrição</span><span>Valor</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div><div class="bank-rows" style="max-height:60vh;overflow:auto">${rowsHTML}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'}</div></div>`;
+  <div class="bank-layout">
+    <div class="panel bank-list"><div class="panel-h"><h3>Saídas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · por mês</span><span class="grow"></span><button class="btn sm ${fOn ? 'on' : ''}" data-act="bank-f-toggle">${icon('search')} Filtrar${bankFilterOn() ? ' · ativo' : ''}</button></div>
+      ${fOn ? bankFilterHTML(catBy) : ''}
+      <div class="panel-b">${entity === 'pf' ? `<div class="seg" style="margin-bottom:10px">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}<div style="max-height:65vh;overflow:auto">${groups || '<div class="empty small">Nenhuma saída.</div>'}</div></div></div>
+    ${report}
+  </div>`;
 }
 CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
 ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };
+ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.dataset.k; const [ent, m] = k.split(':'); const cur = BANK.openM[k] ?? (m === (BANK.month || ymd(new Date()).slice(0, 7)) && ent); BANK.openM[k] = !cur; render(); };
 // Categorias de gasto: as padrão mais as que o Tulio criar.
 const BANK_CATS = ['Alimentação', 'Casa', 'Transporte', 'Saúde', 'Lazer', 'Compras', 'Assinaturas', 'Impostos', 'Burocracia', 'Outros'];
 // Categorias que costumam ser da empresa (PJ) por padrão.
@@ -296,6 +368,28 @@ async function bankCnpjLookup(doc) {
   finally { cnpjPending.delete(digits); }
 }
 // Sugestão: primeiro pela atividade da empresa (CNPJ), depois pelo nome.
+// Meio de pagamento pela origem do lançamento (conta de cartão, memo do Pix, etc.).
+const METHODS = ['Crédito', 'Débito', 'Pix', 'Outro'];
+const GREEN = '#22a06b', RED = '#d64545', PF_C = '#2E43D6', PJ_C = '#b45309';
+const CHART_PAL = ['#2E43D6', '#22a06b', '#d64545', '#b45309', '#7c3aed', '#0ea5a4', '#db2777', '#64748b', '#84cc16', '#f59e0b'];
+const palColor = (name) => { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return CHART_PAL[h % CHART_PAL.length]; };
+const dotHTML = (c, title = '') => `<span title="${esc(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle;flex:none"></span>`;
+// Rosca (donut) com legenda, em SVG simples
+function donutHTML(arr) {
+  const tot = arr.reduce((a, x) => a + x[1], 0);
+  if (!tot) return '<div class="empty small">Sem saídas neste mês.</div>';
+  const R = 42, C = 2 * Math.PI * R; let acc = 0;
+  const segs = arr.map(([k, v]) => { const f = v / tot; const seg = `<circle r="${R}" cx="60" cy="60" fill="none" stroke="${palColor(k)}" stroke-width="18" stroke-dasharray="${f * C} ${C}" stroke-dashoffset="${-acc * C}" transform="rotate(-90 60 60)"></circle>`; acc += f; return seg; }).join('');
+  const legend = arr.map(([k, v]) => `<div class="small" style="display:flex;justify-content:space-between;align-items:center;gap:8px">${dotHTML(palColor(k))}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(k)}</span><span class="mono">${fmtMoney0(v)}</span><span class="faint">${Math.round(v / tot * 100)}%</span></div>`).join('');
+  return `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><svg viewBox="0 0 120 120" width="140" height="140" role="img" aria-label="Gastos por categoria">${segs}<text x="60" y="64" text-anchor="middle" font-size="11" fill="currentColor">${fmtMoney0(tot)}</text></svg><div style="flex:1;min-width:180px;display:grid;gap:4px">${legend}</div></div>`;
+}
+function bankMethod(t) {
+  if (/d660$/.test(t.account_tail || '')) return 'Crédito';
+  const m = String(t.memo || '');
+  if (/pix/i.test(m)) return 'Pix';
+  if (/d[ée]bito/i.test(m)) return 'Débito';
+  return 'Outro';
+}
 function suggestCat(name, doc) {
   const digits = String(doc || '').replace(/\D/g, '');
   const c = digits && cnpjCache()[digits];
@@ -478,12 +572,14 @@ ACTIONS['bank-link'] = async (el) => {
   db.update('tempo_expenses', e.id, { amount: Math.abs(Number(t.amount)), status: 'Pago', paid_on: t.posted_on });
   t.expense_id = e.id; toast('Vinculado a ' + e.name); render();
 };
-ACTIONS['bank-reimb'] = (el) => {
+ACTIONS['bank-reimb'] = async (el) => {
   const t = (BANK.all.pj || []).concat(BANK.all.pf || []).find(x => x.id === el.dataset.id); if (!t) return;
   const m = el.dataset.month;
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: 'Reembolso', updated_at: new Date().toISOString() }).eq('id', t.id);
+  if (error) return toast('Erro: ' + error.message);
   db.all('tempo_reimb_rows').filter(r => r.month === m && !r.refunded_on && Number(r.amount) > 0)
     .forEach(r => db.update('tempo_reimb_rows', r.id, { refunded_on: t.posted_on }, true));
-  db.emit(); t.reimb_linked = true; toast('Lote ' + m + ' marcado como reembolsado em ' + fmtDate(t.posted_on)); render();
+  db.emit(); t.reimb_linked = true; await bankLoadTxns(); toast('Lote ' + m + ' marcado como reembolsado em ' + fmtDate(t.posted_on)); render();
 };
 ACTIONS['bank-biz'] = async (el) => {
   const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;

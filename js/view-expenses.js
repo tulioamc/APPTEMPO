@@ -173,8 +173,16 @@ CHANGES['ex-free'] = (el) => exSetColor(el.dataset.key, el.value);
 // Filtro escondido: só aparece quando o botão Filtrar está aberto.
 const exFilterState = () => S.exF || {};
 const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+// Meio de pagamento de um gasto = meio do lançamento do extrato vinculado a ele.
+let EX_METHOD = {};
+function exMethodMap() {
+  const m = {};
+  if (typeof BANK !== 'undefined') (BANK.all.pf || []).concat(BANK.all.pj || []).forEach(t => { if (t.expense_id) m[t.expense_id] = bankMethod(t); });
+  return m;
+}
 function exMatch(r) {
   const f = exFilterState();
+  if (f.meth && (EX_METHOD[r.id] || '—') !== f.meth) return false;
   if (f.q && !norm(r.name).includes(norm(f.q))) return false;
   if (f.cat && `${r.cat || ''}` !== f.cat) return false;
   if (f.st && r.status !== f.st) return false;
@@ -183,7 +191,7 @@ function exMatch(r) {
   if (f.max && a > Number(f.max)) return false;
   return true;
 }
-function exFilterOn() { const f = exFilterState(); return !!(f.q || f.cat || f.st || f.min || f.max); }
+function exFilterOn() { const f = exFilterState(); return !!(f.q || f.cat || f.st || f.min || f.max || f.meth); }
 function exFilterHTML() {
   const f = exFilterState();
   const cats = Object.entries(EX_CATS).flatMap(([main, subs]) => subs.map(sub => `${main}/${sub}`));
@@ -191,6 +199,7 @@ function exFilterHTML() {
     <div class="field"><label for="exf-q">Nome</label><input id="exf-q" class="input" value="${esc(f.q || '')}" placeholder="Buscar por nome" data-input="ex-f" data-k="q"></div>
     <div class="field"><label for="exf-cat">Categoria</label><select id="exf-cat" class="input" data-on="ex-f" data-k="cat"><option value="">Todas</option>${cats.map(c => `<option value="${esc(c)}" ${f.cat === c ? 'selected' : ''}>${esc(c.replace('/', ' › '))}</option>`).join('')}</select></div>
     <div class="field"><label for="exf-st">Status</label><select id="exf-st" class="input" data-on="ex-f" data-k="st"><option value="">Todos</option>${[...new Set([...EX_STATUS.out, ...EX_STATUS.in])].map(x => `<option value="${esc(x)}" ${f.st === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
+    <div class="field"><label for="exf-meth">Meio</label><select id="exf-meth" class="input" data-on="ex-f" data-k="meth"><option value="">Todos</option>${[...METHODS, '—'].map(x => `<option value="${x}" ${f.meth === x ? 'selected' : ''}>${x === '—' ? 'Sem vínculo' : x}</option>`).join('')}</select></div>
     <div class="field"><label for="exf-min">Valor mínimo</label><input id="exf-min" class="input" type="number" min="0" value="${esc(f.min || '')}" data-input="ex-f" data-k="min"></div>
     <div class="field"><label for="exf-max">Valor máximo</label><input id="exf-max" class="input" type="number" min="0" value="${esc(f.max || '')}" data-input="ex-f" data-k="max"></div>
     <div class="row"><button class="btn sm ghost" data-act="ex-filter-clear">Limpar filtro</button></div>
@@ -226,6 +235,7 @@ VIEWS.expenses = () => {
       <div class="ex-meses">${RB_MONTHS.map((nome, i) => { const v = `${y}-${String(i + 1).padStart(2, '0')}`; return `<button class="ex-m ${v === cur ? 'on' : ''}" data-act="ex-pick-set" data-m="${v}">${nome.slice(0, 3)}</button>`; }).join('')}</div>
     </div>`;
   })() : '';
+  EX_METHOD = exMethodMap();
   const fbtn = `<button class="btn sm ${S.exFOpen || exFilterOn() ? 'on' : ''}" data-act="ex-filter-toggle">${icon('search')} Filtrar${exFilterOn() ? ' · ativo' : ''}</button>`;
   const controls = `<div class="ex-controls">
       <div class="ex-faixa">
