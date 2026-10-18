@@ -48,7 +48,7 @@ function sidebarHTML() {
     `<button class="nav-btn ${S.route === n.id ? 'active' : ''}" data-act="go" data-route="${n.id}" ${S.route === n.id ? 'aria-current="page"' : ''}>${icon(n.icon)}<span>${n.label}</span>${n.count ? `<span class="count">${n.count()}</span>` : ''}</button>`).join('')}
   <div class="sidebar-foot">
     ${a ? `<button class="mini-timer" data-act="go" data-route="timesheet"><span class="row small"><span class="dot ${a.state === 'running' ? 'live' : 'paused'}"></span>${a.state === 'running' ? 'Registrando' : 'Pausado'}</span><span class="t" data-tick="${a.id}">${fmtClock(entryMs(a))}</span><span class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(entryTitle(a))}</span>${pausesOf(a.id).length ? `<span class="small" style="color:var(--warn);font-weight:600">${pausesOf(a.id).length} pausa(s) para revisar</span>` : ''}</button>` : ''}
-    <div class="data-mode"><span class="dot ${db.adapter.persistent ? 'live' : 'mem'}"></span>${db.syncError ? 'Falha de sincronização' : db.adapter.persistent ? 'Sincronizado' : 'Em memória · some ao recarregar'} · v2.01${db.adapter.persistent ? ` · <a href="#" data-act="signout">Sair</a>` : ''}</div>
+    <div class="data-mode"><span class="dot ${db.adapter.persistent ? 'live' : 'mem'}"></span>${db.syncError ? 'Falha de sincronização' : db.adapter.persistent ? 'Sincronizado' : 'Em memória · some ao recarregar'} · ${APP_VERSION}${db.adapter.persistent ? ` · <a href="#" data-act="signout">Sair</a>` : ''}</div>
   </div>`;
 }
 

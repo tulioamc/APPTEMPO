@@ -5,3 +5,6 @@ window.TEMPO_CFG = {
   supabaseKey: 'sb_publishable_uSTceFT6P2pGQP2Rgmkpqg_2tzqTKm9',
   // JSON serializado de colunas por tabela (gerado pelo build.py a partir de db/schema.sql)
 };
+
+/* versão exibida no rodapé da barra lateral; aumentar a cada publicação */
+const APP_VERSION = 'V2.01.35';
