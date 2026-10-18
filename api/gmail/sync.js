@@ -18,10 +18,12 @@ async function syncOne(integ) {
   for (const m of list.messages || []) {
     const msg = await gmail(token, 'messages/' + m.id + '?format=full');
     const date = new Date(Number(msg.internalDate));
+    const subject = ((msg.payload.headers || []).find(h => h.name.toLowerCase() === 'subject') || {}).value || '';
+    const entity = /Nu Empresas/i.test(subject) ? 'pj' : 'pf';
     for (const a of collectOfx(msg.payload)) {
       const att = await gmail(token, `messages/${m.id}/attachments/${a.attachmentId}`);
       const text = Buffer.from(att.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
-      const rows = parseOfx(text).map((t) => ({ ...classify(t), user_id: integ.user_id, source: 'nubank' }));
+      const rows = parseOfx(text).map((t) => ({ ...classify(t), user_id: integ.user_id, source: 'nubank', entity }));
       lidas += rows.length;
       if (rows.length) {
         await rest('tempo_bank_txns?on_conflict=user_id,fitid', {

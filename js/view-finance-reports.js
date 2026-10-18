@@ -13,7 +13,7 @@ VIEWS.finance = () => {
   const pids = new Set(list.map(p => p.id));
   const pays = db.all('tempo_payments').filter(x => pids.has(x.project_id) && ((!f.year && !f.month && !f.from && !f.to) || x.date) && (!f.year || x.date.slice(0, 4) === f.year) && (!f.month || x.date.slice(5, 7) === f.month) && (!f.from || x.date >= f.from) && (!f.to || x.date <= f.to)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   bankRefresh();
-  const html = `${bankPanel()}<div class="panel">${filterBar(f, 'fin')}<div class="panel-b small muted" style="padding:8px 16px">Ano, mês e período filtram projetos pelo prazo (ou data de criação) e pagamentos pela data do recebimento.</div></div>
+  const html = `${bankPanel('pj')}<div class="panel">${filterBar(f, 'fin')}<div class="panel-b small muted" style="padding:8px 16px">Ano, mês e período filtram projetos pelo prazo (ou data de criação) e pagamentos pela data do recebimento.</div></div>
   <div class="kpis">
     <div class="kpi"><span class="k">Orçado</span><span class="v">${fmtMoney0(budget)}</span><span class="s">${list.length} projeto(s)</span></div>
     <div class="kpi"><span class="k">Valor pago</span><span class="v">${fmtMoney0(paid)}</span><span class="s">${budget ? Math.round(paid / budget * 100) + '% do orçado' : ''}</span></div>
@@ -170,9 +170,9 @@ ACTIONS['csv-copy'] = async (el) => {
 
 /* =====================================================================
    EXTRATOS BANCÁRIOS (Gmail → Nubank). Lançamentos vêm de tempo_bank_txns,
-   marcados "novo" até você revisar. Movimentos internos são sinalizados.
+   separados por entidade (pf / pj) e marcados "novo" até você revisar.
    ===================================================================== */
-const BANK = { status: null, txns: [], busy: false, checkedAt: 0, msg: '' };
+const BANK = { status: null, txns: { pf: [], pj: [] }, busy: false, checkedAt: 0, msg: '' };
 async function bankToken() {
   const { data } = await db.adapter.client.auth.getSession();
   return data && data.session ? data.session.access_token : null;
@@ -185,13 +185,15 @@ async function bankApi(path, opts = {}) {
   return j;
 }
 async function bankLoadTxns() {
-  const { data, error } = await db.adapter.client.from('tempo_bank_txns').select('*')
-    .eq('review_status', 'novo').order('posted_on', { ascending: false }).limit(200);
-  if (error) throw error;
-  BANK.txns = data || [];
+  for (const entity of ['pf', 'pj']) {
+    const { data, error } = await db.adapter.client.from('tempo_bank_txns').select('*')
+      .eq('entity', entity).eq('review_status', 'novo').order('posted_on', { ascending: false }).limit(300);
+    if (error) throw error;
+    BANK.txns[entity] = data || [];
+  }
 }
-// Sincroniza ao abrir o Financeiro se a última leitura tiver mais de 2h.
-// O checkedAt evita loop: render() chama a tela de novo, e a checagem não roda de novo por 60s.
+// Sincroniza ao abrir a tela se a última leitura tiver mais de 2h.
+// checkedAt evita loop: render() chama a tela de novo, e a checagem não roda de novo por 60s.
 async function bankRefresh(force) {
   if (!db.adapter || !db.adapter.client || BANK.busy) return;
   if (!force && Date.now() - BANK.checkedAt < 60000) return;
@@ -211,19 +213,20 @@ async function bankRefresh(force) {
   } catch (e) { BANK.msg = 'Erro: ' + e.message; }
   finally { BANK.busy = false; render(); }
 }
-function bankPanel() {
+function bankPanel(entity) {
   const st = BANK.status, connected = !!(st && st.connected);
-  const head = `<div class="panel-h"><h3>Extratos bancários</h3><span class="grow"></span>${connected
+  const label = entity === 'pf' ? 'PF' : 'PJ';
+  const head = `<div class="panel-h"><h3>Extratos ${label}</h3><span class="grow"></span>${connected
     ? `<button class="btn sm" data-act="bank-sync">Atualizar</button>`
     : `<button class="btn sm primary" data-act="bank-connect">Conectar Gmail</button>`}</div>`;
   const sub = connected
     ? `<div class="panel-b small muted" style="padding:8px 16px">Conta: ${esc(st.account_email || '')} · última leitura: ${st.last_sync_at ? fmtDate(st.last_sync_at) : 'nunca'}${BANK.msg ? ' · ' + esc(BANK.msg) : ''}</div>`
     : `<div class="panel-b small muted" style="padding:8px 16px">Conecte o Gmail que recebe os extratos da Nubank. Nada entra no Financeiro sem você revisar.</div>`;
-  const rows = BANK.txns;
+  const rows = BANK.txns[entity] || [];
   const body = rows.length
     ? `<table class="grid compact"><tbody>${rows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.counterpart || t.memo)}</td><td class="num">${fmtMoney(t.amount)}</td><td>${t.scope === 'interna' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Interna</span>' : '<span class="tag tg">Externa</span>'}</td></tr>`).join('')}</tbody></table>`
     : `<div class="empty small">Nenhuma movimentação nova.</div>`;
-  const foot = rows.length ? `<div class="panel-b" style="padding:8px 16px;text-align:right"><button class="btn sm" data-act="bank-review-all">Marcar como revisadas</button></div>` : '';
+  const foot = rows.length ? `<div class="panel-b" style="padding:8px 16px;text-align:right"><button class="btn sm" data-act="bank-review-all" data-entity="${entity}">Marcar como revisadas</button></div>` : '';
   return `<div class="panel">${head}${sub}<div class="panel-b tight" style="max-height:320px;overflow:auto">${body}</div>${foot}</div>`;
 }
 ACTIONS['bank-connect'] = async () => {
@@ -231,11 +234,16 @@ ACTIONS['bank-connect'] = async () => {
   catch (e) { toast('Não consegui conectar: ' + e.message); }
 };
 ACTIONS['bank-sync'] = () => bankRefresh(true);
-ACTIONS['bank-review-all'] = async () => {
-  const ids = BANK.txns.map(t => t.id);
+ACTIONS['bank-review-all'] = async (el) => {
+  const entity = el.dataset.entity;
+  const ids = (BANK.txns[entity] || []).map(t => t.id);
   if (!ids.length) return;
   const { error } = await db.adapter.client.from('tempo_bank_txns')
     .update({ review_status: 'revisado', updated_at: new Date().toISOString() }).in('id', ids);
   if (error) return toast('Erro: ' + error.message);
-  BANK.txns = []; render();
+  BANK.txns[entity] = []; render();
+};
+VIEWS.financepf = () => {
+  bankRefresh();
+  return { title: 'Financeiro PF', actions: '', html: `${bankPanel('pf')}` };
 };
