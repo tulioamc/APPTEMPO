@@ -202,7 +202,7 @@ async function bankFetchAll(build) {
   }
   return out;
 }
-async function bankLoadTxns() {
+async function bankLoadRaw() {
   const cl = db.adapter.client;
   const sorted = (q) => q.order('posted_on', { ascending: false }).order('id');
   for (const entity of ['pf', 'pj']) {
@@ -212,6 +212,46 @@ async function bankLoadTxns() {
   const every = await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*')));
   for (const e of ['pf', 'pj']) BANK.all[e] = every.filter(t => (t.biz_entity || t.entity) === e);
   BANK.every = every;
+}
+// Pagamentos às terapeutas e à dentista ligam sozinhos à linha da tabela de terapias do mesmo mês (pelo nome).
+const bankFamily = (name) => {
+  const n = String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\(\d+\)/g, '').replace(/^dra\.?\s+/, '').trim();
+  if (/^patricia/.test(n) || /psicomotricidade|psicomotrocidade/.test(n)) return 'patricia';
+  if (/^clau/.test(n)) return 'claudiane';
+  if (/^at$/.test(n) || /sarah egiza/.test(n)) return 'at';
+  if (/^adelia/.test(n)) return 'adelia';
+  if (/^aloma/.test(n)) return 'aloma';
+  if (/^raquel/.test(n)) return 'raquel';
+  if (/^homero/.test(n)) return 'homero';
+  if (/^dentista/.test(n)) return 'dentista';
+  return null;
+};
+async function bankAutoTherapy() {
+  const every = BANK.every || [];
+  const taken = new Set(every.map(x => x.reimb_row_id).filter(Boolean));
+  const rows = db.all('tempo_reimb_rows');
+  const todo = [];
+  every.forEach(t => {
+    if (t.flow !== 'out' || t.scope === 'interna' || t.reimb_row_id || t.expense_id) return;
+    const fam = bankFamily(t.counterpart || t.memo); if (!fam) return;
+    const ym = (t.posted_on || '').slice(0, 7), amt = Math.abs(Number(t.amount));
+    const c = rows.filter(r => r.month === ym && !taken.has(r.id) && bankFamily(r.name) === fam);
+    if (!c.length) return;
+    const best = c.slice().sort((a, b) => Math.abs(Number(a.amount) - amt) - Math.abs(Number(b.amount) - amt))[0];
+    taken.add(best.id);
+    todo.push({ id: t.id, rowId: best.id });
+  });
+  if (!todo.length) return false;
+  const cl = db.adapter.client;
+  for (const x of todo) {
+    const { error } = await cl.from('tempo_bank_txns').update({ reimb_row_id: x.rowId, category: 'Terapia', updated_at: new Date().toISOString() }).eq('id', x.id);
+    if (error) { toast('Erro: ' + error.message); break; }
+  }
+  return true;
+}
+async function bankLoadTxns() {
+  await bankLoadRaw();
+  if (await bankAutoTherapy()) await bankLoadRaw();
 }
 // Resumo geral: entradas, saídas e sobra (sem movimentos internos) e onde o dinheiro saiu.
 // Filtro escondido das saídas (busca por nome, categoria, meio, conta e valor).
@@ -272,7 +312,7 @@ function bankSummaryHTML(entity) {
   const listPool = entity === 'pj' && BANK.showT !== false ? poolOut.concat((BANK.all.pj || []).filter(t => t.flow === 'out' && t.scope === 'interna')) : poolOut;
   const outsAll = listPool.filter(passes).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
   const showTBtn = entity === 'pj' ? `<button class="btn sm ghost" data-act="bank-showt">${BANK.showT !== false ? 'Ocultar' : 'Mostrar'} transferências para PF</button>` : '';
-  const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">${showTBtn}
+  const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><button class="btn sm ghost" data-act="bank-cmp">${BANK.cmp ? 'Voltar ao mês' : 'Comparar meses'}</button><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">${showTBtn}
     ${closed ? `<span class="tag tg" style="background:var(--surface-2)">Mês fechado em ${fmtDate(closed.closed_at)}</span><button class="btn sm ghost" data-act="bank-reopen" data-entity="${entity}" data-ym="${ym}">Reabrir</button>` : `<button class="btn sm" data-act="bank-close" data-entity="${entity}" data-ym="${ym}">Fechar mês</button>`}</div>`;
   const rowHTML = (t) => {
     const k = t.counterpart || '—';
@@ -288,9 +328,9 @@ function bankSummaryHTML(entity) {
       <span class="mono small">${dotHTML(t.scope === 'interna' ? '#2563eb' : t.flow === 'in' ? '#22a06b' : '#d64545', t.scope === 'interna' ? 'Interna' : t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
       <span class="small muted">${bankMethod(t)}</span>
       <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
-      <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">${catTag(cat)}</button>`
-        : sug ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-v="${sug}" title="Sugestão pelo nome. Clique para confirmar">${catTag(sug)} <span class="faint small">sugerido</span></button>`
-        : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">Definir categoria</button>`}</span>
+      <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">${catTag(cat)}</button>`
+        : sug ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}" data-v="${sug}" title="Sugestão pelo nome. Clique para confirmar">${catTag(sug)} <span class="faint small">sugerido</span></button>`
+        : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">Definir categoria</button>`}</span>
       <span class="small muted bm">${bankRowExtra(t)}</span></div>`;
   };
   BANK.openM = BANK.openM || {};
@@ -319,7 +359,7 @@ function bankSummaryHTML(entity) {
   const catSums = sum(monthOuts, catKey);
   // Estorno "Estorno→Categoria" abate essa categoria
   (BANK.all[entity] || []).filter(t => t.flow === 'in' && /^Estorno→/.test(t.category || '') && (t.posted_on || '').slice(0, 7) === ym).forEach(t => { const tg = t.category.split('→')[1]; catSums[tg] = (catSums[tg] || 0) - Math.abs(Number(t.amount)); });
-  const byCat = Object.entries(catSums).filter(([k, v]) => k !== THER_LABEL && v > 0).sort((a, b) => b[1] - a[1]);
+  const byCat = Object.entries(catSums).filter(([k, v]) => k !== THER_LABEL && v > 0 && (BANK.reemb !== false || k !== 'Reembolso')).sort((a, b) => b[1] - a[1]);
   if (catSums[THER_LABEL]) byCat.push([THER_LABEL, catSums[THER_LABEL]]);
   const byMeth = Object.entries(sum(monthOuts, bankMethod)).sort((a, b) => b[1] - a[1]);
   const byCp = Object.entries(sum(monthOuts, t => t.counterpart || '—')).sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -328,10 +368,11 @@ function bankSummaryHTML(entity) {
   const views = { cat: ['Categoria', () => donutHTML(byCat, 'Por categoria', chartCat)], meio: ['Meio', () => donutHTML(byMeth, 'Por meio')], conta: ['PF / PJ', () => donutHTML(byAcc, 'PF e PJ', (k) => exColor(k === 'PJ' ? 'EMPRESA' : 'PESSOAL'))], onde: ['Onde foi', () => bars(byCp)] };
   const cur = views[BANK.rep] ? BANK.rep : 'cat';
   const tabs = `<div class="seg" style="margin-bottom:12px;flex-wrap:wrap">${Object.entries(views).map(([k, [l]]) => `<button class="${cur === k ? 'on' : ''}" data-act="bank-rep" data-v="${k}">${l}</button>`).join('')}</div>`;
-  const report = `<div class="panel bank-report"><div class="panel-h"><h3>Relatório de ${rbLabel(ym)}</h3></div><div class="panel-b">${tabs}${views[cur][1]()}</div></div>`;
+  const report = `<div class="panel bank-report"><div class="panel-h"><h3>Relatório de ${rbLabel(ym)}</h3></div><div class="panel-b"><label class="row" style="gap:6px;margin-bottom:10px;align-items:center"><input type="checkbox" data-on="bank-reemb" ${BANK.reemb !== false ? 'checked' : ''}> Mostrar reembolsos no relatório</label>${tabs}${views[cur][1]()}</div></div>`;
   const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
   const GREEN = '#22a06b', RED = '#d64545';
   const fOn = bankFilterOn() || BANK.fOpen;
+  if (BANK.cmp) return `${bar}${compareHTML(entity)}`;
   const nSel = Object.keys(BANK.sel || {}).length;
   const selBar = nSel ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-2);border-radius:10px"><b class="small">${nSel} selecionado(s)</b><button class="btn sm primary" data-act="bank-bulk-cat">Mudar categoria</button><button class="btn sm ghost" data-act="bank-bulk-clear">Limpar seleção</button></div>` : '';
   return `${bar}${selBar}<div class="kpis">
@@ -477,13 +518,16 @@ function bankEstornoTarget(cp) {
     });
   });
 }
-function bankCatDialog(cp, bulk) {
+// Entrada só mostra opções de entrada; Estorno continua aqui e, ao escolher, pede a saída a abater.
+const BANK_IN_CATS = ['Renda', 'Freelas', 'Reembolso', 'Estorno'];
+function bankCatDialog(cp, bulk, flow) {
+  const cats = (flow === 'in' ? BANK_IN_CATS : bankCats()).slice().sort((a, b) => a.localeCompare(b, 'pt-BR'));
   return new Promise(res => {
     let done = false;
     const l = openLayer({
       html: `<div class="dh"><h2>Categoria</h2></div><div class="db"><p style="margin:0">${bulk ? `“${esc(cp)}”. Só os lançamentos selecionados.` : `“${esc(cp)}”. Vale para todos os lançamentos com esse nome.`}</p>
         <div class="field"><span class="lbl">Conta</span><div class="seg" id="bcat-biz"><button data-biz="pf" class="on">PF</button><button data-biz="pj">PJ</button></div></div>
-        <div class="row" style="flex-wrap:wrap;gap:6px">${bankCats().map(c => `<button class="btn sm tg" data-cat="${esc(c)}" style="${cssTb(exColor(exKeyOf(c)))}">${esc(c)}</button>`).join('')}</div>
+        <div class="row" style="flex-wrap:wrap;gap:6px">${cats.map(c => `<button class="btn sm tg" data-cat="${esc(c)}" style="${cssTb(exColor(exKeyOf(c)))}">${esc(c)}</button>`).join('')}</div>
         <div class="field"><label for="bcat-new">Outra categoria</label><div class="row"><input id="bcat-new" class="input" placeholder="Nova categoria"><button class="btn sm" data-cat="__new">Usar</button></div></div></div>`,
       onClose: () => { if (!done) res(null); }
     });
@@ -530,7 +574,7 @@ ACTIONS['bank-alias'] = (el) => {
 };
 ACTIONS['bank-cat'] = async (el) => {
   const entity = el.dataset.entity, cp = el.dataset.cp;
-  const pick = el.dataset.v ? { cat: el.dataset.v, biz: PJ_CATS.includes(el.dataset.v) ? 'pj' : null } : await bankCatDialog(cp);
+  const pick = el.dataset.v ? { cat: el.dataset.v, biz: PJ_CATS.includes(el.dataset.v) ? 'pj' : null } : await bankCatDialog(cp, false, el.dataset.flow);
   if (!pick) return;
   const { cat, biz } = pick;
   const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), updated_at: new Date().toISOString() });
@@ -546,10 +590,48 @@ CHANGES['bank-sel'] = (el) => {
   render();
 };
 ACTIONS['bank-bulk-clear'] = () => { BANK.sel = {}; render(); };
+ACTIONS['bank-cmp'] = () => { BANK.cmp = !BANK.cmp; render(); };
+CHANGES['bank-reemb'] = (el) => { BANK.reemb = el.checked; render(); };
+// Comparar meses: categorias (saídas) e totais de entrada, saída e sobra, mês a mês. Mostra até 12 meses.
+function compareHTML(entity) {
+  const withRe = BANK.reemb !== false;
+  const txns = (BANK.all[entity] || []).filter(t => t.scope !== 'interna' && t.posted_on);
+  const months = [...new Set(txns.map(t => t.posted_on.slice(0, 7)))].sort().slice(-12);
+  const cats = {}; const ent = {}; const sai = {};
+  const add = (bag, k, ym, v) => { bag[k] = bag[k] || {}; bag[k][ym] = (bag[k][ym] || 0) + v; };
+  txns.forEach(t => {
+    const ym = t.posted_on.slice(0, 7), v = Math.abs(Number(t.amount)), c = t.category || 'Sem categoria';
+    if (t.flow === 'in') {
+      if (/^Estorno/.test(c)) return;                       // estorno não é entrada
+      if (!withRe && c === 'Reembolso') return;
+      add(ent, 'Entradas', ym, v);
+    } else {
+      if (!withRe && c === 'Reembolso') return;
+      if (/^Estorno→/.test(c)) { add(cats, c.split('→')[1], ym, -v); add(sai, 'Saídas', ym, v); return; }
+      add(cats, c, ym, v); add(sai, 'Saídas', ym, v);
+    }
+  });
+  const sumRow = (row) => Object.values(row || {}).reduce((a, b) => a + b, 0);
+  const cell = (row, ym) => { const v = (row || {})[ym] || 0; return v ? fmtMoney0(v) : '<span class="faint">—</span>'; };
+  const catList = Object.keys(cats).sort((a, b) => sumRow(cats[b]) - sumRow(cats[a]));
+  const line = (label, row, cls, bold) => `<tr><td ${bold ? 'style="font-weight:600"' : ''}>${label}</td>${months.map(m => `<td class="num ${cls || ''}">${cell(row, m)}</td>`).join('')}<td class="num" style="font-weight:600">${fmtMoney0(sumRow(row))}</td></tr>`;
+  const sobra = {}; months.forEach(m => { sobra[m] = (ent.Entradas || {})[m] || 0; sobra[m] -= (sai.Saídas || {})[m] || 0; });
+  const sobraCells = months.map(m => `<td class="num">${sobra[m] ? fmtMoney0(sobra[m]) : '<span class="faint">—</span>'}</td>`).join('');
+  const sobraTotal = Object.values(sobra).reduce((a, b) => a + b, 0);
+  return `<div class="panel"><div class="panel-h"><h3>Comparar meses · ${entity === 'pj' ? 'PJ' : 'PF e PJ'}</h3><span class="faint small">${withRe ? 'com reembolsos' : 'sem reembolsos'}</span></div>
+    <div class="panel-b" style="overflow:auto"><table class="grid compact"><thead><tr><th>Categoria</th>${months.map(m => `<th class="num">${m.slice(5)}/${m.slice(2, 4)}</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>
+      ${line('Entradas', ent.Entradas, 'bank-in')}
+      ${line('Saídas', sai.Saídas, 'bank-out', true)}
+      <tr><td style="font-weight:600">Sobra</td>${sobraCells}<td class="num" style="font-weight:600">${fmtMoney0(sobraTotal)}</td></tr>
+      <tr><td colspan="${months.length + 2}" class="faint small" style="padding-top:12px">Saídas por categoria</td></tr>
+      ${catList.map(c => line(esc(c), cats[c])).join('')}
+    </tbody></table></div></div>`;
+}
 ACTIONS['bank-bulk-cat'] = async () => {
   const ids = Object.keys(BANK.sel || {});
   if (!ids.length) return;
-  const pick = await bankCatDialog(`${ids.length} lançamento(s)`, true);
+  const flows = new Set(ids.map(id => ((BANK.every || []).find(x => x.id === id) || {}).flow));
+  const pick = await bankCatDialog(`${ids.length} lançamento(s)`, true, flows.size === 1 ? [...flows][0] : null);
   if (!pick) return;
   const { cat, biz } = pick;
   const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), updated_at: new Date().toISOString() }).in('id', ids);
@@ -658,7 +740,12 @@ function bankRowExtra(t) {
   }
   if (t.reimb_row_id) { const r = db.get('tempo_reimb_rows', t.reimb_row_id); return r ? `<span class="small muted">→ Terapia: ${esc(r.name)}</span>` : ''; }
   if (t.expense_id) { const e = db.get('tempo_expenses', t.expense_id); return e ? `<span class="small muted">→ ${esc(e.name)}</span>` : ''; }
-  if (t.flow !== 'out' && t.category === 'Reembolso') return `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
+  if (t.flow !== 'out' && t.category === 'Reembolso') {
+    // reembolso pode ser de terapia (linha da tabela de terapias) ou de um custo (plano de saúde etc.)
+    const rr = bankTherapyMatch(t);
+    const tb = rr ? `<button class="btn sm" data-act="bank-tlink" data-id="${t.id}" data-kind="reimb" data-target="${rr.id}">Vincular a terapia ${esc(rr.name)}</button>` : `<button class="btn sm ghost" data-act="bank-rlink" data-id="${t.id}">Vincular a terapia…</button>`;
+    return `${tb} <button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
+  }
   if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">${t.category === 'Reembolso' ? 'Vincular a gasto…' : 'Vincular a entrada…'}</button>`; }
   const e = bankFixedMatch(t);
   if (e) return `<button class="btn sm" data-act="bank-link" data-id="${t.id}" data-eid="${e.id}">Vincular a ${esc(e.name)}</button>`;
@@ -667,11 +754,13 @@ function bankRowExtra(t) {
   return `<button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Vincular…</button>`;
 }
 // Pagamento de terapia (PF) que bate com uma linha de reembolso do mesmo mês pelo valor.
+// Mês anterior: reembolso recebido costuma chegar depois da terapia.
+const bankPrevYm = (ym) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const bankReimbMonths = (t) => { const ym = (t.posted_on || '').slice(0, 7); return t.flow === 'in' ? [ym, bankPrevYm(ym)] : [ym]; };
 function bankTherapyMatch(t) {
-  if (t.flow !== 'out') return null;
-  const amt = Math.abs(Number(t.amount)), ym = (t.posted_on || '').slice(0, 7);
+  const amt = Math.abs(Number(t.amount)), months = bankReimbMonths(t);
   const taken = new Set((BANK.all.pf || []).concat(BANK.all.pj || []).map(x => x.reimb_row_id).filter(Boolean));
-  const c = db.all('tempo_reimb_rows').filter(r => r.month === ym && !taken.has(r.id) && Number(r.amount) > 0 && Math.abs(Number(r.amount) - amt) <= 1);
+  const c = db.all('tempo_reimb_rows').filter(r => months.includes(r.month) && !taken.has(r.id) && Number(r.amount) > 0 && Math.abs(Number(r.amount) - amt) <= 1);
   return c.length === 1 ? c[0] : null;
 }
 // Escolha manual: lista as linhas de terapia e os custos do mês.
@@ -725,13 +814,36 @@ ACTIONS['bank-rexp'] = async (el) => {
   if (error) return toast('Erro: ' + error.message);
   await bankLoadTxns(); toast('Reembolso vinculado'); render();
 };
+// Escolhe a linha de terapia do mês para um reembolso recebido.
+function bankReimbPick(t) {
+  const months = bankReimbMonths(t);
+  const taken = new Set((BANK.all.pf || []).concat(BANK.all.pj || []).map(x => x.reimb_row_id).filter(Boolean));
+  const rows = db.all('tempo_reimb_rows').filter(r => months.includes(r.month) && !taken.has(r.id)).sort((a, b) => String(a.month).localeCompare(String(b.month)) || String(a.name).localeCompare(String(b.name)));
+  const html = `<div class="dh"><h2>Reembolso de qual terapia?</h2></div><div class="db">
+    <p style="margin:0">${esc(t.counterpart || t.memo)} · ${fmtMoney(Math.abs(Number(t.amount)))} · ${fmtDate(t.posted_on)}</p>
+    <div class="field"><span class="lbl">Terapias de ${months.join(' e ')}</span><div class="stack" style="gap:6px">${rows.length ? rows.map(r => `<button class="btn sm" style="justify-content:space-between;width:100%" data-id="${r.id}">${esc(r.name)} <span class="mono small">${fmtMoney(r.amount)}</span></button>`).join('') : '<span class="small muted">Nenhuma terapia sem vínculo neste mês.</span>'}</div></div>
+    <div class="df"><button class="btn" data-x="no">Cancelar</button></div></div>`;
+  return new Promise(res => {
+    let done = false;
+    const l = openLayer({ html, onClose: () => { if (!done) res(null); } });
+    l.box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-id]'); if (b) { done = true; res(b.dataset.id); l.close(); return; }
+      if (e.target.closest('[data-x]')) { done = true; res(null); l.close(); }
+    });
+  });
+}
+ACTIONS['bank-rlink'] = async (el) => {
+  const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;
+  const id = await bankReimbPick(t); if (!id) return;
+  await linkBankTxn(t, 'reimb', id);
+};
 ACTIONS['bank-tlink'] = async (el) => {
   const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;
   await linkBankTxn(t, el.dataset.kind, el.dataset.target);
 };
 async function linkBankTxn(t, kind, id) {
   const patch = { updated_at: new Date().toISOString() };
-  if (kind === 'reimb') { patch.reimb_row_id = id; patch.category = 'Terapia'; }
+  if (kind === 'reimb') { patch.reimb_row_id = id; if (t.flow === 'out') patch.category = 'Terapia'; }
   else { patch.expense_id = id; db.update('tempo_expenses', id, { amount: Math.abs(Number(t.amount)), status: 'Pago', paid_on: t.posted_on }); }
   const { error } = await db.adapter.client.from('tempo_bank_txns').update(patch).eq('id', t.id);
   if (error) return toast('Erro: ' + error.message);
