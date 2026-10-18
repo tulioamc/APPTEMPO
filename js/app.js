@@ -21,7 +21,7 @@ const NAV = [
   { id: 'projects', label: 'Projetos', icon: 'folder', count: () => projects().length },
   { id: 'tasks', label: 'Tarefas', icon: 'check', count: () => db.all('tempo_tasks').length },
   { id: 'quotes', label: 'Orçamentos', icon: 'doc', count: () => db.all('tempo_quotes').length },
-  { id: 'finance', label: 'Financeiro', icon: 'money' },
+  { id: 'finance', label: 'Financeiro PJ', icon: 'money' },
   { id: 'financepf', label: 'Financeiro PF', icon: 'money' },
   { id: 'expenses', label: 'Despesas', icon: 'money', count: () => exRows(S.exMonth || ymd(new Date()).slice(0, 7)).filter(r => r.status !== 'Não teve' && r.status !== 'Pago' && r.status !== 'Recebido').length },
   { id: 'reimb', label: 'Reembolsos', icon: 'layers', count: () => db.all('tempo_reimb_rows').filter(r => r.refund_id !== rbStatusId('reimb_refund', 'Feito!')).length },

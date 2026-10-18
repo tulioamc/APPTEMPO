@@ -25,7 +25,7 @@ VIEWS.finance = () => {
     <div class="panel"><div class="panel-h"><h3>Pagamentos recebidos</h3><span class="grow"></span><span class="mono small">${fmtMoney0(pays.reduce((s, x) => s + Number(x.amount), 0))}</span></div><div class="panel-b tight" style="max-height:260px;overflow:auto">${pays.length ? `<table class="grid compact"><tbody>${pays.map(x => { const p = db.get('tempo_projects', x.project_id); return `<tr data-act="proj-open" data-id="${p.id}"><td class="nowrap">${x.date ? fmtDate(x.date) : '<span class="faint">sem data</span>'}</td><td>${esc(p.name)}<span class="faint small"> · ${esc(clientOf(p)?.name || '')}</span></td><td class="money">${fmtMoney(x.amount)}</td></tr>`; }).join('')}</tbody></table>` : '<div class="empty small">Nenhum pagamento no período.</div>'}</div></div>
   </div>
   <div class="panel"><div class="panel-h"><h3>Projetos</h3><span class="grow"></span>${colsBtn('finance')}<button class="btn sm" data-act="csv-copy" data-kind="finance">${icon('copy')} Copiar CSV</button></div><div class="panel-b tight">${list.length ? gridTable({ id: 'finance', cols: FCOLS, rows: list, defHidden: ['status'], defSort: null, rowAttrs: p => `data-act="fin-open" data-id="${p.id}"`, rowById: (id) => db.get('tempo_projects', id) }) : `<div class="empty">${icon('money')}<b>Nenhum projeto com esses filtros</b></div>`}</div></div>`;
-  return { title: 'Financeiro', actions: '', html };
+  return { title: 'Financeiro PJ', actions: '', html };
 };
 const FCOLS = {
   agency: PCOLS.agency, client: PCOLS.client,
@@ -205,6 +205,7 @@ function bankSummaryHTML(entity) {
   const sai = all.filter(t => t.flow === 'out').reduce((s, t) => s + Number(t.amount), 0);
   const byCp = {};
   all.filter(t => t.flow === 'out').forEach(t => { const k = t.counterpart || '—'; byCp[k] = (byCp[k] || 0) + Math.abs(Number(t.amount)); });
+  const cartao = Math.abs((BANK.all[entity] || []).filter(t => t.scope === 'cartao' && (t.posted_on || '').slice(0, 7) === ym).reduce((s, t) => s + Number(t.amount), 0));
   const top = Object.entries(byCp).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const max = Math.max(1, ...top.map(x => x[1]));
   const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">
@@ -213,6 +214,7 @@ function bankSummaryHTML(entity) {
     <div class="kpi"><span class="k">Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas</span></div>
     <div class="kpi"><span class="k">Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">externas</span></div>
     <div class="kpi"><span class="k">Sobra</span><span class="v">${fmtMoney0(ent + sai)}</span><span class="s">entradas − saídas</span></div>
+    ${cartao ? `<div class="kpi"><span class="k">Fatura do cartão</span><span class="v">${fmtMoney0(cartao)}</span><span class="s">paga · conta uma vez, pelos itens</span></div>` : ''}
   </div>
   <div class="panel"><div class="panel-h"><h3>Para onde foi o dinheiro</h3></div><div class="panel-b">${top.length ? `<div class="bars">${top.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(k)}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / max * 100}%"></div></div><span class="mono small">${fmtMoney0(v)}</span></div>`).join('')}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'}</div></div>`;
 }
@@ -265,7 +267,7 @@ function bankPanel(entity) {
     : `<div class="panel-b small muted" style="padding:8px 16px">Conecte o Gmail que recebe os extratos da Nubank. Nada entra no Financeiro sem você revisar.</div>`;
   const rows = BANK.txns[entity] || [];
   const body = rows.length
-    ? `<table class="grid compact"><tbody>${rows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.counterpart || t.memo)}</td><td class="num">${fmtMoney(t.amount)}</td><td>${t.scope === 'interna' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Interna</span>' : '<span class="tag tg">Externa</span>'}</td></tr>`).join('')}</tbody></table>`
+    ? `<table class="grid compact"><tbody>${rows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.counterpart || t.memo)}</td><td class="num">${fmtMoney(t.amount)}</td><td>${t.scope === 'interna' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Interna</span>' : t.scope === 'cartao' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Cartão</span>' : '<span class="tag tg">Externa</span>'}</td></tr>`).join('')}</tbody></table>`
     : `<div class="empty small">${reviewedNow ? 'Nenhuma movimentação revisada.' : 'Nenhuma movimentação nova.'}</div>`;
   const reviewed = BANK.mode[entity] === 'revisado';
   const foot = `<div class="panel-b" style="padding:8px 16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn sm ghost" data-act="bank-mode" data-entity="${entity}">${reviewed ? 'Ver novas' : 'Ver revisadas'}</button>${rows.length && !reviewed ? `<button class="btn sm" data-act="bank-review-all" data-entity="${entity}">Marcar como revisadas</button>` : ''}</div>`;
