@@ -327,13 +327,13 @@ ACTIONS['bank-rep'] = (el) => { BANK.rep = el.dataset.v; render(); };
 ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.dataset.k; const [ent, m] = k.split(':'); const cur = BANK.openM[k] ?? (m === (BANK.month || ymd(new Date()).slice(0, 7)) && ent); BANK.openM[k] = !cur; render(); };
 // Categorias de gasto: as padrão mais as que o Tulio criar.
 // Mesmas categorias e cores da tela de Despesas (PF/PJ), mais as de extrato.
-const BANK_CATS = [...Object.values(EX_CATS).flat(), 'Alimentação', 'Transporte', 'Lazer', 'Viagem', 'Compras', 'Roupas', 'Burocracia', 'Terapia', 'Outros'];
+const BANK_CATS = [...Object.values(EX_CATS).flat(), 'Assinaturas', 'Alimentação', 'Transporte', 'Lazer', 'Viagem', 'Compras', 'Roupas', 'Terapia', 'Outros'];
 const exKeyOf = (name) => { for (const [g, subs] of Object.entries(EX_CATS)) if (subs.includes(name)) return `${g}/${name}`; return `PESSOAL/${name}`; };
 const catTag = (name) => (name ? `<span class="tag tg" style="${cssTb(exColor(exKeyOf(name)))}">${esc(name)}</span>` : '');
 const accTag = (acc) => `<span class="tag tg abbr" style="${cssTb(exColor(acc === 'pj' ? 'EMPRESA' : 'PESSOAL'))}">${acc === 'pj' ? 'PJ' : 'PF'}</span>`;
 const THER_LABEL = 'Terapia reembolsável';
 // Categorias que costumam ser da empresa (PJ) por padrão.
-const PJ_CATS = ['Burocracia', 'Impostos'];
+const PJ_CATS = ['Contabilidade', 'Impostos'];
 const bankCats = () => [...new Set([...BANK_CATS, ...db.setting('bankCats', [])])];
 // Sugestão automática pelo nome do estabelecimento. Só sugere; quem confirma é você.
 const CAT_RULES = [
@@ -343,9 +343,9 @@ const CAT_RULES = [
   [/\bbar\b|boteco|cervej|chopp|cinema|ingresso|teatro|show|sympla|steam|playstation|xbox|livraria/i, 'Lazer'],
   [/posto|gasolin|combust|ipiranga|shell|petrobras|estacion|uber(?! ?eats)|99app|99 |cabify|pedagio|ped[aá]gio|estacionamento/i, 'Transporte'],
   [/farm[aá]c|drogaria|drogasil|droga|raia|pacheco|laborat|consult[oó]rio|cl[ií]nica|hospital|academ|sua academia|smart fit|dentist/i, 'Saúde'],
-  [/contador|contabil|cart[oó]rio|junta comercial|receita federal|receita|\bdas\b|inss|darf|simples nacional|cnpj|registro|taxa/i, 'Burocracia'],
+  [/contador|contabil|cart[oó]rio|junta comercial|receita federal|receita|\bdas\b|inss|darf|simples nacional|cnpj|registro|taxa/i, 'Contabilidade'],
   [/netflix|spotify|apple|dropbox|google|youtube|adobe|icloud|prime|hbo|disney|notion|chatgpt|openai|anthropic|claude|cinema 4d|linkedin/i, 'Assinaturas'],
-  [/celpe|enel|energia|[aá]gua|compesa|sabesp|claro|vivo|tim |oi |internet|gás|gas /i, 'Casa'],
+  [/celpe|enel|energia|[aá]gua|compesa|sabesp|claro|vivo|tim |oi |internet|gás|gas /i, 'Contas da casa'],
 ];
 // Atividade principal (CNAE) da empresa -> categoria.
 function cnaeCat(c) {
@@ -355,7 +355,7 @@ function cnaeCat(c) {
   if (/^4731/.test(p)) return 'Transporte';
   if (/^4771/.test(p)) return 'Saúde';
   if (/^49|^50|^51|^52/.test(p)) return 'Transporte';
-  if (/^35|^61/.test(p)) return 'Casa';
+  if (/^35|^61/.test(p)) return 'Contas da casa';
   if (/^62|^63/.test(p)) return 'Assinaturas';
   if (/^86/.test(p)) return 'Saúde';
   if (/^47/.test(p)) return 'Compras';
