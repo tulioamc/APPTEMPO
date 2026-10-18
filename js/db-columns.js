@@ -244,5 +244,35 @@ window.DB_COLUMNS = {
   "order",
   "created_at",
   "updated_at"
+ ],
+ "tempo_integrations": [
+  "id",
+  "user_id",
+  "provider",
+  "account_email",
+  "refresh_token",
+  "oauth_state",
+  "last_sync_at",
+  "last_message_date",
+  "created_at",
+  "updated_at"
+ ],
+ "tempo_bank_txns": [
+  "id",
+  "user_id",
+  "fitid",
+  "source",
+  "account_tail",
+  "posted_on",
+  "amount",
+  "memo",
+  "counterpart",
+  "counterpart_doc",
+  "flow",
+  "scope",
+  "review_status",
+  "expense_id",
+  "created_at",
+  "updated_at"
  ]
 };

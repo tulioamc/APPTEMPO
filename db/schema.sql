@@ -225,3 +225,27 @@ begin
     execute format('create index if not exists %I on %I(user_id)', t || '_user_idx', t);
   end loop;
 end $$;
+
+-- Extratos bancários (Gmail → Nubank). Só o servidor escreve em tempo_integrations;
+-- tempo_bank_txns é lida pelo dono (RLS) e atualizada só na revisão.
+create table if not exists tempo_integrations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  provider text not null,
+  account_email text,
+  refresh_token text,
+  oauth_state text,
+  last_sync_at timestamptz, last_message_date timestamptz,
+  created_at timestamptz not null default now(), updated_at timestamptz,
+  unique (user_id, provider)
+);
+create table if not exists tempo_bank_txns (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  fitid text not null, source text not null default 'nubank', account_tail text,
+  posted_on date not null, amount numeric not null, memo text, counterpart text, counterpart_doc text,
+  flow text not null check (flow in ('in','out')), scope text not null check (scope in ('externa','interna')),
+  review_status text not null default 'novo' check (review_status in ('novo','revisado','ignorado')),
+  expense_id uuid, created_at timestamptz not null default now(), updated_at timestamptz,
+  unique (user_id, fitid)
+);

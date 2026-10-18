@@ -323,3 +323,27 @@ Adendo ao item de reembolsos acima. Tudo que o app lê ou sugere vai para a fila
 - Aviso na hora do prazo: to-do com horário gera aviso na lista de Avisos quando chega a hora (hoje só fica vermelho depois de vencido).
 - Duração no to-do: "reunião de 1h às 14h" preenche início e fim.
 - Vínculo com cliente ou projeto: se o texto citar um cliente ou projeto conhecido, o to-do fica ligado a ele.
+
+## Financeiro automático — Organizze + Nubank (decidido pelo Tulio, 18/10/2026)
+- Fonte: API REST v2 do Organizze (Basic auth com e-mail + chave de API; conta paga ativa). Conexões Open Finance do Organizze trazem contas e cartões da Nubank (PF e PJ a confirmar).
+- Quando consultar: (1) ao abrir o app; (2) a cada 2h; (3) botão "Atualizar" na tela de Financeiro.
+- Chave de API fica só no servidor (variável de ambiente), nunca no navegador.
+- Os lançamentos novos entram direto na tela de Financeiro, marcados como "novos" até o Tulio revisar (sem passar pela lista de Avisos). Categoria pode ser ajustada depois.
+- Pendências: (a) Tulio gera a chave de API no Organizze e confirma se PF e PJ da Nubank conectam; (b) limite de requisições e frequência de sincronização do Organizze não confirmados; (c) a consulta de 2h depende do plano do Vercel (cron de hora em hora/2h pode exigir o plano Pro) ou de uma tarefa agendada do Claude.
+
+## Fixos e conciliação automática (anotado 2026-10-18)
+- Tela de Fixos: nome, categoria, valor esperado, dia de vencimento.
+- Regras de vínculo: nome do favorecido/estabelecimento → fixo. Criada ao aprovar ou vincular manualmente; não pergunta de novo depois.
+- Casamento por frequência + valor parecido: mesmo valor (ex.: 3900 todo mês) ou aproximado (tolerância de arredondamento, ex.: 1900 vs 1923,29 ISAAC). Sugere a conexão na primeira vez; depois do casamento, não pergunta mais.
+- Se já marcado como pago manualmente: atualiza o valor pelo documento (fatura/boleto), guarda o histórico da diferença.
+- Se não marcado: marca como pago com a data e o valor do documento.
+- Documentos com validade (plano de saúde, seguro, assinatura): ler Gmail e atualizar vigência/próximo vencimento.
+- Ambiguidade (dois fixos com valor parecido): prioriza o nome do favorecido; pergunta só se ainda empatar.
+
+## Valores herdados de mês anterior (anotado 2026-10-18)
+- Ao virar o mês e duplicar um fixo/lançamento, o valor copiado aparece em cinza claro (placeholder).
+- Ao clicar e editar, ou quando o app preencher com dado coletado (fatura/boleto/Gmail), o texto volta ao preto normal.
+
+## Decisão atual (2026-10-18)
+- Conciliação financeira via e-mail da Nubank por enquanto (OFX da Nu Empresas e da conta PF, PDF da fatura do cartão).
+- Organizze fica para reavaliar depois de 14/11/2026 (lembrete agendado).
