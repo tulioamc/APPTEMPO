@@ -256,8 +256,11 @@ function bankSummaryHTML(entity) {
     if (f.max && a > Number(f.max)) return false;
     return true;
   };
-  const outsAll = poolOut.filter(passes).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
-  const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">
+  // Transferências internas (PJ → PF) ficam fora dos totais, mas podem aparecer na lista da PJ.
+  const listPool = entity === 'pj' && BANK.showT !== false ? poolOut.concat((BANK.all.pj || []).filter(t => t.flow === 'out' && t.scope === 'interna')) : poolOut;
+  const outsAll = listPool.filter(passes).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
+  const showTBtn = entity === 'pj' ? `<button class="btn sm ghost" data-act="bank-showt">${BANK.showT !== false ? 'Ocultar' : 'Mostrar'} transferências para PF</button>` : '';
+  const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">${showTBtn}
     ${closed ? `<span class="tag tg" style="background:var(--surface-2)">Mês fechado em ${fmtDate(closed.closed_at)}</span><button class="btn sm ghost" data-act="bank-reopen" data-entity="${entity}" data-ym="${ym}">Reabrir</button>` : `<button class="btn sm" data-act="bank-close" data-entity="${entity}" data-ym="${ym}">Fechar mês</button>`}</div>`;
   const rowHTML = (t) => {
     const k = t.counterpart || '—';
@@ -282,9 +285,11 @@ function bankSummaryHTML(entity) {
   const groups = months.map(m => {
     const open = BANK.openM[entity + ':' + m] ?? (m === ym);
     const items = outsAll.filter(t => (t.posted_on || '').slice(0, 7) === m);
-    const tot = items.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    const real = items.filter(t => t.scope !== 'interna');
+    const tot = real.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    const trf = items.filter(t => t.scope === 'interna').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
     return `<div class="bank-group">
-      <button class="bank-ghead" data-act="bank-mtoggle" data-k="${entity}:${m}"><span>${open ? '▾' : '▸'} ${rbLabel(m)}</span><span class="mono small muted">${items.length} · ${fmtMoney0(tot)}</span></button>
+      <button class="bank-ghead" data-act="bank-mtoggle" data-k="${entity}:${m}"><span>${open ? '▾' : '▸'} ${rbLabel(m)}</span><span class="mono small muted">${real.length} · ${fmtMoney0(tot)}${trf ? ` · transferências para PF ${fmtMoney0(trf)} (fora do total)` : ''}</span></button>
       ${open ? `<div class="bank-rows bank-head"><span>Data</span><span>Descrição</span><span>Valor</span><span>Meio</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div>${items.map(rowHTML).join('')}` : ''}
     </div>`;
   }).join('');
@@ -306,7 +311,12 @@ function bankSummaryHTML(entity) {
   const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
   const GREEN = '#22a06b', RED = '#d64545';
   const fOn = bankFilterOn() || BANK.fOpen;
-  return `${bar}<div class="kpis">
+  // Entradas do mês (PJ): mostra tudo que entrou, com o tipo. Não muda os totais.
+  const inRows = entity === 'pj' ? (BANK.all.pj || []).filter(t => t.flow === 'in' && (t.posted_on || '').slice(0, 7) === ym).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || '')) : [];
+  const inTot = inRows.reduce((s, t) => s + Number(t.amount), 0);
+  const inType = (t) => t.scope === 'interna' ? 'Interna' : t.category === 'Reembolso' ? 'Reembolso' : 'Recebimento';
+  const inHTML = entity === 'pj' ? `<div class="panel" style="margin-bottom:12px"><div class="panel-h"><h3>Entradas do mês</h3><span class="small muted">${inRows.length} · ${fmtMoney(inTot)}</span></div><div class="panel-b">${inRows.length ? `<table class="grid compact fin"><thead><tr><th>Data</th><th>Quem pagou</th><th style="text-align:right">Valor</th><th>Tipo</th></tr></thead><tbody>${inRows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.counterpart || t.memo)}</td><td class="num">${fmtMoney(t.amount)}</td><td>${esc(inType(t))}</td></tr>`).join('')}</tbody></table>` : '<div class="empty small">Nenhuma entrada neste mês.</div>'}</div></div>` : '';
+  return `${bar}${inHTML}<div class="kpis">
     <div class="kpi"><span class="k">${dot(GREEN)}Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas, sem reembolsos</span></div>
     <div class="kpi"><span class="k">${dot(RED)}Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">${entity === 'pf' ? 'PF + PJ, sem terapias' : 'só PJ, sem terapias'}</span></div>
     <div class="kpi"><span class="k">${dot(GREEN)}Reembolsos recebidos</span><span class="v">${fmtMoney0(reimbIn)}</span><span class="s">plano de saúde</span></div>
@@ -323,6 +333,7 @@ function bankSummaryHTML(entity) {
 }
 CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
 ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };
+ACTIONS['bank-showt'] = () => { BANK.showT = BANK.showT === false; render(); };
 ACTIONS['bank-rep'] = (el) => { BANK.rep = el.dataset.v; render(); };
 ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.dataset.k; const [ent, m] = k.split(':'); const cur = BANK.openM[k] ?? (m === (BANK.month || ymd(new Date()).slice(0, 7)) && ent); BANK.openM[k] = !cur; render(); };
 // Categorias de gasto: as padrão mais as que o Tulio criar.
