@@ -212,6 +212,7 @@ async function bankLoadRaw() {
   const every = await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*')));
   for (const e of ['pf', 'pj']) BANK.all[e] = every.filter(t => (t.biz_entity || t.entity) === e);
   BANK.every = every;
+  BANK.links = await bankFetchAll(() => cl.from('tempo_bank_reimb_links').select('*').order('reimb_row_id'));
 }
 // Pagamentos às terapeutas e à dentista ligam sozinhos à linha da tabela de terapias do mesmo mês (pelo nome).
 const bankFamily = (name) => {
@@ -255,16 +256,58 @@ function bankMarkCats(cps, cat, auto) {
   cps.forEach(cp => { if (auto) map[cp] = cat; else delete map[cp]; });
   db.setSetting('bankAutoCat', map);
 }
+// Reembolso recebido pode cobrir várias terapias: cada linha de terapia liga a um lançamento (tempo_bank_reimb_links).
+const bankLinksOf = (txnId) => (BANK.links || []).filter(l => l.txn_id === txnId).map(l => l.reimb_row_id);
+const bankTakenRows = () => new Set([...(BANK.every || []).map(x => x.reimb_row_id), ...(BANK.links || []).map(l => l.reimb_row_id)].filter(Boolean));
+// Conjunto de linhas cuja soma é exatamente o valor (em centavos). Candidatas na ordem dada (mês atual primeiro).
+function bankSubsetFor(cands, target) {
+  const reach = new Map([[0, []]]);
+  for (const r of cands) {
+    const c = Math.round(Number(r.amount) * 100);
+    for (const [sum, ids] of [...reach.entries()]) {
+      const ns = sum + c;
+      if (ns <= target && !reach.has(ns)) reach.set(ns, [...ids, r.id]);
+    }
+    if (reach.has(target)) break;
+  }
+  return reach.get(target) || null;
+}
+const bankSkipKey = 'bankReimbSkip';
+// Lançamento de reembolso de terapia liga sozinho às linhas cuja soma é exatamente o valor recebido.
+async function bankAutoReimb() {
+  const skip = db.setting(bankSkipKey, {});
+  const taken = bankTakenRows();
+  const rows = db.all('tempo_reimb_rows');
+  const todo = [];
+  (BANK.every || []).forEach(t => {
+    if (t.flow !== 'in' || !isReembTer(t.category) || skip[t.id] || bankLinksOf(t.id).length) return;
+    const months = bankReimbMonths(t);
+    const cands = rows.filter(r => months.includes(r.month) && !taken.has(r.id) && Number(r.amount) > 0)
+      .sort((a, b) => (b.month === months[0] ? 1 : 0) - (a.month === months[0] ? 1 : 0) || Number(b.amount) - Number(a.amount)).slice(0, 20);
+    if (!cands.length) return;
+    const ids = bankSubsetFor(cands, Math.round(Math.abs(Number(t.amount)) * 100));
+    if (!ids || !ids.length) return;
+    ids.forEach(id => taken.add(id));
+    todo.push({ txn: t.id, ids });
+  });
+  if (!todo.length) return false;
+  const cl = db.adapter.client;
+  for (const x of todo) {
+    const { error } = await cl.from('tempo_bank_reimb_links').insert(x.ids.map(r => ({ reimb_row_id: r, txn_id: x.txn })));
+    if (error) { toast('Erro: ' + error.message); break; }
+  }
+  return true;
+}
 // Sugestões por nome/CNAE viram categoria de verdade (só saídas, e só contrapartes ainda sem categoria).
 async function bankAutoCategory() {
   const every = BANK.every || [];
   const has = new Set(every.filter(x => x.category).map(x => x.counterpart || '—'));
   const groups = {};
   every.forEach(t => {
-    if (t.flow !== 'out' || t.category || t.scope === 'interna') return;
+    if (t.category || t.scope === 'interna') return;
     const k = t.counterpart || '—';
     if (has.has(k)) return;
-    const sug = suggestCat(k, t.counterpart_doc);
+    const sug = t.flow === 'out' ? suggestCat(k, t.counterpart_doc) : suggestIncCat(k);
     if (!sug) return;
     const g = (groups[sug] = groups[sug] || { ids: [], cps: new Set() });
     g.ids.push(t.id); g.cps.add(k);
@@ -284,6 +327,7 @@ async function bankLoadTxns() {
   await bankLoadRaw();
   let changed = await bankAutoTherapy();
   if (await bankAutoCategory()) changed = true;
+  if (await bankAutoReimb()) changed = true;
   if (changed) await bankLoadRaw();
 }
 // Resumo geral: entradas, saídas e sobra (sem movimentos internos) e onde o dinheiro saiu.
@@ -350,7 +394,7 @@ function bankSummaryHTML(entity) {
   const rowHTML = (t) => {
     const k = t.counterpart || '—';
     const cat = catBy[k] || null;
-    const sug = cat ? null : suggestCat(k, t.counterpart_doc);
+    const sug = cat ? null : (t.flow === 'out' ? suggestCat(k, t.counterpart_doc) : suggestIncCat(k));
     const autoCat = db.setting('bankAutoCat', {});
     if (t.counterpart_doc) bankCnpjLookup(t.counterpart_doc);
     const info = t.counterpart_doc && cnpjCache()[String(t.counterpart_doc).replace(/\D/g, '')];
@@ -363,7 +407,7 @@ function bankSummaryHTML(entity) {
       <span class="small muted">${bankMethod(t)}</span>
       <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
       <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">${catTag(cat)}${autoCat[k] === cat ? ' <span class="faint small">sugerido</span>' : ''}</button>`
-        : sug ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}" data-v="${sug}" title="Sugestão pelo nome. Clique para confirmar">${catTag(sug)} <span class="faint small">sugerido</span></button>`
+        : sug ? `<span class="bank-cat-btn" style="cursor:default">${catTag(sug)} <span class="faint small">sugerido</span></span>`
         : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">Definir categoria</button>`}</span>
       <span class="small muted bm">${bankRowExtra(t)}</span></div>`;
   };
@@ -434,7 +478,9 @@ ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.
 // Mesmas categorias e cores da tela de Despesas (PF/PJ), mais as de extrato.
 let BANK_CATS = [...Object.values(EX_CATS).flat(), 'Terapia', 'Estorno'];   // mesmos tipos de Despesas, mais os especiais do extrato
 const exKeyOf = (name) => { for (const [g, subs] of Object.entries(EX_CATS)) if (subs.includes(name)) return `${g}/${name}`; return `PESSOAL/${name}`; };
-const catTag = (name) => (name ? `<span class="tag tg" style="${cssTb(exColor(exKeyOf(name)))}">${esc(name)}</span>` : '');
+// Reembolso Outros→Compras aparece como "Reembolso > Compras" (o valor guardado não muda).
+const catLabel = (name) => String(name || '').replace(/^Reembolso Outros→/, 'Reembolso > ');
+const catTag = (name) => (name ? `<span class="tag tg" style="${cssTb(exColor(exKeyOf(name)))}">${esc(catLabel(name))}</span>` : '');
 const accTag = (acc) => `<span class="tag tg abbr" style="${cssTb(exColor(acc === 'pj' ? 'EMPRESA' : 'PESSOAL'))}">${acc === 'pj' ? 'PJ' : 'PF'}</span>`;
 const THER_LABEL = 'Terapia reembolsável';
 // Categorias que costumam ser da empresa (PJ) por padrão.
@@ -530,6 +576,16 @@ function bankMethod(t) {
   if (/d[ée]bito/i.test(m)) return 'Débito';
   return 'Outro';
 }
+// Entradas: sugestão de reembolso pelo nome (mesmo critério das saídas).
+// Reembolso com nome de compra (ex.: "reembolso amazon") sugere "Reembolso Outros→Compras": abate Compras.
+// Entrada cujo nome bate com uma compra (ex.: AMAZON) é reembolso dessa categoria: "Reembolso Outros→Compras".
+function suggestIncCat(name) {
+  if (/sul\s*america/i.test(name || '')) return REEMB_TER;
+  const t = suggestCat(name, null);
+  if (t) return REEMB_OUT + '→' + t;
+  if (/reembols|estorno|devol/i.test(name || '')) return REEMB_OUT;
+  return null;
+}
 function suggestCat(name, doc) {
   const digits = String(doc || '').replace(/\D/g, '');
   const c = digits && cnpjCache()[digits];
@@ -544,7 +600,7 @@ function bankEstornoTarget(cp) {
     let done = false;
     const l = openLayer({
       html: `<div class="dh"><h2>Abater de qual categoria?</h2></div><div class="db"><p style="margin:0">“${esc(cp)}” · o valor sai dessa categoria no relatório.</p>
-        <div class="row" style="flex-wrap:wrap;gap:6px">${cats.map(c => `<button class="btn sm" data-t="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+        <div class="row" style="flex-wrap:wrap;gap:6px">${cats.map(c => `<button class="btn sm tg" data-t="${esc(c)}" style="${cssTb(exColor(exKeyOf(c)))}">${esc(c)}</button>`).join('')}</div>
         <div class="field"><label for="bext-new">Outra categoria</label><div class="row"><input id="bext-new" class="input" placeholder="Nova categoria"><button class="btn sm" data-t="__new">Usar</button></div></div></div>`,
       onClose: () => { if (!done) res(null); }
     });
@@ -561,6 +617,7 @@ function bankEstornoTarget(cp) {
 // Reembolsos recebidos: de terapia (liga à tabela de terapias) ou de outras coisas que você pagou (liga a um gasto).
 const REEMB_TER = 'Reembolso Terapias', REEMB_OUT = 'Reembolso Outros';
 // Reembolso Outros aponta a categoria que abate ("Reembolso Outros→Lazer"), como o Estorno.
+const isReembTer = (c) => c === REEMB_TER || c === 'Reembolso';
 const isReembOut = (c) => c === REEMB_OUT || /^Reembolso Outros→/.test(c || '');
 const isReembCat = (c) => c === REEMB_TER || isReembOut(c) || c === 'Reembolso';
 const abatesCat = (c) => /^Estorno→/.test(c || '') || (isReembOut(c) && BANK.reemb !== false && /→/.test(c));
@@ -865,6 +922,12 @@ function bankRowExtra(t) {
     const lbl = `[Interno] [${from}>${to}]${pr ? '' : ' [a confirmar]'}`;
     return `<span class="tag tg" style="${cssTb('#2563eb')}">${esc(lbl)}</span>`;
   }
+  const lk = t.flow === 'in' ? bankLinksOf(t.id) : [];
+  if (lk.length) {
+    const rs = lk.map(id => db.get('tempo_reimb_rows', id)).filter(Boolean);
+    const tot = rs.reduce((a, r) => a + Number(r.amount), 0);
+    return `<span class="small muted">→ ${rs.map(r => esc(r.name)).join(', ')} (${fmtMoney0(tot)})</span> <button class="btn sm ghost" data-act="bank-unlink" data-id="${t.id}">Desvincular</button>`;
+  }
   if (t.reimb_row_id) { const r = db.get('tempo_reimb_rows', t.reimb_row_id); return r ? `<span class="small muted">→ Terapia: ${esc(r.name)}</span>` : ''; }
   if (t.expense_id) { const e = db.get('tempo_expenses', t.expense_id); return e ? `<span class="small muted">→ ${esc(e.name)}</span>` : ''; }
   if (t.flow !== 'out' && isReembOut(t.category)) return `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
@@ -887,7 +950,7 @@ const bankPrevYm = (ym) => { const [y, m] = ym.split('-').map(Number); const d =
 const bankReimbMonths = (t) => { const ym = (t.posted_on || '').slice(0, 7); return t.flow === 'in' ? [ym, bankPrevYm(ym)] : [ym]; };
 function bankTherapyMatch(t) {
   const amt = Math.abs(Number(t.amount)), months = bankReimbMonths(t);
-  const taken = new Set((BANK.all.pf || []).concat(BANK.all.pj || []).map(x => x.reimb_row_id).filter(Boolean));
+  const taken = bankTakenRows();
   const c = db.all('tempo_reimb_rows').filter(r => months.includes(r.month) && !taken.has(r.id) && Number(r.amount) > 0 && Math.abs(Number(r.amount) - amt) <= 1);
   return c.length === 1 ? c[0] : null;
 }
@@ -945,18 +1008,31 @@ ACTIONS['bank-rexp'] = async (el) => {
 // Escolhe a linha de terapia do mês para um reembolso recebido.
 function bankReimbPick(t) {
   const months = bankReimbMonths(t);
-  const taken = new Set((BANK.all.pf || []).concat(BANK.all.pj || []).map(x => x.reimb_row_id).filter(Boolean));
-  const rows = db.all('tempo_reimb_rows').filter(r => months.includes(r.month) && !taken.has(r.id)).sort((a, b) => String(a.month).localeCompare(String(b.month)) || String(a.name).localeCompare(String(b.name)));
-  const html = `<div class="dh"><h2>Reembolso de qual terapia?</h2></div><div class="db">
-    <p style="margin:0">${esc(t.counterpart || t.memo)} · ${fmtMoney(Math.abs(Number(t.amount)))} · ${fmtDate(t.posted_on)}</p>
-    <div class="field"><span class="lbl">Terapias de ${months.join(' e ')}</span><div class="stack" style="gap:6px">${rows.length ? rows.map(r => `<button class="btn sm" style="justify-content:space-between;width:100%" data-id="${r.id}">${esc(r.name)} <span class="mono small">${fmtMoney(r.amount)}</span></button>`).join('') : '<span class="small muted">Nenhuma terapia sem vínculo neste mês.</span>'}</div></div>
-    <div class="df"><button class="btn" data-x="no">Cancelar</button></div></div>`;
+  const taken = bankTakenRows();
+  const rows = db.all('tempo_reimb_rows').filter(r => months.includes(r.month) && !taken.has(r.id) && Number(r.amount) > 0).sort((a, b) => String(a.month).localeCompare(String(b.month)) || String(a.name).localeCompare(String(b.name)));
+  const target = Math.abs(Number(t.amount));
+  const html = `<div class="dh"><h2>Reembolso de quais terapias?</h2></div><div class="db">
+    <p style="margin:0">${esc(t.counterpart || t.memo)} · ${fmtMoney(target)} · ${fmtDate(t.posted_on)}</p>
+    <div class="field"><span class="lbl">Terapias de ${months.join(' e ')} · marque todas que estão neste pagamento</span><div class="stack" style="gap:6px">${rows.length ? rows.map(r => `<label class="row" style="justify-content:space-between;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;cursor:pointer"><span><input type="checkbox" value="${r.id}" data-amt="${Number(r.amount)}" style="margin-right:8px">${esc(r.name)} <span class="small muted">${esc(r.month)}</span></span><span class="mono small">${fmtMoney(r.amount)}</span></label>`).join('') : '<span class="small muted">Nenhuma terapia sem vínculo neste mês.</span>'}</div></div>
+    <p class="small" data-sum style="margin:0">Marcado: ${fmtMoney(0)} de ${fmtMoney(target)}</p>
+    <div class="df"><button class="btn" data-x="no">Cancelar</button><button class="btn primary" data-x="ok">Vincular</button></div></div>`;
   return new Promise(res => {
     let done = false;
     const l = openLayer({ html, onClose: () => { if (!done) res(null); } });
+    const sumEl = l.box.querySelector('[data-sum]');
+    const picked = () => [...l.box.querySelectorAll('input[type=checkbox]:checked')];
+    l.box.addEventListener('change', () => {
+      const sum = picked().reduce((a, c) => a + Number(c.dataset.amt), 0);
+      const diff = Math.round((sum - target) * 100);
+      sumEl.textContent = `Marcado: ${fmtMoney(sum)} de ${fmtMoney(target)}` + (diff === 0 ? ' · bate' : ` · diferença ${fmtMoney(Math.abs(diff) / 100)}`);
+    });
     l.box.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-id]'); if (b) { done = true; res(b.dataset.id); l.close(); return; }
-      if (e.target.closest('[data-x]')) { done = true; res(null); l.close(); }
+      if (e.target.closest('[data-x="ok"]')) {
+        const ids = picked().map(c => c.value);
+        if (!ids.length) return toast('Marque pelo menos uma terapia.');
+        done = true; res(ids); l.close(); return;
+      }
+      if (e.target.closest('[data-x="no"]')) { done = true; res(null); l.close(); }
     });
   });
 }
@@ -965,13 +1041,27 @@ ACTIONS['bank-rlink'] = async (el) => {
   const id = await bankReimbPick(t); if (!id) return;
   await linkBankTxn(t, 'reimb', id);
 };
+ACTIONS['bank-unlink'] = async (el) => {
+  const id = el.dataset.id;
+  const { error } = await db.adapter.client.from('tempo_bank_reimb_links').delete().eq('txn_id', id);
+  if (error) return toast('Erro: ' + error.message);
+  db.setSetting(bankSkipKey, { ...db.setting(bankSkipKey, {}), [id]: true });
+  await bankLoadTxns(); toast('Desvinculado'); render();
+};
 ACTIONS['bank-tlink'] = async (el) => {
   const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;
   await linkBankTxn(t, el.dataset.kind, el.dataset.target);
 };
 async function linkBankTxn(t, kind, id) {
+  if (kind === 'reimb' && t.flow !== 'out') {
+    const ids = Array.isArray(id) ? id : [id];
+    const { error } = await db.adapter.client.from('tempo_bank_reimb_links').insert(ids.map(r => ({ reimb_row_id: r, txn_id: t.id })));
+    if (error) return toast('Erro: ' + error.message);
+    const skip = { ...db.setting(bankSkipKey, {}) }; delete skip[t.id]; db.setSetting(bankSkipKey, skip);
+    await bankLoadTxns(); toast('Vinculado'); render(); return;
+  }
   const patch = { updated_at: new Date().toISOString() };
-  if (kind === 'reimb') { patch.reimb_row_id = id; if (t.flow === 'out') patch.category = 'Terapia'; }
+  if (kind === 'reimb') { patch.reimb_row_id = id; patch.category = 'Terapia'; }
   else { patch.expense_id = id; db.update('tempo_expenses', id, { amount: Math.abs(Number(t.amount)), status: 'Pago', paid_on: t.posted_on }); }
   const { error } = await db.adapter.client.from('tempo_bank_txns').update(patch).eq('id', t.id);
   if (error) return toast('Erro: ' + error.message);

@@ -7,4 +7,4 @@ window.TEMPO_CFG = {
 };
 
 /* versão exibida no rodapé da barra lateral; aumentar a cada publicação */
-const APP_VERSION = 'V2.01.78';
+const APP_VERSION = 'V2.01.79';
