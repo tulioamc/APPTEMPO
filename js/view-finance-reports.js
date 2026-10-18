@@ -272,7 +272,7 @@ function bankSummaryHTML(entity) {
     return `<div class="bank-row">
       <span class="mono small">${fmtDateShort(t.posted_on)}</span>
       <span class="bn" title="${esc(info?.nome || k)}">${esc(k)}</span>
-      <span class="mono small">${fmtMoney(Math.abs(Number(t.amount)))}</span>
+      <span class="mono small">${dotHTML(t.flow === 'in' ? '#22a06b' : '#d64545', t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
       <span class="small muted">${bankMethod(t)}</span>
       <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
       <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">${catTag(cat)}</button>`
@@ -281,15 +281,21 @@ function bankSummaryHTML(entity) {
       <span class="small muted bm">${bankRowExtra(t)}</span></div>`;
   };
   BANK.openM = BANK.openM || {};
-  const months = [...new Set(outsAll.map(t => (t.posted_on || '').slice(0, 7)))];
+  const lst = BANK.lst || 'tudo';
+  const outList = lst === 'in' ? [] : outsAll;
+  const inList = lst === 'out' ? [] : (BANK.all[entity] || []).filter(t => t.flow === 'in' && passes(t));
+  const listAll = outList.concat(inList).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
+  const months = [...new Set(listAll.map(t => (t.posted_on || '').slice(0, 7)))];
   const groups = months.map(m => {
     const open = BANK.openM[entity + ':' + m] ?? (m === ym);
-    const items = outsAll.filter(t => (t.posted_on || '').slice(0, 7) === m);
+    const items = listAll.filter(t => (t.posted_on || '').slice(0, 7) === m);
     const real = items.filter(t => t.scope !== 'interna');
-    const tot = real.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    const tot = real.filter(t => t.flow === 'out').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    const totIn = real.filter(t => t.flow === 'in').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
     const trf = items.filter(t => t.scope === 'interna').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    const headTxt = lst === 'in' ? `entradas ${fmtMoney0(totIn)}` : lst === 'out' ? fmtMoney0(tot) : `↑ ${fmtMoney0(totIn)} · ↓ ${fmtMoney0(tot)}`;
     return `<div class="bank-group">
-      <button class="bank-ghead" data-act="bank-mtoggle" data-k="${entity}:${m}"><span>${open ? '▾' : '▸'} ${rbLabel(m)}</span><span class="mono small muted">${real.length} · ${fmtMoney0(tot)}${trf ? ` · transferências para PF ${fmtMoney0(trf)} (fora do total)` : ''}</span></button>
+      <button class="bank-ghead" data-act="bank-mtoggle" data-k="${entity}:${m}"><span>${open ? '▾' : '▸'} ${rbLabel(m)}</span><span class="mono small muted">${real.length} · ${headTxt}${trf ? ` · transferências para PF ${fmtMoney0(trf)} (fora do total)` : ''}</span></button>
       ${open ? `<div class="bank-rows bank-head"><span>Data</span><span>Descrição</span><span>Valor</span><span>Meio</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div>${items.map(rowHTML).join('')}` : ''}
     </div>`;
   }).join('');
@@ -304,19 +310,14 @@ function bankSummaryHTML(entity) {
   const byCp = Object.entries(sum(monthOuts, t => t.counterpart || '—')).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const bars = (arr) => { const mx = Math.max(1, ...arr.map(x => x[1])); return arr.length ? `<div class="bars">${arr.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(k)}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / mx * 100}%"></div></div><span class="mono small">${fmtMoney0(v)}</span></div>`).join('')}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'; };
   const byAcc = Object.entries(sum(monthOuts, t => (t.biz_entity || t.entity).toUpperCase())).sort((a, b) => b[1] - a[1]);
-  const views = { cat: ['Categoria', () => donutHTML(byCat, 'Por categoria', (k) => exColor(exKeyOf(k)))], meio: ['Meio', () => donutHTML(byMeth, 'Por meio')], conta: ['PF / PJ', () => donutHTML(byAcc, 'PF e PJ', (k) => exColor(k === 'PJ' ? 'EMPRESA' : 'PESSOAL'))], onde: ['Onde foi', () => bars(byCp)] };
+  const views = { cat: ['Categoria', () => donutHTML(byCat, 'Por categoria', chartCat)], meio: ['Meio', () => donutHTML(byMeth, 'Por meio')], conta: ['PF / PJ', () => donutHTML(byAcc, 'PF e PJ', (k) => exColor(k === 'PJ' ? 'EMPRESA' : 'PESSOAL'))], onde: ['Onde foi', () => bars(byCp)] };
   const cur = views[BANK.rep] ? BANK.rep : 'cat';
   const tabs = `<div class="seg" style="margin-bottom:12px;flex-wrap:wrap">${Object.entries(views).map(([k, [l]]) => `<button class="${cur === k ? 'on' : ''}" data-act="bank-rep" data-v="${k}">${l}</button>`).join('')}</div>`;
   const report = `<div class="panel bank-report"><div class="panel-h"><h3>Relatório de ${rbLabel(ym)}</h3></div><div class="panel-b">${tabs}${views[cur][1]()}</div></div>`;
   const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
   const GREEN = '#22a06b', RED = '#d64545';
   const fOn = bankFilterOn() || BANK.fOpen;
-  // Entradas do mês (PJ): mostra tudo que entrou, com o tipo. Não muda os totais.
-  const inRows = entity === 'pj' ? (BANK.all.pj || []).filter(t => t.flow === 'in' && (t.posted_on || '').slice(0, 7) === ym).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || '')) : [];
-  const inTot = inRows.reduce((s, t) => s + Number(t.amount), 0);
-  const inType = (t) => t.scope === 'interna' ? 'Interna' : t.category === 'Reembolso' ? 'Reembolso' : 'Recebimento';
-  const inHTML = entity === 'pj' ? `<div class="panel" style="margin-bottom:12px"><div class="panel-h"><h3>Entradas do mês</h3><span class="small muted">${inRows.length} · ${fmtMoney(inTot)}</span></div><div class="panel-b">${inRows.length ? `<table class="grid compact fin"><thead><tr><th>Data</th><th>Quem pagou</th><th style="text-align:right">Valor</th><th>Tipo</th></tr></thead><tbody>${inRows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.counterpart || t.memo)}</td><td class="num">${fmtMoney(t.amount)}</td><td>${esc(inType(t))}</td></tr>`).join('')}</tbody></table>` : '<div class="empty small">Nenhuma entrada neste mês.</div>'}</div></div>` : '';
-  return `${bar}${inHTML}<div class="kpis">
+  return `${bar}<div class="kpis">
     <div class="kpi"><span class="k">${dot(GREEN)}Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas, sem reembolsos</span></div>
     <div class="kpi"><span class="k">${dot(RED)}Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">${entity === 'pf' ? 'PF + PJ, sem terapias' : 'só PJ, sem terapias'}</span></div>
     <div class="kpi"><span class="k">${dot(GREEN)}Reembolsos recebidos</span><span class="v">${fmtMoney0(reimbIn)}</span><span class="s">plano de saúde</span></div>
@@ -327,12 +328,13 @@ function bankSummaryHTML(entity) {
   <div class="bank-layout">
     <div class="panel bank-list"><div class="panel-h"><h3>Saídas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · por mês</span><span class="grow"></span><button class="btn sm ${fOn ? 'on' : ''}" data-act="bank-f-toggle">${icon('search')} Filtrar${bankFilterOn() ? ' · ativo' : ''}</button></div>
       ${fOn ? bankFilterHTML(catBy) : ''}
-      <div class="panel-b">${entity === 'pf' ? `<div class="seg" style="margin-bottom:10px">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}<div style="max-height:65vh;overflow:auto">${groups || '<div class="empty small">Nenhuma saída.</div>'}</div></div></div>
+      <div class="panel-b">${entity === 'pf' ? `<div class="seg" style="margin-bottom:10px">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${`<div class="seg" style="margin-bottom:10px">${[['tudo', 'Tudo'], ['in', 'Entradas'], ['out', 'Saídas']].map(([k, l]) => `<button class="${lst === k ? 'on' : ''}" data-act="bank-lst" data-v="${k}">${l}</button>`).join('')}</div>`}<div style="max-height:65vh;overflow:auto">${groups || '<div class="empty small">Nenhum lançamento.</div>'}</div></div></div>
     ${report}
   </div>`;
 }
 CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
 ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };
+ACTIONS['bank-lst'] = (el) => { BANK.lst = el.dataset.v; render(); };
 ACTIONS['bank-showt'] = () => { BANK.showT = BANK.showT === false; render(); };
 ACTIONS['bank-rep'] = (el) => { BANK.rep = el.dataset.v; render(); };
 ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.dataset.k; const [ent, m] = k.split(':'); const cur = BANK.openM[k] ?? (m === (BANK.month || ymd(new Date()).slice(0, 7)) && ent); BANK.openM[k] = !cur; render(); };
@@ -348,6 +350,7 @@ const PJ_CATS = ['Contabilidade', 'Impostos'];
 const bankCats = () => [...new Set([...BANK_CATS, ...db.setting('bankCats', [])])];
 // Sugestão automática pelo nome do estabelecimento. Só sugere; quem confirma é você.
 const CAT_RULES = [
+  [/hudson|aluguel/i, 'Moradia'],
   [/amazon|shopee|mercadolivre|mercado livre|magalu|magazine|shein|aliexpress|americanas|renner|c&a|zara|riachuelo/i, 'Compras'],
   [/mercad|supermerc|atacad|varej|hortifr|padaria|a[cç]ougue|sacol[aã]o|assa[ií]|carrefour|p[ãa]o de a[cç]|feira|multifood|ampm|am\/pm|conveni|biscuit|bisc/i, 'Alimentação'],
   [/ifd|ifood|rappi|uber ?eats|delivery|restaur|lanche|pizza|hamburg|sushi|cafe|caf[eé]|sorvet|doceria|bistr|churr/i, 'Alimentação'],
@@ -393,6 +396,8 @@ async function bankCnpjLookup(doc) {
 const METHODS = ['Crédito', 'Débito', 'Pix', 'Outro'];
 const GREEN = '#22a06b', RED = '#d64545', PF_C = '#2E43D6', PJ_C = '#b45309';
 const CHART_PAL = ['#2E43D6', '#22a06b', '#d64545', '#b45309', '#7c3aed', '#0ea5a4', '#db2777', '#64748b', '#84cc16', '#f59e0b'];
+const CAT_COLORS = ['#2E43D6', '#22a06b', '#d64545', '#b45309', '#7c3aed', '#0ea5a4', '#db2777', '#64748b', '#84cc16', '#f59e0b', '#0284c7', '#a16207', '#4f46e5', '#15803d', '#be123c', '#0f766e', '#9333ea', '#ca8a04', '#06b6d4', '#ea580c', '#475569', '#65a30d'];
+const chartCat = (k) => { const i = [...BANK_CATS, 'Sem categoria'].indexOf(k); return i >= 0 ? CAT_COLORS[i % CAT_COLORS.length] : palColor(k); };
 const palColor = (name) => { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return CHART_PAL[h % CHART_PAL.length]; };
 const dotHTML = (c, title = '') => `<span title="${esc(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle;flex:none"></span>`;
 // Rosca centralizada com chips claros na legenda (mesmas cores das categorias)
@@ -403,15 +408,19 @@ function donutHTML(arr, centerLabel = 'Total', colorFn = (k) => palColor(k)) {
   if (!tot) return '<div class="empty small">Sem saídas neste mês.</div>';
   const R = 70, C = 2 * Math.PI * R; let acc = 0; const gap = arr.length > 1 ? 2 : 0;
   const colorOf = (k) => (k === THER_LABEL ? '#94a3b8' : colorFn(k));
-  const segs = arr.map(([k, v]) => { const f = v / tot; const len = Math.max(0, f * C - gap); const seg = `<circle r="${R}" cx="110" cy="110" fill="none" stroke="${colorOf(k)}" stroke-width="26" stroke-dasharray="${len} ${C}" stroke-dashoffset="${-acc * C}" transform="rotate(-90 110 110)"><title>${esc(k)}: ${fmtMoney0(v)} (${Math.round(f * 100)}%)</title></circle>`; acc += f; return seg; }).join('');
-  const chips = arr.map(([k, v]) => chipHTML(colorOf(k), k, v, Math.round(v / tot * 100), colorOf(k))).join('');
-  return `<div style="display:grid;justify-items:center;gap:14px">
+  const segs = arr.map(([k, v]) => { const f = v / tot; const len = Math.max(0, f * C - gap); const seg = `<circle data-seg="${esc(k)}" r="${R}" cx="110" cy="110" fill="none" stroke="${colorOf(k)}" stroke-width="26" stroke-dasharray="${len} ${C}" stroke-dashoffset="${-acc * C}" transform="rotate(-90 110 110)"><title>${esc(k)}: ${fmtMoney0(v)} (${Math.round(f * 100)}%)</title></circle>`; acc += f; return seg; }).join('');
+  const chips = arr.map(([k, v]) => `<span data-seg="${esc(k)}" style="display:inline-flex;transition:opacity .15s">${chipHTML(colorOf(k), k, v, Math.round(v / tot * 100), colorOf(k))}</span>`).join('');
+  return `<div data-donut style="display:grid;justify-items:center;gap:14px">
     <svg viewBox="0 0 220 220" width="220" height="220" role="img" aria-label="${esc(centerLabel)}">${segs}
       <text x="110" y="104" text-anchor="middle" font-size="12" fill="var(--fg-3)">${esc(centerLabel)}</text>
       <text x="110" y="126" text-anchor="middle" font-size="17" font-weight="600" fill="currentColor">${fmtMoney0(tot)}</text></svg>
     <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center">${chips}</div>
   </div>`;
 }
+// Ao passar o mouse numa categoria (no gráfico ou na legenda), destaca só ela.
+const donutFocus = (box, key) => box.querySelectorAll('[data-seg]').forEach(x => { x.style.opacity = !key || x.dataset.seg === key ? '' : '0.25'; });
+document.addEventListener('mouseover', (e) => { const el = e.target.closest && e.target.closest('[data-seg]'); const box = el && el.closest('[data-donut]'); if (box) donutFocus(box, el.dataset.seg); });
+document.addEventListener('mouseout', (e) => { const el = e.target.closest && e.target.closest('[data-seg]'); const box = el && el.closest('[data-donut]'); if (box) donutFocus(box, null); });
 function bankMethod(t) {
   if (/d660$/.test(t.account_tail || '')) return 'Crédito';
   const m = String(t.memo || '');
