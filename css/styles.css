@@ -1,4 +1,8 @@
 /* Layout: sidebar fixa (Workspace / Cadastros) + área de trabalho; no celular a sidebar vira gaveta e o cronômetro fica num bar fixo. */
+@font-face { font-family: "BR Sonoma"; src: url("/fonts/BRSonoma-Light.otf") format("opentype"); font-weight: 300; font-display: swap; }
+@font-face { font-family: "BR Sonoma"; src: url("/fonts/BRSonoma-Medium.otf") format("opentype"); font-weight: 400 500; font-display: swap; }
+@font-face { font-family: "BR Sonoma"; src: url("/fonts/BRSonoma-SemiBold.otf") format("opentype"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "BR Sonoma"; src: url("/fonts/BRSonoma-Bold.otf") format("opentype"); font-weight: 700 900; font-display: swap; }
 :root {
   --bg: #F5F6F8;
   --surface: #FFFFFF;
@@ -34,7 +38,7 @@
   --t-red-bg:#FBE0DD; --t-red-fg:#9B2C22;
 
   --font-ui: "BR Sonoma", "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-mono: "BR Sonoma", "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --fs: 14px;
   --radius: 10px;
   --radius-sm: 6px;

@@ -48,7 +48,7 @@ function sidebarHTML() {
     `<button class="nav-btn ${S.route === n.id ? 'active' : ''}" data-act="go" data-route="${n.id}" ${S.route === n.id ? 'aria-current="page"' : ''}>${icon(n.icon)}<span>${n.label}</span>${n.count ? `<span class="count">${n.count()}</span>` : ''}</button>`).join('')}
   <div class="sidebar-foot">
     ${a ? `<button class="mini-timer" data-act="go" data-route="timesheet"><span class="row small"><span class="dot ${a.state === 'running' ? 'live' : 'paused'}"></span>${a.state === 'running' ? 'Registrando' : 'Pausado'}</span><span class="t" data-tick="${a.id}">${fmtClock(entryMs(a))}</span><span class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(entryTitle(a))}</span>${pausesOf(a.id).length ? `<span class="small" style="color:var(--warn);font-weight:600">${pausesOf(a.id).length} pausa(s) para revisar</span>` : ''}</button>` : ''}
-    <div class="data-mode"><span class="dot ${db.adapter.persistent ? 'live' : 'mem'}"></span>${db.syncError ? 'Falha de sincronização' : db.adapter.persistent ? 'Sincronizado' : 'Em memória · some ao recarregar'} · ${APP_VERSION}${db.adapter.persistent ? ` · <a href="#" data-act="signout">Sair</a>` : ''}</div>
+    <div class="data-mode"><span class="dot ${db.adapter.persistent ? 'live' : 'mem'}"></span>${db.syncError ? 'Falha de sincronização' : db.adapter.persistent ? 'Sincronizado' : 'Em memória · some ao recarregar'} · ${APP_VERSION}${window.TEMPO_NEW_VERSION ? ` · <a href="#" data-act="app-update" title="Nova versão ${esc(window.TEMPO_NEW_VERSION)}">Atualizar</a>` : ''}${db.adapter.persistent ? ` · <a href="#" data-act="signout">Sair</a>` : ''}</div>
   </div>`;
 }
 
@@ -239,6 +239,24 @@ ACTIONS.signout = async () => {
   location.reload();
 };
 
+// Compara a versão desta página com a publicada no site (sem cache) e mostra "Atualizar" no rodapé se for mais nova.
+async function checkAppVersion() {
+  try {
+    const txt = await (await fetch('/js/config.js?t=' + Date.now(), { cache: 'no-store' })).text();
+    const m = txt.match(/APP_VERSION\s*=\s*'([^']+)'/);
+    if (m && m[1] !== APP_VERSION) { window.TEMPO_NEW_VERSION = m[1]; render(); }
+  } catch (e) { /* sem internet: não mostra nada */ }
+}
+ACTIONS['app-update'] = async () => {
+  try {
+    const regs = await navigator.serviceWorker?.getRegistrations?.() || [];
+    await Promise.all(regs.map(r => r.unregister()));
+    const keys = await caches?.keys?.() || [];
+    await Promise.all(keys.map(k => caches.delete(k)));
+  } catch (e) { /* segue e recarrega mesmo assim */ }
+  location.reload();
+};
+
 async function boot() {
   const online = !!(TEMPO_CFG.supabaseUrl && window.supabase);
   let adapter = new MemoryAdapter();
@@ -268,4 +286,6 @@ async function boot() {
   scanAlerts();
   if (db.setting('idleDetect', false)) startIdleDetection(false);
   render();
+  checkAppVersion();
+  setInterval(checkAppVersion, 30 * 60 * 1000);
 }
