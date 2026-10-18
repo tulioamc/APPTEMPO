@@ -659,7 +659,7 @@ function bankRowExtra(t) {
   if (t.reimb_row_id) { const r = db.get('tempo_reimb_rows', t.reimb_row_id); return r ? `<span class="small muted">→ Terapia: ${esc(r.name)}</span>` : ''; }
   if (t.expense_id) { const e = db.get('tempo_expenses', t.expense_id); return e ? `<span class="small muted">→ ${esc(e.name)}</span>` : ''; }
   if (t.flow !== 'out' && t.category === 'Reembolso') return `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
-  if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`; }
+  if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">${t.category === 'Reembolso' ? 'Vincular a gasto…' : 'Vincular a entrada…'}</button>`; }
   const e = bankFixedMatch(t);
   if (e) return `<button class="btn sm" data-act="bank-link" data-id="${t.id}" data-eid="${e.id}">Vincular a ${esc(e.name)}</button>`;
   const rr = bankTherapyMatch(t);
@@ -702,10 +702,12 @@ ACTIONS['bank-tpick'] = async (el) => {
 // Reembolso recebido ligado a um custo do mesmo mês. Não altera o valor nem o status do custo.
 function bankExpPick(t) {
   const ym = (t.posted_on || '').slice(0, 7);
-  const exps = db.all('tempo_expenses').filter(e => e.month === ym && e.kind === 'out').sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  const html = `<div class="dh"><h2>Reembolso de qual gasto?</h2></div><div class="db">
+  // entrada que não é reembolso se vincula a um recebimento; reembolso e saídas, a um custo
+  const want = (t.flow === 'in' && t.category !== 'Reembolso') ? 'in' : 'out';
+  const exps = db.all('tempo_expenses').filter(e => e.month === ym && e.kind === want).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const html = `<div class="dh"><h2>${want === 'in' ? 'Entrada de qual recebimento?' : 'Reembolso de qual gasto?'}</h2></div><div class="db">
     <p style="margin:0">${esc(t.counterpart || t.memo)} · ${fmtMoney(Math.abs(Number(t.amount)))} · ${fmtDate(t.posted_on)}</p>
-    <div class="field"><span class="lbl">Custos de ${ym}</span><div class="stack" style="gap:6px">${exps.length ? exps.map(e => `<button class="btn sm" style="justify-content:space-between;width:100%" data-id="${e.id}">${esc(e.name)} <span class="mono small">${fmtMoney(e.amount)}</span></button>`).join('') : '<span class="small muted">Nenhum custo neste mês.</span>'}</div></div>
+    <div class="field"><span class="lbl">${want === 'in' ? 'Recebimentos' : 'Custos'} de ${ym}</span><div class="stack" style="gap:6px">${exps.length ? exps.map(e => `<button class="btn sm" style="justify-content:space-between;width:100%" data-id="${e.id}">${esc(e.name)} <span class="mono small">${fmtMoney(e.amount)}</span></button>`).join('') : '<span class="small muted">Nenhum custo neste mês.</span>'}</div></div>
     </div><div class="df"><button class="btn" data-x="no">Cancelar</button></div>`;
   return new Promise(res => {
     let done = false;
