@@ -227,7 +227,6 @@ function bankSummaryHTML(entity) {
     const sug = cat ? null : suggestCat(k, t.counterpart_doc);
     if (t.counterpart_doc) bankCnpjLookup(t.counterpart_doc);
     const info = t.counterpart_doc && cnpjCache()[String(t.counterpart_doc).replace(/\D/g, '')];
-    const ex = t.expense_id ? db.get('tempo_expenses', t.expense_id) : null;
     const eff = t.biz_entity || t.entity;
     return `<div class="bank-row">
       <span class="mono small">${fmtDateShort(t.posted_on)}</span>
@@ -237,7 +236,7 @@ function bankSummaryHTML(entity) {
       <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">${tag(cat, 'gray')}</button>`
         : sug ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-v="${sug}" title="Sugestão pelo nome. Clique para confirmar">${tag(sug, 'gray')} <span class="faint small">sugerido</span></button>`
         : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">Definir categoria</button>`}</span>
-      <span class="small muted bm">${ex ? '→ ' + esc(ex.name) : ''}</span></div>`;
+      <span class="small muted bm">${bankRowExtra(t)}</span></div>`;
   }).join('');
   return `${bar}<div class="kpis">
     <div class="kpi"><span class="k">Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas</span></div>
@@ -408,12 +407,59 @@ function bankReimbMatch(t) {
   return m ? { month: m, total: byMonth[m] } : null;
 }
 function bankRowExtra(t) {
+  if (t.reimb_row_id) { const r = db.get('tempo_reimb_rows', t.reimb_row_id); return r ? `<span class="small muted">→ Terapia: ${esc(r.name)}</span>` : ''; }
   if (t.expense_id) { const e = db.get('tempo_expenses', t.expense_id); return e ? `<span class="small muted">→ ${esc(e.name)}</span>` : ''; }
+  if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : ''; }
   const e = bankFixedMatch(t);
   if (e) return `<button class="btn sm" data-act="bank-link" data-id="${t.id}" data-eid="${e.id}">Vincular a ${esc(e.name)}</button>`;
-  const r = bankReimbMatch(t);
-  if (r) return `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>`;
-  return '';
+  const rr = bankTherapyMatch(t);
+  if (rr) return `<button class="btn sm" data-act="bank-tlink" data-id="${t.id}" data-kind="reimb" data-target="${rr.id}">Vincular a terapia ${esc(rr.name)}</button>`;
+  return `<button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Vincular…</button>`;
+}
+// Pagamento de terapia (PF) que bate com uma linha de reembolso do mesmo mês pelo valor.
+function bankTherapyMatch(t) {
+  if (t.flow !== 'out') return null;
+  const amt = Math.abs(Number(t.amount)), ym = (t.posted_on || '').slice(0, 7);
+  const taken = new Set((BANK.all.pf || []).concat(BANK.all.pj || []).map(x => x.reimb_row_id).filter(Boolean));
+  const c = db.all('tempo_reimb_rows').filter(r => r.month === ym && !taken.has(r.id) && Number(r.amount) > 0 && Math.abs(Number(r.amount) - amt) <= 1);
+  return c.length === 1 ? c[0] : null;
+}
+// Escolha manual: lista as linhas de terapia e os custos do mês.
+function bankPickDialog(t) {
+  const ym = (t.posted_on || '').slice(0, 7);
+  const rows = db.all('tempo_reimb_rows').filter(r => r.month === ym && Number(r.amount) > 0).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const exps = db.all('tempo_expenses').filter(e => e.month === ym && e.kind === 'out' && e.amount != null);
+  const btn = (kind, id, label, val) => `<button class="btn sm" style="justify-content:space-between;width:100%" data-kind="${kind}" data-id="${id}">${esc(label)} <span class="mono small">${fmtMoney(val)}</span></button>`;
+  const html = `<div class="dh"><h2>Vincular lançamento</h2></div><div class="db">
+    <p style="margin:0">${esc(t.counterpart || t.memo)} · ${fmtMoney(Math.abs(Number(t.amount)))} · ${fmtDate(t.posted_on)}</p>
+    <div class="field"><span class="lbl">Terapias do mês ${ym}</span><div class="stack" style="gap:6px">${rows.length ? rows.map(r => btn('reimb', r.id, r.name, r.amount)).join('') : '<span class="small muted">Nenhuma linha de terapia neste mês.</span>'}</div></div>
+    <div class="field"><span class="lbl">Custos fixos do mês</span><div class="stack" style="gap:6px">${exps.length ? exps.map(e => btn('expense', e.id, e.name, e.amount)).join('') : '<span class="small muted">Nenhum custo fixo neste mês.</span>'}</div></div>
+    </div><div class="df"><button class="btn" data-x="no">Cancelar</button></div>`;
+  return new Promise(res => {
+    let done = false;
+    const l = openLayer({ html, onClose: () => { if (!done) res(null); } });
+    l.box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-kind]'); if (b) { done = true; res({ kind: b.dataset.kind, id: b.dataset.id }); l.close(); return; }
+      if (e.target.closest('[data-x]')) { done = true; res(null); l.close(); }
+    });
+  });
+}
+ACTIONS['bank-tpick'] = async (el) => {
+  const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;
+  const pick = await bankPickDialog(t); if (!pick) return;
+  await linkBankTxn(t, pick.kind, pick.id);
+};
+ACTIONS['bank-tlink'] = async (el) => {
+  const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;
+  await linkBankTxn(t, el.dataset.kind, el.dataset.target);
+};
+async function linkBankTxn(t, kind, id) {
+  const patch = { updated_at: new Date().toISOString() };
+  if (kind === 'reimb') { patch.reimb_row_id = id; patch.category = patch.category || 'Saúde'; }
+  else { patch.expense_id = id; db.update('tempo_expenses', id, { amount: Math.abs(Number(t.amount)), status: 'Pago', paid_on: t.posted_on }); }
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update(patch).eq('id', t.id);
+  if (error) return toast('Erro: ' + error.message);
+  await bankLoadTxns(); toast('Vinculado'); render();
 }
 ACTIONS['bank-link'] = async (el) => {
   const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id);
