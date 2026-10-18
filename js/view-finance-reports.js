@@ -249,6 +249,12 @@ async function bankAutoTherapy() {
   }
   return true;
 }
+// Guarda, por contraparte, se a categoria veio do app (sugestão) ou foi escolhida por você.
+function bankMarkCats(cps, cat, auto) {
+  const map = { ...db.setting('bankAutoCat', {}) };
+  cps.forEach(cp => { if (auto) map[cp] = cat; else delete map[cp]; });
+  db.setSetting('bankAutoCat', map);
+}
 // Sugestões por nome/CNAE viram categoria de verdade (só saídas, e só contrapartes ainda sem categoria).
 async function bankAutoCategory() {
   const every = BANK.every || [];
@@ -260,14 +266,17 @@ async function bankAutoCategory() {
     if (has.has(k)) return;
     const sug = suggestCat(k, t.counterpart_doc);
     if (!sug) return;
-    (groups[sug] = groups[sug] || []).push(t.id);
+    const g = (groups[sug] = groups[sug] || { ids: [], cps: new Set() });
+    g.ids.push(t.id); g.cps.add(k);
   });
+  Object.values(groups).forEach(g => { g.cps = [...g.cps]; });
   const cats = Object.keys(groups);
   if (!cats.length) return false;
   const cl = db.adapter.client;
   for (const c of cats) {
-    const { error } = await cl.from('tempo_bank_txns').update({ category: c, updated_at: new Date().toISOString() }).in('id', groups[c]);
+    const { error } = await cl.from('tempo_bank_txns').update({ category: c, updated_at: new Date().toISOString() }).in('id', groups[c].ids);
     if (error) { toast('Erro: ' + error.message); break; }
+    bankMarkCats(groups[c].cps, c, true);
   }
   return true;
 }
@@ -342,6 +351,7 @@ function bankSummaryHTML(entity) {
     const k = t.counterpart || '—';
     const cat = catBy[k] || null;
     const sug = cat ? null : suggestCat(k, t.counterpart_doc);
+    const autoCat = db.setting('bankAutoCat', {});
     if (t.counterpart_doc) bankCnpjLookup(t.counterpart_doc);
     const info = t.counterpart_doc && cnpjCache()[String(t.counterpart_doc).replace(/\D/g, '')];
     const eff = t.biz_entity || t.entity;
@@ -352,7 +362,7 @@ function bankSummaryHTML(entity) {
       <span class="mono small">${dotHTML(t.scope === 'interna' ? '#2563eb' : t.flow === 'in' ? '#22a06b' : '#d64545', t.scope === 'interna' ? 'Interna' : t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
       <span class="small muted">${bankMethod(t)}</span>
       <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
-      <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">${catTag(cat)}</button>`
+      <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">${catTag(cat)}${autoCat[k] === cat ? ' <span class="faint small">sugerido</span>' : ''}</button>`
         : sug ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}" data-v="${sug}" title="Sugestão pelo nome. Clique para confirmar">${catTag(sug)} <span class="faint small">sugerido</span></button>`
         : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">Definir categoria</button>`}</span>
       <span class="small muted bm">${bankRowExtra(t)}</span></div>`;
@@ -609,6 +619,7 @@ ACTIONS['bank-cat'] = async (el) => {
   const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), updated_at: new Date().toISOString() });
   const { error } = cp === '—' ? await q.is('counterpart', null) : await q.eq('counterpart', cp);
   if (error) return toast('Erro: ' + error.message);
+  bankMarkCats([cp], cat, false);
   await bankLoadTxns();
   if (!cat.startsWith('Estorno') && !BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
   render();
@@ -745,6 +756,7 @@ ACTIONS['bank-bulk-cat'] = async () => {
   const { cat, biz } = pick;
   const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), updated_at: new Date().toISOString() }).in('id', ids);
   if (error) return toast('Erro: ' + error.message);
+  bankMarkCats(ids.map(id => ((BANK.every || []).find(x => x.id === id) || {}).counterpart || '—'), cat, false);
   await bankLoadTxns();
   if (!cat.startsWith('Estorno') && !BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
   BANK.sel = {};
