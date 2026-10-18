@@ -197,52 +197,110 @@ async function bankLoadTxns() {
       .eq('entity', entity).eq('review_status', BANK.mode[entity]).order('posted_on', { ascending: false }).limit(300);
     if (error) throw error;
     BANK.txns[entity] = data || [];
-    const { data: every } = await db.adapter.client.from('tempo_bank_txns').select('*')
-      .eq('entity', entity).order('posted_on', { ascending: false }).limit(2000);
-    BANK.all[entity] = every || [];
   }
+  // resumo: lançamento conta para PJ se marcado como PJ, senão para a conta de origem
+  const { data: every } = await db.adapter.client.from('tempo_bank_txns').select('*')
+    .order('posted_on', { ascending: false }).limit(3000);
+  for (const e of ['pf', 'pj']) BANK.all[e] = (every || []).filter(t => (t.biz_entity || t.entity) === e);
 }
 // Resumo geral: entradas, saídas e sobra (sem movimentos internos) e onde o dinheiro saiu.
 function bankSummaryHTML(entity) {
   const ym = BANK.month || ymd(new Date()).slice(0, 7);
   const key = entity + ':' + ym;
   const closed = db.setting('closedMonths', {})[key];
-  const all = (BANK.all[entity] || []).filter(t => t.scope === 'externa' && (t.posted_on || '').slice(0, 7) === ym);
-  const ent = all.filter(t => t.flow === 'in').reduce((s, t) => s + Number(t.amount), 0);
-  const sai = all.filter(t => t.flow === 'out').reduce((s, t) => s + Number(t.amount), 0);
+  const inMonth = (BANK.all[entity] || []).filter(t => t.scope === 'externa' && (t.posted_on || '').slice(0, 7) === ym);
+  const ent = inMonth.filter(t => t.flow === 'in').reduce((s, t) => s + Number(t.amount), 0);
+  const sai = inMonth.filter(t => t.flow === 'out').reduce((s, t) => s + Number(t.amount), 0);
+  const cartao = Math.abs((BANK.all[entity] || []).filter(t => t.scope === 'cartao' && (t.posted_on || '').slice(0, 7) === ym).reduce((s, t) => s + Number(t.amount), 0));
   const origin = entity === 'pf' ? (BANK.origin || 'all') : 'all';
   const originOf = (t) => (/d660$/.test(t.account_tail || '') ? 'cartao' : 'conta');
-  const byCp = {};
-  all.filter(t => t.flow === 'out' && (origin === 'all' || originOf(t) === origin)).forEach(t => {
-    const k = t.counterpart || '—';
-    const g = (byCp[k] ||= { v: 0, cat: null, expense: null });
-    g.v += Math.abs(Number(t.amount));
-    g.cat = g.cat || t.category || null;
-    g.expense = g.expense || t.expense_id || null;
-  });
-  const cartao = Math.abs((BANK.all[entity] || []).filter(t => t.scope === 'cartao' && (t.posted_on || '').slice(0, 7) === ym).reduce((s, t) => s + Number(t.amount), 0));
-  const top = Object.entries(byCp).sort((a, b) => b[1].v - a[1].v);
-  const max = Math.max(1, ...top.map(x => x[1].v));
+  const outs = inMonth.filter(t => t.flow === 'out' && (origin === 'all' || originOf(t) === origin))
+    .sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
+  // categoria vale para o nome inteiro (todas as contas)
+  const catBy = {};
+  (BANK.all.pf || []).concat(BANK.all.pj || []).forEach(x => { if (x.category) catBy[x.counterpart || '—'] = x.category; });
   const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">
     ${closed ? `<span class="tag tg" style="background:var(--surface-2)">Mês fechado em ${fmtDate(closed.closed_at)}</span><button class="btn sm ghost" data-act="bank-reopen" data-entity="${entity}" data-ym="${ym}">Reabrir</button>` : `<button class="btn sm" data-act="bank-close" data-entity="${entity}" data-ym="${ym}">Fechar mês</button>`}</div>`;
+  const rowsHTML = outs.map(t => {
+    const k = t.counterpart || '—';
+    const cat = catBy[k] || null;
+    const sug = cat ? null : suggestCat(k, t.counterpart_doc);
+    if (t.counterpart_doc) bankCnpjLookup(t.counterpart_doc);
+    const info = t.counterpart_doc && cnpjCache()[String(t.counterpart_doc).replace(/\D/g, '')];
+    const ex = t.expense_id ? db.get('tempo_expenses', t.expense_id) : null;
+    const eff = t.biz_entity || t.entity;
+    return `<div class="bank-row">
+      <span class="mono small">${fmtDateShort(t.posted_on)}</span>
+      <span class="bn" title="${esc(info?.nome || k)}">${esc(k)}</span>
+      <span class="mono small">${fmtMoney(Math.abs(Number(t.amount)))}</span>
+      <span><button class="btn sm ghost" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${eff.toUpperCase()}</button></span>
+      <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">${tag(cat, 'gray')}</button>`
+        : sug ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-v="${sug}" title="Sugestão pelo nome. Clique para confirmar">${tag(sug, 'gray')} <span class="faint small">sugerido</span></button>`
+        : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">Definir categoria</button>`}</span>
+      <span class="small muted bm">${ex ? '→ ' + esc(ex.name) : ''}</span></div>`;
+  }).join('');
   return `${bar}<div class="kpis">
     <div class="kpi"><span class="k">Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas</span></div>
     <div class="kpi"><span class="k">Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">externas</span></div>
     <div class="kpi"><span class="k">Sobra</span><span class="v">${fmtMoney0(ent + sai)}</span><span class="s">entradas − saídas</span></div>
     ${cartao ? `<div class="kpi"><span class="k">Fatura do cartão</span><span class="v">${fmtMoney0(cartao)}</span><span class="s">paga · conta uma vez, pelos itens</span></div>` : ''}
   </div>
-  <div class="panel"><div class="panel-h"><h3>Para onde foi o dinheiro</h3></div><div class="panel-b">${entity === 'pf' ? `<div class="seg" style="margin-bottom:10px">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${top.length ? `<div class="bank-rows" style="max-height:520px;overflow:auto">${top.map(([k, g]) => {
-      const ex = g.expense ? db.get('tempo_expenses', g.expense) : null;
-      return `<div class="bank-row"><span class="bn" title="${esc(k)}">${esc(k)}</span><span class="mono small">${fmtMoney0(g.v)}</span>
-        <span>${g.cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${entity}" data-cp="${esc(k)}">${tag(g.cat, 'gray')}</button>` : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${entity}" data-cp="${esc(k)}">Definir categoria</button>`}</span>
-        <span class="small muted bm">${ex ? '→ ' + esc(ex.name) : ''}</span>
-        <span class="bar-track"><span class="bar-fill fill" style="display:block;width:${g.v / max * 100}%"></span></span></div>`; }).join('')}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'}</div></div>`;
+  <div class="panel"><div class="panel-h"><h3>Saídas do mês</h3><span class="small muted">${outs.length} lançamento(s)</span></div><div class="panel-b">${entity === 'pf' ? `<div class="seg" style="margin-bottom:10px">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${outs.length ? `<div class="bank-rows bank-head"><span>Data</span><span>Descrição</span><span>Valor</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div><div class="bank-rows" style="max-height:60vh;overflow:auto">${rowsHTML}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'}</div></div>`;
 }
 CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
 ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };
 // Categorias de gasto: as padrão mais as que o Tulio criar.
 const BANK_CATS = ['Alimentação', 'Casa', 'Transporte', 'Saúde', 'Lazer', 'Compras', 'Assinaturas', 'Impostos', 'Outros'];
 const bankCats = () => [...new Set([...BANK_CATS, ...db.setting('bankCats', [])])];
+// Sugestão automática pelo nome do estabelecimento. Só sugere; quem confirma é você.
+const CAT_RULES = [
+  [/amazon|shopee|mercadolivre|mercado livre|magalu|magazine|shein|aliexpress|americanas|renner|c&a|zara|riachuelo/i, 'Compras'],
+  [/mercad|supermerc|atacad|varej|hortifr|padaria|a[cç]ougue|sacol[aã]o|assa[ií]|carrefour|p[ãa]o de a[cç]|feira|multifood|ampm|am\/pm|conveni|biscuit|bisc/i, 'Alimentação'],
+  [/ifd|ifood|rappi|uber ?eats|delivery|restaur|lanche|pizza|hamburg|sushi|cafe|caf[eé]|sorvet|doceria|bistr|churr/i, 'Alimentação'],
+  [/\bbar\b|boteco|cervej|chopp|cinema|ingresso|teatro|show|sympla|steam|playstation|xbox|livraria/i, 'Lazer'],
+  [/posto|gasolin|combust|ipiranga|shell|petrobras|estacion|uber(?! ?eats)|99app|99 |cabify|pedagio|ped[aá]gio|estacionamento/i, 'Transporte'],
+  [/farm[aá]c|drogaria|drogasil|droga|raia|pacheco|laborat|consult[oó]rio|cl[ií]nica|hospital|academ|sua academia|smart fit|dentist/i, 'Saúde'],
+  [/netflix|spotify|apple|dropbox|google|youtube|adobe|icloud|prime|hbo|disney|notion|chatgpt|openai|anthropic|claude|cinema 4d|linkedin/i, 'Assinaturas'],
+  [/celpe|enel|energia|[aá]gua|compesa|sabesp|claro|vivo|tim |oi |internet|gás|gas /i, 'Casa'],
+];
+// Atividade principal (CNAE) da empresa -> categoria.
+function cnaeCat(c) {
+  const p = String(c || '');
+  if (/^4711|^4721|^5611|^5612|^5620/.test(p)) return 'Alimentação';
+  if (/^5630|^9001|^9329/.test(p)) return 'Lazer';
+  if (/^4731/.test(p)) return 'Transporte';
+  if (/^4771/.test(p)) return 'Saúde';
+  if (/^49|^50|^51|^52/.test(p)) return 'Transporte';
+  if (/^35|^61/.test(p)) return 'Casa';
+  if (/^62|^63/.test(p)) return 'Assinaturas';
+  if (/^86/.test(p)) return 'Saúde';
+  if (/^47/.test(p)) return 'Compras';
+  return null;
+}
+const cnpjCache = () => db.setting('cnpjCache', {});
+const cnpjPending = new Set();
+// Consulta o CNPJ na BrasilAPI (uma vez por CNPJ; guarda no banco de configurações).
+async function bankCnpjLookup(doc) {
+  const digits = String(doc || '').replace(/\D/g, '');
+  if (digits.length !== 14 || cnpjCache()[digits] || cnpjPending.has(digits)) return;
+  cnpjPending.add(digits);
+  try {
+    const r = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + digits);
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    db.setSetting('cnpjCache', { ...cnpjCache(), [digits]: { nome: j.nome_fantasia || j.razao_social || '', cnae: j.cnae_fiscal ? String(j.cnae_fiscal) : '' } });
+    render();
+  } catch (e) { /* sem internet ou CNPJ inválido: segue com as regras por nome */ }
+  finally { cnpjPending.delete(digits); }
+}
+// Sugestão: primeiro pela atividade da empresa (CNPJ), depois pelo nome.
+function suggestCat(name, doc) {
+  const digits = String(doc || '').replace(/\D/g, '');
+  const c = digits && cnpjCache()[digits];
+  if (c && c.cnae) { const v = cnaeCat(c.cnae); if (v) return v; }
+  const hit = CAT_RULES.find(([re]) => re.test(name || ''));
+  return hit ? hit[1] : null;
+}
 function bankCatDialog(cp) {
   return new Promise(res => {
     let done = false;
@@ -263,12 +321,12 @@ function bankCatDialog(cp) {
 }
 ACTIONS['bank-cat'] = async (el) => {
   const entity = el.dataset.entity, cp = el.dataset.cp;
-  const cat = await bankCatDialog(cp);
+  const cat = el.dataset.v || await bankCatDialog(cp);
   if (!cat) return;
-  const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, updated_at: new Date().toISOString() }).eq('entity', entity);
+  const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, updated_at: new Date().toISOString() });
   const { error } = cp === '—' ? await q.is('counterpart', null) : await q.eq('counterpart', cp);
   if (error) return toast('Erro: ' + error.message);
-  (BANK.all[entity] || []).forEach(t => { if ((t.counterpart || '—') === cp) t.category = cat; });
+  await bankLoadTxns();
   if (!BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
   render();
 };
@@ -320,12 +378,67 @@ function bankPanel(entity) {
     : `<div class="panel-b small muted" style="padding:8px 16px">Conecte o Gmail que recebe os extratos da Nubank. Nada entra no Financeiro sem você revisar.</div>`;
   const rows = BANK.txns[entity] || [];
   const body = rows.length
-    ? `<table class="grid compact fin"><tbody>${rows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.counterpart || t.memo)}</td><td class="num">${fmtMoney(t.amount)}</td><td>${t.scope === 'interna' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Interna</span>' : t.scope === 'cartao' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Cartão</span>' : '<span class="tag tg">Externa</span>'}</td></tr>`).join('')}</tbody></table>`
+    ? `<table class="grid compact fin"><tbody>${rows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.counterpart || t.memo)}</td><td class="num">${fmtMoney(t.amount)}</td><td>${t.scope === 'interna' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Interna</span>' : t.scope === 'cartao' ? '<span class="tag tg" style="background:var(--surface-2);color:var(--fg-3)">Cartão</span>' : '<span class="tag tg">Externa</span>'}</td><td>${bankRowExtra(t)}</td></tr>`).join('')}</tbody></table>`
     : `<div class="empty small">${reviewedNow ? 'Nenhuma movimentação revisada.' : 'Nenhuma movimentação nova.'}</div>`;
   const reviewed = BANK.mode[entity] === 'revisado';
   const foot = `<div class="panel-b" style="padding:8px 16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn sm ghost" data-act="bank-mode" data-entity="${entity}">${reviewed ? 'Ver novas' : 'Ver revisadas'}</button>${rows.length && !reviewed ? `<button class="btn sm" data-act="bank-review-all" data-entity="${entity}">Marcar como revisadas</button>` : ''}</div>`;
   return `<div class="panel">${head}${sub}<div class="panel-b tight" style="max-height:320px;overflow:auto">${body}</div>${foot}</div>`;
 }
+// Vínculos sugeridos: custo fixo (nome parecido + valor dentro da tolerância) e reembolso SulAmérica (lote com o mesmo valor).
+function bankFixedMatch(t) {
+  if (t.expense_id || t.flow !== 'out' || !t.counterpart) return null;
+  const amt = Math.abs(Number(t.amount)), cp = t.counterpart.toLowerCase();
+  const linked = new Set((BANK.all[t.entity] || []).map(x => x.expense_id).filter(Boolean));
+  const ym = (t.posted_on || '').slice(0, 7);
+  const word = cp.split(/\s+/)[0];
+  return db.all('tempo_expenses').find(e => {
+    if (e.kind !== 'out' || e.month !== ym || linked.has(e.id) || !e.name || e.amount == null) return false;
+    const nm = e.name.toLowerCase();
+    const nameOk = word.length >= 4 && nm.includes(word);
+    return nameOk && Math.abs(Number(e.amount) - amt) <= Math.max(5, Number(e.amount) * 0.03);
+  }) || null;
+}
+function bankReimbMatch(t) {
+  if (t.flow !== 'in' || !/sulam/i.test(t.counterpart || '') || t.reimb_linked) return null;
+  const amt = Number(t.amount);
+  const pend = db.all('tempo_reimb_rows').filter(r => !r.refunded_on && Number(r.amount) > 0 && db.get('tempo_status_options', r.req_id)?.name !== 'Não se aplica');
+  const byMonth = {};
+  pend.forEach(r => { byMonth[r.month] = (byMonth[r.month] || 0) + Number(r.amount); });
+  const m = Object.keys(byMonth).find(k => Math.abs(byMonth[k] - amt) <= 1);
+  return m ? { month: m, total: byMonth[m] } : null;
+}
+function bankRowExtra(t) {
+  if (t.expense_id) { const e = db.get('tempo_expenses', t.expense_id); return e ? `<span class="small muted">→ ${esc(e.name)}</span>` : ''; }
+  const e = bankFixedMatch(t);
+  if (e) return `<button class="btn sm" data-act="bank-link" data-id="${t.id}" data-eid="${e.id}">Vincular a ${esc(e.name)}</button>`;
+  const r = bankReimbMatch(t);
+  if (r) return `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>`;
+  return '';
+}
+ACTIONS['bank-link'] = async (el) => {
+  const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id);
+  const e = db.get('tempo_expenses', el.dataset.eid); if (!t || !e) return;
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ expense_id: e.id, updated_at: new Date().toISOString() }).eq('id', t.id);
+  if (error) return toast('Erro: ' + error.message);
+  // o documento (extrato) vence: valor e data pagos vêm do banco
+  db.update('tempo_expenses', e.id, { amount: Math.abs(Number(t.amount)), status: 'Pago', paid_on: t.posted_on });
+  t.expense_id = e.id; toast('Vinculado a ' + e.name); render();
+};
+ACTIONS['bank-reimb'] = (el) => {
+  const t = (BANK.all.pj || []).concat(BANK.all.pf || []).find(x => x.id === el.dataset.id); if (!t) return;
+  const m = el.dataset.month;
+  db.all('tempo_reimb_rows').filter(r => r.month === m && !r.refunded_on && Number(r.amount) > 0)
+    .forEach(r => db.update('tempo_reimb_rows', r.id, { refunded_on: t.posted_on }, true));
+  db.emit(); t.reimb_linked = true; toast('Lote ' + m + ' marcado como reembolsado em ' + fmtDate(t.posted_on)); render();
+};
+ACTIONS['bank-biz'] = async (el) => {
+  const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;
+  const cur = t.biz_entity || t.entity;
+  const next = cur === 'pf' ? 'pj' : 'pf';
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ biz_entity: next === t.entity ? null : next, updated_at: new Date().toISOString() }).eq('id', t.id);
+  if (error) return toast('Erro: ' + error.message);
+  await bankLoadTxns(); render();
+};
 ACTIONS['bank-connect'] = async () => {
   try { const r = await bankApi('start'); location.href = r.url; }
   catch (e) { toast('Não consegui conectar: ' + e.message); }
@@ -363,9 +476,8 @@ function pfInvestHTML() {
 VIEWS.financepf = () => {
   bankRefresh();
   const tab = BANK.pfTab || 'geral';
-  if (tab === 'conta') BANK.origin = 'conta'; else if (tab === 'cartao') BANK.origin = 'cartao'; else if (BANK.origin !== undefined && tab === 'geral') BANK.origin = 'all';
   const body = tab === 'invest' ? pfInvestHTML() : `${bankSummaryHTML('pf')}${bankPanel('pf')}`;
   const tabs = `<div class="seg" style="margin-bottom:12px">${PF_TABS.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" data-act="pf-tab" data-v="${k}">${l}</button>`).join('')}</div>`;
   return { title: 'Financeiro PF', actions: '', html: tabs + body };
 };
-ACTIONS['pf-tab'] = (el) => { BANK.pfTab = el.dataset.v; render(); };
+ACTIONS['pf-tab'] = (el) => { const v = el.dataset.v; BANK.pfTab = v; BANK.origin = v === 'conta' ? 'conta' : v === 'cartao' ? 'cartao' : 'all'; render(); };

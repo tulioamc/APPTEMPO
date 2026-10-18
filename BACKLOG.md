@@ -389,3 +389,10 @@ Adendo ao item de reembolsos acima. Tudo que o app lê ou sugere vai para a fila
 - Bloqueado por você: SYNC_SECRET (Vercel e GitHub) e ativação do workflow; PDF de exemplo da fatura; decisão sobre travar o mês fechado; confirmação das transferências PJ→"Tulio de Azevedo Melo Couceiro" e "BRENDA"; confirmação do cliente REBU; chave do Supabase.
 - Bloqueado pelo extrato: o OFX só diz "Resgate RDB", sem a caixinha. Para separar Giro, Reserva, Especial e Freelas, preciso que você informe de qual caixinha é cada movimento ou outra fonte de dados.
 - Não iniciado: conciliação automática de fixos, sugestão de reembolso SulAmérica, recorrência do Dentista, integração de e-mail (E1–E7).
+
+### V2.01.56 (2026-10-18)
+- Feito: sugestão de vínculo de custo fixo (nome parecido, mês igual, valor dentro de R$ 5 ou 3%); ao vincular, o valor e a data do extrato passam para o custo fixo e ele vai para Pago. Sugestão de lote SulAmérica (crédito igual à soma de um mês pendente); ao confirmar, marca "Reembolsado em" com a data do crédito.
+- Dentista: a recorrência mensal já existe (o mês novo copia o anterior); confirmar no próximo mês.
+- Não iniciado, com decisões pendentes: integração de e-mail E1–E7 (qual endereço ou etiqueta ler, e se orçamento sugerido pode criar rascunho sem aprovação).
+- V2.01.56 (ajuste): "Saídas do mês" mostra cada lançamento com data, descrição, valor, conta (PF/PJ, clicável para trocar), categoria e onde foi, com rolagem. Lançamento marcado como PJ entra no resumo do PJ mesmo estando no cartão PF (ex.: Dropbox). A barra cinza foi removida.
+- Categorias por sugestão: regras por palavra-chave no nome (mercado/atacadão → Alimentação; bar → Lazer; restaurante/iFood → Alimentação; posto → Transporte; farmácia → Saúde; Amazon/Shopee → Compras; assinaturas → Assinaturas; energia/água/telefone → Casa). A sugestão aparece como "sugerido" e só vira categoria quando você confirma; a confirmação vale para o nome inteiro. Ajustar as regras conforme os nomes reais aparecerem.
