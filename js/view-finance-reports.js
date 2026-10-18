@@ -271,9 +271,9 @@ function bankSummaryHTML(entity) {
       <span class="bn" title="${esc(info?.nome || k)}">${esc(k)}</span>
       <span class="mono small">${fmtMoney(Math.abs(Number(t.amount)))}</span>
       <span class="small muted">${bankMethod(t)}</span>
-      <span><button class="btn sm ghost" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${dotHTML(eff === 'pj' ? PJ_C : PF_C)}${eff.toUpperCase()}</button></span>
-      <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">${dotHTML(palColor(cat))}${tag(cat, 'gray')}</button>`
-        : sug ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-v="${sug}" title="Sugestão pelo nome. Clique para confirmar">${dotHTML(palColor(sug))}${tag(sug, 'gray')} <span class="faint small">sugerido</span></button>`
+      <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
+      <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">${catTag(cat)}</button>`
+        : sug ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-v="${sug}" title="Sugestão pelo nome. Clique para confirmar">${catTag(sug)} <span class="faint small">sugerido</span></button>`
         : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">Definir categoria</button>`}</span>
       <span class="small muted bm">${bankRowExtra(t)}</span></div>`;
   };
@@ -290,15 +290,19 @@ function bankSummaryHTML(entity) {
   }).join('');
   const sum = (arr, fn) => arr.reduce((acc, x) => { const k = fn(x); acc[k] = (acc[k] || 0) + Math.abs(Number(x.amount)); return acc; }, {});
   const monthOuts = outMonth.filter(passes);
-  const byCat = Object.entries(sum(monthOuts, t => catBy[t.counterpart || '—'] || 'Sem categoria')).sort((a, b) => b[1] - a[1]);
+  // Terapia reembolsável fica separada e sempre no fim da lista, mesmo sendo o maior valor
+  const catKey = (t) => (isTher(t) ? THER_LABEL : (catBy[t.counterpart || '—'] || 'Sem categoria'));
+  const catSums = sum(monthOuts, catKey);
+  const byCat = Object.entries(catSums).filter(([k]) => k !== THER_LABEL).sort((a, b) => b[1] - a[1]);
+  if (catSums[THER_LABEL]) byCat.push([THER_LABEL, catSums[THER_LABEL]]);
   const byMeth = Object.entries(sum(monthOuts, bankMethod)).sort((a, b) => b[1] - a[1]);
   const byCp = Object.entries(sum(monthOuts, t => t.counterpart || '—')).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const bars = (arr) => { const mx = Math.max(1, ...arr.map(x => x[1])); return arr.length ? `<div class="bars">${arr.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(k)}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / mx * 100}%"></div></div><span class="mono small">${fmtMoney0(v)}</span></div>`).join('')}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'; };
-  const report = `<div class="panel bank-report"><div class="panel-h"><h3>Relatório de ${rbLabel(ym)}</h3></div><div class="panel-b stack">
-    <div><span class="lbl">Por categoria</span>${donutHTML(byCat)}</div>
-    <div><span class="lbl">Por meio</span>${donutHTML(byMeth)}</div>
-    <div><span class="lbl">Onde foi (top 10)</span>${bars(byCp)}</div>
-  </div></div>`;
+  const byAcc = Object.entries(sum(monthOuts, t => (t.biz_entity || t.entity).toUpperCase())).sort((a, b) => b[1] - a[1]);
+  const views = { cat: ['Categoria', () => donutHTML(byCat, 'Por categoria', (k) => exColor(exKeyOf(k)))], meio: ['Meio', () => donutHTML(byMeth, 'Por meio')], conta: ['PF / PJ', () => donutHTML(byAcc, 'PF e PJ', (k) => exColor(k === 'PJ' ? 'EMPRESA' : 'PESSOAL'))], onde: ['Onde foi', () => bars(byCp)] };
+  const cur = views[BANK.rep] ? BANK.rep : 'cat';
+  const tabs = `<div class="seg" style="margin-bottom:12px;flex-wrap:wrap">${Object.entries(views).map(([k, [l]]) => `<button class="${cur === k ? 'on' : ''}" data-act="bank-rep" data-v="${k}">${l}</button>`).join('')}</div>`;
+  const report = `<div class="panel bank-report"><div class="panel-h"><h3>Relatório de ${rbLabel(ym)}</h3></div><div class="panel-b">${tabs}${views[cur][1]()}</div></div>`;
   const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
   const GREEN = '#22a06b', RED = '#d64545';
   const fOn = bankFilterOn() || BANK.fOpen;
@@ -319,9 +323,15 @@ function bankSummaryHTML(entity) {
 }
 CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
 ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };
+ACTIONS['bank-rep'] = (el) => { BANK.rep = el.dataset.v; render(); };
 ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.dataset.k; const [ent, m] = k.split(':'); const cur = BANK.openM[k] ?? (m === (BANK.month || ymd(new Date()).slice(0, 7)) && ent); BANK.openM[k] = !cur; render(); };
 // Categorias de gasto: as padrão mais as que o Tulio criar.
-const BANK_CATS = ['Alimentação', 'Casa', 'Transporte', 'Saúde', 'Lazer', 'Compras', 'Assinaturas', 'Impostos', 'Burocracia', 'Outros'];
+// Mesmas categorias e cores da tela de Despesas (PF/PJ), mais as de extrato.
+const BANK_CATS = [...Object.values(EX_CATS).flat(), 'Alimentação', 'Transporte', 'Lazer', 'Viagem', 'Compras', 'Roupas', 'Burocracia', 'Terapia', 'Outros'];
+const exKeyOf = (name) => { for (const [g, subs] of Object.entries(EX_CATS)) if (subs.includes(name)) return `${g}/${name}`; return `PESSOAL/${name}`; };
+const catTag = (name) => (name ? `<span class="tag tg" style="${cssTb(exColor(exKeyOf(name)))}">${esc(name)}</span>` : '');
+const accTag = (acc) => `<span class="tag tg abbr" style="${cssTb(exColor(acc === 'pj' ? 'EMPRESA' : 'PESSOAL'))}">${acc === 'pj' ? 'PJ' : 'PF'}</span>`;
+const THER_LABEL = 'Terapia reembolsável';
 // Categorias que costumam ser da empresa (PJ) por padrão.
 const PJ_CATS = ['Burocracia', 'Impostos'];
 const bankCats = () => [...new Set([...BANK_CATS, ...db.setting('bankCats', [])])];
@@ -374,14 +384,22 @@ const GREEN = '#22a06b', RED = '#d64545', PF_C = '#2E43D6', PJ_C = '#b45309';
 const CHART_PAL = ['#2E43D6', '#22a06b', '#d64545', '#b45309', '#7c3aed', '#0ea5a4', '#db2777', '#64748b', '#84cc16', '#f59e0b'];
 const palColor = (name) => { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return CHART_PAL[h % CHART_PAL.length]; };
 const dotHTML = (c, title = '') => `<span title="${esc(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle;flex:none"></span>`;
-// Rosca (donut) com legenda, em SVG simples
-function donutHTML(arr) {
+// Rosca centralizada com chips claros na legenda (mesmas cores das categorias)
+const chipHTML = (c, label, val, pct, hex) => `<span class="tag tg" style="${cssTb(hex)}">${esc(label)} <span class="mono">${fmtMoney0(val)}</span>${pct !== undefined ? ` <span style="opacity:.7">${pct}%</span>` : ''}</span>`;
+function donutHTML(arr, centerLabel = 'Total', colorFn = (k) => palColor(k)) {
+  arr = arr.map(([k, v]) => [k, v]);
   const tot = arr.reduce((a, x) => a + x[1], 0);
   if (!tot) return '<div class="empty small">Sem saídas neste mês.</div>';
-  const R = 42, C = 2 * Math.PI * R; let acc = 0;
-  const segs = arr.map(([k, v]) => { const f = v / tot; const seg = `<circle r="${R}" cx="60" cy="60" fill="none" stroke="${palColor(k)}" stroke-width="18" stroke-dasharray="${f * C} ${C}" stroke-dashoffset="${-acc * C}" transform="rotate(-90 60 60)"></circle>`; acc += f; return seg; }).join('');
-  const legend = arr.map(([k, v]) => `<div class="small" style="display:flex;justify-content:space-between;align-items:center;gap:8px">${dotHTML(palColor(k))}<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(k)}</span><span class="mono">${fmtMoney0(v)}</span><span class="faint">${Math.round(v / tot * 100)}%</span></div>`).join('');
-  return `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><svg viewBox="0 0 120 120" width="140" height="140" role="img" aria-label="Gastos por categoria">${segs}<text x="60" y="64" text-anchor="middle" font-size="11" fill="currentColor">${fmtMoney0(tot)}</text></svg><div style="flex:1;min-width:180px;display:grid;gap:4px">${legend}</div></div>`;
+  const R = 70, C = 2 * Math.PI * R; let acc = 0; const gap = arr.length > 1 ? 2 : 0;
+  const colorOf = (k) => (k === THER_LABEL ? '#94a3b8' : colorFn(k));
+  const segs = arr.map(([k, v]) => { const f = v / tot; const len = Math.max(0, f * C - gap); const seg = `<circle r="${R}" cx="110" cy="110" fill="none" stroke="${colorOf(k)}" stroke-width="26" stroke-dasharray="${len} ${C}" stroke-dashoffset="${-acc * C}" transform="rotate(-90 110 110)"><title>${esc(k)}: ${fmtMoney0(v)} (${Math.round(f * 100)}%)</title></circle>`; acc += f; return seg; }).join('');
+  const chips = arr.map(([k, v]) => chipHTML(colorOf(k), k, v, Math.round(v / tot * 100), colorOf(k))).join('');
+  return `<div style="display:grid;justify-items:center;gap:14px">
+    <svg viewBox="0 0 220 220" width="220" height="220" role="img" aria-label="${esc(centerLabel)}">${segs}
+      <text x="110" y="104" text-anchor="middle" font-size="12" fill="var(--fg-3)">${esc(centerLabel)}</text>
+      <text x="110" y="126" text-anchor="middle" font-size="17" font-weight="600" fill="currentColor">${fmtMoney0(tot)}</text></svg>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center">${chips}</div>
+  </div>`;
 }
 function bankMethod(t) {
   if (/d660$/.test(t.account_tail || '')) return 'Crédito';
@@ -557,7 +575,7 @@ ACTIONS['bank-tlink'] = async (el) => {
 };
 async function linkBankTxn(t, kind, id) {
   const patch = { updated_at: new Date().toISOString() };
-  if (kind === 'reimb') { patch.reimb_row_id = id; patch.category = patch.category || 'Saúde'; }
+  if (kind === 'reimb') { patch.reimb_row_id = id; patch.category = 'Terapia'; }
   else { patch.expense_id = id; db.update('tempo_expenses', id, { amount: Math.abs(Number(t.amount)), status: 'Pago', paid_on: t.posted_on }); }
   const { error } = await db.adapter.client.from('tempo_bank_txns').update(patch).eq('id', t.id);
   if (error) return toast('Erro: ' + error.message);
