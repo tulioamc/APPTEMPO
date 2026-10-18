@@ -223,6 +223,7 @@ setInterval(() => ensureMonthSheets(), 3600000);
 
 /* ---------- aparência ---------- */
 function applyAppearance() {
+  if (typeof applyExCats === 'function') applyExCats();
   const root = document.documentElement;
   const theme = db.setting('theme', 'system');
   if (theme === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', theme);

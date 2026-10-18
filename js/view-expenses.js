@@ -8,7 +8,7 @@
    ===================================================================== */
 
 const EX_CATS = {
-  PESSOAL: ['Moradia', 'Contas da casa', 'Casa e serviços', 'Saúde', 'Educação', 'Cartão e dívidas', 'Renda', 'Filho'],
+  PESSOAL: ['Moradia', 'Contas da casa', 'Casa e serviços', 'Saúde', 'Educação', 'Cartão e dívidas', 'Renda', 'Filho', 'Alimentação', 'Transporte', 'Lazer', 'Viagem', 'Compras', 'Roupas', 'Assinaturas', 'Outros'],
   EMPRESA: ['Impostos', 'Contabilidade', 'Assinaturas e programas', 'Freelas']
 };
 const EX_STATUS = { out: ['Não pago', 'Pago', 'Não teve'], in: ['Não recebido', 'Recebido', 'Não teve'] };
@@ -153,7 +153,12 @@ const EX_COLS = {
 const EX_IN_CATS = ['PESSOAL/Renda', 'EMPRESA/Freelas'];
 const EX_GROUP_LABEL = { PESSOAL: 'PF', EMPRESA: 'PJ' };
 const EX_GROUP_DEF = { PESSOAL: '#D6C1F2', EMPRESA: '#F4DE8C' };
-const exDefColor = (key) => EX_GROUP_DEF[key] || (EX_IN_CATS.includes(key) ? '#AFCBF3' : '#F7C6A0');
+const exDefColor = (key) => {
+  if (EX_GROUP_DEF[key]) return EX_GROUP_DEF[key];
+  if (EX_IN_CATS.includes(key)) return '#AFCBF3';
+  const i = Object.entries(EX_CATS).flatMap(([g, subs]) => subs.map(sub => `${g}/${sub}`)).indexOf(key);
+  return i >= 0 ? CAT_COLORS[i % CAT_COLORS.length] : '#E2E8F0';   // cor clara e diferente por tipo
+};
 const exColor = (key) => (db.setting('ex_colors', {}) || {})[key] || exDefColor(key);
 const exCatTags = (cat) => { const [g, sub] = cat.split('/');
   return `<span class="ctag"><span class="tag tg abbr" style="${cssTb(exColor(g))}" data-act="ex-color" data-key="${esc(g)}" title="Mudar cor">${esc(EX_GROUP_LABEL[g] || g)}</span><span class="tag tg" style="${cssTb(exColor(cat))}" data-act="ex-color" data-key="${esc(cat)}" title="Mudar cor">${esc(sub || cat)}</span></span>`; };

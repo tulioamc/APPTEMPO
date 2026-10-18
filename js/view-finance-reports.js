@@ -228,14 +228,17 @@ function bankSummaryHTML(entity) {
   const ym = BANK.month || ymd(new Date()).slice(0, 7);
   const key = entity + ':' + ym;
   const closed = db.setting('closedMonths', {})[key];
-  const inMonth = (BANK.all[entity] || []).filter(t => t.scope === 'externa' && (t.posted_on || '').slice(0, 7) === ym);
+  const inBase = entity === 'pf' ? (BANK.every || []) : (BANK.all[entity] || []);   // PF financeiro = PF + PJ como uma conta só
+  const inMonth = inBase.filter(t => t.scope === 'externa' && (t.posted_on || '').slice(0, 7) === ym);
   // Saídas: PF mostra tudo (contas PF e PJ); PJ mostra só o que é PJ
   const poolOut = (entity === 'pf' ? (BANK.every || []) : (BANK.all.pj || [])).filter(t => t.scope === 'externa' && t.flow === 'out');
   const isTher = (t) => t.flow === 'out' && !!t.reimb_row_id;
   const isReimb = (t) => t.flow === 'in' && t.category === 'Reembolso';
-  const ent = inMonth.filter(t => t.flow === 'in' && !isReimb(t)).reduce((s, t) => s + Number(t.amount), 0);
+  const isExt = (t) => t.flow === 'in' && /^Estorno/.test(t.category || '');
+  const extSum = inBase.filter(t => isExt(t) && (t.posted_on || '').slice(0, 7) === ym).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const ent = inMonth.filter(t => t.flow === 'in' && !isReimb(t) && !isExt(t)).reduce((s, t) => s + Number(t.amount), 0);
   const outMonth = poolOut.filter(t => (t.posted_on || '').slice(0, 7) === ym);
-  const sai = outMonth.filter(t => !isTher(t)).reduce((s, t) => s + Number(t.amount), 0);
+  const sai = outMonth.filter(t => !isTher(t)).reduce((s, t) => s + Number(t.amount), 0) + extSum;
   const reimbIn = inMonth.filter(isReimb).reduce((s, t) => s + Number(t.amount), 0);
   const ther = Math.abs(outMonth.filter(isTher).reduce((s, t) => s + Number(t.amount), 0));
   const cartao = Math.abs((BANK.all[entity] || []).filter(t => t.scope === 'cartao' && (t.posted_on || '').slice(0, 7) === ym).reduce((s, t) => s + Number(t.amount), 0));
@@ -272,7 +275,7 @@ function bankSummaryHTML(entity) {
     return `<div class="bank-row">
       <span class="mono small">${fmtDateShort(t.posted_on)}</span>
       <span class="bn" title="${esc(info?.nome || k)}">${esc(k)}</span>
-      <span class="mono small">${dotHTML(t.flow === 'in' ? '#22a06b' : '#d64545', t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
+      <span class="mono small">${dotHTML(t.scope === 'interna' ? '#2563eb' : t.flow === 'in' ? '#22a06b' : '#d64545', t.scope === 'interna' ? 'Interna' : t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
       <span class="small muted">${bankMethod(t)}</span>
       <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
       <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}">${catTag(cat)}</button>`
@@ -304,7 +307,9 @@ function bankSummaryHTML(entity) {
   // Terapia reembolsável fica separada e sempre no fim da lista, mesmo sendo o maior valor
   const catKey = (t) => (isTher(t) ? THER_LABEL : (catBy[t.counterpart || '—'] || 'Sem categoria'));
   const catSums = sum(monthOuts, catKey);
-  const byCat = Object.entries(catSums).filter(([k]) => k !== THER_LABEL).sort((a, b) => b[1] - a[1]);
+  // Estorno "Estorno→Categoria" abate essa categoria
+  (BANK.all[entity] || []).filter(t => t.flow === 'in' && /^Estorno→/.test(t.category || '') && (t.posted_on || '').slice(0, 7) === ym).forEach(t => { const tg = t.category.split('→')[1]; catSums[tg] = (catSums[tg] || 0) - Math.abs(Number(t.amount)); });
+  const byCat = Object.entries(catSums).filter(([k, v]) => k !== THER_LABEL && v > 0).sort((a, b) => b[1] - a[1]);
   if (catSums[THER_LABEL]) byCat.push([THER_LABEL, catSums[THER_LABEL]]);
   const byMeth = Object.entries(sum(monthOuts, bankMethod)).sort((a, b) => b[1] - a[1]);
   const byCp = Object.entries(sum(monthOuts, t => t.counterpart || '—')).sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -340,7 +345,7 @@ ACTIONS['bank-rep'] = (el) => { BANK.rep = el.dataset.v; render(); };
 ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.dataset.k; const [ent, m] = k.split(':'); const cur = BANK.openM[k] ?? (m === (BANK.month || ymd(new Date()).slice(0, 7)) && ent); BANK.openM[k] = !cur; render(); };
 // Categorias de gasto: as padrão mais as que o Tulio criar.
 // Mesmas categorias e cores da tela de Despesas (PF/PJ), mais as de extrato.
-const BANK_CATS = [...Object.values(EX_CATS).flat(), 'Assinaturas', 'Alimentação', 'Transporte', 'Lazer', 'Viagem', 'Compras', 'Roupas', 'Terapia', 'Outros'];
+let BANK_CATS = [...Object.values(EX_CATS).flat(), 'Terapia', 'Estorno'];   // mesmos tipos de Despesas, mais os especiais do extrato
 const exKeyOf = (name) => { for (const [g, subs] of Object.entries(EX_CATS)) if (subs.includes(name)) return `${g}/${name}`; return `PESSOAL/${name}`; };
 const catTag = (name) => (name ? `<span class="tag tg" style="${cssTb(exColor(exKeyOf(name)))}">${esc(name)}</span>` : '');
 const accTag = (acc) => `<span class="tag tg abbr" style="${cssTb(exColor(acc === 'pj' ? 'EMPRESA' : 'PESSOAL'))}">${acc === 'pj' ? 'PJ' : 'PF'}</span>`;
@@ -396,29 +401,34 @@ async function bankCnpjLookup(doc) {
 const METHODS = ['Crédito', 'Débito', 'Pix', 'Outro'];
 const GREEN = '#22a06b', RED = '#d64545', PF_C = '#2E43D6', PJ_C = '#b45309';
 const CHART_PAL = ['#2E43D6', '#22a06b', '#d64545', '#b45309', '#7c3aed', '#0ea5a4', '#db2777', '#64748b', '#84cc16', '#f59e0b'];
-const CAT_COLORS = ['#2E43D6', '#22a06b', '#d64545', '#b45309', '#7c3aed', '#0ea5a4', '#db2777', '#64748b', '#84cc16', '#f59e0b', '#0284c7', '#a16207', '#4f46e5', '#15803d', '#be123c', '#0f766e', '#9333ea', '#ca8a04', '#06b6d4', '#ea580c', '#475569', '#65a30d'];
-const chartCat = (k) => { const i = [...BANK_CATS, 'Sem categoria'].indexOf(k); return i >= 0 ? CAT_COLORS[i % CAT_COLORS.length] : palColor(k); };
+const CAT_COLORS = ['#B9C8F5', '#A8DCC4', '#F5B5B5', '#F2D39B', '#D2BEF5', '#A6E3E1', '#F7C2DA', '#C9D1DC', '#D7EFA6', '#F8E08E', '#B7D9F7', '#E8C79B', '#C7CBFA', '#B6E2C6', '#F1B3C0', '#A7E6DC', '#E3B8F5', '#F2D27A', '#A5EDEF', '#FBC7A4', '#C3CAD6', '#CFE7A0'];
+const chartCat = (k) => exColor(exKeyOf(k));   // mesma cor que o tipo tem em Despesas
 const palColor = (name) => { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return CHART_PAL[h % CHART_PAL.length]; };
 const dotHTML = (c, title = '') => `<span title="${esc(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle;flex:none"></span>`;
 // Rosca centralizada com chips claros na legenda (mesmas cores das categorias)
 const chipHTML = (c, label, val, pct, hex) => `<span class="tag tg" style="${cssTb(hex)}">${esc(label)} <span class="mono">${fmtMoney0(val)}</span>${pct !== undefined ? ` <span style="opacity:.7">${pct}%</span>` : ''}</span>`;
 function donutHTML(arr, centerLabel = 'Total', colorFn = (k) => palColor(k)) {
-  arr = arr.map(([k, v]) => [k, v]);
   const tot = arr.reduce((a, x) => a + x[1], 0);
   if (!tot) return '<div class="empty small">Sem saídas neste mês.</div>';
   const R = 70, C = 2 * Math.PI * R; let acc = 0; const gap = arr.length > 1 ? 2 : 0;
-  const colorOf = (k) => (k === THER_LABEL ? '#94a3b8' : colorFn(k));
-  const segs = arr.map(([k, v]) => { const f = v / tot; const len = Math.max(0, f * C - gap); const seg = `<circle data-seg="${esc(k)}" r="${R}" cx="110" cy="110" fill="none" stroke="${colorOf(k)}" stroke-width="26" stroke-dasharray="${len} ${C}" stroke-dashoffset="${-acc * C}" transform="rotate(-90 110 110)"><title>${esc(k)}: ${fmtMoney0(v)} (${Math.round(f * 100)}%)</title></circle>`; acc += f; return seg; }).join('');
-  const chips = arr.map(([k, v]) => `<span data-seg="${esc(k)}" style="display:inline-flex;transition:opacity .15s">${chipHTML(colorOf(k), k, v, Math.round(v / tot * 100), colorOf(k))}</span>`).join('');
-  return `<div data-donut style="display:grid;justify-items:center;gap:14px">
+  const colorOf = (k) => (k === THER_LABEL ? '#cbd5e1' : colorFn(k));
+  const segs = arr.map(([k, v]) => { const f = v / tot; const len = Math.max(0, f * C - gap); const seg = `<circle data-seg="${esc(k)}" r="${R}" cx="110" cy="110" fill="none" stroke="${colorOf(k)}" stroke-width="26" stroke-dasharray="${len} ${C}" stroke-dashoffset="${-acc * C}" transform="rotate(-90 110 110)" style="transition:opacity .15s"><title>${esc(k)}: ${fmtMoney0(v)} (${Math.round(f * 100)}%)</title></circle>`; acc += f; return seg; }).join('');
+  const legend = arr.map(([k, v]) => { const pct = Math.round(v / tot * 100); return `<div data-seg="${esc(k)}" data-val="${esc(fmtMoney0(v) + ' · ' + pct + '%')}" style="transition:opacity .15s">${chipHTML(colorOf(k), k, v, pct, colorOf(k))}</div>`; }).join('');
+  return `<div data-donut data-d1="${esc(centerLabel)}" data-d2="${esc(fmtMoney0(tot))}" style="display:flex;gap:28px;align-items:center;justify-content:center;flex-wrap:wrap">
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:300px">${legend}</div>
     <svg viewBox="0 0 220 220" width="220" height="220" role="img" aria-label="${esc(centerLabel)}">${segs}
-      <text x="110" y="104" text-anchor="middle" font-size="12" fill="var(--fg-3)">${esc(centerLabel)}</text>
-      <text x="110" y="126" text-anchor="middle" font-size="17" font-weight="600" fill="currentColor">${fmtMoney0(tot)}</text></svg>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center">${chips}</div>
+      <text class="dc1" x="110" y="104" text-anchor="middle" font-size="12" fill="var(--fg-3)">${esc(centerLabel)}</text>
+      <text class="dc2" x="110" y="126" text-anchor="middle" font-size="17" font-weight="600" fill="currentColor">${fmtMoney0(tot)}</text></svg>
   </div>`;
 }
 // Ao passar o mouse numa categoria (no gráfico ou na legenda), destaca só ela.
-const donutFocus = (box, key) => box.querySelectorAll('[data-seg]').forEach(x => { x.style.opacity = !key || x.dataset.seg === key ? '' : '0.25'; });
+const donutFocus = (box, key) => {
+  box.querySelectorAll('[data-seg]').forEach(x => { x.style.opacity = !key || x.dataset.seg === key ? '' : '0.25'; });
+  const leg = key ? Array.from(box.querySelectorAll('[data-val]')).find(x => x.dataset.seg === key) : null;
+  const c1 = box.querySelector('.dc1'), c2 = box.querySelector('.dc2');
+  if (c1) c1.textContent = key || box.dataset.d1;
+  if (c2) c2.textContent = key ? (leg ? leg.dataset.val : '') : box.dataset.d2;
+};
 document.addEventListener('mouseover', (e) => { const el = e.target.closest && e.target.closest('[data-seg]'); const box = el && el.closest('[data-donut]'); if (box) donutFocus(box, el.dataset.seg); });
 document.addEventListener('mouseout', (e) => { const el = e.target.closest && e.target.closest('[data-seg]'); const box = el && el.closest('[data-donut]'); if (box) donutFocus(box, null); });
 function bankMethod(t) {
@@ -435,6 +445,26 @@ function suggestCat(name, doc) {
   const hit = CAT_RULES.find(([re]) => re.test(name || ''));
   return hit ? hit[1] : null;
 }
+// Estorno: pergunta de qual categoria abater.
+function bankEstornoTarget(cp) {
+  const cats = bankCats().filter(c => c !== 'Estorno' && c !== 'Terapia');
+  return new Promise(res => {
+    let done = false;
+    const l = openLayer({
+      html: `<div class="dh"><h2>Abater de qual categoria?</h2></div><div class="db"><p style="margin:0">“${esc(cp)}” · o valor sai dessa categoria no relatório.</p>
+        <div class="row" style="flex-wrap:wrap;gap:6px">${cats.map(c => `<button class="btn sm" data-t="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+        <div class="field"><label for="bext-new">Outra categoria</label><div class="row"><input id="bext-new" class="input" placeholder="Nova categoria"><button class="btn sm" data-t="__new">Usar</button></div></div></div>`,
+      onClose: () => { if (!done) res(null); }
+    });
+    l.box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-t]'); if (!b) return;
+      let v = b.dataset.t;
+      if (v === '__new') v = $('#bext-new', l.box).value.trim();
+      if (!v) return toast('Digite o nome da categoria.');
+      done = true; res(v); l.close();
+    });
+  });
+}
 function bankCatDialog(cp) {
   return new Promise(res => {
     let done = false;
@@ -445,14 +475,21 @@ function bankCatDialog(cp) {
         <div class="field"><label for="bcat-new">Outra categoria</label><div class="row"><input id="bcat-new" class="input" placeholder="Nova categoria"><button class="btn sm" data-cat="__new">Usar</button></div></div></div>`,
       onClose: () => { if (!done) res(null); }
     });
-    const pickBiz = (b) => { l.box.querySelectorAll('#bcat-biz button').forEach(x => x.classList.toggle('on', x === b)); };
-    l.box.addEventListener('click', (e) => {
+    let bizTouched = false;
+    const pickBiz = (b) => { bizTouched = true; l.box.querySelectorAll('#bcat-biz button').forEach(x => x.classList.toggle('on', x === b)); };
+    l.box.addEventListener('click', async (e) => {
       const bz = e.target.closest('#bcat-biz [data-biz]'); if (bz) return pickBiz(bz);
       const b = e.target.closest('[data-cat]'); if (!b) return;
       let v = b.dataset.cat;
       if (v === '__new') v = $('#bcat-new', l.box).value.trim();
       if (!v) return toast('Digite o nome da categoria.');
-      const biz = l.box.querySelector('#bcat-biz button.on')?.dataset.biz || 'pf';
+      let biz = bizTouched ? (l.box.querySelector('#bcat-biz button.on')?.dataset.biz || 'pf') : 'pf';
+      if (v === 'Estorno') {
+        const target = await bankEstornoTarget(cp);
+        if (!target) return;
+        v = 'Estorno→' + target;
+        if (!bizTouched) biz = null;   // estorno fica na conta de origem, a não ser que você troque
+      }
       done = true; res({ cat: v, biz }); l.close();
     });
   });
@@ -466,7 +503,7 @@ ACTIONS['bank-cat'] = async (el) => {
   const { error } = cp === '—' ? await q.is('counterpart', null) : await q.eq('counterpart', cp);
   if (error) return toast('Erro: ' + error.message);
   await bankLoadTxns();
-  if (!BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
+  if (!cat.startsWith('Estorno') && !BANK_CATS.includes(cat) && !db.setting('bankCats', []).includes(cat)) db.setSetting('bankCats', [...db.setting('bankCats', []), cat]);
   render();
 };
 ACTIONS['bank-close'] = (el) => {
@@ -546,7 +583,25 @@ function bankReimbMatch(t) {
   const m = Object.keys(byMonth).find(k => Math.abs(byMonth[k] - amt) <= 1);
   return m ? { month: m, total: byMonth[m] } : null;
 }
+// Transferência interna: procura o par (valor igual, sentido contrário, até 3 dias) entre contas e caixinhas.
+function bankPairOf(t) {
+  if (t.scope !== 'interna') return null;
+  const amt = Math.abs(Number(t.amount)), d0 = new Date(t.posted_on).getTime();
+  const c = (BANK.every || []).filter(x => x.id !== t.id && x.scope === 'interna' && x.flow !== t.flow
+    && Math.abs(Math.abs(Number(x.amount)) - amt) < 0.01 && Math.abs(new Date(x.posted_on).getTime() - d0) <= 3 * 86400000);
+  return c[0] || null;
+}
+const bankSrc = (x) => (/RDB|Resgate|Aplica[cç][aã]o|Caixinha|Rendimento/i.test(x.memo || '') ? 'CAIXINHA' : (x.biz_entity || x.entity || '').toUpperCase());
+const bankOther = (src) => (src === 'PJ' ? 'PF' : src === 'PF' ? 'PJ' : 'PF');
 function bankRowExtra(t) {
+  if (t.scope === 'interna') {
+    const pr = bankPairOf(t);
+    let from, to;
+    if (pr) { from = bankSrc(t.flow === 'out' ? t : pr); to = bankSrc(t.flow === 'out' ? pr : t); }
+    else { const me = bankSrc(t); from = t.flow === 'out' ? me : bankOther(me); to = t.flow === 'out' ? bankOther(me) : me; }
+    const lbl = `[Interno] [${from}>${to}]${pr ? '' : ' [a confirmar]'}`;
+    return `<span class="tag tg" style="${cssTb('#2563eb')}">${esc(lbl)}</span>`;
+  }
   if (t.reimb_row_id) { const r = db.get('tempo_reimb_rows', t.reimb_row_id); return r ? `<span class="small muted">→ Terapia: ${esc(r.name)}</span>` : ''; }
   if (t.expense_id) { const e = db.get('tempo_expenses', t.expense_id); return e ? `<span class="small muted">→ ${esc(e.name)}</span>` : ''; }
   if (t.flow !== 'out' && t.category === 'Reembolso') return `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
@@ -673,19 +728,59 @@ ACTIONS['bank-review-all'] = async (el) => {
 };
 // Abas do Financeiro PF: Visão geral, Conta, Cartão e Investimentos (caixinhas).
 const PF_TABS = [['geral', 'Visão geral'], ['conta', 'Conta corrente'], ['cartao', 'Cartão'], ['invest', 'Investimentos']];
+// Caixinhas: saldo informado por você (print do app), guardado por data.
+const CX_KEY = 'caixinhaSnaps';
+const cxSnaps = () => (db.setting(CX_KEY, []) || []).slice().sort((x, y) => String(y.date).localeCompare(String(x.date)));
+function cxSave(list) { db.setSetting(CX_KEY, list); db.emit(); }
+const cxFmt = (v) => fmtMoney(v);
 function pfInvestHTML() {
-  const ym = BANK.month || ymd(new Date()).slice(0, 7);
-  const rows = (BANK.all.pf || []).filter(t => t.scope === 'interna' && (t.posted_on || '').slice(0, 7) === ym);
-  const aplic = rows.filter(t => t.flow === 'out').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-  const resg = rows.filter(t => t.flow === 'in').reduce((s, t) => s + Number(t.amount), 0);
-  return `<div class="kpis">
-    <div class="kpi"><span class="k">Resgates</span><span class="v">${fmtMoney0(resg)}</span><span class="s">entraram na conta</span></div>
-    <div class="kpi"><span class="k">Aplicações</span><span class="v">${fmtMoney0(aplic)}</span><span class="s">saíram para as caixinhas</span></div>
-  </div>
-  <div class="panel"><div class="panel-h"><h3>Movimentos de caixinhas</h3><span class="small muted">Giro, Reserva, Especial, Freelas</span></div>
-  <div class="panel-b small muted" style="padding:8px 16px">O extrato diz “Resgate RDB”, mas não diz de qual caixinha. Por isso ainda não separo por caixinha: o saldo de cada uma depende de você informar ou de outra fonte.</div>
-  <div class="panel-b tight" style="max-height:420px;overflow:auto">${rows.length ? `<table class="grid compact fin"><tbody>${rows.map(t => `<tr><td class="mono small">${fmtDateShort(t.posted_on)}</td><td>${esc(t.memo || '')}</td><td class="num">${fmtMoney(t.amount)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty small">Nenhum movimento de caixinha neste mês.</div>'}</div></div>`;
+  const snaps = cxSnaps();
+  const last = snaps[0];
+  const today = ymd(new Date());
+  const names = last ? last.boxes.map(b => b.name) : ['Turbo Ultravioleta', 'APARTAMENTO', 'FREELAS', 'GIRO'];
+  const form = `<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>Atualizar caixinhas</h3><span class="small muted">use o saldo que aparece no app do Nubank</span></div><div class="panel-b">
+    <form data-form="cx-snap" class="stack" style="gap:8px">
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap"><span class="small muted">Data do saldo</span><input type="date" name="date" class="input" value="${today}" style="width:170px"></div>
+      ${names.map((n, i) => `<div class="row" style="gap:8px;align-items:center"><input class="input" name="n${i}" value="${esc(n)}" style="width:240px"><input class="input" name="v${i}" type="number" step="0.01" min="0" placeholder="0,00" style="width:170px;text-align:right"></div>`).join('')}
+      <div class="row" style="gap:8px"><button type="button" class="btn sm ghost" data-act="cx-add-row">+ caixinha</button><button class="btn primary sm">Salvar atualização</button></div>
+    </form></div></div>`;
+  const current = last ? `<div class="kpis">
+    <div class="kpi"><span class="k">Total em caixinhas</span><span class="v">${fmtMoney0(last.total)}</span><span class="s">saldo de ${esc(last.date)}</span></div>
+    ${last.boxes.map(b => `<div class="kpi"><span class="k">${esc(b.name)}</span><span class="v">${fmtMoney0(b.value)}</span><span class="s">${last.total ? Math.round(b.value / last.total * 100) : 0}% do total</span></div>`).join('')}
+  </div>` : '<div class="empty small" style="margin-bottom:14px">Nenhuma atualização ainda. Preencha o formulário abaixo.</div>';
+  const hist = snaps.length ? `<div class="panel"><div class="panel-h"><h3>Últimas atualizações</h3><span class="small muted">mais recente primeiro</span></div><div class="panel-b tight"><table class="grid compact fin"><thead><tr><th>Data</th><th>Caixinha</th><th style="text-align:right">Saldo</th><th style="text-align:right">Total</th><th></th></tr></thead><tbody>${snaps.map(sn => sn.boxes.map((b, i) => `<tr><td class="mono small">${i === 0 ? esc(sn.date) : ''}</td><td>${esc(b.name)}</td><td class="num">${cxFmt(b.value)}</td><td class="num">${i === 0 ? cxFmt(sn.total) : ''}</td><td>${i === 0 ? `<button class="btn sm ghost" data-act="cx-del" data-date="${esc(sn.date)}">Apagar</button>` : ''}</td></tr>`).join('')).join('')}</tbody></table></div></div>` : '';
+  return current + form + hist;
 }
+ACTIONS['cx-add-row'] = (el) => {
+  const form = el.closest('form'); const i = form.querySelectorAll('input[name^="n"]').length;
+  const wrap = document.createElement('div'); wrap.className = 'row'; wrap.style.cssText = 'gap:8px;align-items:center';
+  wrap.innerHTML = `<input class="input" name="n${i}" placeholder="Nome da caixinha" style="width:240px"><input class="input" name="v${i}" type="number" step="0.01" min="0" placeholder="0,00" style="width:170px;text-align:right">`;
+  el.closest('.row').before(wrap);
+};
+ACTIONS['cx-del'] = async (el) => {
+  const ok = await confirmBox({ title: 'Apagar esta atualização?', body: 'Os saldos de ' + el.dataset.date + ' serão removidos.', ok: 'Apagar', danger: true });
+  if (!ok) return;
+  cxSave(cxSnaps().filter(x => x.date !== el.dataset.date)); render();
+};
+document.addEventListener('submit', (e) => {
+  const form = e.target.closest && e.target.closest('[data-form="cx-snap"]'); if (!form) return;
+  e.preventDefault();
+  saveCxSnap(form);
+});
+function saveCxSnap(form) {
+  const fd = new FormData(form);
+  const boxes = [];
+  for (let i = 0; i < 50; i++) {
+    if (!fd.has('n' + i)) break;
+    const name = String(fd.get('n' + i) || '').trim(), raw = fd.get('v' + i);
+    if (name && raw !== null && String(raw).trim() !== '') boxes.push({ name, value: Number(raw) || 0 });
+  }
+  const date = String(fd.get('date') || ymd(new Date()));
+  if (!boxes.length) return toast('Informe pelo menos uma caixinha com saldo');
+  const total = boxes.reduce((t, b) => t + b.value, 0);
+  cxSave([...cxSnaps().filter(x => x.date !== date), { date, boxes, total }]);
+  toast('Atualização salva'); render();
+};
 VIEWS.financepf = () => {
   bankRefresh();
   const tab = BANK.pfTab || 'geral';

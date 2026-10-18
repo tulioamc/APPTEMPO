@@ -60,7 +60,7 @@ function prefTypes() {
     <button class="btn sm danger" data-act="wt-delete" data-id="${o.id}">Apagar</button>
     <button class="btn sm" data-act="wt-arch" data-id="${o.id}">Desarquivar</button>
   </div>`).join('')}</div></div>` : '';
-  return `<div class="panel"><div class="panel-h"><h3>Tipos de trabalho</h3><span class="small muted">usados nas sessões, tarefas e relatórios</span></div><div class="panel-b">${wtRows(workTypes())}
+  return exTypesPanel() + `<div class="panel"><div class="panel-h"><h3>Tipos de trabalho</h3><span class="small muted">usados nas sessões, tarefas e relatórios</span></div><div class="panel-b">${wtRows(workTypes())}
     <form class="row" style="margin:12px 0 0 244px" data-form="add-opt" data-kind="wt"><input class="input" style="max-width:300px" name="name" placeholder="Novo tipo de trabalho" aria-label="Novo tipo"><button class="btn primary">${icon('plus')} Adicionar</button></form></div></div>` + archPanel;
 }
 function prefStatus() {
