@@ -368,9 +368,10 @@ table.grid.static tbody tr:hover td { background: transparent; }
 .colmenu .ci .grow { font-size: .92em; }
 .rem-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 12px; background: var(--surface); }
 .rem-card.off { opacity: .6; }
-.opt-row { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.opt-row { display: grid; grid-template-columns: 28px 200px minmax(0,300px) 170px 28px 28px 28px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.opt-row.wt { grid-template-columns: 28px 200px minmax(0,300px) 28px 28px auto; }
+.opt-row > .input { width: 100%; min-width: 0; }
 .opt-row:last-child { border-bottom: 0; }
-.opt-row .input { flex: 0 1 300px; min-width: 140px; }
 .opt-row select.input, select.input {
   -webkit-appearance: none; appearance: none; padding-right: 30px; cursor: pointer;
   background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%236b7280' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 9px center;

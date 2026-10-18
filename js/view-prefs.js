@@ -30,11 +30,11 @@ ACTIONS.set = (el) => { let v = el.dataset.v; if (['radius', 'fontSize', 'rowPad
 CHANGES.set = (el) => { let v = el.value; if (['radius', 'fontSize', 'rowPad', 'idleMinutes'].includes(el.dataset.k)) v = Math.max(0, Number(v) || 0); db.setSetting(el.dataset.k, v); };
 
 function optionRows(list, kind) {
-  return list.map((o, i) => `<div class="opt-row">
+  return list.map((o, i) => `<div class="opt-row${kind === 'wt' ? ' wt' : ''}">
     <button class="swatch fill" style="${cssTb(o.color)};flex:none" data-act="opt-color" data-t="${kind === 'wt' ? 'tempo_work_types' : 'tempo_status_options'}" data-id="${o.id}" title="Mudar cor" aria-label="Mudar cor"></button>
-    <span style="flex:none">${tag(o.name, o.color, { pill: kind !== 'wt' })}</span>
+    <span style="white-space:nowrap;overflow:hidden">${tag(o.name, o.color, { pill: kind !== 'wt' })}</span>
     <input class="input sm" value="${esc(o.name)}" data-on="opt" data-t="${kind === 'wt' ? 'tempo_work_types' : 'tempo_status_options'}" data-id="${o.id}" data-k="name" aria-label="Nome">
-    ${kind !== 'wt' ? `<select class="input sm" style="width:auto;flex:none" data-on="opt" data-t="tempo_status_options" data-id="${o.id}" data-k="category" aria-label="Significado">${({ work: [['todo', 'A fazer'], ['active', 'Em andamento'], ['done', 'Concluído'], ['cancelled', 'Cancelado']], payment: [['open', 'Em aberto'], ['closed', 'Quitado']], quote: [['open', 'Em aberto'], ['won', 'Aprovado'], ['lost', 'Perdido']] })[kind].map(([v, l]) => `<option value="${v}" ${o.category === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` : ''}
+    ${kind !== 'wt' ? `<select class="input sm" data-on="opt" data-t="tempo_status_options" data-id="${o.id}" data-k="category" aria-label="Significado">${({ work: [['todo', 'A fazer'], ['active', 'Em andamento'], ['done', 'Concluído'], ['cancelled', 'Cancelado']], payment: [['open', 'Em aberto'], ['closed', 'Quitado']], quote: [['open', 'Em aberto'], ['won', 'Aprovado'], ['lost', 'Perdido']] })[kind].map(([v, l]) => `<option value="${v}" ${o.category === v ? 'selected' : ''}>${l}</option>`).join('')}</select>` : ''}
     <button class="btn sm icon ghost" data-act="opt-move" data-kind="${kind}" data-id="${o.id}" data-d="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">${icon('chevU')}</button>
     <button class="btn sm icon ghost" data-act="opt-move" data-kind="${kind}" data-id="${o.id}" data-d="1" ${i === list.length - 1 ? 'disabled' : ''} aria-label="Descer">${icon('chevD')}</button>
     ${kind === 'wt' ? `<button class="btn sm ghost" data-act="wt-arch" data-id="${o.id}">${o.archived ? 'Reativar' : 'Arquivar'}</button>` : `<button class="btn sm icon ghost" data-act="opt-del" data-id="${o.id}" aria-label="Excluir">${icon('trash')}</button>`}
@@ -42,11 +42,11 @@ function optionRows(list, kind) {
 }
 function prefTypes() {
   return `<div class="panel"><div class="panel-h"><h3>Tipos de trabalho</h3><span class="small muted">usados nas sessões, tarefas e relatórios</span></div><div class="panel-b">${optionRows(workTypes(true), 'wt')}
-    <form class="row" style="margin-top:12px" data-form="add-opt" data-kind="wt"><input class="input" style="max-width:300px" name="name" placeholder="Novo tipo de trabalho" aria-label="Novo tipo"><button class="btn primary">${icon('plus')} Adicionar</button></form></div></div>`;
+    <form class="row" style="margin:12px 0 0 194px" data-form="add-opt" data-kind="wt"><input class="input" style="max-width:300px" name="name" placeholder="Novo tipo de trabalho" aria-label="Novo tipo"><button class="btn primary">${icon('plus')} Adicionar</button></form></div></div>`;
 }
 function prefStatus() {
   const block = (kind, title, hint) => `<div class="panel"><div class="panel-h"><h3>${title}</h3><span class="small muted">${hint}</span></div><div class="panel-b">${optionRows(statuses(kind), kind)}
-    <form class="row" style="margin-top:12px" data-form="add-opt" data-kind="${kind}"><input class="input" style="max-width:300px" name="name" placeholder="Novo status" aria-label="Novo status"><button class="btn primary">${icon('plus')} Adicionar</button></form></div></div>`;
+    <form class="row" style="margin:12px 0 0 194px" data-form="add-opt" data-kind="${kind}"><input class="input" style="max-width:300px" name="name" placeholder="Novo status" aria-label="Novo status"><button class="btn primary">${icon('plus')} Adicionar</button></form></div></div>`;
   return block('work', 'Status do trabalho', 'projetos, tarefas e subtarefas') + block('payment', 'Status de pagamento', 'independente do status do trabalho') + block('quote', 'Status de orçamento', 'propostas enviadas') +
     `<div class="small muted">O “significado” diz ao app como tratar cada status: quais contam como ativos, concluídos ou em aberto nos filtros e relatórios.</div>`;
 }
