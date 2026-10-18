@@ -9,7 +9,7 @@
 
 1. **Campos de seleção com busca** — ao clicar em Status, Pagamento etc., abrir um dropdown que permite buscar, selecionar na lista e criar uma opção nova ali mesmo.
 2. **Reordenar colunas arrastando** — segurar o cabeçalho de uma coluna e soltar entre outras duas (com indicador de onde vai cair). Hoje só pelo menu "Colunas" com setas, e só em Projetos. Vale para todas as tabelas; ordem fica salva por tabela.
-3. **Calculadora de orçamento: encargos e custos extras**
+3. **Calculadora de orçamento: encargos e custos extras** — ✅ feito (nota fiscal 9% ligada, BV desligado 10%, custos extras desligados; resumo A/B/C/D/Total).
    - **Nota fiscal** (marcado por padrão) + campo **Imposto %** (padrão 9%). Desmarcado: campo bloqueado e não entra no cálculo.
    - **BV** (desmarcado por padrão) + campo **Comissão %** (padrão 10%). Desmarcado: campo bloqueado e não entra no cálculo. BV = comissão de agência (uso em Recife).
    - **Terceirizado / custo extra** (desmarcado por padrão). Marcado: lista de itens com nome + valor, botões + / −, e total.
@@ -44,7 +44,7 @@
    - Data: clicar abre um calendário para escolher a nova data (prazo continua pedindo motivo e guardando histórico).
    - Valor: digitar só números e formatar sempre como R$ x.xxx,xx (ponto no milhar/milhão/bilhão, vírgula nos centavos).
    - Status/pagamento: usar o dropdown com busca do item 1.
-8. **Etiqueta do cliente com sigla da agência** — ex.: agência BRENDA, cliente ABA
+8. **Etiqueta do cliente com sigla da agência** — ✅ feito (sigla editável no cadastro da agência; etiqueta `[BR][ABA]` nas tabelas)
    - Coluna/campo **Agência**: continua `[BRENDA]` (nome completo, cor da agência).
    - Coluna/campo **Cliente**: `[BR][ABA]`.
    - Primeiro bloco do cliente: sigla da agência com a cor da agência. Sigla editável no cadastro; padrão = 2 primeiras letras. Se chocar com outra agência, troca a 2ª letra pela próxima letra do nome (ex.: BRENDA = BR, BRASILB = BA) até ficar única.

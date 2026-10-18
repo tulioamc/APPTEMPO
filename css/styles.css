@@ -674,3 +674,11 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 .todo-title { cursor: text; }
 .todo-title:hover { text-decoration: underline dotted var(--fg-3); text-underline-offset: 3px; }
 #todo-edit { font-size: inherit; padding: 4px 8px; }
+
+/* Despesas e Reembolsos com caixa branca, como Financeiro, Orçamentos e Tarefas */
+.ex-sec { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
+.ex-sec > .ex-sec-h { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.ex-sec > .row { padding: 8px 12px !important; }
+.rb-month { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
+.rb-month > summary { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.rb-month > .row { padding: 8px 12px !important; }
