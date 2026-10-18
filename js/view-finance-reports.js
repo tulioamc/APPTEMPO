@@ -212,6 +212,7 @@ async function bankLoadRaw() {
   const every = await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*')));
   for (const e of ['pf', 'pj']) BANK.all[e] = every.filter(t => (t.biz_entity || t.entity) === e);
   BANK.every = every;
+  BANK.learned = bankBuildLearned(every);
   BANK.links = await bankFetchAll(() => cl.from('tempo_bank_reimb_links').select('*').order('reimb_row_id'));
 }
 // Pagamentos às terapeutas e à dentista ligam sozinhos à linha da tabela de terapias do mesmo mês (pelo nome).
@@ -489,15 +490,19 @@ const bankCats = () => [...new Set([...BANK_CATS, ...db.setting('bankCats', [])]
 // Sugestão automática pelo nome do estabelecimento. Só sugere; quem confirma é você.
 const CAT_RULES = [
   [/hudson|aluguel/i, 'Moradia'],
-  [/amazon|shopee|mercadolivre|mercado livre|magalu|magazine|shein|aliexpress|americanas|renner|c&a|zara|riachuelo/i, 'Compras'],
-  [/mercad|supermerc|atacad|varej|hortifr|padaria|a[cç]ougue|sacol[aã]o|assa[ií]|carrefour|p[ãa]o de a[cç]|feira|multifood|ampm|am\/pm|conveni|biscuit|bisc/i, 'Alimentação'],
-  [/ifd|ifood|rappi|uber ?eats|delivery|restaur|lanche|pizza|hamburg|sushi|cafe|caf[eé]|sorvet|doceria|bistr|churr/i, 'Alimentação'],
-  [/\bbar\b|boteco|cervej|chopp|cinema|ingresso|teatro|show|sympla|steam|playstation|xbox|livraria/i, 'Lazer'],
-  [/posto|gasolin|combust|ipiranga|shell|petrobras|estacion|uber(?! ?eats)|99app|99 |cabify|pedagio|ped[aá]gio|estacionamento/i, 'Transporte'],
-  [/farm[aá]c|drogaria|drogasil|droga|raia|pacheco|laborat|consult[oó]rio|cl[ií]nica|hospital|academ|sua academia|smart fit|dentist/i, 'Saúde'],
-  [/contador|contabil|cart[oó]rio|junta comercial|receita federal|receita|\bdas\b|inss|darf|simples nacional|cnpj|registro|taxa/i, 'Contabilidade'],
-  [/netflix|spotify|apple|dropbox|google|youtube|adobe|icloud|prime|hbo|disney|notion|chatgpt|openai|anthropic|claude|cinema 4d|linkedin/i, 'Assinaturas'],
+  [/amazon|shopee|mercadolivre|mercado livre|magalu|magazine|shein|aliexpress|americanas|renner|c&a|zara|riachuelo|melimais/i, 'Compras'],
+  [/mercad|supermerc|atacad|varej|hortifr|padaria|a[cç]ougue|sacol[aã]o|assa[ií]|carrefour|p[ãa]o de a[cç]|feira|multifood|ampm|am\/pm|conveni|biscuit|bisc|rosarinho|palato|recibom|maralco|clube portugues|minuto pa|bembom|benfica|gaivota|novo mercatto|bem mais|spress|freitas varejo|mercadinho/i, 'Alimentação'],
+  [/ifd|ifood|rappi|uber ?eats|delivery|restaur|lanche|pizza|hamburg|burger|sushi|teppan|china in box|donut|popeyes|deli\b|frios|cafe|caf[eé]|sorvet|doceria|bistr|churr/i, 'Alimentação'],
+  [/farma\b|medicament|drogasil|extra farma|dose certa|rd saude|tradicao medic/i, 'Remédios'],
+  [/\bbar\b|boteco|cervej|chopp|cinema|cinemark|ingresso|teatro|show|sympla|steam|playstation|playst|xbox|livrar|kaizen|barraca|esperanto|choribar|rosa e silva/i, 'Lazer'],
+  [/posto|gasolin|combust|ipiranga|shell|petrobras|petrocal|petroservice|multipostos|auto posto|estacion|uber(?! ?eats)|99app|\b99\b|cabify|pedagio|ped[aá]gio|estacionamento|park\b|parking|detran|cloudpark|pop \d|nutag/i, 'Transporte'],
+  [/farm[aá]c|drogaria|droga|raia|pacheco|laborat|consult[oó]rio|cl[ií]nica|hospital|academ|smart fit|dentist|fitness|barbear|cabeleireir|beleza|perfum|assistencia dos funcion|caixa de assist|kali/i, 'Saúde'],
+  [/inditex|centauro|osklen|\bosk\b/i, 'Roupas'],
+  [/booking|airasia|12go|2c2p|hotel|flight|cars on/i, 'Viagem'],
+  [/contador|contabil|cart[oó]rio|junta comercial|receita federal|receita|\bdas\b|inss|darf|simples nacional|cnpj|registro|taxa|pjbank/i, 'Contabilidade'],
+  [/netflix|spotify|apple|dropbox|google|youtube|adobe|icloud|prime|hbo|disney|notion|chatgpt|openai|anthropic|claude|cinema 4d|linkedin|mubi|microsoft|onedrive/i, 'Assinaturas'],
   [/celpe|enel|energia|[aá]gua|compesa|sabesp|claro|vivo|tim |oi |internet|gás|gas /i, 'Contas da casa'],
+  [/kalunga/i, 'Material de Trabalho'],
 ];
 // Atividade principal (CNAE) da empresa -> categoria.
 function cnaeCat(c) {
@@ -586,12 +591,39 @@ function suggestIncCat(name) {
   if (/reembols|estorno|devol/i.test(name || '')) return REEMB_OUT;
   return null;
 }
+// Aprendizado: palavras do nome que sempre levaram à mesma categoria nas suas categorizações (2+ contrapartes, 80%+).
+const LEARN_STOP = new Set(['pagamento', 'transferencia', 'enviada', 'recebida', 'compra', 'debito', 'credito', 'parcelado', 'parcela', 'ltda', 'comercio', 'servicos', 'brasil', 'pix', 'hotel', 'iof', 'subscr', 'delivery', 'estorno', 'com', 'para', 'pela', 'the', 'and']);
+function bankBuildLearned(every) {
+  const per = {};   // counterpart -> categoria dominante (saídas)
+  (every || []).forEach(t => {
+    if (t.flow !== 'out' || !t.category || !t.counterpart || /^(Estorno|Reembolso|Terapia)/.test(t.category)) return;
+    per[t.counterpart] = per[t.counterpart] || {};
+    per[t.counterpart][t.category] = (per[t.counterpart][t.category] || 0) + 1;
+  });
+  const tok = {};   // palavra -> { categoria: nº de contrapartes }
+  Object.entries(per).forEach(([cp, cats]) => {
+    const best = Object.entries(cats).sort((a, b) => b[1] - a[1])[0][0];
+    new Set(bnorm(cp).split(/[^a-z]+/).filter(w => w.length >= 4 && !LEARN_STOP.has(w))).forEach(w => {
+      tok[w] = tok[w] || {}; tok[w][best] = (tok[w][best] || 0) + 1;
+    });
+  });
+  const out = {};
+  Object.entries(tok).forEach(([w, cats]) => {
+    const total = Object.values(cats).reduce((a, b) => a + b, 0);
+    const [cat, n] = Object.entries(cats).sort((a, b) => b[1] - a[1])[0];
+    if (n >= 2 && n / total >= 0.8) out[w] = cat;
+  });
+  return out;
+}
 function suggestCat(name, doc) {
   const digits = String(doc || '').replace(/\D/g, '');
   const c = digits && cnpjCache()[digits];
   if (c && c.cnae) { const v = cnaeCat(c.cnae); if (v) return v; }
   const hit = CAT_RULES.find(([re]) => re.test(name || ''));
-  return hit ? hit[1] : null;
+  if (hit) return hit[1];
+  const learned = BANK.learned || {};
+  const w = bnorm(name).split(/[^a-z]+/).find(x => x.length >= 4 && learned[x]);
+  return w ? learned[w] : null;
 }
 // Estorno: pergunta de qual categoria abater.
 function bankEstornoTarget(cp) {
