@@ -94,7 +94,8 @@ VIEWS.reimb = () => {
   const amt = (r) => Number(r.amount) || 0;
 
   /* Resumo geral */
-  const paid = all.filter(r => payOf(r) === 'Pago');
+  const isNA = (r) => reqOf(r) === 'Não se aplica' || refOf(r) === 'Não se aplica';
+  const paid = all.filter(r => payOf(r) === 'Pago' && !isNA(r));
   const refunded = all.filter(r => refOf(r) === 'Feito!');
   const net = rbSum(paid) - rbSum(refunded);
     const notRequested = all.filter(r => ['a Fazer', 'Falta Nota'].includes(reqOf(r)) && amt(r) > 0);
