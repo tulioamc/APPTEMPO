@@ -79,7 +79,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     func runUpdate(manual: Bool) {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let script = home + "/APPTEMPO/mac/update.sh"
-        let newBin = home + "/APPTEMPO/mac/.build/release/TempoMac"
         guard FileManager.default.fileExists(atPath: script) else {
             if manual { showNotice("Tempo", "Pasta ~/APPTEMPO não encontrada. Clone o repositório primeiro.") }
             return
@@ -94,7 +93,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                     self.showNotice("Tempo: atualização falhou", "Abra o Terminal e rode ~/APPTEMPO/mac/update.sh para ver o erro.")
                 } else if text.contains("ATUALIZADO") {
                     self.showNotice("Tempo atualizado", "Reabrindo com a versão nova.")
-                    let relaunch = Process(); relaunch.executableURL = URL(fileURLWithPath: newBin)
+                    let appPath = home + "/Applications/Tempo.app"
+                    let relaunch = Process(); relaunch.executableURL = URL(fileURLWithPath: "/bin/bash")
+                    relaunch.arguments = ["-c", "sleep 1; open \"\(appPath)\""]
                     try? relaunch.run()
                     NSApp.terminate(nil)
                 } else if manual {
@@ -131,6 +132,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     /// Fechar a janela só esconde: o app continua rodando na barra de menus e o site segue ativo.
     func windowShouldClose(_ sender: NSWindow) -> Bool { sender.orderOut(nil); return false }
 
+    /// Clicar no ícone do Dock mostra a mesma janela que "Mostrar Tempo" na barra de menus.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showWindow(); return true
+    }
+
     private func iso(_ d: Date) -> String { isoFormatter.string(from: d) }
 
     /// Chama window.TempoBridge.<fn>(args...) na página. Se a página não estiver carregada, a chamada é ignorada.
@@ -162,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         m.addItem(withTitle: "Atualizar app", action: #selector(updateNow), keyEquivalent: "u")
         m.addItem(.separator())
         m.addItem(toggleItem("Guardar pasta da janela ativa", key: "captureFolders", defaultOn: true, action: #selector(toggleFolders)))
-        m.addItem(toggleItem("Guardar nome do arquivo (desligado por padrão)", key: "captureFileNames", defaultOn: false, action: #selector(toggleFiles)))
+        m.addItem(toggleItem("Guardar nome do arquivo", key: "captureFileNames", defaultOn: true, action: #selector(toggleFiles)))
         m.addItem(.separator())
         m.addItem(withTitle: "Sair", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = m

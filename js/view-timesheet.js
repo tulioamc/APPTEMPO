@@ -100,17 +100,17 @@ function dayStrip(entries, day) {
     e.segments.forEach((s, i) => {
       const st = Math.max(0, new Date(s.s) - base), en = Math.min(span, (s.e ? new Date(s.e) : Date.now()) - base);
       if (en <= 0 || st >= span) return;
-      bars += `<span class="seg-b fill" ${!s.e ? `data-strip-live="${base.getTime()}"` : ''} data-st="${st}" style="--tb:${hexOf(col)};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" title="${esc(entryTitle(e))} · ${fmtTime(s.s)}–${s.e ? fmtTime(s.e) : 'agora'}"></span>`;
+      bars += `<span class="seg-b fill" ${!s.e ? `data-strip-live="${base.getTime()}"` : ''} data-st="${st}" style="--tb:${hexOf(col)};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`${entryTitle(e)}\n${fmtTime(s.s)} – ${s.e ? fmtTime(s.e) : 'agora'} · ${fmtDur((s.e ? new Date(s.e) : Date.now()) - new Date(s.s))}`)}"></span>`;
     });
     db.all('tempo_notices').filter(n => n.kind === 'pause' && n.status === 'accepted' && n.data?.source === 'app' && n.data?.entry_id === e.id).forEach(n => {
       const st = Math.max(0, new Date(n.data.from) - base), en = Math.min(span, new Date(n.data.to) - base);
       if (en <= 0 || st >= span) return;
-      bars += `<span class="seg-b fill pausa" style="--tb:#B8BDC6;left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" title="Marcada como pausa · ${fmtTime(n.data.from)}–${fmtTime(n.data.to)} · ${esc(n.data.app || '')}"></span>`;
+      bars += `<span class="seg-b fill pausa" style="--tb:#B8BDC6;left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Marcada como pausa${n.data.app ? ' (' + n.data.app + ')' : ''}\n${fmtTime(n.data.from)} – ${fmtTime(n.data.to)} · ${fmtDur(new Date(n.data.to) - new Date(n.data.from))}`)}"></span>`;
     });
     entryGaps(e).forEach(g => {
       const st = Math.max(0, new Date(g.s) - base), en = Math.min(span, new Date(g.e) - base);
       if (en <= 0 || st >= span) return;
-      bars += `<span class="seg-b fill pausa" style="--tb:#B8BDC6;left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" title="Pausa · ${fmtTime(g.s)}–${fmtTime(g.e)}${g.why ? ' · ' + esc(g.why) : ''}"></span>`;
+      bars += `<span class="seg-b fill pausa" style="--tb:#B8BDC6;left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Pausa${g.why ? ' (' + g.why + ')' : ''}\n${fmtTime(g.s)} – ${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}"></span>`;
     });
   });
   return `<div class="day-strip" aria-label="Linha do tempo do dia">${bars}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
@@ -349,3 +349,17 @@ function openEntryModal(id) {
     }
   });
 }
+
+/* dica flutuante das barras do dia: o que é e quanto tempo durou */
+let stripTip = null;
+document.addEventListener('mouseover', (e) => {
+  const b = e.target.closest?.('.seg-b[data-tip]'); if (!b) return;
+  if (!stripTip) { stripTip = document.createElement('div'); stripTip.className = 'strip-tip'; document.body.appendChild(stripTip); }
+  stripTip.textContent = b.dataset.tip; stripTip.style.display = 'block';
+});
+document.addEventListener('mousemove', (e) => {
+  if (!stripTip || stripTip.style.display !== 'block') return;
+  const x = Math.min(e.clientX + 12, innerWidth - stripTip.offsetWidth - 8);
+  stripTip.style.left = Math.max(8, x) + 'px'; stripTip.style.top = (e.clientY - stripTip.offsetHeight - 10 < 8 ? e.clientY + 16 : e.clientY - stripTip.offsetHeight - 10) + 'px';
+});
+document.addEventListener('mouseout', (e) => { if (stripTip && e.target.closest?.('.seg-b[data-tip]')) stripTip.style.display = 'none'; });

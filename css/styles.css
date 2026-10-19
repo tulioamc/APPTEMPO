@@ -289,7 +289,7 @@ table.grid.static tbody tr:hover td { background: transparent; }
 .cal .ev { font-size: .76em; padding: 2px 6px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; border: 0; text-align: left; }
 
 /* ---------- time sheet ---------- */
-.ts-hero { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); gap: 16px; }
+.ts-hero { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.7fr); gap: 16px; }
 .timer-card { background: var(--surface); border: 1px solid var(--line); border-radius: calc(var(--radius) + 4px); padding: 22px; display: flex; flex-direction: column; gap: 16px; position: relative; overflow: hidden; }
 .timer-card.running { border-color: var(--accent-line); }
 .timer-state { display: inline-flex; align-items: center; gap: 8px; font-size: .8em; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; color: var(--fg-2); }
@@ -727,3 +727,5 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 
 /* pausas: cinza com listras, na faixa do dia */
 .day-strip .seg-b.pausa { background: repeating-linear-gradient(45deg, var(--tb) 0 4px, transparent 4px 7px); opacity: .7; }
+
+.strip-tip { position: fixed; z-index: 450; display: none; pointer-events: none; background: var(--fg); color: var(--bg); padding: 6px 9px; border-radius: 6px; font-size: .8em; line-height: 1.4; white-space: pre-line; box-shadow: var(--shadow); max-width: 280px; }
