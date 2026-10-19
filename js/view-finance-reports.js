@@ -439,8 +439,8 @@ function bankSummaryHTML(entity) {
   const catSums = sum(monthOuts, catKey);
   // Estorno "Estorno→Categoria" abate essa categoria
   (BANK.all[entity] || []).filter(t => t.flow === 'in' && abatesCat(t.category) && (t.posted_on || '').slice(0, 7) === ym).forEach(t => { const tg = t.category.split('→')[1]; catSums[tg] = (catSums[tg] || 0) - Math.abs(Number(t.amount)); });
-  const byCat = Object.entries(catSums).filter(([k, v]) => k !== THER_LABEL && v > 0 && (BANK.reemb !== false || !isReembCat(k))).sort((a, b) => b[1] - a[1]);
-  if (catSums[THER_LABEL] && BANK.reemb !== false) byCat.push([THER_LABEL, catSums[THER_LABEL]]);
+  const byCat = Object.entries(catSums).filter(([k, v]) => k !== THER_LABEL && v > 0 && (BANK.reemb === true || !isReembCat(k))).sort((a, b) => b[1] - a[1]);
+  if (catSums[THER_LABEL] && BANK.reemb === true) byCat.push([THER_LABEL, catSums[THER_LABEL]]);
   const byMeth = Object.entries(sum(monthOuts, bankMethod)).sort((a, b) => b[1] - a[1]);
   const byCp = Object.entries(sum(monthOuts, t => t.counterpart || '—')).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const bars = (arr) => { const mx = Math.max(1, ...arr.map(x => x[1])); return arr.length ? `<div class="bars">${arr.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(k)}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / mx * 100}%"></div></div><span class="mono small">${fmtMoney0(v)}</span></div>`).join('')}</div>` : '<div class="empty small">Sem saídas neste mês.</div>'; };
@@ -448,7 +448,7 @@ function bankSummaryHTML(entity) {
   const views = { cat: ['Categoria', () => donutHTML(byCat, 'Por categoria', chartCat, true)], meio: ['Meio', () => donutHTML(byMeth, 'Por meio')], conta: ['PF / PJ', () => donutHTML(byAcc, 'PF e PJ', (k) => exColor(k === 'PJ' ? 'EMPRESA' : 'PESSOAL'))], onde: ['Onde foi', () => bars(byCp)] };
   const cur = views[BANK.rep] ? BANK.rep : 'cat';
   const tabs = `<div class="seg" style="margin-bottom:12px;flex-wrap:wrap">${Object.entries(views).map(([k, [l]]) => `<button class="${cur === k ? 'on' : ''}" data-act="bank-rep" data-v="${k}">${l}</button>`).join('')}</div>`;
-  const report = `<div class="panel bank-report"><div class="panel-h"><h3 class="row" style="gap:6px;align-items:center;flex-wrap:wrap">Relatório de <select data-on="bank-rmonth" class="input" style="width:auto;font:inherit;font-weight:600;padding:4px 8px">${[...new Set([ym, ...(BANK.all[entity] || []).filter(t => t.posted_on).map(t => t.posted_on.slice(0, 7))])].sort().reverse().map(m => `<option value="${m}" ${m === ym ? 'selected' : ''}>${rbLabel(m)}</option>`).join('')}</select></h3></div><div class="panel-b"><label class="row" style="gap:6px;margin-bottom:10px;align-items:center"><input type="checkbox" data-on="bank-reemb" ${BANK.reemb !== false ? 'checked' : ''}> Mostrar reembolsos no relatório</label>${tabs}${views[cur][1]()}</div></div>`;
+  const report = `<div class="panel bank-report"><div class="panel-h"><h3 class="row" style="gap:6px;align-items:center;flex-wrap:wrap">Relatório de <select data-on="bank-rmonth" class="input" style="width:auto;font:inherit;font-weight:600;padding:4px 8px">${[...new Set([ym, ...(BANK.all[entity] || []).filter(t => t.posted_on).map(t => t.posted_on.slice(0, 7))])].sort().reverse().map(m => `<option value="${m}" ${m === ym ? 'selected' : ''}>${rbLabel(m)}</option>`).join('')}</select></h3></div><div class="panel-b"><label class="row" style="gap:6px;margin-bottom:10px;align-items:center"><input type="checkbox" data-on="bank-reemb" ${BANK.reemb === true ? 'checked' : ''}> Mostrar reembolsos no relatório</label>${tabs}${views[cur][1]()}</div></div>`;
   const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
   const GREEN = '#22a06b', RED = '#d64545';
   const fOn = bankFilterOn() || BANK.fOpen;
@@ -661,10 +661,11 @@ const REEMB_TER = 'Reembolso Terapias', REEMB_OUT = 'Reembolso Outros';
 const isReembTer = (c) => c === REEMB_TER || c === 'Reembolso';
 const isReembOut = (c) => c === REEMB_OUT || /^Reembolso Outros→/.test(c || '');
 const isReembCat = (c) => c === REEMB_TER || isReembOut(c) || c === 'Reembolso';
-const abatesCat = (c) => /^Estorno→/.test(c || '') || (isReembOut(c) && BANK.reemb !== false && /→/.test(c));
+const abatesCat = (c) => /^Estorno→/.test(c || '') || (isReembOut(c) && BANK.reemb === true && /→/.test(c));
 const BANK_IN_CATS = ['Renda', 'Freelas', REEMB_TER, REEMB_OUT, 'Estorno'];
 function bankCatDialog(cp, bulk, flow) {
-  const cats = (flow === 'in' ? BANK_IN_CATS : bankCats()).slice().sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  // Estorno e reembolso só existem em entradas.
+  const cats = (flow === 'in' ? BANK_IN_CATS : bankCats().filter(c => c !== 'Estorno' && !isReembCat(c))).slice().sort((a, b) => a.localeCompare(b, 'pt-BR'));
   return new Promise(res => {
     let done = false;
     const l = openLayer({
@@ -672,15 +673,15 @@ function bankCatDialog(cp, bulk, flow) {
         <div class="field"><span class="lbl">Conta</span><div class="seg" id="bcat-biz"><button data-biz="pf" class="on">PF</button><button data-biz="pj">PJ</button></div></div>
         <div class="row" style="flex-wrap:wrap;gap:6px">${cats.map(c => `<button class="btn sm tg" data-cat="${esc(c)}" style="${cssTb(exColor(exKeyOf(c)))}">${esc(c)}</button>`).join('')}</div>
         <div class="field"><label for="bcat-new">Outra categoria</label><div class="row"><input id="bcat-new" class="input" placeholder="Nova categoria"><button class="btn sm" data-cat="__new">Usar</button></div></div>
-        <div class="field"><span class="lbl">Pessoa (opcional)</span><div class="seg" id="bcat-tag"><button data-tag="" class="on">Eu</button><button data-tag="Rafa">Rafa</button><button data-tag="Alice">Alice</button></div></div></div>`,
+        <div class="field"><span class="lbl">Pessoa (opcional)</span><div class="seg" id="bcat-tag"><button data-tag="">Eu</button><button data-tag="Rafa">Rafa</button><button data-tag="Alice">Alice</button></div></div></div>`,
       onClose: () => { if (!done) res(null); }
     });
-    let bizTouched = false, tagTouched = false, tagVal = null;
+    let bizTouched = false;
     const pickBiz = (b) => { bizTouched = true; l.box.querySelectorAll('#bcat-biz button').forEach(x => x.classList.toggle('on', x === b)); };
-    const pickTag = (b) => { tagTouched = true; tagVal = b.dataset.tag || null; l.box.querySelectorAll('#bcat-tag button').forEach(x => x.classList.toggle('on', x === b)); };
     l.box.addEventListener('click', async (e) => {
       const bz = e.target.closest('#bcat-biz [data-biz]'); if (bz) return pickBiz(bz);
-      const tg = e.target.closest('#bcat-tag [data-tag]'); if (tg) return pickTag(tg);
+      const tg = e.target.closest('#bcat-tag [data-tag]');
+      if (tg) { done = true; res({ tagOnly: true, tag: tg.dataset.tag || null }); l.close(); return; }
       const b = e.target.closest('[data-cat]'); if (!b) return;
       let v = b.dataset.cat;
       if (v === '__new') v = $('#bcat-new', l.box).value.trim();
@@ -692,7 +693,7 @@ function bankCatDialog(cp, bulk, flow) {
         v = (v === 'Estorno' ? 'Estorno→' : REEMB_OUT + '→') + target;
         if (!bizTouched) biz = null;   // estorno fica na conta de origem, a não ser que você troque
       }
-      done = true; res({ cat: v, biz, tag: tagTouched ? tagVal : undefined }); l.close();
+      done = true; res({ cat: v, biz }); l.close();
     });
   });
 }
@@ -722,8 +723,14 @@ ACTIONS['bank-cat'] = async (el) => {
   const entity = el.dataset.entity, cp = el.dataset.cp;
   const pick = el.dataset.v ? { cat: el.dataset.v, biz: PJ_CATS.includes(el.dataset.v) ? 'pj' : null } : await bankCatDialog(cp, false, el.dataset.flow);
   if (!pick) return;
+  if (pick.tagOnly) {
+    const qt = db.adapter.client.from('tempo_bank_txns').update({ tag: pick.tag, updated_at: new Date().toISOString() });
+    const { error: et } = cp === '—' ? await qt.is('counterpart', null) : await qt.eq('counterpart', cp);
+    if (et) return toast('Erro: ' + et.message);
+    await bankLoadTxns(); return render();
+  }
   const { cat, biz } = pick;
-  const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), ...(pick.tag !== undefined ? { tag: pick.tag } : {}), updated_at: new Date().toISOString() });
+  const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), updated_at: new Date().toISOString() });
   const { error } = cp === '—' ? await q.is('counterpart', null) : await q.eq('counterpart', cp);
   if (error) return toast('Erro: ' + error.message);
   bankMarkCats([cp], cat, false);
@@ -743,7 +750,7 @@ CHANGES['bank-cmpb'] = (el) => { BANK.cmpB = el.value; render(); };
 CHANGES['bank-rmonth'] = (el) => { BANK.month = el.value; render(); };
 // Soma de um mês: entradas, saídas (sem terapias), sobra e saídas por categoria.
 function monthSnap(entity, ym) {
-  const withRe = BANK.reemb !== false;
+  const withRe = BANK.reemb === true;
   const cats = {}; let ent = 0, sai = 0;
   (BANK.all[entity] || []).forEach(t => {
     if (t.scope === 'interna' || !t.posted_on || t.posted_on.slice(0, 7) !== ym) return;
@@ -795,7 +802,7 @@ function compareHTML(entity) {
     const a = sa.cats[k] || 0, b = sb.cats[k] || 0;
     return `<tr><td>${esc(k)}</td><td class="num" style="color:${A_C}">${fmtMoney0(a)}</td><td class="num" style="color:${B_C}">${fmtMoney0(b)}</td><td class="num">${diff(a, b, true)}</td></tr>`;
   }).join('');
-  return `<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>Comparar dois meses</h3><span class="faint small">${BANK.reemb !== false ? 'com reembolsos' : 'sem reembolsos'}</span></div>
+  return `<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>Comparar dois meses</h3><span class="faint small">${BANK.reemb === true ? 'com reembolsos' : 'sem reembolsos'}</span></div>
     <div class="panel-b">
       <div class="row" style="gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
         <label class="row small" style="gap:6px;align-items:center"><span style="width:10px;height:10px;border-radius:50%;background:${A_C}"></span>Mês 1 <select data-on="bank-cmpa" class="input" style="width:auto;min-width:170px">${opts(A)}</select></label>
@@ -821,7 +828,7 @@ ACTIONS['bank-mnow'] = () => { BANK.month = null; render(); };
 CHANGES['bank-reemb'] = (el) => { BANK.reemb = el.checked; render(); };
 // Comparar meses: categorias (saídas) e totais de entrada, saída e sobra, mês a mês. Mostra até 12 meses.
 function trendHTML(entity) {
-  const withRe = BANK.reemb !== false;
+  const withRe = BANK.reemb === true;
   const txns = (BANK.all[entity] || []).filter(t => t.scope !== 'interna' && t.posted_on);
   const months = [...new Set(txns.map(t => t.posted_on.slice(0, 7)))].sort().slice(-12);
   const cats = {}; const ent = {}; const sai = {};
@@ -860,8 +867,13 @@ ACTIONS['bank-bulk-cat'] = async () => {
   const flows = new Set(ids.map(id => ((BANK.every || []).find(x => x.id === id) || {}).flow));
   const pick = await bankCatDialog(`${ids.length} lançamento(s)`, true, flows.size === 1 ? [...flows][0] : null);
   if (!pick) return;
+  if (pick.tagOnly) {
+    const { error: et } = await db.adapter.client.from('tempo_bank_txns').update({ tag: pick.tag, updated_at: new Date().toISOString() }).in('id', ids);
+    if (et) return toast('Erro: ' + et.message);
+    BANK.sel = {}; await bankLoadTxns(); return render();
+  }
   const { cat, biz } = pick;
-  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), ...(pick.tag !== undefined ? { tag: pick.tag } : {}), updated_at: new Date().toISOString() }).in('id', ids);
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), updated_at: new Date().toISOString() }).in('id', ids);
   if (error) return toast('Erro: ' + error.message);
   bankMarkCats(ids.map(id => ((BANK.every || []).find(x => x.id === id) || {}).counterpart || '—'), cat, false);
   await bankLoadTxns();
