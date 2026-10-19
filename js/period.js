@@ -73,7 +73,7 @@ function reportPanelHTML(day) {
       const ms = new Date(r.to) - new Date(r.from); if (!(ms > 0)) return;
       const tn = toolName(r); progs.set(tn, (progs.get(tn) || 0) + ms);
       const fk = `${r.app}|${r.doc || ''}`;
-      const f = files.get(fk) || { label: r.doc ? `${r.doc} · ${r.app}` : r.app, app: r.app, ms: 0 };
+      const f = files.get(fk) || { label: r.doc ? `${r.doc} · ${r.app}` : r.app, app: r.app, doc: r.doc || null, ms: 0 };
       f.ms += ms; files.set(fk, f);
     });
   });
@@ -82,13 +82,16 @@ function reportPanelHTML(day) {
   const typeItems = items(types, k => { const w = db.get('tempo_work_types', k); return w?.name || 'Sem tipo'; }, k => hexOf(db.get('tempo_work_types', k)?.color || 'gray'));
   const pauseItems = items(pauses, pauseLabel, k => pauseHatch(k));
   const progItems = items(progs, k => k, k => toolColor(k));
-  const fileItems = [...files.values()].sort((x, y) => y.ms - x.ms).map(f => ({ label: f.label, ms: f.ms, color: toolColor(f.app) }));
+  // arquivos sem nome próprio (só o programa), nomes iguais ao do programa e sites do Chrome já aparecem em "Programas e sites"
+  const fileItems = [...files.values()].filter(f => f.doc && f.doc !== f.app && !isChromeSite(f.app, f.doc))
+    .sort((x, y) => y.ms - x.ms).map(f => ({ label: f.label, ms: f.ms, color: toolColor(f.app) }));
 
   const section = (title, list) => {
     if (!list.length) return `<div class="stack" style="gap:6px"><span class="lbl">${title}</span><div class="muted small">Nada neste período.</div></div>`;
     const max = Math.max(1, ...list.map(i => i.ms));
-    const shown = list.slice(0, 8);
-    return `<div class="stack" style="gap:6px"><span class="lbl">${title}</span><div class="bars">${shown.map(i => `<div class="bar-row"><span class="lab">${esc(i.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${(i.ms / max * 100).toFixed(1)}%;background:${i.color || 'var(--accent)'}"></div></div><span class="val">${fmtDur(i.ms)}</span></div>`).join('')}</div>${list.length > 8 ? `<div class="small muted">+${list.length - 8} outros</div>` : ''}</div>`;
+    const rowOf = (i) => `<div class="bar-row"><span class="lab">${esc(i.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${(i.ms / max * 100).toFixed(1)}%;background:${i.color || 'var(--accent)'}"></div></div><span class="val">${fmtDur(i.ms)}</span></div>`;
+    const head = list.slice(0, 8).map(rowOf).join(''), more = list.slice(8).map(rowOf).join('');
+    return `<div class="stack" style="gap:6px"><span class="lbl">${title}</span><div class="bars">${head}</div>${more ? `<details class="rep-more"><summary class="small muted" style="cursor:pointer;padding:4px 0">+${list.length - 8} outros (clique para ver todos)</summary><div class="bars" style="margin-top:6px">${more}</div></details>` : ''}</div>`;
   };
   const sections = [];
   if (p === 'dia' && v === 'tudo') sections.push(section('Tipos de trabalho', typeItems));
@@ -116,7 +119,10 @@ function reportPanelHTML(day) {
       <div class="small muted">bruto ${fmtDur(bruto)} · trabalho ${fmtDur(net)} · pausas ${fmtDur(Math.max(0, bruto - net))}</div>
       ${stripHTML}
       ${chartHTML}
-      ${sections.join('')}
+      <details class="rep-det">
+        <summary style="cursor:pointer;font-weight:600;padding:4px 0;list-style-position:inside">Detalhes: tipos, pausas, programas e arquivos</summary>
+        <div class="stack" style="gap:14px;margin-top:12px">${sections.join('')}</div>
+      </details>
     </div>
   </div>`;
 }

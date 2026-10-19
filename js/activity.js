@@ -16,7 +16,15 @@ const CHROME_SITE_NAMES = ['Behance', 'Pinterest', 'Magnific', 'Reunião', 'Clau
 const isChromeSite = (app, doc) => !!doc && /chrome/i.test(String(app || '')) && CHROME_SITE_NAMES.includes(doc);
 const toolName = (r) => (isChromeSite(r.app, r.doc) ? r.doc : r.app);
 /* cor padrão estável por nome (o mesmo nome sempre tem a mesma cor padrão, em qualquer sessão) */
-const actDefaultColor = (name) => { let h = 0; for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ACT_COLORS[h % ACT_COLORS.length]; };
+/* cor padrão de cada programa/site (a mesma em todos os gráficos); o que não estiver aqui ganha uma cor pelo nome */
+const TOOL_DEFAULTS = [['illustrator', '#F97316'], ['photoshop', '#1D6FE0'], ['after effects', '#7C3AED'], ['premiere', '#6D28D9'],
+  ['claude', '#C8A02A'], ['chatgpt', '#10A37F'], ['gpt', '#10A37F'], ['magnific', '#111827'], ['whatsapp', '#25D366'],
+  ['telegram', '#229ED9'], ['tempo', '#2563EB'], ['ajustes', '#64748B'], ['figma', '#A259FF'], ['chrome', '#EA4335']];
+const actDefaultColor = (name) => {
+  const n = String(name).toLowerCase();
+  const hit = TOOL_DEFAULTS.find(([k]) => n.includes(k)); if (hit) return hit[1];
+  let h = 0; for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ACT_COLORS[h % ACT_COLORS.length];
+};
 const colorKeyOf = (gid) => {
   if (gid.startsWith('p:')) return 'n:' + gid.slice(2);
   if (gid.startsWith('a:')) {
