@@ -200,6 +200,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         m.addItem(.separator())
         m.addItem(withTitle: "Sair", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = m
+
+        // Atalhos (⌘U, ⌘R, ⌘Q) só funcionam com um menu principal do app; o menu da barra não basta.
+        let main = NSMenu()
+        let appItem = NSMenuItem()
+        main.addItem(appItem)
+        let appMenu = NSMenu(title: "Tempo")
+        appMenu.addItem(withTitle: "Mostrar Tempo", action: #selector(showWindow), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Recarregar", action: #selector(reload), keyEquivalent: "r")
+        appMenu.addItem(withTitle: "Atualizar app", action: #selector(updateNow), keyEquivalent: "u")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Sair", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+        NSApp.mainMenu = main
     }
 
     private func toggleItem(_ title: String, key: String, defaultOn: Bool, action: Selector) -> NSMenuItem {
