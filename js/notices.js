@@ -133,28 +133,36 @@ function parseTodoText(text) {
     const rm = t.match(/(?<![\p{L}\p{N}])(depois\s+de\s+amanh[ãa]|amanh[ãa]|hoje)(?![\p{L}\p{N}])/iu);
     if (rm) { const w = sem(rm[1]); const n = w.startsWith('depois') ? 2 : w.startsWith('amanh') ? 1 : 0; day = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + n); t = t.replace(rm[0], ' '); }
   }
+  // 4a) intervalo: "7h30 às 8h", "7h30 até 8h", "das 7h30 a 8h", "7h30-8h"
+  let end = null;
+  const rg = t.match(/(?<![\p{L}\p{N}])(?:das?\s+)?(\d{1,2})\s*(?::|h)\s*(\d{2})?\s*(?:[àa]s?|at[ée]|-|–)\s*(\d{1,2})(?:\s*(?::|h)\s*(\d{2})?)?(?![\p{L}\p{N}])/iu);
+  if (rg && Number(rg[1]) <= 23 && Number(rg[3]) <= 23 && Number(rg[2] || 0) <= 59 && Number(rg[4] || 0) <= 59) {
+    hh = Number(rg[1]); mi = Number(rg[2] || 0); end = `${pad(Number(rg[3]))}:${pad(Number(rg[4] || 0))}`; t = t.replace(rg[0], ' ');
+  }
   // 4) horário: 16h, 16h30, 16:30, às 16
   const tm = t.match(/(?<![\p{L}\p{N}])(?:[àa]s?\s+)?(\d{1,2})\s*(?::|h)\s*(\d{2})?(?![\p{L}\p{N}])/iu) || t.match(/(?<![\p{L}\p{N}])[àa]s?\s+(\d{1,2})(?![\p{L}\p{N}])/iu);
-  if (tm && Number(tm[1]) <= 23 && Number(tm[2] || 0) <= 59) { hh = Number(tm[1]); mi = Number(tm[2] || 0); t = t.replace(tm[0], ' '); }
+  if (hh === null && tm && Number(tm[1]) <= 23 && Number(tm[2] || 0) <= 59) { hh = Number(tm[1]); mi = Number(tm[2] || 0); t = t.replace(tm[0], ' '); }
   const deadline = /(?<![\p{L}\p{N}])at[ée](?![\p{L}\p{N}])/iu.test(orig);
   const title = t.replace(/\s+/g, ' ').replace(/(?<![\p{L}\p{N}])(at[ée]|[àa]s?|de|do|da|para)\s*$/iu, '').replace(/[\s,.;:-]+$/, '').trim() || orig;
-  if (!day && hh === null) return { title: orig, due: null, deadline: false };
+  if (!day && hh === null) return { title: orig, due: null, deadline: false, end: null };
   const d = day || hoje;
   const h = hh === null ? 20 : hh, m = hh === null ? 0 : mi;
-  return { title, due: `${ymd(d)}T${pad(h)}:${pad(m)}`, deadline };
+  return { title, due: `${ymd(d)}T${pad(h)}:${pad(m)}`, deadline: deadline && !end, end };
 }
 function todoDueLabel(data) {
   const [ds, ts] = data.due.split('T'); const [h, m] = ts.split(':').map(Number);
   const hoje = ymd(new Date()), amanha = ymd(new Date(Date.now() + 864e5));
   const quando = ds === hoje ? 'hoje' : ds === amanha ? 'amanhã' : fmtDateShort(ds);
-  return `${data.deadline ? 'até ' : ''}${quando} ${m ? `${h}h${pad(m)}` : `${h}h`}`;
+  const fmt = (hh, mm) => mm ? `${hh}h${pad(mm)}` : `${hh}h`;
+  if (data.end) { const [eh, em] = data.end.split(':').map(Number); return `${quando} ${fmt(h, m)} às ${fmt(eh, em)}`; }
+  return `${data.deadline ? 'até ' : ''}${quando} ${fmt(h, m)}`;
 }
 
 /* To-do manual */
 ACTIONS['todo-add'] = () => {
   const inp = $('#todo-new'); const raw = (inp?.value || '').trim(); if (!raw) return;
   const p = parseTodoText(raw);
-  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: p.due ? { due: p.due, deadline: p.deadline } : {}, decision: '', decided_at: null, snooze_until: null }, true);
+  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {}, decision: '', decided_at: null, snooze_until: null }, true);
   db.emit();
 };
 ACTIONS['todo-toggle'] = (el) => {
@@ -211,7 +219,7 @@ ACTIONS['todo-save'] = (el) => {
   const id = el.dataset.id; if (S.todoEdit !== id) return; S.todoEdit = null;
   const raw = el.value.trim(); if (!raw || !db.get('tempo_notices', id)) { render(); return; }
   const p = parseTodoText(raw);
-  db.update('tempo_notices', id, { title: p.title, data: p.due ? { due: p.due, deadline: p.deadline } : {} }, true);
+  db.update('tempo_notices', id, { title: p.title, data: p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {} }, true);
   db.emit();
 };
 
