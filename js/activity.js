@@ -40,8 +40,8 @@ function actRoots(keys) {
 
 /* Analisa a sessão: grupos (ordenados por tempo e com cor) e cada registro bruto com seu grupo.
    mode 'program' agrupa por programa; 'file' agrupa por arquivo (com os ajustes manuais). */
-function actAnalyze(entryId, mode) {
-  const list = actList(entryId);
+function actAnalyze(entryId, mode) { return actAnalyzeList(actList(entryId), mode); }
+function actAnalyzeList(list, mode) {
   if (!list.length) return { groups: [], records: [] };
   const info = {};
   list.forEach(x => { const k = actKeyOf(x); info[k] = info[k] || { key: k, app: x.app, doc: x.doc, folder: x.folder }; });
@@ -251,3 +251,22 @@ document.addEventListener('mouseout', (e) => {
   wrap.classList.remove('focus');
   wrap.querySelectorAll('.on').forEach(x => x.classList.remove('on'));
 });
+
+/* Aba Tempo do projeto: faixa de programas e de arquivos somando todas as sessões do projeto.
+   A faixa tem 100% = tempo líquido do projeto; o que não tem registro fica cinza. */
+function actProjectHTML(entries) {
+  const list = entries.flatMap(e => actList(e.id));
+  const total = entries.reduce((s, e) => s + entryMs(e), 0);
+  if (!list.length || !total) return '';
+  const sec = (title, mode) => {
+    const A = actAnalyzeList(list, mode);
+    let off = 0, bars = '';
+    A.groups.forEach(g => {
+      const w = Math.min(100 - off, g.ms / total * 100); if (w <= 0) return;
+      bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%" data-tip="${esc(actTip(g))}"></span>`;
+      off += w;
+    });
+    return `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div><div class="act-strip">${bars}</div><div class="act-chips">${A.groups.map(g => `<span class="act-chip" data-g="${esc(g.id)}" style="--tb:${g.color}"><i></i>${esc(g.label)} <span class="faint">${fmtH(g.ms)}</span></span>`).join('')}</div></div>`;
+  };
+  return `<div class="stack" style="gap:10px;margin-bottom:14px">${sec('Por programa', 'program')}${sec('Por arquivo', 'file')}</div>`;
+}

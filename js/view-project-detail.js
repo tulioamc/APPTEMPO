@@ -1,7 +1,7 @@
 /* =====================================================================
    DETALHE DO PROJETO (gaveta lateral)
    ===================================================================== */
-function openProject(id, tab = 'overview') {
+function openProject(id, tab = 'time') {
   const st = { tab };
   const l = openLayer({
     kind: 'drawer',
@@ -15,7 +15,7 @@ function projectDrawer(id, st) {
   const p = db.get('tempo_projects', id);
   if (!p) return `<div class="dh"><h2>Projeto removido</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer">${icon('x')}</button></div>`;
   const a = agencyOf(p), c = clientOf(p);
-  const tabs = [['overview', 'Visão geral'], ['tasks', `Tarefas (${db.where('tempo_tasks', t => t.project_id === id).length})`], ['time', 'Tempo'], ['revisions', `Revisões (${db.where('tempo_revisions', r => r.project_id === id).length})`], ['finance', 'Financeiro'], ['history', 'Histórico']];
+  const tabs = [['time', 'Tempo'], ['overview', 'Visão geral'], ['tasks', `Tarefas (${db.where('tempo_tasks', t => t.project_id === id).length})`], ['revisions', `Revisões (${db.where('tempo_revisions', r => r.project_id === id).length})`], ['finance', 'Financeiro'], ['history', 'Histórico']];
   const body = { overview: pdOverview, tasks: pdTasks, time: pdTime, revisions: pdRevisions, finance: pdFinance, history: pdHistory }[st.tab](p);
   return `<div class="dh"><div class="grow"><div class="row small" style="gap:6px">${agencyTag(a)}${comboBtn('client', p.client_id, 'proj-client', p.id)}</div><h2 style="margin-top:4px">${esc(p.name)}</h2></div>
     <button class="btn sm" data-x="track">${icon('play')} Registrar tempo</button><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
@@ -73,8 +73,9 @@ function pdTasks(p) {
 function pdTime(p) {
   const es = db.where('tempo_time_entries', e => e.project_id === p.id).sort((a, b) => new Date(entryStart(b)) - new Date(entryStart(a)));
   const tot = es.reduce((s, e) => s + entryMs(e), 0);
+  const actHtml = actProjectHTML(es);
   const by = {}; es.forEach(e => { by[e.work_type_id || '_'] = (by[e.work_type_id || '_'] || 0) + entryMs(e); });
-  return `<div class="kpis"><div class="kpi"><span class="k">Total líquido</span><span class="v">${fmtH(tot)}</span><span class="s">${es.length} sessão(ões)</span></div><div class="kpi"><span class="k">Bruto</span><span class="v">${fmtH(es.reduce((s, e) => s + entryBrutoMs(e), 0))}</span><span class="s">pausas ${fmtH(Math.max(0, es.reduce((s, e) => s + entryBrutoMs(e), 0) - tot))}</span></div><div class="kpi"><span class="k">Em revisões</span><span class="v">${fmtH(revisionMs(p.id))}</span><span class="s">${tot ? Math.round(revisionMs(p.id) / tot * 100) : 0}% do tempo</span></div></div>
+  return `${actHtml}<div class="kpis"><div class="kpi"><span class="k">Total líquido</span><span class="v">${fmtH(tot)}</span><span class="s">${es.length} sessão(ões)</span></div><div class="kpi"><span class="k">Bruto</span><span class="v">${fmtH(es.reduce((s, e) => s + entryBrutoMs(e), 0))}</span><span class="s">pausas ${fmtH(Math.max(0, es.reduce((s, e) => s + entryBrutoMs(e), 0) - tot))}</span></div><div class="kpi"><span class="k">Em revisões</span><span class="v">${fmtH(revisionMs(p.id))}</span><span class="s">${tot ? Math.round(revisionMs(p.id) / tot * 100) : 0}% do tempo</span></div></div>
   ${tot ? `<div class="bars">${Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, ms]) => { const w = db.get('tempo_work_types', k); return `<div class="bar-row"><span class="lab">${esc(w?.name || 'Sem tipo')}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf(w?.color || 'gray')};width:${ms / tot * 100}%"></div></div><span class="val">${fmtDur(ms)}</span></div>`; }).join('')}</div>` : ''}
   <div class="panel"><div class="panel-b tight">${es.length ? es.map(e => `<div class="entry" data-x="open-entry" data-id="${e.id}"><span class="when">${fmtDateShort(entryStart(e))} ${fmtTime(entryStart(e))}</span><div class="what"><div class="t">${esc(entryTitle(e))}${e.revision_id ? ' <span class="inh">revisão</span>' : ''}</div><div class="p">${esc(e.notes || '')}</div></div><span class="dur">${fmtDur(entryMs(e))}</span></div>`).join('') : '<div class="empty small">Nenhum tempo registrado.</div>'}</div></div>`;
 }

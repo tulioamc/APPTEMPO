@@ -15,7 +15,7 @@ function fmtDur(ms) {
   if (!h) return `${mm}min`; return mm ? `${h}h ${pad(mm)}` : `${h}h`;
 }
 const hours = (ms) => ms / 3600000;
-const fmtH = (ms) => (hours(ms)).toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + ' h';
+const fmtH = (ms) => { const m = Math.round(Math.max(0, ms || 0) / 60000); return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
 function ymd(d) { d = new Date(d); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function parseYmd(s) { if (!s) return null; const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
 function fmtDate(s) { if (!s) return ''; const d = typeof s === 'string' && s.length === 10 ? parseYmd(s) : new Date(s); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; }
