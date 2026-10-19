@@ -39,10 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
 
         monitor.onSegment = { [weak self] from, to, ctx in
-            self?.callBridge("reportActivity", [[
+            let payload: [String: Any] = [
                 "from": self?.iso(from) ?? "", "to": self?.iso(to) ?? "",
                 "app": ctx.app, "doc": ctx.doc ?? NSNull(), "folder": ctx.folder ?? NSNull()
-            ]])
+            ]
+            self?.callBridge("reportActivity", [payload])
         }
         monitor.onIdle = { [weak self] from, to in
             self?.callBridge("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", NSNull()])
