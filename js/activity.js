@@ -6,6 +6,11 @@
 
 const ACT_COLORS = ['#F59E0B', '#7C3AED', '#2563EB', '#60A5FA', '#DB2777', '#059669', '#92400E', '#64748B'];
 const ACT_START_H = 7, ACT_SPAN = 17 * 3600000;
+const ACT_PALETTE = ['#F59E0B', '#7C3AED', '#2563EB', '#60A5FA', '#DB2777', '#059669', '#92400E', '#64748B', '#EF4444', '#14B8A6', '#84CC16', '#111827'];
+/* cor escolhida por grupo (chave = id do grupo): db.setting('actColors') */
+const actColorMap = () => db.setting('actColors', {}) || {};
+function actSetColor(gid, color) { const m = { ...actColorMap() }; if (color) m[gid] = color; else delete m[gid]; db.setSetting('actColors', m); db.emit(); }
+const actSwatches = () => `<div class="act-swatches">${ACT_PALETTE.map(c => `<button type="button" class="act-swatch" data-x="act-color" data-c="${c}" style="background:${c}" aria-label="Cor ${c}"></button>`).join('')}<button type="button" class="act-swatch none" data-x="act-color" data-c="" aria-label="Cor padrão">×</button></div>`;
 
 function actList(entryId) { return db.setting('act:' + entryId, []) || []; }
 
@@ -55,7 +60,7 @@ function actAnalyze(entryId, mode) {
     const items = Object.values(g.items).sort((a, b) => b.ms - a.ms);
     const names = [...new Set(items.map(it => it.doc || it.app))];
     const label = mode === 'program' ? items[0].app : (names.length <= 2 ? names.join(' · ') : `${names.slice(0, 2).join(' · ')} +${names.length - 2}`);
-    return { id: g.id, items, ms: g.ms, label, color: ACT_COLORS[i % ACT_COLORS.length] };
+    return { id: g.id, items, ms: g.ms, label, color: actColorMap()[g.id] || ACT_COLORS[i % ACT_COLORS.length] };
   });
   return { groups: sorted, records };
 }
@@ -161,7 +166,7 @@ function actStripHTML(e, A) {
 }
 
 function actChipsHTML(A, mode) {
-  return `<div class="act-chips">${A.groups.map(g => `<button type="button" class="act-chip" data-x="act-chip" data-g="${esc(g.id)}" data-mode="${mode}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
+  return `<div class="act-chips">${A.groups.map(g => `<button type="button" class="act-chip" data-x="act-chip" data-g="${esc(g.id)}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
 }
 
 /* Bloco da tela "Revisar sessão": uma faixa por programa e uma por arquivo. */
@@ -187,6 +192,7 @@ function openActGroup(entryId, gid, onDone) {
         ${others.length ? `<div class="field"><label for="act-target">Agrupar com outro</label><select id="act-target" class="input">${others.map(o => `<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('')}</select></div><div class="row"><button class="btn" data-x="act-merge">Agrupar</button></div>` : ''}
         <div class="field"><label for="act-proj">Mover este tempo para o projeto</label><select id="act-proj" class="input"><option value="">Escolha um projeto</option>${tkProjectsSorted().map(p => `<option value="${esc(p.id)}">${esc(tkProjectLabel(p))}</option>`).join('')}</select></div>
         <div class="field"><label for="act-task">Tarefa (opcional)</label><select id="act-task" class="input" disabled><option value="">Sem tarefa</option></select></div>
+        <div class="field"><label>Cor</label>${actSwatches()}</div>
         <div class="row"><button class="btn" data-x="act-move">Mover</button><span class="small muted">Sai desta sessão e vai para o projeto escolhido.</span></div>
       </div>
       <div class="df"><button class="btn" data-act="close-layer">Fechar</button></div>`,
@@ -200,6 +206,7 @@ function openActGroup(entryId, gid, onDone) {
       ly.box.addEventListener('click', async (ev) => {
         const b = ev.target.closest('[data-x]'); if (!b) return;
         const x = b.dataset.x;
+        if (x === 'act-color') { actSetColor(g.id, b.dataset.c); ly.close(); onDone && onDone(); return; }
         if (x === 'act-ungroup') { actUngroup(g); }
         else if (x === 'act-merge') { actMerge(g, ly.box.querySelector('#act-target').value); }
         else if (x === 'act-move') {
@@ -213,6 +220,18 @@ function openActGroup(entryId, gid, onDone) {
         ly.close(); onDone && onDone();
       });
     },
+  });
+}
+
+/* Janela de cor de um programa (e de qualquer grupo). */
+function openActColor(gid, label, onDone) {
+  openLayer({
+    render: () => `<div class="dh"><h2>${esc(label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+      <div class="db"><span class="lbl">Cor na linha do tempo</span>${actSwatches()}</div>`,
+    onMount: (ly) => ly.box.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-x="act-color"]'); if (!b) return;
+      actSetColor(gid, b.dataset.c); ly.close(); onDone && onDone();
+    }),
   });
 }
 

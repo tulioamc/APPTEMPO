@@ -733,6 +733,10 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .act-foot { margin-top: 18px; padding-top: 10px; border-top: 1px dashed var(--border); opacity: .85; }
 .act-foot .lbl { font-size: .8em; }
 .act-log { font-size: .72em; color: var(--fg-3); line-height: 1.5; margin-bottom: 8px; font-family: var(--mono, monospace); }
+.act-swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.act-swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.act-swatch:hover { border-color: var(--fg); }
+.act-swatch.none { background: var(--surface-2); color: var(--fg-3); font-size: 14px; line-height: 20px; }
 .act-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .act-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 2px 9px; font-size: .8em; cursor: pointer; color: var(--fg); }
 .act-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--tb); display: inline-block; }

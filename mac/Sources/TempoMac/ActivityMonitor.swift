@@ -63,7 +63,7 @@ final class ActivityMonitor {
     private func closeSegment(at end: Date) {
         guard let ctx = current else { return }
         let long = end.timeIntervalSince(segStart) >= minSegment
-        if long && ctx.bundle != selfBundle && !excluded.contains(ctx.bundle) {
+        if long && !excluded.contains(ctx.bundle) {
             onSegment?(segStart, end, ctx)
         }
         current = nil
@@ -85,6 +85,8 @@ final class ActivityMonitor {
     private func currentContext() -> Context? {
         guard let app = NSWorkspace.shared.frontmostApplication, let name = app.localizedName else { return nil }
         let bundle = app.bundleIdentifier ?? name
+        // o próprio Tempo também aparece na linha do tempo, como "Tempo"
+        if bundle == selfBundle { return Context(app: "Tempo", bundle: bundle, doc: nil, folder: nil) }
         if bundle == "com.google.Chrome" {
             // Chrome só conta quando a aba ativa é um dos sites da lista; outros sites não são registrados.
             guard AXIsProcessTrusted(), let site = chromeSite(app.processIdentifier) else { return nil }

@@ -325,7 +325,7 @@ function openEntryModal(id) {
     const x = b.dataset.x;
     if (x === 'edit-seg') { const i = Number(b.dataset.i); openSeg = openSeg === i ? null : i; redraw(); return; }
     if (x === 'pick') { showPicker = true; redraw(); }
-    if (x === 'act-chip') { if (b.dataset.mode === 'file') openActGroup(e.id, b.dataset.g, redraw); return; }
+    if (x === 'act-chip') { if (b.dataset.mode === 'file') openActGroup(e.id, b.dataset.g, redraw); else openActColor(b.dataset.g, b.dataset.label || 'Programa', redraw); return; }
     if (x === 'addseg') { const last = segs[segs.length - 1]; const base = last.e ? new Date(last.e) : new Date(); const s = new Date(base.getTime() + 30 * 60000); segs.push({ s: s.toISOString(), e: new Date(s.getTime() + 3600000).toISOString() }); redraw(); }
     if (x === 'delseg') { segs.splice(Number(b.dataset.i), 1); openSeg = null; redraw(); }
     if (x === 'del') {
