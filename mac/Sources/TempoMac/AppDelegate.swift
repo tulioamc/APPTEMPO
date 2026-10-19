@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
         window.title = "Tempo"
+        window.delegate = self
         window.contentView = web
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -126,6 +127,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Fechar a janela só esconde: o app continua rodando na barra de menus e o site segue ativo.
+    func windowShouldClose(_ sender: NSWindow) -> Bool { sender.orderOut(nil); return false }
 
     private func iso(_ d: Date) -> String { isoFormatter.string(from: d) }
 
