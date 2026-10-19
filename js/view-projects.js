@@ -207,6 +207,8 @@ function openProjectForm(id, clientId, onCreated) {
   });
   l.box.addEventListener('submit', (e) => e.preventDefault());
   l.box.addEventListener('change', (e) => { if (e.target.id === 'pf-client') $('#pf-fee-wrap', l.box).innerHTML = feeFieldInner(null, e.target.value); });
+  l.box.addEventListener('change', (e) => { if (e.target.id === 'pf-client' || e.target.id === 'pf-fee') syncFee(l.box); });
+  syncFee(l.box);
   l.box.addEventListener('click', (e) => {
     const b = e.target.closest('[data-x]'); if (!b) return;
     if (b.dataset.x === 'newclient') { openPartyForm('client', null, (c) => { $('#pf-client', l.box).innerHTML = clientSelectOptions(c.id); }); return; }
@@ -237,6 +239,16 @@ function feeFieldInner(p, cid) {
   const onNow = p ? statusName(p.payment_status_id) === 'Fee' : fe;
   const hint = !cid ? 'Escolha o cliente.' : !fe ? 'Bloqueado: este cliente não tem fee mensal.' : onNow ? 'Já vem marcado: cliente com fee mensal. Desmarque se for projeto por fora.' : 'Projeto por fora do fee: cobrado por projeto.';
   return `<label class="check small"><input type="checkbox" id="pf-fee" ${fe && onNow ? 'checked' : ''} ${fe ? '' : 'disabled'}> Entra no fee mensal</label><div class="faint small">${hint}</div>`;
+}
+/* Projeto no fee: pagamento vira Fee e orçamento fica travado (sem valor por projeto). */
+function syncFee(box) {
+  const cb = $('#pf-fee', box); const pay = $('#pf-pay', box); const bud = $('#pf-bud', box);
+  if (!pay || !bud) return;
+  const fee = statuses('payment').find(x => x.name === 'Fee');
+  const naoFat = statuses('payment').find(x => x.name === 'Não faturado');
+  const on = !!(cb && cb.checked && !cb.disabled && fee);
+  if (on) { pay.value = fee.id; pay.disabled = true; bud.value = ''; bud.readOnly = true; bud.title = 'Projeto no fee não tem valor por projeto'; }
+  else { pay.disabled = false; bud.readOnly = false; bud.removeAttribute('title'); if (fee && pay.value === fee.id && naoFat) pay.value = naoFat.id; }
 }
 function feePayId(chosenId, box) {
   const fee = statuses('payment').find(x => x.name === 'Fee'); const cb = $('#pf-fee', box);

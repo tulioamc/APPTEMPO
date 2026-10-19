@@ -50,11 +50,24 @@ ACTIONS['tk-set'] = (el) => { S.task[el.dataset.k] = el.dataset.v; render(); };
 ACTIONS['tk-open'] = (el) => openProject(el.dataset.p || db.get('tempo_tasks', el.dataset.id)?.project_id, 'tasks');
 CHANGES['tk-status'] = (el) => { setTaskStatus(db.get('tempo_tasks', el.dataset.id), el.value); toast('Status da tarefa atualizado'); };
 ACTIONS['tk-track'] = (el) => { const t = db.get('tempo_tasks', el.dataset.id); const p = db.get('tempo_projects', t.project_id); const c = clientOf(p); openStartModal({ agency_id: c?.agency_id || '__none', client_id: p.client_id, project_id: p.id, task_id: t.parent_id || t.id, sub_id: t.parent_id ? t.id : '' }); };
+/* Só projetos ativos (sem concluídos/cancelados), em ordem: agência > cliente > projeto. */
+const agOfProject = (p) => { const c = clientOf(p); return c ? db.get('tempo_agencies', c.agency_id) : null; };
+function tkProjectsSorted() {
+  return projects()
+    .filter(p => !['done', 'cancelled'].includes(statusCat(p.status_id)))
+    .sort((a, b) => (agOfProject(a)?.name || '~').localeCompare(agOfProject(b)?.name || '~', 'pt-BR')
+      || (clientOf(a)?.name || '').localeCompare(clientOf(b)?.name || '', 'pt-BR')
+      || a.name.localeCompare(b.name, 'pt-BR'));
+}
+function tkProjectLabel(p) {
+  const a = agOfProject(p); const c = clientOf(p);
+  return [a ? (agencyAbbr(a) || a.name) : 'Direto', c?.name || '', p.name].filter(Boolean).join(' › ');
+}
 ACTIONS['tk-new'] = () => {
   if (!projects().length) return toast('Crie um projeto antes de adicionar tarefas.');
   const l = openLayer({
     html: `<div class="dh"><h2>Nova tarefa</h2></div><form class="db" id="tkf">
-      <div class="field"><label for="tkf-p">Projeto *</label><select id="tkf-p" class="input" name="project_id">${options(projects().sort((a, b) => a.name.localeCompare(b.name)), S.task.project, { empty: true, emptyLabel: 'Selecione…', label: p => `${clientOf(p)?.name || ''} · ${p.name}` })}</select></div>
+      <div class="field"><label for="tkf-p">Projeto *</label><select id="tkf-p" class="input" name="project_id">${options(tkProjectsSorted(), S.task.project, { empty: true, emptyLabel: 'Selecione…', label: p => tkProjectLabel(p) })}</select></div>
       <div class="field"><label for="tkf-par">Subtarefa de (opcional)</label><select id="tkf-par" class="input" name="parent_id"><option value="">É uma tarefa principal</option></select></div>
       <div class="field"><label for="tkf-n">Nome *</label><input id="tkf-n" class="input" name="name"></div>
       <div class="grid2"><div class="field"><label for="tkf-wt">Tipo de trabalho</label><select id="tkf-wt" class="input" name="work_type_id">${options(workTypes(), '', { empty: true, emptyLabel: 'Sem tipo' })}</select></div><div class="field"><label for="tkf-dl">Prazo</label><input id="tkf-dl" type="date" class="input" name="deadline"></div></div>
