@@ -745,3 +745,16 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .day-strip .seg-b.pausa { background: repeating-linear-gradient(45deg, var(--tb) 0 4px, transparent 4px 7px); opacity: .7; }
 
 .strip-tip { position: fixed; z-index: 450; display: none; pointer-events: none; background: var(--fg); color: var(--bg); padding: 6px 9px; border-radius: 6px; font-size: .8em; line-height: 1.4; white-space: pre-line; box-shadow: var(--shadow); max-width: 280px; }
+
+/* gráficos de tempo */
+.hbars { display: flex; flex-direction: column; gap: 8px; }
+.hbar { display: grid; grid-template-columns: minmax(90px, 200px) 1fr 64px; align-items: center; gap: 10px; font-size: .85em; }
+.hb-lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hb-track { height: 14px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.hb-fill { display: block; height: 100%; border-radius: 4px; }
+.hb-val { text-align: right; }
+.mchart { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; align-items: end; height: 150px; }
+.mcol { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; }
+.mstack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 4px 4px 0 0; overflow: hidden; }
+.mstack span { display: block; min-height: 2px; }
+.mlab { font-size: .7em; color: var(--fg-3); margin-top: 4px; }

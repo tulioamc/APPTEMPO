@@ -73,7 +73,7 @@ function pdTasks(p) {
 function pdTime(p) {
   const es = db.where('tempo_time_entries', e => e.project_id === p.id).sort((a, b) => new Date(entryStart(b)) - new Date(entryStart(a)));
   const tot = es.reduce((s, e) => s + entryMs(e), 0);
-  const actHtml = actProjectHTML(es);
+  const actHtml = actProjectHTML(es) + projectTaskChartHTML(p, es);
   const by = {}; es.forEach(e => { by[e.work_type_id || '_'] = (by[e.work_type_id || '_'] || 0) + entryMs(e); });
   return `${actHtml}<div class="kpis"><div class="kpi"><span class="k">Total líquido</span><span class="v">${fmtH(tot)}</span><span class="s">${es.length} sessão(ões)</span></div><div class="kpi"><span class="k">Bruto</span><span class="v">${fmtH(es.reduce((s, e) => s + entryBrutoMs(e), 0))}</span><span class="s">pausas ${fmtH(Math.max(0, es.reduce((s, e) => s + entryBrutoMs(e), 0) - tot))}</span></div><div class="kpi"><span class="k">Em revisões</span><span class="v">${fmtH(revisionMs(p.id))}</span><span class="s">${tot ? Math.round(revisionMs(p.id) / tot * 100) : 0}% do tempo</span></div></div>
   ${tot ? `<div class="bars">${Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, ms]) => { const w = db.get('tempo_work_types', k); return `<div class="bar-row"><span class="lab">${esc(w?.name || 'Sem tipo')}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf(w?.color || 'gray')};width:${ms / tot * 100}%"></div></div><span class="val">${fmtDur(ms)}</span></div>`; }).join('')}</div>` : ''}
