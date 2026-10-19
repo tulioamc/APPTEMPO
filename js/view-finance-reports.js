@@ -285,7 +285,7 @@ async function bankAutoReimb() {
     if (t.flow !== 'in' || !isReembTer(t.category) || skip[t.id] || bankLinksOf(t.id).length) return;
     const months = bankReimbMonths(t);
     const cands = rows.filter(r => months.includes(r.month) && !taken.has(r.id) && Number(r.amount) > 0)
-      .sort((a, b) => (b.month === months[0] ? 1 : 0) - (a.month === months[0] ? 1 : 0) || Number(b.amount) - Number(a.amount)).slice(0, 20);
+      .sort((a, b) => (b.month === months[0] ? 1 : 0) - (a.month === months[0] ? 1 : 0) || Number(b.amount) - Number(a.amount)).slice(0, 30);
     if (!cands.length) return;
     const ids = bankSubsetFor(cands, Math.round(Math.abs(Number(t.amount)) * 100));
     if (!ids || !ids.length) return;
@@ -1004,7 +1004,13 @@ function bankRowExtra(t) {
 // Pagamento de terapia (PF) que bate com uma linha de reembolso do mesmo mês pelo valor.
 // Mês anterior: reembolso recebido costuma chegar depois da terapia.
 const bankPrevYm = (ym) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
-const bankReimbMonths = (t) => { const ym = (t.posted_on || '').slice(0, 7); return t.flow === 'in' ? [ym, bankPrevYm(ym)] : [ym]; };
+// Entrada de reembolso: mês do pagamento e os 3 meses anteriores (terapias podem ser de meses bem anteriores).
+const bankReimbMonths = (t) => {
+  const ym = (t.posted_on || '').slice(0, 7);
+  if (t.flow !== 'in') return [ym];
+  const out = [ym]; for (let i = 0; i < 3; i++) out.push(bankPrevYm(out[out.length - 1]));
+  return out;
+};
 function bankTherapyMatch(t) {
   const amt = Math.abs(Number(t.amount)), months = bankReimbMonths(t);
   const taken = bankTakenRows();
@@ -1068,10 +1074,17 @@ function bankReimbPick(t) {
   const taken = bankTakenRows();
   const rows = db.all('tempo_reimb_rows').filter(r => months.includes(r.month) && !taken.has(r.id) && Number(r.amount) > 0).sort((a, b) => String(a.month).localeCompare(String(b.month)) || String(a.name).localeCompare(String(b.name)));
   const target = Math.abs(Number(t.amount));
+  const sumText = (sum) => { const diff = Math.round((sum - target) * 100); return `Marcado: ${fmtMoney(sum)} de ${fmtMoney(target)}` + (diff === 0 ? ' · bate' : ` · diferença ${fmtMoney(Math.abs(diff) / 100)}`); };
+  // Sugestão: mesma busca de soma exata do auto-vínculo, com as candidatas na mesma ordem (mês atual primeiro, maior valor).
+  const cands = rows.slice().sort((a, b) => (b.month === months[0] ? 1 : 0) - (a.month === months[0] ? 1 : 0) || Number(b.amount) - Number(a.amount)).slice(0, 30);
+  const sugg = bankSubsetFor(cands, Math.round(target * 100)) || [];
+  const suggSet = new Set(sugg);
+  const suggSum = cands.filter(r => suggSet.has(r.id)).reduce((a, r) => a + Number(r.amount), 0);
   const html = `<div class="dh"><h2>Reembolso de quais terapias?</h2></div><div class="db">
     <p style="margin:0">${esc(t.counterpart || t.memo)} · ${fmtMoney(target)} · ${fmtDate(t.posted_on)}</p>
-    <div class="field"><span class="lbl">Terapias de ${months.join(' e ')} · marque todas que estão neste pagamento</span><div class="stack" style="gap:6px">${rows.length ? rows.map(r => `<label class="row" style="justify-content:space-between;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;cursor:pointer"><span><input type="checkbox" value="${r.id}" data-amt="${Number(r.amount)}" style="margin-right:8px">${esc(r.name)} <span class="small muted">${esc(r.month)}</span></span><span class="mono small">${fmtMoney(r.amount)}</span></label>`).join('') : '<span class="small muted">Nenhuma terapia sem vínculo neste mês.</span>'}</div></div>
-    <p class="small" data-sum style="margin:0">Marcado: ${fmtMoney(0)} de ${fmtMoney(target)}</p>
+    <div class="field"><span class="lbl">Terapias de ${months.join(', ')} · marque todas que estão neste pagamento</span><div class="stack" style="gap:6px">${rows.length ? rows.map(r => `<label class="row" style="justify-content:space-between;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;cursor:pointer"><span><input type="checkbox" value="${r.id}" data-amt="${Number(r.amount)}" style="margin-right:8px"${suggSet.has(r.id) ? ' checked' : ''}>${esc(r.name)} <span class="small muted">${esc(r.month)}</span></span><span class="mono small">${fmtMoney(r.amount)}</span></label>`).join('') : '<span class="small muted">Nenhuma terapia sem vínculo neste mês.</span>'}</div></div>
+    ${sugg.length ? '<p class="small muted" style="margin:0">Sugestão: marquei as terapias que fecham o valor exato. Confira e clique em Vincular.</p>' : '<p class="small muted" style="margin:0">Nenhuma combinação fecha o valor exato. Marque manualmente.</p>'}
+    <p class="small" data-sum style="margin:0">${sumText(suggSum)}</p>
     <div class="df"><button class="btn" data-x="no">Cancelar</button><button class="btn primary" data-x="ok">Vincular</button></div></div>`;
   return new Promise(res => {
     let done = false;
@@ -1080,8 +1093,7 @@ function bankReimbPick(t) {
     const picked = () => [...l.box.querySelectorAll('input[type=checkbox]:checked')];
     l.box.addEventListener('change', () => {
       const sum = picked().reduce((a, c) => a + Number(c.dataset.amt), 0);
-      const diff = Math.round((sum - target) * 100);
-      sumEl.textContent = `Marcado: ${fmtMoney(sum)} de ${fmtMoney(target)}` + (diff === 0 ? ' · bate' : ` · diferença ${fmtMoney(Math.abs(diff) / 100)}`);
+      sumEl.textContent = sumText(sum);
     });
     l.box.addEventListener('click', (e) => {
       if (e.target.closest('[data-x="ok"]')) {
