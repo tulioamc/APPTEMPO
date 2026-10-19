@@ -233,7 +233,7 @@ function suggestStart(p, seg) {
   const pending = db.all('tempo_notices').some(n => n.kind === 'start' && n.status === 'pending' && (n.data?.project_id || null) === pid);
   if (pending || activeEntry()) return;
   const client = p ? clientOf(p) : null;
-  const sel = { project_id: pid, client_id: client?.id || null, agency_id: client?.agency_id || null, task_id: null, work_type_id: p?.work_type_id || null, notes: '', revision_id: null };
+  const sel = { project_id: pid, client_id: client?.id || null, agency_id: client?.agency_id || null, task_id: null, work_type_id: null, notes: '', revision_id: null };
   const e = startEntry(sel); if (!e) return;
   db.update('tempo_time_entries', e.id, { segments: [{ s: seg.from, e: null }] }, true);
   notifyNative(p ? `Contando em ${p.name}` : `Contando em ${seg.app}`, `Confirme no Tempo para entrar no bruto, ou negue para arquivar.`);
@@ -291,7 +291,7 @@ function applyPause(a, n, mode) {
   const out = []; segs.forEach(s => { const S0 = new Date(s.s), E0 = s.e ? new Date(s.e) : null; const F = new Date(f), T = new Date(t);
     if (E0 && E0 <= F || S0 >= T) { out.push(s); return; }
     // motivo da pausa: "mac"/"suspenso"/"ocioso", ou o nome do app que pausou (ex.: WhatsApp)
-    if (S0 < F) out.push({ s: s.s, e: f, why: sug.source === 'app' && sug.app ? sug.app : sug.source });
+    if (S0 < F) out.push({ s: s.s, e: f, why: sug.source === 'app' && sug.app ? sug.app : (sug.source === 'mac' && sug.app === 'sono' ? 'sono' : sug.source) });
     if (!E0 || E0 > T) out.push({ s: t, e: s.e });
   });
   db.update('tempo_time_entries', a.id, { segments: out, edits: auditEdit(a, before, `Pausa de ${fmtDur(new Date(t) - new Date(f))} inserida (${fmtTime(f)}–${fmtTime(t)})`) }, true);

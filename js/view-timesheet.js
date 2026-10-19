@@ -71,6 +71,8 @@ VIEWS.timesheet = () => {
     </div>
   </div>
 
+  ${periodPanelHTML(day)}
+
   <div class="panel">
     <div class="panel-h">
       <div class="date-nav"><button class="btn sm icon" data-act="ts-shift" data-d="-1" aria-label="Dia anterior">${icon('chevL')}</button><input type="date" id="ts-date" class="input sm" style="width:auto" value="${S.tsDay}" data-on="ts-date"><button class="btn sm icon" data-act="ts-shift" data-d="1" aria-label="Próximo dia">${icon('chevR')}</button>${!isToday(day) ? `<button class="btn sm" data-act="ts-day" data-day="${ymd(new Date())}">Hoje</button>` : ''}</div>
@@ -107,12 +109,12 @@ function dayStrip(entries, day) {
     db.all('tempo_notices').filter(n => n.kind === 'pause' && n.status === 'accepted' && n.data?.source === 'app' && n.data?.entry_id === e.id).forEach(n => {
       const st = Math.max(0, new Date(n.data.from) - base), en = Math.min(span, new Date(n.data.to) - base);
       if (en <= 0 || st >= span) return;
-      bars += `<span class="seg-b fill pausa" style="--tb:#B8BDC6;left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Marcada como pausa${n.data.app ? ' (' + n.data.app + ')' : ''}\n${fmtTime(n.data.from)} – ${fmtTime(n.data.to)} · ${fmtDur(new Date(n.data.to) - new Date(n.data.from))}`)}"></span>`;
+      bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(n.data.app || 'app')};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Marcada como pausa${n.data.app ? ' (' + n.data.app + ')' : ''}\n${fmtTime(n.data.from)} – ${fmtTime(n.data.to)} · ${fmtDur(new Date(n.data.to) - new Date(n.data.from))}`)}"></span>`;
     });
     entryGaps(e).forEach(g => {
       const st = Math.max(0, new Date(g.s) - base), en = Math.min(span, new Date(g.e) - base);
       if (en <= 0 || st >= span) return;
-      bars += `<span class="seg-b fill pausa" style="--tb:#B8BDC6;left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Pausa${g.why ? ' (' + g.why + ')' : ''}\n${fmtTime(g.s)} – ${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}"></span>`;
+      bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(g.why)};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Pausa${g.why ? ' (' + g.why + ')' : ''}\n${fmtTime(g.s)} – ${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}"></span>`;
     });
   });
   return `<div class="day-strip" aria-label="Linha do tempo do dia">${bars}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
@@ -311,6 +313,7 @@ function openEntryModal(id) {
   };
   const l = openLayer({ wide: true, render: render_, onMount: (ly) => { if (showPicker) bindPicker(ly, sel, () => syncRev(ly)); } });
   const keepForm = () => { const f = formData(l.box); return f; };
+  window.actRedrawHook = () => redraw();   // a faixa de atividade chama isto depois de mover um intervalo
   const redraw = () => { const f = keepForm(); l.refresh(); ['work_type_id', 'revision_id', 'notes', 'reason'].forEach(k => { const el = l.box.querySelector(`[name="${k}"]`); if (el && f[k] !== undefined) el.value = f[k]; }); };
   l.box.addEventListener('change', (ev) => {
     const i = ev.target.dataset.seg; if (i === undefined) return;

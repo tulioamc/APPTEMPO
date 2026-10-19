@@ -54,6 +54,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         monitor.onIdle = { [weak self] from, to in
             self?.enqueue("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", NSNull()])
         }
+        monitor.onSleepEnd = { [weak self] from, to in
+            self?.enqueue("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", "sono"])
+        }
         // ao abrir, procura atualização em segundo plano (sem fazer nada se não houver mudança)
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.runUpdate(manual: false) }
         barTicker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshBar() }

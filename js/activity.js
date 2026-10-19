@@ -6,11 +6,42 @@
 
 const ACT_COLORS = ['#F59E0B', '#7C3AED', '#2563EB', '#60A5FA', '#DB2777', '#059669', '#92400E', '#64748B'];
 const ACT_START_H = 7, ACT_SPAN = 17 * 3600000;
-const ACT_PALETTE = ['#F59E0B', '#7C3AED', '#2563EB', '#60A5FA', '#DB2777', '#059669', '#92400E', '#64748B', '#EF4444', '#14B8A6', '#84CC16', '#111827'];
+const ACT_PALETTE = ['#F59E0B', '#7C3AED', '#2563EB', '#60A5FA', '#DB2777', '#059669', '#92400E', '#64748B', '#EF4444', '#14B8A6', '#84CC16', '#111827',
+  '#F97316', '#EAB308', '#22C55E', '#06B6D4', '#0EA5E9', '#6366F1', '#8B5CF6', '#EC4899', '#F43F5E', '#A3E635', '#78716C', '#FDE047'];
 /* cor escolhida por grupo (chave = id do grupo): db.setting('actColors') */
 const actColorMap = () => db.setting('actColors', {}) || {};
-function actSetColor(gid, color) { const m = { ...actColorMap() }; if (color) m[gid] = color; else delete m[gid]; db.setSetting('actColors', m); db.emit(); }
-const actSwatches = () => `<div class="act-swatches">${ACT_PALETTE.map(c => `<button type="button" class="act-swatch" data-x="act-color" data-c="${c}" style="background:${c}" aria-label="Cor ${c}"></button>`).join('')}<button type="button" class="act-swatch none" data-x="act-color" data-c="" aria-label="Cor padrão">×</button></div>`;
+/* Cor global por ferramenta (programa ou site do Chrome): chave 'n:<nome>'. Mudou uma vez, muda em todas as sessões,
+   na faixa "por programa", na faixa "por arquivo" (sites) e no resumo de semana/mês. */
+const CHROME_SITE_NAMES = ['Behance', 'Pinterest', 'Magnific', 'Reunião', 'Claude', 'ChatGPT'];
+const isChromeSite = (app, doc) => !!doc && /chrome/i.test(String(app || '')) && CHROME_SITE_NAMES.includes(doc);
+const toolName = (r) => (isChromeSite(r.app, r.doc) ? r.doc : r.app);
+/* cor padrão estável por nome (o mesmo nome sempre tem a mesma cor padrão, em qualquer sessão) */
+const actDefaultColor = (name) => { let h = 0; for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ACT_COLORS[h % ACT_COLORS.length]; };
+const colorKeyOf = (gid) => {
+  if (gid.startsWith('p:')) return 'n:' + gid.slice(2);
+  if (gid.startsWith('a:')) {
+    const parts = gid.slice(2).split('|');
+    if (parts.length >= 3 && isChromeSite(parts[0], parts[parts.length - 1])) return 'n:' + parts[parts.length - 1];
+  }
+  return gid;
+};
+const toolColor = (name) => actColorMap()['n:' + name] || actDefaultColor(name);
+/* Cor de um grupo na faixa:
+   - programa e site do Chrome: a cor da ferramenta (global, 'n:<nome>');
+   - arquivo de um programa: herda a cor do programa (a não ser que a cor do próprio arquivo tenha sido escolhida);
+   - sem nada disso: cor da lista, por posição. */
+function groupColor(gid, i) {
+  const ck = colorKeyOf(gid);
+  if (ck.startsWith('n:')) return toolColor(ck.slice(2));
+  if (gid.startsWith('a:')) return actColorMap()[gid] || toolColor(gid.slice(2).split('|')[0]);
+  return actColorMap()[gid] || ACT_COLORS[i % ACT_COLORS.length];
+}
+function actSetColor(gid, color) {
+  const key = colorKeyOf(gid); const m = { ...actColorMap() };
+  if (color) m[key] = color; else delete m[key];
+  db.setSetting('actColors', m); db.emit();
+}
+const actSwatches = (gid) => `<div class="act-swatches">${ACT_PALETTE.map(c => `<button type="button" class="act-swatch" data-x="act-color" data-c="${c}" style="background:${c}" aria-label="Cor ${c}"></button>`).join('')}<button type="button" class="act-swatch none" data-x="act-color" data-c="" aria-label="Cor padrão">×</button><label class="act-swatch" title="Outra cor" style="position:relative;background:conic-gradient(#EF4444,#F59E0B,#84CC16,#06B6D4,#2563EB,#DB2777,#EF4444);cursor:pointer"><input type="color" data-x="act-custom" data-g="${esc(gid || '')}" value="#2563eb" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0" aria-label="Outra cor"></label></div>`;
 
 function actList(entryId) { return db.setting('act:' + entryId, []) || []; }
 
@@ -60,7 +91,7 @@ function actAnalyzeList(list, mode) {
     const items = Object.values(g.items).sort((a, b) => b.ms - a.ms);
     const names = [...new Set(items.map(it => it.doc || it.app))];
     const label = mode === 'program' ? items[0].app : (names.length <= 2 ? names.join(' · ') : `${names.slice(0, 2).join(' · ')} +${names.length - 2}`);
-    return { id: g.id, items, ms: g.ms, label, color: actColorMap()[g.id] || ACT_COLORS[i % ACT_COLORS.length] };
+    return { id: g.id, items, ms: g.ms, label, color: groupColor(g.id, i) };
   });
   return { groups: sorted, records };
 }
@@ -129,7 +160,7 @@ function actMoveGroup(entryId, g, pick) {
   // o registro novo leva o tempo do arquivo e os registros brutos dele
   const nova = db.insert('tempo_time_entries', {
     project_id: p.id, client_id: c?.id || null, agency_id: c?.agency_id || null, task_id: pick.task_id || null,
-    work_type_id: p.work_type_id || null, revision_id: null, notes: `Movido de outra sessão: ${g.label}`,
+    work_type_id: lastWorkType(p.id), revision_id: null, notes: `Movido de outra sessão: ${g.label}`,
     state: 'done', segments: moved, edits: [{ at: nowISO(), reason: `Arquivo ${g.label} movido para ${label}`, before: e.segments }],
   });
   db.setSetting('act:' + nova.id, mine);
@@ -151,6 +182,18 @@ const PAUSE_WHY = { mac: 'Ocioso (mouse e teclado parados) ou computador dormiu'
 const pauseWhy = (why) => PAUSE_WHY[why] || why || 'Intervalo manual';
 /* pausa de app (WhatsApp, Telegram…) aparece em verde claro; ociosidade fica cinza */
 const isAppPause = (why) => !!why && (why === 'app' || (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).some(x => String(x).trim().toLowerCase() === String(why).trim().toLowerCase()));
+/* Cor da listra de cada tipo de pausa (igual na linha do tempo principal e nas faixas da sessão):
+   ociosidade = azul bem claro · WhatsApp (e apps de mensagem) = verde claro · Telegram = azul escuro · outros = cinza */
+const PAUSE_HATCH = { idle: '#BFDBFE', whatsapp: '#86EFAC', telegram: '#1E40AF', other: '#A1A1AA' };
+const pauseKind = (why) => {
+  const w = String(why || '').trim().toLowerCase();
+  if (!w) return 'other';
+  if (w.includes('telegram')) return 'telegram';
+  if (w === 'app' || w.includes('whatsapp') || isAppPause(why)) return 'whatsapp';
+  if (w === 'mac' || w === 'ocioso' || w.includes('ocios')) return 'idle';
+  return 'other';
+};
+const pauseHatch = (why) => PAUSE_HATCH[pauseKind(why)];
 
 function actStripHTML(e, A) {
   const now = Date.now();
@@ -167,7 +210,7 @@ function actStripHTML(e, A) {
   for (let i = 1; i < segs.length; i++) {
     const a = segs[i - 1].b, b = segs[i].a;
     if (b <= a) continue;
-    pauses += `<span class="act-pause" style="position:absolute;top:0;bottom:0;left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%;background:repeating-linear-gradient(45deg,${isAppPause(segs[i - 1].why) ? '#9BD77F' : '#C4C8D0'} 0 3px,transparent 3px 7px)" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
+    pauses += `<span class="seg-b pausa act-pause" style="--ph:${pauseHatch(segs[i - 1].why)};left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
   }
   let bars = '';
   A.records.forEach(r => {
@@ -176,7 +219,7 @@ function actStripHTML(e, A) {
     if (y <= x) return;
     bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" style="--tb:${g.color};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(actTip(g))}"></span>`;
   });
-  return `<div class="act-strip">${pauses}${bars}</div>`;
+  return `<div class="act-strip" data-ent="${esc(e.id)}" data-t0="${t0}" data-span="${span}" style="position:relative">${pauses}${bars}</div>`;
 }
 
 function actChipsHTML(A, mode) {
@@ -221,7 +264,7 @@ function openActGroup(entryId, gid, onDone) {
         ${others.length ? `<div class="field"><label for="act-target">Agrupar com outro</label><select id="act-target" class="input">${others.map(o => `<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('')}</select></div><div class="row"><button class="btn" data-x="act-merge">Agrupar</button></div>` : ''}
         <div class="field"><label for="act-proj">Mover este tempo para o projeto</label><select id="act-proj" class="input"><option value="">Escolha um projeto</option>${tkProjectsSorted().map(p => `<option value="${esc(p.id)}">${esc(tkProjectLabel(p))}</option>`).join('')}</select></div>
         <div class="field"><label for="act-task">Tarefa (opcional)</label><select id="act-task" class="input" disabled><option value="">Sem tarefa</option></select></div>
-        <div class="field"><label>Cor</label>${actSwatches()}</div>
+        <div class="field"><label>Cor</label>${actSwatches(gid)}</div>
         <div class="row"><button class="btn" data-x="act-move">Mover</button><span class="small muted">Sai desta sessão e vai para o projeto escolhido.</span></div>
       </div>
       <div class="df"><button class="btn" data-act="close-layer">Fechar</button></div>`,
@@ -256,13 +299,20 @@ function openActGroup(entryId, gid, onDone) {
 function openActColor(gid, label, onDone) {
   openLayer({
     render: () => `<div class="dh"><h2>${esc(label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
-      <div class="db"><span class="lbl">Cor na linha do tempo</span>${actSwatches()}</div>`,
+      <div class="db"><span class="lbl">Cor na linha do tempo</span>${actSwatches(gid)}</div>`,
     onMount: (ly) => ly.box.addEventListener('click', (ev) => {
       const b = ev.target.closest('[data-x="act-color"]'); if (!b) return;
       actSetColor(gid, b.dataset.c); ly.close(); onDone && onDone();
     }),
   });
 }
+
+/* Cor personalizada: o seletor de cor do sistema grava a cor do grupo. */
+document.addEventListener('change', (ev) => {
+  const i = ev.target.closest?.('input[data-x="act-custom"]'); if (!i || !i.dataset.g) return;
+  actSetColor(i.dataset.g, i.value);
+  toast('Cor aplicada');
+});
 
 /* Destaque: ao passar o mouse sobre um trecho ou chip, os outros grupos da mesma faixa esmaecem. */
 document.addEventListener('mouseover', (e) => {

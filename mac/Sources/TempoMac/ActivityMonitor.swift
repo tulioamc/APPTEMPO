@@ -14,6 +14,8 @@ struct Context: Equatable {
 final class ActivityMonitor {
     var onSegment: ((Date, Date, Context) -> Void)?
     var onIdle: ((Date, Date) -> Void)?
+    /// Tempo com o computador dormindo (tampa fechada): é um motivo de pausa próprio.
+    var onSleepEnd: ((Date, Date) -> Void)?
 
     private let defaults = UserDefaults.standard
     private var current: Context?
@@ -46,7 +48,7 @@ final class ActivityMonitor {
             guard let self = self, let start = self.sleptAt else { return }
             self.sleptAt = nil
             let now = Date()
-            self.onIdle?(start, now)
+            self.onSleepEnd?(start, now)
             self.segStart = now
         }
         Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.tick() }

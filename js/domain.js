@@ -192,9 +192,17 @@ const MILESTONES = [['approved_at','Aprovação'],['started_at','Início'],['sen
 const INTERVALS = [['approved_at','started_at','Aprovação → início'],['approved_at','completed_at','Aprovação → conclusão'],['completed_at','invoice_at','Conclusão → nota fiscal'],['completed_at','paid_at','Conclusão → pagamento'],['invoice_at','paid_at','Nota fiscal → pagamento']];
 
 /* ---------- sessão ativa ---------- */
+/* Tipo de trabalho da última sessão aberta do projeto: a próxima herda esse tipo até você abrir outro. */
+function lastWorkType(projectId) {
+  if (!projectId) return null;
+  const es = db.where('tempo_time_entries', e => e.project_id === projectId && e.work_type_id && entryStart(e))
+    .sort((a, b) => new Date(entryStart(b)) - new Date(entryStart(a)));
+  return es[0]?.work_type_id || db.get('tempo_projects', projectId)?.work_type_id || null;
+}
 function startEntry(sel) {
   if (activeEntry()) return null; // impede sessão duplicada
-  const e = db.insert('tempo_time_entries', { ...sel, state: 'running', segments: [{ s: nowISO(), e: null }], edits: [] });
+  const work_type_id = sel.work_type_id || lastWorkType(sel.project_id) || null;
+  const e = db.insert('tempo_time_entries', { ...sel, work_type_id, state: 'running', segments: [{ s: nowISO(), e: null }], edits: [] });
   db.setSetting('lastSeen', Date.now());
   return e;
 }

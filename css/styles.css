@@ -726,7 +726,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .bank-cat-btn { background: none; border: 0; padding: 0; cursor: pointer; }
 
 /* pausas: cinza com listras, na faixa do dia */
-.act-strip { position: relative; height: 26px; border-radius: 6px; background: #D9DCE2; overflow: hidden; margin-top: 6px; }
+.act-strip { position: relative; height: 26px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
 .act-strip .act-track { position: absolute; top: 0; bottom: 0; background: #B8BDC6; opacity: .45; }
 .act-strip .seg-b { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
 .act-sec.focus .act-b:not(.on) { opacity: .2; }
@@ -742,7 +742,8 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .act-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--tb); display: inline-block; }
 .act-chip.on { border-color: var(--tb); }
 .act-sec.focus .act-chip:not(.on) { opacity: .4; }
-.day-strip .seg-b.pausa { background: repeating-linear-gradient(45deg, var(--tb) 0 4px, transparent 4px 7px); opacity: .7; }
+/* pausas: mesma listra na linha do tempo principal e nas faixas da sessão (cor vem de --ph) */
+.day-strip .seg-b.pausa, .act-strip .seg-b.pausa { background: repeating-linear-gradient(45deg, var(--ph, #A1A1AA) 0 4px, transparent 4px 7px); box-shadow: none; opacity: .9; }
 
 .strip-tip { position: fixed; z-index: 450; display: none; pointer-events: none; background: var(--fg); color: var(--bg); padding: 6px 9px; border-radius: 6px; font-size: .8em; line-height: 1.4; white-space: pre-line; box-shadow: var(--shadow); max-width: 280px; }
 
