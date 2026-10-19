@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
     private var web: WKWebView!
     private var statusItem: NSStatusItem!
