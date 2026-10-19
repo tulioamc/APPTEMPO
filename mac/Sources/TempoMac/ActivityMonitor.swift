@@ -27,9 +27,26 @@ final class ActivityMonitor {
     private var captureFolders: Bool { defaults.object(forKey: "captureFolders") as? Bool ?? true }
     private var excluded: Set<String> { Set(defaults.stringArray(forKey: "excludedApps") ?? []) }
 
+    private var sleptAt: Date?
+
     func start() {
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             self?.tick()
+        }
+        // computador dormiu (ou fechou a tampa): o tempo do sono vira ociosidade, do jeito que o Tempo espera
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self else { return }
+            let now = Date()
+            self.closeSegment(at: now)
+            self.current = nil
+            self.sleptAt = now
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self, let start = self.sleptAt else { return }
+            self.sleptAt = nil
+            let now = Date()
+            self.onIdle?(start, now)
+            self.segStart = now
         }
         Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.tick() }
         tick()
