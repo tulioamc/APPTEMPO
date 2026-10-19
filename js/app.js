@@ -189,6 +189,11 @@ function learnFolderRule(folder, projectId, clientId) {
    Sem projeto, vira sessão avulsa para você ligar depois. */
 const DESIGN_APP_RE = /adobe|illustrator|photoshop|indesign|after effects|premiere|lightroom|cinema ?4d|blender|figma|sketch|affinity|procreate|davinci/i;
 const DEFAULT_PAUSE_APPS = ['WhatsApp', 'Telegram', 'Mensagens', 'Messages'];
+/* Cronômetro para a barra de menus do Mac: manda o estado a cada 5 s (no navegador não faz nada). */
+setInterval(() => {
+  const a = activeEntry();
+  try { window.webkit?.messageHandlers?.tempo?.postMessage({ type: 'timer', running: !!a && a.state === 'running', paused: !!a && a.state === 'paused', ms: a ? entryMs(a) : 0 }); } catch (e) {}
+}, 5000);
 /* Notificação do sistema (só no app de Mac; no navegador não faz nada). */
 function notifyNative(title, body) { try { window.webkit?.messageHandlers?.tempo?.postMessage({ title, body }); } catch (e) {} }
 /* Avisos de atividade já decididos e com mais de 30 dias saem do banco, para a lista não crescer para sempre. */

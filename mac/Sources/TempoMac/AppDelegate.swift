@@ -6,6 +6,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var window: NSWindow!
     private var web: WKWebView!
     private var statusItem: NSStatusItem!
+    private var timerRunning = false
+    private var timerPaused = false
+    private var timerMs: Double = 0
+    private var timerSyncedAt = Date()
+    private var barTicker: Timer?
     private let monitor = ActivityMonitor()
     private let defaults = UserDefaults.standard
     private let isoFormatter: ISO8601DateFormatter = {
@@ -48,16 +53,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         monitor.onIdle = { [weak self] from, to in
             self?.callBridge("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", NSNull()])
         }
+        barTicker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshBar() }
         monitor.start()
     }
 
     /// Notificação do macOS vinda do site. Usa osascript, que funciona sem empacotar o app em .app.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let d = message.body as? [String: Any], let title = d["title"] as? String, let body = d["body"] as? String else { return }
+        guard let d = message.body as? [String: Any] else { return }
+        if (d["type"] as? String) == "timer" { handleTimer(d); return }
+        guard let title = d["title"] as? String, let body = d["body"] as? String else { return }
         func q(_ x: String) -> String { x.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") }
         let script = "display notification \"\(q(body))\" with title \"\(q(title))\""
         let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript"); p.arguments = ["-e", script]
         try? p.run()
+    }
+
+    /// Estado do cronômetro vindo do site: mostra o tempo na barra enquanto houver sessão rodando.
+    private func handleTimer(_ d: [String: Any]) {
+        timerRunning = d["running"] as? Bool ?? false
+        timerPaused = d["paused"] as? Bool ?? false
+        timerMs = (d["ms"] as? Double) ?? Double(d["ms"] as? Int ?? 0)
+        timerSyncedAt = Date()
+        refreshBar()
+    }
+
+    private func refreshBar() {
+        guard let button = statusItem?.button else { return }
+        guard timerRunning || timerPaused else { button.title = ""; return }
+        let elapsed = timerMs / 1000 + (timerRunning ? Date().timeIntervalSince(timerSyncedAt) : 0)
+        let s = Int(elapsed)
+        let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
+        // até 59:59 mostra minutos:segundos; a partir de 1 hora mostra horas:minutos
+        let txt = h > 0 ? String(format: "%d:%02d", h, m) : String(format: "%02d:%02d", m, sec)
+        button.title = (timerPaused ? " ⏸ " : " ") + txt
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
