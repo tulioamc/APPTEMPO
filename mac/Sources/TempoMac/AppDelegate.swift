@@ -53,6 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         monitor.onIdle = { [weak self] from, to in
             self?.callBridge("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", NSNull()])
         }
+        // ao abrir, procura atualização em segundo plano (sem fazer nada se não houver mudança)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.runUpdate(manual: false) }
         barTicker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshBar() }
         monitor.start()
     }
@@ -62,11 +64,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard let d = message.body as? [String: Any] else { return }
         if (d["type"] as? String) == "timer" { handleTimer(d); return }
         guard let title = d["title"] as? String, let body = d["body"] as? String else { return }
+        showNotice(title, body)
+    }
+
+    func showNotice(_ title: String, _ body: String) {
         func q(_ x: String) -> String { x.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") }
         let script = "display notification \"\(q(body))\" with title \"\(q(title))\""
         let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript"); p.arguments = ["-e", script]
         try? p.run()
     }
+
+    /// Atualiza pelo ~/APPTEMPO/mac/update.sh (git pull + build). Se mudou, reabre a versão nova.
+    func runUpdate(manual: Bool) {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let script = home + "/APPTEMPO/mac/update.sh"
+        let newBin = home + "/APPTEMPO/mac/.build/release/TempoMac"
+        guard FileManager.default.fileExists(atPath: script) else {
+            if manual { showNotice("Tempo", "Pasta ~/APPTEMPO não encontrada. Clone o repositório primeiro.") }
+            return
+        }
+        DispatchQueue.global().async {
+            let p = Process(); p.executableURL = URL(fileURLWithPath: "/bin/bash"); p.arguments = [script]
+            let out = Pipe(); p.standardOutput = out; p.standardError = out
+            try? p.run(); p.waitUntilExit()
+            let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            DispatchQueue.main.async {
+                if p.terminationStatus != 0 {
+                    self.showNotice("Tempo: atualização falhou", "Abra o Terminal e rode ~/APPTEMPO/mac/update.sh para ver o erro.")
+                } else if text.contains("ATUALIZADO") {
+                    self.showNotice("Tempo atualizado", "Reabrindo com a versão nova.")
+                    let relaunch = Process(); relaunch.executableURL = URL(fileURLWithPath: newBin)
+                    try? relaunch.run()
+                    NSApp.terminate(nil)
+                } else if manual {
+                    self.showNotice("Tempo", "Já está na versão mais nova.")
+                }
+            }
+        }
+    }
+
+    @objc private func updateNow() { runUpdate(manual: true) }
 
     /// Estado do cronômetro vindo do site: mostra o tempo na barra enquanto houver sessão rodando.
     private func handleTimer(_ d: [String: Any]) {
@@ -118,6 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let m = NSMenu()
         m.addItem(withTitle: "Mostrar Tempo", action: #selector(showWindow), keyEquivalent: "")
         m.addItem(withTitle: "Recarregar", action: #selector(reload), keyEquivalent: "r")
+        m.addItem(withTitle: "Atualizar app", action: #selector(updateNow), keyEquivalent: "u")
         m.addItem(.separator())
         m.addItem(toggleItem("Guardar pasta da janela ativa", key: "captureFolders", defaultOn: true, action: #selector(toggleFolders)))
         m.addItem(toggleItem("Guardar nome do arquivo (desligado por padrão)", key: "captureFileNames", defaultOn: false, action: #selector(toggleFiles)))

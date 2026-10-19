@@ -66,6 +66,13 @@ function openPartyForm(kind, id, cb, preset = {}) {
       <div class="field"><label for="pt-e">Endereço</label><input id="pt-e" class="input" name="address" value="${esc(x?.address || '')}"></div>
       <div class="field"><label for="pt-o">Observações gerais</label><textarea id="pt-o" class="input" name="notes">${esc(x?.notes || '')}</textarea></div>
       <div class="field"><span class="lbl">Cor da etiqueta</span>${colorPicker('color', x?.color || (preset.agency_id ? colorVariant(db.get('tempo_agencies', preset.agency_id).color, clients(preset.agency_id).map(k => k.color)) : presetAt(db.all(kind === 'agency' ? 'tempo_agencies' : 'tempo_clients').length)))}</div>
+      <div class="field"><span class="lbl">Cor da letra</span><input type="hidden" id="pt-fg" name="fg" value="${esc(partyFg(kind, id) || '')}">
+        <div class="swatches" role="radiogroup">
+          <button type="button" class="swatch tx ${!partyFg(kind, id) ? 'on' : ''}" data-fg="" title="Padrão do tema" aria-label="Padrão">A</button>
+          ${TEXT_COLORS.map(c => `<button type="button" class="swatch tx ${partyFg(kind, id) === c ? 'on' : ''}" style="color:${c}${c === '#FFFFFF' ? ';background:#374151' : ''}" data-fg="${c}" title="${c}" aria-label="Letra ${c}">A</button>`).join('')}
+          <label class="swatch swatch-add" title="Outra cor">+<input type="color" value="${partyFg(kind, id) || '#111111'}" data-fg-free aria-label="Outra cor da letra"></label>
+        </div>
+        <span class="hint">Vale para a etiqueta do ${lab} em todo o app.</span></div>
     </form>
     <div class="df"><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="save">${x ? 'Salvar' : 'Cadastrar'}</button></div>`
   });
@@ -73,6 +80,16 @@ function openPartyForm(kind, id, cb, preset = {}) {
   $('#pt-n', l.box).addEventListener('input', () => { dupCheck(); const ab = $('#pt-ab', l.box); if (ab) ab.placeholder = abbrFor($('#pt-n', l.box).value, id); });
   let colorTouched = !!x;
   l.box.addEventListener('click', (e) => { if (e.target.closest('.swatches')) colorTouched = true; });
+  l.box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fg]'); if (!b) return;
+    l.box.querySelectorAll('[data-fg]').forEach(x => x.classList.toggle('on', x === b));
+    $('#pt-fg', l.box).value = b.dataset.fg;
+  });
+  l.box.addEventListener('input', (e) => {
+    if (!e.target.matches('[data-fg-free]')) return;
+    $('#pt-fg', l.box).value = e.target.value;
+    l.box.querySelectorAll('[data-fg]').forEach(x => x.classList.remove('on'));
+  });
   l.box.addEventListener('input', (e) => { if (e.target.matches('[data-color-free]')) colorTouched = true; });
   const agSel = $('#pt-a', l.box);
   const autoColor = () => { if (colorTouched || !agSel) return; const a = db.get('tempo_agencies', agSel.value); if (!a) return; const c = colorVariant(a.color, clients(a.id).map(k => k.color)); const wrap = $('.swatches', l.box); wrap.outerHTML = colorPicker('color', c); };
@@ -91,6 +108,7 @@ function openPartyForm(kind, id, cb, preset = {}) {
     }
     if (kind === 'client') data.agency_id = f.agency_id || directAgency()?.id || null;
     let row; if (x) row = db.update(T, x.id, data); else row = db.insert(T, { ...data, archived: false });
+    if (row?.id) setPartyFg(kind, row.id, $('#pt-fg', l.box).value || null);
     l.close(); toast(x ? 'Cadastro atualizado' : `${lab[0].toUpperCase() + lab.slice(1)} cadastrad${kind === 'agency' ? 'a' : 'o'}`); cb && cb(row);
   });
 }

@@ -1,8 +1,14 @@
 #!/bin/bash
-# Atualiza e recompila o app de Mac a partir do repositório.
-# Uso: ./update.sh  (rodar dentro de repo-extra/mac, no clone do GitHub)
+# Atualiza o código do repositório e recompila o app de Mac só quando houve mudança.
+# Saída: SEM_MUDANCA ou ATUALIZADO. Usado pelo próprio app (menu "Atualizar app" e ao abrir).
 set -e
 cd "$(dirname "$0")"
-git -C ../.. pull --ff-only
-swift build -c release
-echo "Pronto: $(pwd)/.build/release/TempoMac"
+REPO="$(cd ../.. && pwd)"
+before=$(git -C "$REPO" rev-parse HEAD)
+git -C "$REPO" pull --ff-only -q
+after=$(git -C "$REPO" rev-parse HEAD)
+if [ "$before" = "$after" ] && [ -x .build/release/TempoMac ]; then
+  echo "SEM_MUDANCA"; exit 0
+fi
+swift build -c release -q
+echo "ATUALIZADO"
