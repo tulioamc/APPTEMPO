@@ -15,7 +15,9 @@ function selToEntry(sel) {
 
 VIEWS.timesheet = () => {
   const a = activeEntry();
-  const day = parseYmd(S.tsDay); const entries = entriesOn(day);
+  const day = parseYmd(S.tsDay);
+  // a sessão em andamento fica sempre em cima; as outras seguem por horário (mais recente primeiro)
+  const entries = entriesOn(day).sort((x, y) => (y.state === 'running') - (x.state === 'running'));
   const dayMs = entries.reduce((s, e) => s + entryMs(e), 0);
   const brutoDay = entries.reduce((s, e) => s + entryBrutoMs(e), 0);
   const ws = new Date(day); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7));

@@ -148,7 +148,9 @@ const actTip = (g) => `${g.label}\n${g.items.map(i => `${i.doc || i.app}: ${fmtD
    o que não tem registro fica cinza. Os pausas saem da conta (a faixa mostra só o tempo trabalhado). */
 /* Motivo de uma pausa (o campo "why" fica no trabalho que vem antes da pausa; ver entryGaps). */
 const PAUSE_WHY = { mac: 'Ocioso (mouse e teclado parados) ou computador dormiu', app: 'WhatsApp / Telegram', suspenso: 'Página parada (computador dormiu)', ocioso: 'Ociosidade (navegador)' };
-const pauseWhy = (why) => PAUSE_WHY[why] || 'Intervalo manual';
+const pauseWhy = (why) => PAUSE_WHY[why] || why || 'Intervalo manual';
+/* pausa de app (WhatsApp, Telegram…) aparece em verde claro; ociosidade fica cinza */
+const isAppPause = (why) => !!why && (why === 'app' || (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).some(x => String(x).trim().toLowerCase() === String(why).trim().toLowerCase()));
 
 function actStripHTML(e, A) {
   const now = Date.now();
@@ -165,7 +167,7 @@ function actStripHTML(e, A) {
   for (let i = 1; i < segs.length; i++) {
     const a = segs[i - 1].b, b = segs[i].a;
     if (b <= a) continue;
-    pauses += `<span class="act-pause" style="position:absolute;top:0;bottom:0;left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%;background:repeating-linear-gradient(45deg,#C4C8D0 0 3px,transparent 3px 7px)" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
+    pauses += `<span class="act-pause" style="position:absolute;top:0;bottom:0;left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%;background:repeating-linear-gradient(45deg,${isAppPause(segs[i - 1].why) ? '#9BD77F' : '#C4C8D0'} 0 3px,transparent 3px 7px)" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
   }
   let bars = '';
   A.records.forEach(r => {

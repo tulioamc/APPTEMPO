@@ -242,6 +242,8 @@ function suggestStart(p, seg) {
 }
 async function suggestActivity(seg) {
   if (!isMacApp() || !seg || !seg.app) return;   // atividade só vem do app de Mac
+  // o macOS às vezes manda o nome com marcas invisíveis (ex.: "‎WhatsApp"); sem limpar, a lista de pausa não reconhece
+  seg = { ...seg, app: String(seg.app).replace(/[‎‏‪-‮⁦-⁩]/g, '').trim() };
   // dados atuais antes de gravar: com uma cópia antiga, a gravação apagaria registros feitos pelo outro lado
   try { await db.refresh(); } catch (e) { console.warn('refresh', e); }
   if (!_pruned) { _pruned = true; pruneOldActivity(); }
@@ -288,7 +290,8 @@ function applyPause(a, n, mode) {
   }
   const out = []; segs.forEach(s => { const S0 = new Date(s.s), E0 = s.e ? new Date(s.e) : null; const F = new Date(f), T = new Date(t);
     if (E0 && E0 <= F || S0 >= T) { out.push(s); return; }
-    if (S0 < F) out.push({ s: s.s, e: f, why: sug.source });
+    // motivo da pausa: "mac"/"suspenso"/"ocioso", ou o nome do app que pausou (ex.: WhatsApp)
+    if (S0 < F) out.push({ s: s.s, e: f, why: sug.source === 'app' && sug.app ? sug.app : sug.source });
     if (!E0 || E0 > T) out.push({ s: t, e: s.e });
   });
   db.update('tempo_time_entries', a.id, { segments: out, edits: auditEdit(a, before, `Pausa de ${fmtDur(new Date(t) - new Date(f))} inserida (${fmtTime(f)}–${fmtTime(t)})`) }, true);
