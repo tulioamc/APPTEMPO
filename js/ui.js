@@ -48,16 +48,19 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 function tag(name, color, opts = {}) {
   if (!name) return '<span class="faint">—</span>';
-  return `<span class="tag tg ${opts.pill ? 'pill' : ''} ${opts.upper ? 'upper' : ''}" style="${cssTb(color)}">${esc(name)}</span>`;
+  return `<span class="tag tg ${opts.pill ? 'pill' : ''} ${opts.upper ? 'upper' : ''}" style="${cssTb(color)}${opts.fg ? ';color:' + opts.fg : ''}">${esc(name)}</span>`;
 }
+/* cor da letra: opcional, guardada à parte (não entra na paleta). Sem escolha = padrão do tema. */
+const partyFg = (kind, id) => (db.setting('textColors', {}) || {})[`${kind}:${id}`] || null;
+function setPartyFg(kind, id, c) { const m = { ...(db.setting('textColors', {}) || {}) }; const k = `${kind}:${id}`; if (c) m[k] = c; else delete m[k]; db.setSetting('textColors', m); db.emit(); }
 function statusTag(id, pill = true) { const s = db.get('tempo_status_options', id); return s ? tag(s.name, s.color, { pill }) : '<span class="faint">—</span>'; }
 function wtTag(id) { const w = db.get('tempo_work_types', id); return w ? tag(w.name, w.color) : ''; }
 function clientTag(c, opts = {}) {
   if (!c) return '<span class="faint">—</span>';
   const a = db.get('tempo_agencies', c.agency_id);
-  return `<span class="ctag">${a && agencyAbbr(a) ? `<span class="tag tg abbr" style="${cssTb(a.color)}" title="${esc(a.name)}">${esc(agencyAbbr(a))}</span>` : `<span class="tag tg abbr" style="background:var(--surface-2);color:var(--fg-3)" title="Cliente direto">&nbsp;&nbsp;</span>`}<span class="tag tg" style="${cssTb(c.color)}">${esc(c.name)}</span></span>`;
+  return `<span class="ctag">${a && agencyAbbr(a) ? `<span class="tag tg abbr" style="${cssTb(a.color)}${partyFg('agency', a.id) ? ';color:' + partyFg('agency', a.id) : ''}" title="${esc(a.name)}">${esc(agencyAbbr(a))}</span>` : `<span class="tag tg abbr" style="background:var(--surface-2);color:var(--fg-3)" title="Cliente direto">&nbsp;&nbsp;</span>`}<span class="tag tg" style="${cssTb(c.color)}">${esc(c.name)}</span></span>`;
 }
-function agencyTag(a) { return a ? tag(a.name, a.color, { upper: true }) : '<span class="faint small">Direto</span>'; }
+function agencyTag(a) { return a ? tag(a.name, a.color, { upper: true, fg: partyFg('agency', a.id) }) : '<span class="faint small">Direto</span>'; }
 
 function options(list, selected, { empty, emptyLabel = '—', label = (x) => x.name, value = (x) => x.id } = {}) {
   let h = empty ? `<option value="">${esc(emptyLabel)}</option>` : '';

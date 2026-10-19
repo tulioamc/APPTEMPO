@@ -80,7 +80,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func setupMenu() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "⏱"
+        // ícone simples do sistema (cronômetro), no mesmo tamanho dos outros ícones da barra
+        if let img = NSImage(systemSymbolName: "timer", accessibilityDescription: "Tempo") {
+            img.isTemplate = true
+            statusItem.button?.image = img
+        } else {
+            statusItem.button?.title = "T"
+        }
         let m = NSMenu()
         m.addItem(withTitle: "Mostrar Tempo", action: #selector(showWindow), keyEquivalent: "")
         m.addItem(withTitle: "Recarregar", action: #selector(reload), keyEquivalent: "r")

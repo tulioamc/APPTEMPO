@@ -194,6 +194,7 @@ function openProjectForm(id, clientId) {
       <div class="grid2">
         <div class="field"><label for="pf-st">Status</label><select id="pf-st" class="input" name="status_id">${options(statuses('work'), p?.status_id || statusByCat('work', 'todo')?.id)}</select></div>
         <div class="field"><label for="pf-pay">Pagamento</label><select id="pf-pay" class="input" name="payment_status_id">${options(statuses('payment'), p?.payment_status_id || statuses('payment')[0]?.id)}</select></div>
+        <div class="field" id="pf-fee-wrap">${feeFieldInner(p, p?.client_id || clientId)}</div>
         <div class="field"><label for="pf-dl">Prazo</label><input id="pf-dl" type="date" class="input" name="deadline" value="${p?.deadline || ''}"></div>
         <div class="field"><label for="pf-est">Horas estimadas</label><input id="pf-est" type="number" min="0" step="0.5" class="input" name="estimated_hours" value="${p?.estimated_hours ?? ''}"></div>
         <div class="field"><label for="pf-bud">Orçamento</label><input id="pf-bud" class="input mono" name="budget" ${moneyAttrs(p?.budget)}></div>
@@ -205,6 +206,7 @@ function openProjectForm(id, clientId) {
     <div class="df"><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="save">${p ? 'Salvar' : 'Criar projeto'}</button></div>`
   });
   l.box.addEventListener('submit', (e) => e.preventDefault());
+  l.box.addEventListener('change', (e) => { if (e.target.id === 'pf-client') $('#pf-fee-wrap', l.box).innerHTML = feeFieldInner(null, e.target.value); });
   l.box.addEventListener('click', (e) => {
     const b = e.target.closest('[data-x]'); if (!b) return;
     if (b.dataset.x === 'newclient') { openPartyForm('client', null, (c) => { $('#pf-client', l.box).innerHTML = clientSelectOptions(c.id); }); return; }
@@ -212,18 +214,33 @@ function openProjectForm(id, clientId) {
     if (!f.name.trim()) return toast('Dê um nome ao projeto.');
     if (!f.client_id) return toast('Escolha o cliente.');
     const data = { name: f.name.trim(), client_id: f.client_id, budget: numIn(f.budget), estimated_hours: numIn(f.estimated_hours), revisions_included: numIn(f.revisions_included), notes: f.notes, description: f.description };
+    const payId = feePayId(f.payment_status_id, l.box);
     if (p) {
       db.update('tempo_projects', p.id, data, true);
       if (f.status_id !== p.status_id) setProjectStatus(p, f.status_id);
-      if (f.payment_status_id !== p.payment_status_id) setPaymentStatus(p, f.payment_status_id);
+      if (payId !== p.payment_status_id) setPaymentStatus(p, payId);
       if ((f.deadline || '') !== (p.deadline || '')) changeDeadline(p, f.deadline, 'Editado no formulário');
       db.emit(); toast('Projeto atualizado');
     } else {
-      const np = db.insert('tempo_projects', { ...data, status_id: f.status_id, payment_status_id: f.payment_status_id, deadline: f.deadline || null, deadline_original: f.deadline || null, remaining_override: null, archived: false }, true);
+      const np = db.insert('tempo_projects', { ...data, status_id: f.status_id, payment_status_id: payId, deadline: f.deadline || null, deadline_original: f.deadline || null, remaining_override: null, archived: false }, true);
       logEvent('project', np.id, 'created', 'Projeto criado');
       if (statusCat(f.status_id) === 'active') db.update('tempo_projects', np.id, { started_at: nowISO() }, true);
       db.emit(); toast('Projeto criado'); l.close(); openProject(np.id); return;
     }
     l.close();
   });
+}
+
+/* Fee na criação do projeto: vem marcado se o cliente (ou a agência) tem fee mensal; bloqueado se não tem. */
+function feeFieldInner(p, cid) {
+  const fe = cid ? feeEligible(cid) : false;
+  const onNow = p ? statusName(p.payment_status_id) === 'Fee' : fe;
+  const hint = !cid ? 'Escolha o cliente.' : !fe ? 'Bloqueado: este cliente não tem fee mensal.' : onNow ? 'Já vem marcado: cliente com fee mensal. Desmarque se for projeto por fora.' : 'Projeto por fora do fee: cobrado por projeto.';
+  return `<label class="check small"><input type="checkbox" id="pf-fee" ${fe && onNow ? 'checked' : ''} ${fe ? '' : 'disabled'}> Entra no fee mensal</label><div class="faint small">${hint}</div>`;
+}
+function feePayId(chosenId, box) {
+  const fee = statuses('payment').find(x => x.name === 'Fee'); const cb = $('#pf-fee', box);
+  if (fee && cb && cb.checked && !cb.disabled) return fee.id;
+  if (fee && chosenId === fee.id) return statuses('payment').find(x => x.name === 'Não faturado')?.id || chosenId;
+  return chosenId;
 }

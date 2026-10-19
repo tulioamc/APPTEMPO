@@ -89,14 +89,27 @@ document.addEventListener('change', (e) => {
 });
 
 /* popover de cor (usado nas listas de preferências) */
-function openColorPop(anchor, current, onPick) {
+const TEXT_COLORS = ['#FFFFFF', '#111111', '#1F2937', '#7C2D12', '#14532D', '#1E3A8A', '#6B21A8'];
+function openColorPop(anchor, current, onPick, opts = {}) {
   $('.colorpop')?.remove();
   const pop = document.createElement('div'); pop.className = 'colormenu colorpop';
   pop.innerHTML = colorPicker('c', current);
+  pop.onText = opts.onText || null;
+  if (opts.onText) {
+    const fg = (opts.currentText || '').toUpperCase();
+    pop.insertAdjacentHTML('beforeend', `<div class="tc-sec"><div class="tc-h small muted">Cor da letra</div><div class="swatches">
+      <button type="button" class="swatch tx ${!fg ? 'on' : ''}" data-act="pick-text" data-color="" title="Padrão do tema" aria-label="Padrão">A</button>
+      ${TEXT_COLORS.map(c => `<button type="button" class="swatch tx ${fg === c ? 'on' : ''}" style="color:${c}${c === '#FFFFFF' ? ';background:#374151' : ''}" data-act="pick-text" data-color="${c}" title="${c}" aria-label="Letra ${c}">A</button>`).join('')}
+      <label class="swatch swatch-add" title="Outra cor">+<input type="color" value="${fg || '#111111'}" data-text-free aria-label="Outra cor da letra"></label></div></div>`);
+  }
   document.body.appendChild(pop);
   const r = anchor.getBoundingClientRect(); pop.style.top = (r.bottom + window.scrollY + 6) + 'px'; pop.style.left = Math.max(8, Math.min(window.innerWidth - 300, r.left + window.scrollX)) + 'px';
   pop.addEventListener('change', (e) => { if (e.target.name === 'c') { onPick(e.target.value); } });
-  pop.addEventListener('click', (e) => { const sw = e.target.closest('[data-act="pick-swatch"]'); e.stopPropagation(); if (sw) { e.preventDefault(); ACTIONS['pick-swatch'](sw); setTimeout(() => pop.remove(), 60); } });
+  pop.addEventListener('input', (e) => { if (e.target.dataset.textFree && pop.onText) pop.onText(e.target.value.toUpperCase()); });
+  pop.addEventListener('click', (e) => {
+    const tx = e.target.closest('[data-act="pick-text"]');
+    if (tx) { e.preventDefault(); e.stopPropagation(); pop.onText?.(tx.dataset.color || null); setTimeout(() => pop.remove(), 60); return; }
+    const sw = e.target.closest('[data-act="pick-swatch"]'); e.stopPropagation(); if (sw) { e.preventDefault(); ACTIONS['pick-swatch'](sw); setTimeout(() => pop.remove(), 60); } });
   setTimeout(() => document.addEventListener('mousedown', function off(e) { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('mousedown', off); } }), 0);
 }
 
