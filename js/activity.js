@@ -146,9 +146,13 @@ const actTip = (g) => `${g.label}\n${g.items.map(i => `${i.doc || i.app}: ${fmtD
 
 /* Uma faixa só, com 100% da largura = todo o tempo da sessão. Cada trecho ocupa a parte proporcional ao seu tempo;
    o que não tem registro fica cinza. Os pausas saem da conta (a faixa mostra só o tempo trabalhado). */
+/* Motivo de uma pausa (o campo "why" fica no trabalho que vem antes da pausa; ver entryGaps). */
+const PAUSE_WHY = { mac: 'Ocioso (mouse e teclado parados) ou computador dormiu', app: 'WhatsApp / Telegram', suspenso: 'Página parada (computador dormiu)', ocioso: 'Ociosidade (navegador)' };
+const pauseWhy = (why) => PAUSE_WHY[why] || 'Intervalo manual';
+
 function actStripHTML(e, A) {
   const now = Date.now();
-  const segs = (e.segments || []).map(s => ({ a: new Date(s.s).getTime(), b: s.e ? new Date(s.e).getTime() : now }))
+  const segs = (e.segments || []).map(s => ({ a: new Date(s.s).getTime(), b: s.e ? new Date(s.e).getTime() : now, why: s.why || null }))
     .filter(x => x.b > x.a).sort((p, q) => p.a - q.a);
   if (!segs.length) return '';
   // a faixa cobre a sessão inteira (do começo ao fim); as pausas (espaços entre trabalhos) ficam hachuradas
@@ -161,7 +165,7 @@ function actStripHTML(e, A) {
   for (let i = 1; i < segs.length; i++) {
     const a = segs[i - 1].b, b = segs[i].a;
     if (b <= a) continue;
-    pauses += `<span class="act-pause" style="position:absolute;top:0;bottom:0;left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%;background:repeating-linear-gradient(45deg,#C4C8D0 0 3px,transparent 3px 7px)" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}`)}"></span>`;
+    pauses += `<span class="act-pause" style="position:absolute;top:0;bottom:0;left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%;background:repeating-linear-gradient(45deg,#C4C8D0 0 3px,transparent 3px 7px)" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
   }
   let bars = '';
   A.records.forEach(r => {
@@ -183,6 +187,21 @@ function actSectionHTML(e) {
   const prog = actAnalyze(e.id, 'program'), file = actAnalyze(e.id, 'file');
   const sec = (title, mode, A) => `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div>${actStripHTML(e, A)}${actChipsHTML(A, mode)}</div>`;
   return `<div class="stack" style="gap:8px">${sec('Por programa', 'program', prog)}${sec('Por arquivo / página', 'file', file)}<span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
+}
+
+/* Log discreto no fim do formulário da sessão: cada registro de atividade (programa e arquivo) e cada pausa, por horário.
+   Linhas de texto antigas (legado, em Notas) também entram aqui, para não sumirem. */
+function actLogFootHTML(e, legacyLines) {
+  const rows = (legacyLines || []).map(l => ({ k: l.slice(0, 5), line: l }));
+  actList(e.id).forEach(r => rows.push({ k: fmtTime(r.from), line: `${fmtTime(r.from)}–${fmtTime(r.to)}  ${r.app}${r.doc ? ' · ' + r.doc : ''}` }));
+  const segs = e.segments || [];
+  for (let i = 0; i < segs.length - 1; i++) {
+    const a = segs[i].e, b = segs[i + 1].s;
+    if (a && b && new Date(b) > new Date(a)) rows.push({ k: fmtTime(a), line: `${fmtTime(a)}–${fmtTime(b)}  pausa · ${pauseWhy(segs[i].why)}` });
+  }
+  if (!rows.length) return '';
+  rows.sort((p, q) => (p.k < q.k ? -1 : p.k > q.k ? 1 : 0));
+  return `<div class="act-foot"><span class="lbl">Log</span><div class="act-log">${rows.map(r => esc(r.line)).join('<br>')}</div></div>`;
 }
 
 /* Janela de um grupo de arquivos: desfazer, juntar com outro grupo ou mover o tempo para outro projeto/tarefa. */
