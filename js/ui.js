@@ -58,7 +58,7 @@ function wtTag(id) { const w = db.get('tempo_work_types', id); return w ? tag(w.
 function clientTag(c, opts = {}) {
   if (!c) return '<span class="faint">—</span>';
   const a = db.get('tempo_agencies', c.agency_id);
-  return `<span class="ctag">${a && agencyAbbr(a) ? `<span class="tag tg abbr" style="${cssTb(a.color)}${partyFg('agency', a.id) ? ';color:' + partyFg('agency', a.id) : ''}" title="${esc(a.name)}">${esc(agencyAbbr(a))}</span>` : `<span class="tag tg abbr" style="background:#8B5A2B;color:#FFFFFF" title="Cliente direto">&nbsp;</span>`}<span class="tag tg" style="${cssTb(c.color)}${partyFg('client', c.id) ? ';color:' + partyFg('client', c.id) : ''}">${esc(c.name)}</span></span>`;
+  return `<span class="ctag">${a && agencyAbbr(a) ? `<span class="tag tg abbr" style="${cssTb(a.color)}${partyFg('agency', a.id) ? ';color:' + partyFg('agency', a.id) : ''}" title="${esc(a.name)}">${esc(agencyAbbr(a))}</span>` : `<span class="tag tg abbr" style="${directAgency() ? cssTb(directAgency().color) : 'background:var(--surface-2);color:var(--fg-3)'}" title="Cliente direto">&nbsp;</span>`}<span class="tag tg" style="${cssTb(c.color)}${partyFg('client', c.id) ? ';color:' + partyFg('client', c.id) : ''}">${esc(c.name)}</span></span>`;
 }
 function agencyTag(a) { return a ? tag(a.name, a.color, { upper: true, fg: partyFg('agency', a.id) }) : '<span class="faint small">Direto</span>'; }
 

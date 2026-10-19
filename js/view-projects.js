@@ -184,7 +184,7 @@ function clientSelectOptions(selected) {
   return h;
 }
 ACTIONS['proj-new'] = (el) => openProjectForm(null, el?.dataset?.client);
-function openProjectForm(id, clientId) {
+function openProjectForm(id, clientId, onCreated) {
   const p = id ? db.get('tempo_projects', id) : null;
   const l = openLayer({
     html: `<div class="dh"><h2>${p ? 'Editar projeto' : 'Novo projeto'}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
@@ -225,7 +225,7 @@ function openProjectForm(id, clientId) {
       const np = db.insert('tempo_projects', { ...data, status_id: f.status_id, payment_status_id: payId, deadline: f.deadline || null, deadline_original: f.deadline || null, remaining_override: null, archived: false }, true);
       logEvent('project', np.id, 'created', 'Projeto criado');
       if (statusCat(f.status_id) === 'active') db.update('tempo_projects', np.id, { started_at: nowISO() }, true);
-      db.emit(); toast('Projeto criado'); l.close(); openProject(np.id); return;
+      db.emit(); toast('Projeto criado'); l.close(); if (onCreated) return onCreated(np); openProject(np.id); return;
     }
     l.close();
   });

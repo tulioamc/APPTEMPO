@@ -168,7 +168,7 @@ function pickerHTML(sel, q = '') {
     <div class="picker">
       ${col('Agência', ags, 'agency_id', sel.agency_id, `<button type="button" class="popt none ${sel.agency_id === '__none' ? 'on' : ''}" data-act="pk" data-k="agency_id" data-v="__none"><span class="n">Sem agência (direto)</span></button>`)}
       ${col('Cliente', cls, 'client_id', sel.client_id)}
-      ${col('Projeto', prs, 'project_id', sel.project_id)}
+      ${col('Projeto', prs, 'project_id', sel.project_id, sel.client_id ? `<button type="button" class="popt" data-act="pk-newproj" style="color:var(--accent)"><span class="n">+ Novo projeto</span></button>` : '')}
       ${col('Tarefa', tks, 'task_id', sel.task_id)}
       ${col('Subtarefa <span style="text-transform:none;letter-spacing:0">(opcional)</span>', sbs, 'sub_id', sel.sub_id)}
     </div>
@@ -196,6 +196,8 @@ function bindPicker(layer, sel, rerender) {
   host.addEventListener('click', (e) => {
     const b = e.target.closest('[data-act="pk"]'); const c = e.target.closest('[data-act="pk-clear"]');
     if (c) { e.stopPropagation(); Object.keys(sel).forEach(k => sel[k] = ''); q = ''; draw(); return; }
+    const np = e.target.closest('[data-act="pk-newproj"]');
+    if (np) { e.stopPropagation(); openProjectForm(null, sel.client_id, (p) => { pickApply(sel, 'project_id', p.id); draw(); }); return; }
     if (!b) return; e.stopPropagation(); pickApply(sel, b.dataset.k, b.dataset.v);
     if (['project_id', 'task_id', 'sub_id'].includes(b.dataset.k)) q = '';
     draw();
