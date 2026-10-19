@@ -99,6 +99,8 @@ final class ActivityMonitor {
     static let chromeSites: [(match: String, label: String)] = [
         ("Behance", "Behance"), ("Pinterest", "Pinterest"), ("Magnific", "Magnific"),
         ("Claude", "Claude"), ("ChatGPT", "ChatGPT"),
+        ("Google Docs", "Docs"), ("Documentos Google", "Docs"), ("Google Sheets", "Sheets"), ("Planilhas Google", "Sheets"),
+        ("Google Slides", "Slides"), ("Apresentações Google", "Slides"), ("Gmail", "Gmail"), ("Google Drive", "Drive"),
         ("Google Meet", "Reunião"), ("Meet –", "Reunião"),
     ]
 

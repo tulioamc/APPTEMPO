@@ -12,14 +12,17 @@ const ACT_PALETTE = ['#F59E0B', '#7C3AED', '#2563EB', '#60A5FA', '#DB2777', '#05
 const actColorMap = () => db.setting('actColors', {}) || {};
 /* Cor global por ferramenta (programa ou site do Chrome): chave 'n:<nome>'. Mudou uma vez, muda em todas as sessões,
    na faixa "por programa", na faixa "por arquivo" (sites) e no resumo de semana/mês. */
-const CHROME_SITE_NAMES = ['Behance', 'Pinterest', 'Magnific', 'Reunião', 'Claude', 'ChatGPT'];
+const CHROME_SITE_NAMES = ['Behance', 'Pinterest', 'Magnific', 'Reunião', 'Claude', 'ChatGPT', 'Docs', 'Sheets', 'Slides', 'Gmail', 'Drive'];
+/* o app do ChatGPT e o site contam como a mesma ferramenta */
+const toolAlias = (app) => (/chatgpt/i.test(String(app || '')) ? 'ChatGPT' : app);
 const isChromeSite = (app, doc) => !!doc && /chrome/i.test(String(app || '')) && CHROME_SITE_NAMES.includes(doc);
-const toolName = (r) => (isChromeSite(r.app, r.doc) ? r.doc : r.app);
+const toolName = (r) => (isChromeSite(r.app, r.doc) ? r.doc : toolAlias(r.app));
 /* cor padrão estável por nome (o mesmo nome sempre tem a mesma cor padrão, em qualquer sessão) */
 /* cor padrão de cada programa/site (a mesma em todos os gráficos); o que não estiver aqui ganha uma cor pelo nome */
 const TOOL_DEFAULTS = [['illustrator', '#F97316'], ['photoshop', '#1D6FE0'], ['after effects', '#7C3AED'], ['premiere', '#6D28D9'],
   ['claude', '#C8A02A'], ['chatgpt', '#10A37F'], ['gpt', '#10A37F'], ['magnific', '#111827'], ['whatsapp', '#25D366'],
-  ['telegram', '#229ED9'], ['tempo', '#2563EB'], ['ajustes', '#64748B'], ['figma', '#A259FF'], ['chrome', '#EA4335']];
+  ['telegram', '#229ED9'], ['tempo', '#2563EB'], ['ajustes', '#64748B'], ['figma', '#A259FF'], ['chrome', '#EA4335'],
+  ['docs', '#4285F4'], ['sheets', '#0F9D58'], ['slides', '#F4B400'], ['gmail', '#D93025'], ['drive', '#1FA463']];
 const actDefaultColor = (name) => {
   const n = String(name).toLowerCase();
   const hit = TOOL_DEFAULTS.find(([k]) => n.includes(k)); if (hit) return hit[1];
@@ -86,7 +89,7 @@ function actAnalyzeList(list, mode) {
   list.forEach(x => { const k = actKeyOf(x); info[k] = info[k] || { key: k, app: x.app, doc: x.doc, folder: x.folder }; });
   const find = actRoots(Object.values(info));
   const links = db.setting('actLinks', {}) || {};
-  const gidOf = (x) => mode === 'program' ? 'p:' + x.app : (links[actKeyOf(x)] || 'a:' + find(actKeyOf(x)));
+  const gidOf = (x) => mode === 'program' ? 'p:' + toolAlias(x.app) : (links[actKeyOf(x)] || 'a:' + find(actKeyOf(x)));
   const groups = {};
   const records = list.map(x => {
     const id = gidOf(x), ms = new Date(x.to) - new Date(x.from), k = actKeyOf(x);
@@ -98,7 +101,7 @@ function actAnalyzeList(list, mode) {
   const sorted = Object.values(groups).sort((a, b) => b.ms - a.ms).map((g, i) => {
     const items = Object.values(g.items).sort((a, b) => b.ms - a.ms);
     const names = [...new Set(items.map(it => it.doc || it.app))];
-    const label = mode === 'program' ? items[0].app : (names.length <= 2 ? names.join(' · ') : `${names.slice(0, 2).join(' · ')} +${names.length - 2}`);
+    const label = mode === 'program' ? toolAlias(items[0].app) : (names.length <= 2 ? names.join(' · ') : `${names.slice(0, 2).join(' · ')} +${names.length - 2}`);
     return { id: g.id, items, ms: g.ms, label, color: groupColor(g.id, i) };
   });
   return { groups: sorted, records };

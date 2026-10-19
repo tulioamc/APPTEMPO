@@ -83,15 +83,22 @@ function reportPanelHTML(day) {
   const pauseItems = items(pauses, pauseLabel, k => pauseHatch(k));
   const progItems = items(progs, k => k, k => toolColor(k));
   // arquivos sem nome próprio (só o programa), nomes iguais ao do programa e sites do Chrome já aparecem em "Programas e sites"
-  const fileItems = [...files.values()].filter(f => f.doc && f.doc !== f.app && !isChromeSite(f.app, f.doc))
+  const fileItems = [...files.values()].filter(f => f.doc && !f.app.toLowerCase().includes(f.doc.toLowerCase()) && !isChromeSite(f.app, f.doc))
     .sort((x, y) => y.ms - x.ms).map(f => ({ label: f.label, ms: f.ms, color: toolColor(f.app) }));
 
   const section = (title, list) => {
-    if (!list.length) return `<div class="stack" style="gap:6px"><span class="lbl">${title}</span><div class="muted small">Nada neste período.</div></div>`;
-    const max = Math.max(1, ...list.map(i => i.ms));
-    const rowOf = (i) => `<div class="bar-row"><span class="lab">${esc(i.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${(i.ms / max * 100).toFixed(1)}%;background:${i.color || 'var(--accent)'}"></div></div><span class="val">${fmtDur(i.ms)}</span></div>`;
-    const head = list.slice(0, 8).map(rowOf).join(''), more = list.slice(8).map(rowOf).join('');
-    return `<div class="stack" style="gap:6px"><span class="lbl">${title}</span><div class="bars">${head}</div>${more ? `<details class="rep-more"><summary class="small muted" style="cursor:pointer;padding:4px 0">+${list.length - 8} outros (clique para ver todos)</summary><div class="bars" style="margin-top:6px">${more}</div></details>` : ''}</div>`;
+    const total = list.reduce((s, i) => s + i.ms, 0);
+    let body = '<div class="muted small">Nada neste período.</div>';
+    if (list.length) {
+      const max = Math.max(1, ...list.map(i => i.ms));
+      const rowOf = (i) => `<div class="bar-row"><span class="lab">${esc(i.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${(i.ms / max * 100).toFixed(1)}%;background:${i.color || 'var(--accent)'}"></div></div><span class="val">${fmtDur(i.ms)}</span></div>`;
+      const head = list.slice(0, 8).map(rowOf).join(''), more = list.slice(8).map(rowOf).join('');
+      body = `<div class="bars">${head}</div>${more ? `<details class="rep-more"><summary class="small muted" style="cursor:pointer;padding:4px 0">+${list.length - 8} outros (clique para ver todos)</summary><div class="bars" style="margin-top:6px">${more}</div></details>` : ''}`;
+    }
+    return `<details class="rep-det" style="border-top:1px solid var(--line);padding-top:8px">
+      <summary style="cursor:pointer;font-weight:600"><span class="lbl" style="display:inline">${title}</span> <span class="mono small muted">${list.length ? fmtDur(total) : ''}</span></summary>
+      <div class="stack" style="gap:6px;margin-top:10px">${body}</div>
+    </details>`;
   };
   const sections = [];
   if (p === 'dia' && v === 'tudo') sections.push(section('Tipos de trabalho', typeItems));
@@ -119,10 +126,7 @@ function reportPanelHTML(day) {
       <div class="small muted">bruto ${fmtDur(bruto)} · trabalho ${fmtDur(net)} · pausas ${fmtDur(Math.max(0, bruto - net))}</div>
       ${stripHTML}
       ${chartHTML}
-      <details class="rep-det">
-        <summary style="cursor:pointer;font-weight:600;padding:4px 0;list-style-position:inside">Detalhes: tipos, pausas, programas e arquivos</summary>
-        <div class="stack" style="gap:14px;margin-top:12px">${sections.join('')}</div>
-      </details>
+      <div class="stack" style="gap:6px">${sections.join('')}</div>
     </div>
   </div>`;
 }
