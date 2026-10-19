@@ -259,7 +259,8 @@ function bankMarkCats(cps, cat, auto) {
 }
 // Reembolso recebido pode cobrir várias terapias: cada linha de terapia liga a um lançamento (tempo_bank_reimb_links).
 const bankLinksOf = (txnId) => (BANK.links || []).filter(l => l.txn_id === txnId).map(l => l.reimb_row_id);
-const bankTakenRows = () => new Set([...(BANK.every || []).map(x => x.reimb_row_id), ...(BANK.links || []).map(l => l.reimb_row_id)].filter(Boolean));
+// Linhas de terapia já ligadas a um reembolso recebido. Pagamento à terapeuta não ocupa a linha.
+const bankTakenRows = () => new Set((BANK.links || []).map(l => l.reimb_row_id).filter(Boolean));
 // Conjunto de linhas cuja soma é exatamente o valor (em centavos). Candidatas na ordem dada (mês atual primeiro).
 function bankSubsetFor(cands, target) {
   const reach = new Map([[0, []]]);
