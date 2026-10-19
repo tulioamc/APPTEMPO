@@ -142,6 +142,8 @@ document.addEventListener('click', (e) => {
 const CHANGES = {};
 document.addEventListener('change', (e) => { const el = e.target.closest('[data-on]'); if (el && CHANGES[el.dataset.on]) CHANGES[el.dataset.on](el, e); });
 document.addEventListener('input', (e) => { const el = e.target.closest('[data-input]'); if (el && CHANGES[el.dataset.input]) CHANGES[el.dataset.input](el, e); });
+// Enter num campo de data confirma o que está digitado (sai do campo e dispara a mudança), sem reabrir o seletor.
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches && e.target.matches('input[type="date"], input[type="datetime-local"]')) { e.preventDefault(); e.target.blur(); } });
 
 ACTIONS['pick-swatch'] = (el) => {
   const wrap = el.closest('.swatches'); $$('.swatch', wrap).forEach(s => s.classList.toggle('on', s === el));
