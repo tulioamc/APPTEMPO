@@ -35,6 +35,12 @@ for s in 16 32 128 256 512; do
   sips -z $d $d "$SRC" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
-codesign --force --sign - "$APP" >/dev/null 2>&1 || true
+# Assinatura: com o certificado "Tempo Local" (criado uma vez no Acesso às Chaves), a permissão de Acessibilidade
+# continua valendo depois das atualizações. Sem ele, usa a assinatura automática (a permissão cai a cada build).
+if security find-identity -p codesigning | grep -q "Tempo Local"; then
+  codesign --force --sign "Tempo Local" "$APP" >/dev/null 2>&1 || codesign --force --sign - "$APP" >/dev/null 2>&1 || true
+else
+  codesign --force --sign - "$APP" >/dev/null 2>&1 || true
+fi
 rm -rf "$TMP"
 echo "APP_OK"
