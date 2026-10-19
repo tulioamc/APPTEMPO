@@ -36,11 +36,14 @@ const noticeButtons = (n) => {
   if (n.kind === 'pause') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Aceitar</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'activity') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Adicionar à nota</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'todo') return '';
+  if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
   return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
 };
 ACTIONS['notice-accept'] = (el) => {
   const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
-  if (n.kind === 'pause') { const a = db.get('tempo_time_entries', n.data.entry_id); if (a && a.state === 'running') applyPause(a, n, 'insert'); else decideNotice(n, 'ignored', 'Sessão já encerrada'); }
+  if (n.kind === 'pause' && n.data?.source === 'app') { decideNotice(n, 'accepted', 'Marcada no bruto (cronômetro seguiu)'); }
+  else if (n.kind === 'start') { decideNotice(n, 'accepted', 'Confirmada: entrou no bruto'); }
+  else if (n.kind === 'pause') { const a = db.get('tempo_time_entries', n.data.entry_id); if (a && a.state === 'running') applyPause(a, n, 'insert'); else decideNotice(n, 'ignored', 'Sessão já encerrada'); }
   else if (n.kind === 'activity') {
     const a = db.get('tempo_time_entries', n.data.entry_id);
     if (a && a.state !== 'done') { const d = n.data; learnFolderRule(d.folder, a.project_id, (entryPath(a).client || {}).id); const line = `${fmtTime(d.from)}–${fmtTime(d.to)} ${d.app}${d.doc ? ' · ' + d.doc : ''}${d.folder ? ' (' + d.folder + ')' : ''}`; db.update('tempo_time_entries', a.id, { notes: (a.notes ? a.notes + '\n' : '') + line }, true); decideNotice(n, 'accepted', 'Adicionada à nota da sessão'); }
@@ -49,13 +52,30 @@ ACTIONS['notice-accept'] = (el) => {
   else decideNotice(n, 'accepted', 'Aceito');
   db.emit();
 };
+/* Negar: tira o tempo do registro e arquiva o aviso com um retrato da sessão, para resgatar depois. */
+ACTIONS['notice-deny'] = (el) => {
+  const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
+  const e = db.get('tempo_time_entries', n.data?.entry_id);
+  const snapshot = e ? clone(e) : null;
+  if (e) db.remove('tempo_time_entries', e.id, true);
+  decideNotice(n, 'ignored', 'Negada (arquivada, pode resgatar)', { data: { ...n.data, snapshot } });
+  db.emit();
+};
 ACTIONS['notice-ignore'] = (el) => { decideNotice(db.get('tempo_notices', el.dataset.id), 'ignored', 'Ignorado'); db.emit(); };
 ACTIONS['notice-ack'] = (el) => { decideNotice(db.get('tempo_notices', el.dataset.id), 'accepted', 'Visto'); db.emit(); };
 ACTIONS['notice-snooze'] = (el) => {
   const d = new Date(); d.setDate(d.getDate() + 1);
   db.update('tempo_notices', el.dataset.id, { status: 'snoozed', snooze_until: ymd(d), decision: `Adiado para ${fmtDate(ymd(d))}` }, true); db.emit();
 };
-ACTIONS['notice-reopen'] = (el) => { db.update('tempo_notices', el.dataset.id, { status: 'pending', decision: '' }, true); db.emit(); };
+ACTIONS['notice-reopen'] = (el) => {
+  const n0 = db.get('tempo_notices', el.dataset.id);
+  if (n0?.kind === 'start' && n0.data?.snapshot) {
+    const { id: _old, ...rest } = n0.data.snapshot; const e = db.insert('tempo_time_entries', { ...rest, state: 'done' }, true);
+    db.update('tempo_notices', n0.id, { status: 'pending', decision: '', data: { ...n0.data, entry_id: e?.id || null, snapshot: null } }, true);
+    db.emit(); return;
+  }
+  db.update('tempo_notices', el.dataset.id, { status: 'pending', decision: '' }, true); db.emit();
+};
 ACTIONS['notice-filter'] = (el) => { S.nt = el.dataset.f; render(); };
 
 /* Clique no aviso: leva até onde dá para resolver. Não muda o aviso; ele só muda com "Ok, visto"/Aceitar/Ignorar. */

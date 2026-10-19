@@ -183,14 +183,34 @@ function learnFolderRule(folder, projectId, clientId) {
   parts.forEach(k => rules.push({ key: k, project_id: projectId, client_id: clientId || null }));
   db.setSetting('folderRules', rules);
 }
+/* Sem sessão e app de trabalho (pasta/projeto conhecido, ou app de design mesmo sem projeto): começa a contar
+   desde o horário em que você estava ali (provisório). Confirmar = entra no bruto. Negar = arquiva (pode resgatar).
+   Sem projeto, vira sessão avulsa para você ligar depois. */
+const DESIGN_APP_RE = /adobe|illustrator|photoshop|indesign|after effects|premiere|lightroom|cinema ?4d|blender|figma|sketch|affinity|procreate|davinci/i;
+const DEFAULT_PAUSE_APPS = ['WhatsApp', 'Telegram', 'Mensagens', 'Messages'];
+function suggestStart(p, seg) {
+  const pid = p ? p.id : null;
+  const pending = db.all('tempo_notices').some(n => n.kind === 'start' && n.status === 'pending' && (n.data?.project_id || null) === pid);
+  if (pending || activeEntry()) return;
+  const client = p ? clientOf(p) : null;
+  const sel = { project_id: pid, client_id: client?.id || null, agency_id: client?.agency_id || null, task_id: null, work_type_id: p?.work_type_id || null, notes: '', revision_id: null };
+  const e = startEntry(sel); if (!e) return;
+  db.update('tempo_time_entries', e.id, { segments: [{ s: seg.from, e: null }] }, true);
+  const unsaved = !seg.folder ? 'Arquivo ainda não salvo. ' : '';
+  addNotice({ kind: 'start', key: `start:${e.id}`, title: p ? `Contando em ${p.name} desde ${fmtTime(seg.from)}` : `Contando em ${seg.app} sem projeto desde ${fmtTime(seg.from)}`, body: `${unsaved}Detectado em ${seg.app}${seg.folder ? ' · ' + seg.folder : ''}. Confirme para entrar no bruto, ou negue para arquivar.`, entity: 'entry', entity_id: e.id, project_id: pid, data: { project_id: pid, entry_id: e.id, snapshot: null, from: seg.from, app: seg.app, unsaved: !seg.folder } });
+}
 function suggestActivity(seg) {
-  const a = activeEntry(); if (!a || !seg || !seg.app) return;
+  if (!seg || !seg.app) return;
   const fromMs = new Date(seg.from).getTime(), toMs = new Date(seg.to).getTime();
   if (!(toMs > fromMs) || toMs - fromMs < 120000) return;
-  const pauseApps = (db.setting('pauseApps', []) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
-  if (pauseApps.includes(String(seg.app).toLowerCase()) && toMs - fromMs >= idleLimit() * 60000) suggestPause(fromMs, toMs, 'app', seg.app);
+  const a = activeEntry();
+  const pauseApps = (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
+  const isPauseApp = pauseApps.includes(String(seg.app).toLowerCase());
   const rule = folderRule(seg.folder);
   const ruleProject = rule ? db.get('tempo_projects', rule.project_id) : null;
+  if (!a) { if (!isPauseApp && (ruleProject || DESIGN_APP_RE.test(seg.app))) suggestStart(ruleProject, seg); return; }
+  // app que pausa: só marca no bruto (o cronômetro segue) e vira aviso para você conferir
+  if (isPauseApp && toMs - fromMs >= idleLimit() * 60000) suggestPause(fromMs, toMs, 'app', seg.app);
   const client = rule?.client_id ? db.get('tempo_clients', rule.client_id) : (seg.folder ? clientFromPath(seg.folder) : null);
   const projSug = ruleProject && ruleProject.id !== a.project_id ? ruleProject : null;
   const key = `act:${a.id}:${seg.from}:${seg.app}`;

@@ -82,6 +82,8 @@ final class ActivityMonitor {
         // Pasta e nome do arquivo exigem permissão de Acessibilidade. Sem ela, só o nome do app é registrado.
         if AXIsProcessTrusted() {
             let axApp = AXUIElementCreateApplication(app.processIdentifier)
+            // um app travado não pode segurar o Tempo: no máximo 0,5 s por leitura
+            AXUIElementSetMessagingTimeout(axApp, 0.5)
             var winRef: CFTypeRef?
             if AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &winRef) == .success, let winRef = winRef {
                 let win = winRef as! AXUIElement

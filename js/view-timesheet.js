@@ -102,6 +102,11 @@ function dayStrip(entries, day) {
       if (en <= 0 || st >= span) return;
       bars += `<span class="seg-b fill" ${!s.e ? `data-strip-live="${base.getTime()}"` : ''} data-st="${st}" style="--tb:${hexOf(col)};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" title="${esc(entryTitle(e))} · ${fmtTime(s.s)}–${s.e ? fmtTime(s.e) : 'agora'}"></span>`;
     });
+    db.all('tempo_notices').filter(n => n.kind === 'pause' && n.status === 'accepted' && n.data?.source === 'app' && n.data?.entry_id === e.id).forEach(n => {
+      const st = Math.max(0, new Date(n.data.from) - base), en = Math.min(span, new Date(n.data.to) - base);
+      if (en <= 0 || st >= span) return;
+      bars += `<span class="seg-b fill pausa" style="--tb:#B8BDC6;left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" title="Marcada como pausa · ${fmtTime(n.data.from)}–${fmtTime(n.data.to)} · ${esc(n.data.app || '')}"></span>`;
+    });
     entryGaps(e).forEach(g => {
       const st = Math.max(0, new Date(g.s) - base), en = Math.min(span, new Date(g.e) - base);
       if (en <= 0 || st >= span) return;
