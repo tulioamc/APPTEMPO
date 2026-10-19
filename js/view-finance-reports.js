@@ -219,7 +219,7 @@ async function bankLoadRaw() {
 const bankFamily = (name) => {
   const n = String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\(\d+\)/g, '').replace(/^dra\.?\s+/, '').trim();
   if (/^patricia/.test(n) || /psicomotricidade|psicomotrocidade/.test(n)) return 'patricia';
-  if (/^clau/.test(n)) return 'claudiane';
+  if (/^(claudiane|clau)(\s|$)/.test(n)) return 'claudiane';
   if (/^at$/.test(n) || /sarah egiza/.test(n)) return 'at';
   if (/^adelia/.test(n)) return 'adelia';
   if (/^aloma/.test(n)) return 'aloma';
@@ -238,9 +238,23 @@ async function bankAutoTherapy() {
     const fam = bankFamily(t.counterpart || t.memo); if (!fam) return;
     const ym = (t.posted_on || '').slice(0, 7), amt = Math.abs(Number(t.amount));
     const c = rows.filter(r => r.month === ym && !taken.has(r.id) && bankFamily(r.name) === fam);
-    if (!c.length) return;
+    if (!c.length) {
+      // Pagamento de terapia sem linha no mês: cria a linha já com a data paga.
+      const n = rows.filter(r => r.month === ym).length;
+      const row = db.insert('tempo_reimb_rows', { month: ym, name: t.counterpart, note: '', amount: amt, date: null, paid_on: t.posted_on, order: n,
+        pay_id: rbStatusId('reimb_pay', 'Pago'), refund_id: rbStatusId('reimb_refund', 'a Pagar'), req_id: rbStatusId('reimb_req', 'a Fazer') });
+      rows.push(row); taken.add(row.id);
+      todo.push({ id: t.id, rowId: row.id });
+      return;
+    }
     const best = c.slice().sort((a, b) => Math.abs(Number(a.amount) - amt) - Math.abs(Number(b.amount) - amt))[0];
     taken.add(best.id);
+    // O extrato vale: valor e data pagos vêm do banco.
+    const diffs = {};
+    if (best.paid_on !== t.posted_on) diffs.paid_on = t.posted_on;
+    if (Math.abs(Number(best.amount) - amt) > 0.005) diffs.amount = amt;
+    if (rbStatusId('reimb_pay', 'Pago') && best.pay_id !== rbStatusId('reimb_pay', 'Pago')) diffs.pay_id = rbStatusId('reimb_pay', 'Pago');
+    if (Object.keys(diffs).length) db.update('tempo_reimb_rows', best.id, diffs);
     todo.push({ id: t.id, rowId: best.id });
   });
   if (!todo.length) return false;
@@ -330,7 +344,46 @@ async function bankLoadTxns() {
   let changed = await bankAutoTherapy();
   if (await bankAutoCategory()) changed = true;
   if (await bankAutoReimb()) changed = true;
+  if (await bankAutoFixed()) changed = true;
   if (changed) await bankLoadRaw();
+}
+// Gasto fixo aprendido: a contraparte → nomes de gasto fixo que você já vinculou a ela.
+function bankFixedLearned() {
+  const map = {};
+  (BANK.every || []).forEach(t => {
+    if (t.flow !== 'out' || !t.expense_id || !t.counterpart) return;
+    const e = db.get('tempo_expenses', t.expense_id); if (!e || !e.name) return;
+    (map[t.counterpart] = map[t.counterpart] || new Set()).add(e.name);
+  });
+  return map;
+}
+// Saída de uma contraparte já vinculada a um gasto fixo: liga sozinha ao gasto do mesmo nome e mês (valor com folga de 6%).
+async function bankAutoFixed() {
+  const learned = bankFixedLearned();
+  const taken = new Set((BANK.every || []).map(t => t.expense_id).filter(Boolean));
+  const expenses = db.all('tempo_expenses');
+  const todo = [];
+  (BANK.every || []).forEach(t => {
+    if (t.flow !== 'out' || t.expense_id || t.scope === 'interna' || !t.counterpart || !learned[t.counterpart]) return;
+    const ym = (t.posted_on || '').slice(0, 7), amt = Math.abs(Number(t.amount));
+    const names = learned[t.counterpart];
+    let e = expenses.find(x => x.kind === 'out' && x.month === ym && !taken.has(x.id) && x.amount != null
+      && names.has(x.name) && Math.abs(Number(x.amount) - amt) <= Math.max(5, Number(x.amount) * 0.06));
+    if (!e) {
+      // Sem gasto fixo deste nome no mês: cria com o valor do banco (não cria duplicado se já existe um com esse nome).
+      if (expenses.some(x => x.kind === 'out' && x.month === ym && names.has(x.name))) return;
+      e = db.insert('tempo_expenses', { month: ym, kind: 'out', name: [...names][0], cat: '', note: '', amount: amt, due_date: null, paid_on: t.posted_on, status: 'Pago', inst_no: null, inst_total: null, order: expenses.filter(x => x.month === ym).length });
+      expenses.push(e);
+    }
+    taken.add(e.id); todo.push({ t, e });
+  });
+  if (!todo.length) return false;
+  for (const { t, e } of todo) {
+    const { error } = await db.adapter.client.from('tempo_bank_txns').update({ expense_id: e.id, updated_at: new Date().toISOString() }).eq('id', t.id);
+    if (error) { toast('Erro: ' + error.message); break; }
+    db.update('tempo_expenses', e.id, { amount: Math.abs(Number(t.amount)), status: 'Pago', paid_on: t.posted_on });
+  }
+  return true;
 }
 // Resumo geral: entradas, saídas e sobra (sem movimentos internos) e onde o dinheiro saiu.
 // Filtro escondido das saídas (busca por nome, categoria, meio, conta e valor).
@@ -1028,10 +1081,12 @@ function bankPickDialog(t) {
   const rows = db.all('tempo_reimb_rows').filter(r => r.month === ym && Number(r.amount) > 0).sort((a, b) => String(a.name).localeCompare(String(b.name)));
   const exps = db.all('tempo_expenses').filter(e => e.month === ym && e.kind === 'out' && e.amount != null);
   const btn = (kind, id, label, val) => `<button class="btn sm" style="justify-content:space-between;width:100%" data-kind="${kind}" data-id="${id}">${esc(label)} <span class="mono small">${fmtMoney(val)}</span></button>`;
+  const fixedBlock = `<div class="field"><span class="lbl">Custos fixos do mês</span><div class="stack" style="gap:6px">${exps.length ? exps.map(e => btn('expense', e.id, e.name, e.amount)).join('') : '<span class="small muted">Nenhum custo fixo neste mês.</span>'}</div></div>`;
+  const therBlock = `<div class="field"><span class="lbl">Terapias do mês ${ym}</span><div class="stack" style="gap:6px">${rows.length ? rows.map(r => btn('reimb', r.id, r.name, r.amount)).join('') : '<span class="small muted">Nenhuma linha de terapia neste mês.</span>'}</div></div>`;
+  // Saída: custo fixo primeiro. Entrada: terapias primeiro.
   const html = `<div class="dh"><h2>Vincular lançamento</h2></div><div class="db">
     <p style="margin:0">${esc(t.counterpart || t.memo)} · ${fmtMoney(Math.abs(Number(t.amount)))} · ${fmtDate(t.posted_on)}</p>
-    <div class="field"><span class="lbl">Terapias do mês ${ym}</span><div class="stack" style="gap:6px">${rows.length ? rows.map(r => btn('reimb', r.id, r.name, r.amount)).join('') : '<span class="small muted">Nenhuma linha de terapia neste mês.</span>'}</div></div>
-    <div class="field"><span class="lbl">Custos fixos do mês</span><div class="stack" style="gap:6px">${exps.length ? exps.map(e => btn('expense', e.id, e.name, e.amount)).join('') : '<span class="small muted">Nenhum custo fixo neste mês.</span>'}</div></div>
+    ${t.flow === 'out' ? (/sul\s*americ/i.test(t.counterpart || '') ? fixedBlock : fixedBlock + therBlock) : therBlock + fixedBlock}
     </div><div class="df"><button class="btn" data-x="no">Cancelar</button></div>`;
   return new Promise(res => {
     let done = false;
