@@ -56,22 +56,8 @@ VIEWS.timesheet = () => {
   const html = `
   <div class="ts-hero">
     ${timer}
-    <div class="panel">
-      <div class="panel-h"><h3>${isToday(day) ? 'Hoje' : longDate(day)}</h3><span class="grow"></span><span class="small muted" style="margin-right:10px">bruto ${fmtDur(brutoDay)} · pausas ${fmtDur(Math.max(0, brutoDay - dayMs))}</span><span class="mono" style="font-weight:600;font-size:1.1em" data-tick-day="${S.tsDay}">${fmtDur(dayMs)}</span></div>
-      <div class="panel-b stack">
-        <div>${strip}</div>
-        ${typeRows.length ? `<div class="bars">${typeRows.map(([k, ms]) => { const w = db.get('tempo_work_types', k); return `<div class="bar-row"><span class="lab row" style="gap:6px"><span class="cdot fill" style="--tb:${hexOf(w?.color || 'gray')}"></span>${esc(w?.name || 'Sem tipo')}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf(w?.color || 'gray')};width:${(ms / dayMs * 100).toFixed(1)}%"></div></div><span class="val">${fmtDur(ms)}</span></div>`; }).join('')}</div>` : '<div class="muted small">Nenhum registro neste dia.</div>'}
-        <div class="stack" style="gap:6px">
-          <div class="row between"><span class="lbl">Semana</span><span class="mono small">${fmtDur(weekMs)}</span></div>
-          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end;height:70px">
-            ${week.map(x => `<button data-act="ts-day" data-day="${ymd(x.d)}" title="${fmtDate(ymd(x.d))} · ${fmtDur(x.ms)}" style="border:0;background:none;padding:0;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-end;height:100%;gap:4px"><span style="display:block;height:${Math.max(3, x.ms / maxW * 46)}px;border-radius:3px;background:${ymd(x.d) === S.tsDay ? 'var(--accent)' : 'var(--surface-3)'}"></span><span class="small ${ymd(x.d) === S.tsDay ? '' : 'faint'}" style="text-align:center">${WEEKDAYS[x.d.getDay()]}</span></button>`).join('')}
-          </div>
-        </div>
-      </div>
-    </div>
+    ${reportPanelHTML(day)}
   </div>
-
-  ${periodPanelHTML(day)}
 
   <div class="panel">
     <div class="panel-h">
@@ -117,7 +103,7 @@ function dayStrip(entries, day) {
       bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(g.why)};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Pausa${g.why ? ' (' + g.why + ')' : ''}\n${fmtTime(g.s)} – ${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}"></span>`;
     });
   });
-  return `<div class="day-strip" aria-label="Linha do tempo do dia">${bars}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
+  return `<div class="day-strip" data-report="1" data-t0="${base.getTime()}" data-span="${span}" data-ents="${entries.map(e => e.id).join(',')}" aria-label="Linha do tempo do dia">${bars}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
 }
 function updateLiveStrip(el) { const span = 17 * 3600000; const st = Number(el.dataset.st); const en = Math.min(span, Date.now() - Number(el.dataset.stripLive)); el.style.width = Math.max(.3, (en - st) / span * 100) + '%'; }
 
@@ -293,15 +279,17 @@ function openEntryModal(id) {
         <div class="field"><label for="em-rev">Rodada de revisão</label><select id="em-rev" class="input" name="revision_id" ${revs.length ? '' : 'disabled'}>${options(revs, e?.revision_id, { empty: true, emptyLabel: revs.length ? 'Não é revisão' : 'Projeto sem rodadas', label: r => `Rodada ${r.number} — ${r.description.slice(0, 40)}` })}</select></div>
       </div>
       ${e ? actSectionHTML(e) : ''}
-      <div class="stack" style="gap:8px">
-        <div class="row between"><span class="lbl">Intervalos trabalhados</span><span class="mono small">Total ${fmtDur(total)}</span></div>
-        ${segDaysHTML()}
-        <div class="row"><button class="btn sm" data-x="addseg">${icon('plus')} Adicionar intervalo (após pausa)</button>${e && e.state !== 'done' ? '<span class="small muted">Deixe o último fim vazio para continuar contando.</span>' : ''}</div>
-      </div>
       <div class="field"><label for="em-notes">Notas</label><textarea id="em-notes" class="input" name="notes">${esc(userNotes)}</textarea></div>
+      <div class="grid2" style="align-items:start">
+        <div class="stack" style="gap:8px">
+          <div class="row between"><span class="lbl">Intervalos trabalhados</span><span class="mono small">Total ${fmtDur(total)}</span></div>
+          ${segDaysHTML()}
+          <div class="row"><button class="btn sm" data-x="addseg">${icon('plus')} Adicionar intervalo (após pausa)</button>${e && e.state !== 'done' ? '<span class="small muted">Deixe o último fim vazio para continuar contando.</span>' : ''}</div>
+        </div>
+        <div>${e ? actLogFootHTML(e, logLines) : ''}</div>
+      </div>
       ${e ? `<div class="field"><label for="em-reason">Motivo da correção</label><input id="em-reason" class="input" name="reason" placeholder="Ex.: esqueci de pausar no almoço"><span class="hint">Fica guardado no histórico da sessão junto com os horários anteriores.</span></div>` : ''}
       ${e?.edits?.length ? `<div class="stack" style="gap:6px"><span class="lbl">Histórico de correções</span><div class="timeline">${e.edits.slice().reverse().map(x => `<div class="tl"><span class="w">${fmtDateTime(x.at)}</span><span class="b"></span><span>${esc(x.reason || 'Sem motivo informado')}<br><span class="faint small">Antes: ${x.before.map(s => `${fmtTime(s.s)}–${s.e ? fmtTime(s.e) : '…'}`).join(', ')}</span></span></div>`).join('')}</div></div>` : ''}
-      ${e ? actLogFootHTML(e, logLines) : ''}
     </div>
     <div class="df">${e ? `<button class="btn danger left" data-x="del">${icon('trash')} Excluir</button>` : ''}<button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="save">Salvar</button></div>`;
   };
