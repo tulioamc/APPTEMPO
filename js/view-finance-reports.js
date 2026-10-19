@@ -725,14 +725,17 @@ ACTIONS['bank-cat'] = async (el) => {
   const pick = el.dataset.v ? { cat: el.dataset.v, biz: PJ_CATS.includes(el.dataset.v) ? 'pj' : null } : await bankCatDialog(cp, false, el.dataset.flow);
   if (!pick) return;
   if (pick.tagOnly) {
-    const qt = db.adapter.client.from('tempo_bank_txns').update({ tag: pick.tag, updated_at: new Date().toISOString() });
+    const qt0 = db.adapter.client.from('tempo_bank_txns').update({ tag: pick.tag, updated_at: new Date().toISOString() });
+    const qt = el.dataset.flow ? qt0.eq('flow', el.dataset.flow) : qt0;
     const { error: et } = cp === '—' ? await qt.is('counterpart', null) : await qt.eq('counterpart', cp);
     if (et) return toast('Erro: ' + et.message);
     await bankLoadTxns(); return render();
   }
   const { cat, biz } = pick;
+  // Só as linhas do mesmo fluxo (entrada ou saída): categorizar uma entrada não muda as saídas da mesma contraparte.
   const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), updated_at: new Date().toISOString() });
-  const { error } = cp === '—' ? await q.is('counterpart', null) : await q.eq('counterpart', cp);
+  const qf = el.dataset.flow ? q.eq('flow', el.dataset.flow) : q;
+  const { error } = cp === '—' ? await qf.is('counterpart', null) : await qf.eq('counterpart', cp);
   if (error) return toast('Erro: ' + error.message);
   bankMarkCats([cp], cat, false);
   await bankLoadTxns();
