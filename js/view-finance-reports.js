@@ -591,29 +591,34 @@ function suggestIncCat(name) {
   if (/reembols|estorno|devol/i.test(name || '')) return REEMB_OUT;
   return null;
 }
-// Aprendizado: palavras do nome que sempre levaram à mesma categoria nas suas categorizações (2+ contrapartes, 80%+).
-const LEARN_STOP = new Set(['pagamento', 'transferencia', 'enviada', 'recebida', 'compra', 'debito', 'credito', 'parcelado', 'parcela', 'ltda', 'comercio', 'servicos', 'brasil', 'pix', 'hotel', 'iof', 'subscr', 'delivery', 'estorno', 'com', 'para', 'pela', 'the', 'and']);
+// Aprendizado: o conjunto de palavras do nome (sem "da/de/do", parênteses e "transferência") que sempre levou
+// à mesma categoria, em 2+ contrapartes e 80%+. O nome precisa conter TODAS essas palavras, em qualquer ordem:
+// "Cristiana Abrantes da Fonte" só casa se tiver as três juntas, nunca só "Fonte Abrantes".
+const LEARN_STOP = new Set(['da', 'de', 'do', 'dos', 'das', 'e', 'a', 'o', 'the', 'and', 'com', 'para', 'pela', 'ltda', 'sa', 'pix', 'me', 'eireli', 'pagamento', 'transferencia', 'enviada', 'recebida', 'compra', 'debito', 'credito', 'parcelado', 'parcela', 'brasil', 'comercio', 'servicos']);
+const normWords = (name) => bnorm(String(name || '').replace(/\(.*?\)/g, ' ')).split(/[^a-z0-9]+/).filter(w => w && !LEARN_STOP.has(w) && !/^\d+$/.test(w));
 function bankBuildLearned(every) {
-  const per = {};   // counterpart -> categoria dominante (saídas)
+  const per = {};   // contraparte -> categoria dominante (saídas)
   (every || []).forEach(t => {
     if (t.flow !== 'out' || !t.category || !t.counterpart || /^(Estorno|Reembolso|Terapia)/.test(t.category)) return;
     per[t.counterpart] = per[t.counterpart] || {};
     per[t.counterpart][t.category] = (per[t.counterpart][t.category] || 0) + 1;
   });
-  const tok = {};   // palavra -> { categoria: nº de contrapartes }
+  const sets = {};   // conjunto de palavras -> { categoria: nº de contrapartes }
   Object.entries(per).forEach(([cp, cats]) => {
     const best = Object.entries(cats).sort((a, b) => b[1] - a[1])[0][0];
-    new Set(bnorm(cp).split(/[^a-z]+/).filter(w => w.length >= 4 && !LEARN_STOP.has(w))).forEach(w => {
-      tok[w] = tok[w] || {}; tok[w][best] = (tok[w][best] || 0) + 1;
-    });
+    const w = [...new Set(normWords(cp))].filter(x => x.length >= 3);
+    if (w.length < 2) return;
+    const key = w.sort().join('|');
+    sets[key] = sets[key] || {};
+    sets[key][best] = (sets[key][best] || 0) + 1;
   });
-  const out = {};
-  Object.entries(tok).forEach(([w, cats]) => {
+  const out = [];
+  Object.entries(sets).forEach(([key, cats]) => {
     const total = Object.values(cats).reduce((a, b) => a + b, 0);
     const [cat, n] = Object.entries(cats).sort((a, b) => b[1] - a[1])[0];
-    if (n >= 2 && n / total >= 0.8) out[w] = cat;
+    if (total >= 2 && n / total >= 0.8) out.push({ words: key.split('|'), cat, n: total });
   });
-  return out;
+  return out.sort((a, b) => b.n - a.n);
 }
 function suggestCat(name, doc) {
   const digits = String(doc || '').replace(/\D/g, '');
@@ -621,9 +626,9 @@ function suggestCat(name, doc) {
   if (c && c.cnae) { const v = cnaeCat(c.cnae); if (v) return v; }
   const hit = CAT_RULES.find(([re]) => re.test(name || ''));
   if (hit) return hit[1];
-  const learned = BANK.learned || {};
-  const w = bnorm(name).split(/[^a-z]+/).find(x => x.length >= 4 && learned[x]);
-  return w ? learned[w] : null;
+  const ws = new Set(normWords(name));
+  const learnedHit = (BANK.learned || []).find(r => r.words.every(x => ws.has(x)));
+  return learnedHit ? learnedHit.cat : null;
 }
 // Estorno: pergunta de qual categoria abater.
 function bankEstornoTarget(cp) {
