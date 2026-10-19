@@ -136,11 +136,12 @@ function uncoveredGap(a, fromMs, toMs) {
   return best || [fromMs, fromMs];
 }
 function suggestPause(fromMs, toMs, source, app) {
-  const a = activeEntry(); if (!a || toMs - fromMs < idleLimit() * 60000) return;
+  const minMs = source === 'app' ? 60000 : idleLimit() * 60000;
+  const a = activeEntry(); if (!a || toMs - fromMs < minMs) return;
   const segStart = new Date(a.segments[a.segments.length - 1].s).getTime(); fromMs = Math.max(fromMs, segStart);
   // inatividade não pode cobrir uso de app: a pausa vai só para o maior trecho sem atividade registrada
   if (source !== 'app') [fromMs, toMs] = uncoveredGap(a, fromMs, toMs);
-  if (toMs - fromMs < idleLimit() * 60000) return;
+  if (toMs - fromMs < minMs) return;
   if (pausesOf(a.id).some(n => Math.abs(new Date(n.data.from) - fromMs) < 60000)) return;
   const from = new Date(fromMs).toISOString(), to = new Date(toMs).toISOString();
   addNotice({ kind: 'pause', key: `pause:${a.id}:${from}`, title: `Pausa sugerida: ${fmtDur(toMs - fromMs)}`, body: `Parado entre ${fmtTime(from)} e ${fmtTime(to)}; voltou às ${fmtTime(to)}.`, entity: 'entry', entity_id: a.id, project_id: a.project_id, data: { entry_id: a.id, from, to, source, app: app || null } });
@@ -239,9 +240,10 @@ function suggestActivity(seg) {
   const rule = folderRule(seg.folder);
   const ruleProject = rule ? db.get('tempo_projects', rule.project_id) : null;
   if (!a) { if (!isPauseApp && (ruleProject || DESIGN_APP_RE.test(seg.app))) suggestStart(ruleProject, seg); return; }
-  if (a.state === 'running') recordActivity(a, seg);
+  if (a.state === 'running' && !isPauseApp) recordActivity(a, seg);
   // app que pausa: só marca no bruto (o cronômetro segue) e vira aviso para você conferir
-  if (isPauseApp && toMs - fromMs >= idleLimit() * 60000) suggestPause(fromMs, toMs, 'app', seg.app);
+  // WhatsApp/Telegram não são atividade: viram pausa (a partir de 1 minuto, como as outras atividades)
+  if (isPauseApp) suggestPause(fromMs, toMs, 'app', seg.app);
 }
 CHANGES['pause-apps'] = (el) => { db.setSetting('pauseApps', el.value.split(',').map(x => x.trim()).filter(Boolean)); };
 
