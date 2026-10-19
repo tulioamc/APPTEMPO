@@ -373,13 +373,15 @@ function bankSummaryHTML(entity) {
   const origin = entity === 'pf' ? (BANK.origin || 'all') : 'all';
   const originOf = (t) => (/d660$/.test(t.account_tail || '') ? 'cartao' : 'conta');
   const f = BANK.f || {};
+  // Categoria por contraparte e fluxo: entrada e saída da mesma contraparte podem ter categorias diferentes.
+  const cbk = (t) => (t.counterpart || '—') + '|' + (t.flow || '');
   const catBy = {};
-  (BANK.every || []).forEach(x => { if (x.category) catBy[x.counterpart || '—'] = x.category; });
+  (BANK.every || []).forEach(x => { if (x.category) catBy[cbk(x)] = x.category; });
   const passes = (t) => {
     if (origin !== 'all' && originOf(t) !== origin) return false;
     const k = t.counterpart || '—';
     if (f.q && !bnorm(k).includes(bnorm(f.q))) return false;
-    if (f.cat === '__none' ? !!catBy[k] : (f.cat && catBy[k] !== f.cat)) return false;
+    if (f.cat === '__none' ? !!catBy[cbk(t)] : (f.cat && catBy[cbk(t)] !== f.cat)) return false;
     if (f.meth && bankMethod(t) !== f.meth) return false;
     if (f.acc && t.entity !== f.acc) return false;
     const a = Math.abs(Number(t.amount) || 0);
@@ -396,7 +398,7 @@ function bankSummaryHTML(entity) {
   const closeRow = `<div class="row" style="gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;flex-wrap:wrap">${closed ? `<span class="tag tg" style="background:var(--surface-2)">Mês fechado em ${fmtDate(closed.closed_at)}</span><button class="btn sm ghost" data-act="bank-reopen" data-entity="${entity}" data-ym="${ym}">Reabrir</button>` : `<button class="btn sm ghost" data-act="bank-close" data-entity="${entity}" data-ym="${ym}">Fechar mês</button>`}</div>`;
   const rowHTML = (t) => {
     const k = t.counterpart || '—';
-    const cat = catBy[k] || null;
+    const cat = catBy[cbk(t)] || null;
     const sug = cat ? null : (t.flow === 'out' ? suggestCat(k, t.counterpart_doc) : suggestIncCat(k));
     const autoCat = db.setting('bankAutoCat', {});
     if (t.counterpart_doc) bankCnpjLookup(t.counterpart_doc);
@@ -436,7 +438,7 @@ function bankSummaryHTML(entity) {
   const sum = (arr, fn) => arr.reduce((acc, x) => { const k = fn(x); acc[k] = (acc[k] || 0) + Math.abs(Number(x.amount)); return acc; }, {});
   const monthOuts = outMonth.filter(passes);
   // Terapia reembolsável fica separada e sempre no fim da lista, mesmo sendo o maior valor
-  const catKey = (t) => (isTher(t) ? THER_LABEL : (catBy[t.counterpart || '—'] || 'Sem categoria'));
+  const catKey = (t) => (isTher(t) ? THER_LABEL : (catBy[cbk(t)] || 'Sem categoria'));
   const catSums = sum(monthOuts, catKey);
   // Estorno "Estorno→Categoria" abate essa categoria
   (BANK.all[entity] || []).filter(t => t.flow === 'in' && abatesCat(t.category) && (t.posted_on || '').slice(0, 7) === ym).forEach(t => { const tg = t.category.split('→')[1]; catSums[tg] = (catSums[tg] || 0) - Math.abs(Number(t.amount)); });
