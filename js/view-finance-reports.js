@@ -410,7 +410,7 @@ function bankSummaryHTML(entity) {
       <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
       <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">${catTag(cat)}${autoCat[k] === cat ? ' <span class="faint small">sugerido</span>' : ''}</button>`
         : sug ? `<span class="bank-cat-btn" style="cursor:default">${catTag(sug)} <span class="faint small">sugerido</span></span>`
-        : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">Definir categoria</button>`}${t.tag ? ` <button class="tag tg" data-act="bank-tag" data-id="${t.id}" title="Marcação de pessoa. Clique para trocar" style="background:var(--surface-2);cursor:pointer">${esc(t.tag)}</button>` : ` <button class="btn sm ghost" data-act="bank-tag" data-id="${t.id}" title="Marcar pessoa">+ pessoa</button>`}</span>
+        : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">Definir categoria</button>`}${t.tag ? ` <span class="tag tg" style="${cssTb(TAG_COLOR[t.tag] || '#8a8f98')}">${esc(t.tag)}</span>` : ''}</span>
       <span class="small muted bm">${bankRowExtra(t)}</span></div>`;
   };
   BANK.openM = BANK.openM || {};
@@ -454,7 +454,7 @@ function bankSummaryHTML(entity) {
   const fOn = bankFilterOn() || BANK.fOpen;
   if (BANK.cmp) return `${bar}${compareHTML(entity)}`;
   const nSel = Object.keys(BANK.sel || {}).length;
-  const selBar = nSel ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-2);border-radius:10px"><b class="small">${nSel} selecionado(s)</b><button class="btn sm primary" data-act="bank-bulk-cat">Mudar categoria</button><button class="btn sm" data-act="bank-bulk-tag">Marcar pessoa</button><button class="btn sm ghost" data-act="bank-bulk-clear">Limpar seleção</button></div>` : '';
+  const selBar = nSel ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-2);border-radius:10px"><b class="small">${nSel} selecionado(s)</b><button class="btn sm primary" data-act="bank-bulk-cat">Mudar categoria</button><button class="btn sm ghost" data-act="bank-bulk-clear">Limpar seleção</button></div>` : '';
   return `${bar}${selBar}<div class="kpis">
     <div class="kpi"><span class="k">${dot(GREEN)}Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas, sem reembolsos</span></div>
     <div class="kpi"><span class="k">${dot(RED)}Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">${entity === 'pf' ? 'PF + PJ, sem terapias' : 'só PJ, sem terapias'}</span></div>
@@ -482,6 +482,8 @@ let BANK_CATS = [...Object.values(EX_CATS).flat(), 'Terapia', 'Estorno'];   // m
 const exKeyOf = (name) => { for (const [g, subs] of Object.entries(EX_CATS)) if (subs.includes(name)) return `${g}/${name}`; return `PESSOAL/${name}`; };
 // Reembolso Outros→Compras aparece como "Reembolso > Compras" (o valor guardado não muda).
 const catLabel = (name) => String(name || '').replace(/^Reembolso Outros→/, 'Reembolso > ');
+// Cor da marcação de pessoa: Alice rosinha, Rafa azulzinha.
+const TAG_COLOR = { Alice: '#e07ab0', Rafa: '#5b8fe0' };
 const catTag = (name) => (name ? `<span class="tag tg" style="${cssTb(exColor(exKeyOf(name)))}">${esc(catLabel(name))}</span>` : '');
 const accTag = (acc) => `<span class="tag tg abbr" style="${cssTb(exColor(acc === 'pj' ? 'EMPRESA' : 'PESSOAL'))}">${acc === 'pj' ? 'PJ' : 'PF'}</span>`;
 const THER_LABEL = 'Terapia reembolsável';
@@ -669,13 +671,16 @@ function bankCatDialog(cp, bulk, flow) {
       html: `<div class="dh"><h2>Categoria</h2></div><div class="db"><p style="margin:0">${bulk ? `“${esc(cp)}”. Só os lançamentos selecionados.` : `“${esc(cp)}”. Vale para todos os lançamentos com esse nome.`}</p>
         <div class="field"><span class="lbl">Conta</span><div class="seg" id="bcat-biz"><button data-biz="pf" class="on">PF</button><button data-biz="pj">PJ</button></div></div>
         <div class="row" style="flex-wrap:wrap;gap:6px">${cats.map(c => `<button class="btn sm tg" data-cat="${esc(c)}" style="${cssTb(exColor(exKeyOf(c)))}">${esc(c)}</button>`).join('')}</div>
-        <div class="field"><label for="bcat-new">Outra categoria</label><div class="row"><input id="bcat-new" class="input" placeholder="Nova categoria"><button class="btn sm" data-cat="__new">Usar</button></div></div></div>`,
+        <div class="field"><label for="bcat-new">Outra categoria</label><div class="row"><input id="bcat-new" class="input" placeholder="Nova categoria"><button class="btn sm" data-cat="__new">Usar</button></div></div>
+        <div class="field"><span class="lbl">Pessoa (opcional)</span><div class="seg" id="bcat-tag"><button data-tag="" class="on">Eu</button><button data-tag="Rafa">Rafa</button><button data-tag="Alice">Alice</button></div></div></div>`,
       onClose: () => { if (!done) res(null); }
     });
-    let bizTouched = false;
+    let bizTouched = false, tagTouched = false, tagVal = null;
     const pickBiz = (b) => { bizTouched = true; l.box.querySelectorAll('#bcat-biz button').forEach(x => x.classList.toggle('on', x === b)); };
+    const pickTag = (b) => { tagTouched = true; tagVal = b.dataset.tag || null; l.box.querySelectorAll('#bcat-tag button').forEach(x => x.classList.toggle('on', x === b)); };
     l.box.addEventListener('click', async (e) => {
       const bz = e.target.closest('#bcat-biz [data-biz]'); if (bz) return pickBiz(bz);
+      const tg = e.target.closest('#bcat-tag [data-tag]'); if (tg) return pickTag(tg);
       const b = e.target.closest('[data-cat]'); if (!b) return;
       let v = b.dataset.cat;
       if (v === '__new') v = $('#bcat-new', l.box).value.trim();
@@ -687,7 +692,7 @@ function bankCatDialog(cp, bulk, flow) {
         v = (v === 'Estorno' ? 'Estorno→' : REEMB_OUT + '→') + target;
         if (!bizTouched) biz = null;   // estorno fica na conta de origem, a não ser que você troque
       }
-      done = true; res({ cat: v, biz }); l.close();
+      done = true; res({ cat: v, biz, tag: tagTouched ? tagVal : undefined }); l.close();
     });
   });
 }
@@ -718,7 +723,7 @@ ACTIONS['bank-cat'] = async (el) => {
   const pick = el.dataset.v ? { cat: el.dataset.v, biz: PJ_CATS.includes(el.dataset.v) ? 'pj' : null } : await bankCatDialog(cp, false, el.dataset.flow);
   if (!pick) return;
   const { cat, biz } = pick;
-  const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), updated_at: new Date().toISOString() });
+  const q = db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), ...(pick.tag !== undefined ? { tag: pick.tag } : {}), updated_at: new Date().toISOString() });
   const { error } = cp === '—' ? await q.is('counterpart', null) : await q.eq('counterpart', cp);
   if (error) return toast('Erro: ' + error.message);
   bankMarkCats([cp], cat, false);
@@ -732,42 +737,6 @@ CHANGES['bank-sel'] = (el) => {
   render();
 };
 ACTIONS['bank-bulk-clear'] = () => { BANK.sel = {}; render(); };
-// Marcação de pessoa (Rafa, Alice): independe da categoria; fica depois dela.
-const BANK_TAGS = ['Rafa', 'Alice'];
-function bankTagPick(current) {
-  return new Promise(res => {
-    let done = false;
-    const opts = [...BANK_TAGS, '__none'];
-    const l = openLayer({
-      html: `<div class="dh"><h2>Marcar pessoa</h2></div><div class="db"><p style="margin:0">Marcação extra, pode ficar em qualquer categoria.</p>
-        <div class="row" style="flex-wrap:wrap;gap:6px">${opts.map(o => `<button class="btn sm${o === current ? ' primary' : ''}" data-t="${esc(o)}">${o === '__none' ? 'Sem marca' : esc(o)}</button>`).join('')}</div></div>`,
-      onClose: () => { if (!done) res(undefined); }
-    });
-    l.box.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-t]'); if (!b) return;
-      done = true; res(b.dataset.t === '__none' ? null : b.dataset.t); l.close();
-    });
-  });
-}
-async function bankSetTag(ids, tag) {
-  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ tag, updated_at: new Date().toISOString() }).in('id', ids);
-  if (error) return toast('Erro: ' + error.message);
-  await bankLoadTxns(); render();
-}
-ACTIONS['bank-tag'] = async (el) => {
-  const t = (BANK.every || []).find(x => x.id === el.dataset.id); if (!t) return;
-  const v = await bankTagPick(t.tag || null);
-  if (v === undefined || v === t.tag) return;
-  await bankSetTag([t.id], v);
-};
-ACTIONS['bank-bulk-tag'] = async () => {
-  const ids = Object.keys(BANK.sel || {});
-  if (!ids.length) return;
-  const v = await bankTagPick(null);
-  if (v === undefined) return;   // fechou sem escolher
-  await bankSetTag(ids, v);
-  BANK.sel = {};
-};
 ACTIONS['bank-cmp'] = () => { BANK.cmp = !BANK.cmp; render(); };
 CHANGES['bank-cmpa'] = (el) => { BANK.cmpA = el.value; render(); };
 CHANGES['bank-cmpb'] = (el) => { BANK.cmpB = el.value; render(); };
@@ -892,7 +861,7 @@ ACTIONS['bank-bulk-cat'] = async () => {
   const pick = await bankCatDialog(`${ids.length} lançamento(s)`, true, flows.size === 1 ? [...flows][0] : null);
   if (!pick) return;
   const { cat, biz } = pick;
-  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), updated_at: new Date().toISOString() }).in('id', ids);
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: cat, ...(biz ? { biz_entity: biz } : {}), ...(pick.tag !== undefined ? { tag: pick.tag } : {}), updated_at: new Date().toISOString() }).in('id', ids);
   if (error) return toast('Erro: ' + error.message);
   bankMarkCats(ids.map(id => ((BANK.every || []).find(x => x.id === id) || {}).counterpart || '—'), cat, false);
   await bankLoadTxns();
