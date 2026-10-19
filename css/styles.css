@@ -495,6 +495,7 @@ table.grid th.sel-col, table.grid td.sel-col { width: 34px; min-width: 34px; max
 .colormenu { position: absolute; z-index: 130; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px; max-width: 300px; }
 .ctag { display: inline-flex; gap: 3px; align-items: center; max-width: 100%; }
 .ctag .tag.abbr { font-family: var(--font-mono); font-size: .78em; font-weight: 600; letter-spacing: .02em; padding: 2px 5px; }
+.tag.abbr { min-width: 2.6em; justify-content: center; text-align: center; }
 
 /* ---------- dropdown com busca ---------- */
 .combo-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid transparent; background: none; padding: 2px 4px; border-radius: var(--radius-sm); max-width: 100%; min-height: 28px; }
