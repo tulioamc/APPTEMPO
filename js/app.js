@@ -136,6 +136,7 @@ function suggestPause(fromMs, toMs, source, app) {
   const from = new Date(fromMs).toISOString(), to = new Date(toMs).toISOString();
   addNotice({ kind: 'pause', key: `pause:${a.id}:${from}`, title: `Pausa sugerida: ${fmtDur(toMs - fromMs)}`, body: `Parado entre ${fmtTime(from)} e ${fmtTime(to)}; voltou às ${fmtTime(to)}.`, entity: 'entry', entity_id: a.id, project_id: a.project_id, data: { entry_id: a.id, from, to, source, app: app || null } });
   toast(`${icon('alert', 'ico')} Pausa sugerida: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`, { actions: [{ label: 'Revisar', run: () => go('timesheet') }] });
+  notifyNative('Pausa sugerida', `${fmtDur(toMs - fromMs)} parado (${fmtTime(from)}–${fmtTime(to)})`);
 }
 function heartbeat() {
   const now = Date.now(); const gap = now - lastBeat; const a = activeEntry();
@@ -188,6 +189,14 @@ function learnFolderRule(folder, projectId, clientId) {
    Sem projeto, vira sessão avulsa para você ligar depois. */
 const DESIGN_APP_RE = /adobe|illustrator|photoshop|indesign|after effects|premiere|lightroom|cinema ?4d|blender|figma|sketch|affinity|procreate|davinci/i;
 const DEFAULT_PAUSE_APPS = ['WhatsApp', 'Telegram', 'Mensagens', 'Messages'];
+/* Notificação do sistema (só no app de Mac; no navegador não faz nada). */
+function notifyNative(title, body) { try { window.webkit?.messageHandlers?.tempo?.postMessage({ title, body }); } catch (e) {} }
+/* Avisos de atividade já decididos e com mais de 30 dias saem do banco, para a lista não crescer para sempre. */
+function pruneOldActivity() {
+  const limit = Date.now() - 30 * 86400000;
+  db.where('tempo_notices', n => n.kind === 'activity' && n.status !== 'pending' && new Date(n.created_at || 0).getTime() < limit).forEach(n => db.remove('tempo_notices', n.id, true));
+}
+let _pruned = false;
 function suggestStart(p, seg) {
   const pid = p ? p.id : null;
   const pending = db.all('tempo_notices').some(n => n.kind === 'start' && n.status === 'pending' && (n.data?.project_id || null) === pid);
@@ -196,11 +205,13 @@ function suggestStart(p, seg) {
   const sel = { project_id: pid, client_id: client?.id || null, agency_id: client?.agency_id || null, task_id: null, work_type_id: p?.work_type_id || null, notes: '', revision_id: null };
   const e = startEntry(sel); if (!e) return;
   db.update('tempo_time_entries', e.id, { segments: [{ s: seg.from, e: null }] }, true);
+  notifyNative(p ? `Contando em ${p.name}` : `Contando em ${seg.app}`, `Confirme no Tempo para entrar no bruto, ou negue para arquivar.`);
   const unsaved = !seg.folder ? 'Arquivo ainda não salvo. ' : '';
   addNotice({ kind: 'start', key: `start:${e.id}`, title: p ? `Contando em ${p.name} desde ${fmtTime(seg.from)}` : `Contando em ${seg.app} sem projeto desde ${fmtTime(seg.from)}`, body: `${unsaved}Detectado em ${seg.app}${seg.folder ? ' · ' + seg.folder : ''}. Confirme para entrar no bruto, ou negue para arquivar.`, entity: 'entry', entity_id: e.id, project_id: pid, data: { project_id: pid, entry_id: e.id, snapshot: null, from: seg.from, app: seg.app, unsaved: !seg.folder } });
 }
 function suggestActivity(seg) {
   if (!seg || !seg.app) return;
+  if (!_pruned) { _pruned = true; pruneOldActivity(); }
   const fromMs = new Date(seg.from).getTime(), toMs = new Date(seg.to).getTime();
   if (!(toMs > fromMs) || toMs - fromMs < 120000) return;
   const a = activeEntry();

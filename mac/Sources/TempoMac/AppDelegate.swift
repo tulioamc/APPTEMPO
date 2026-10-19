@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
     private var web: WKWebView!
     private var statusItem: NSStatusItem!
@@ -18,7 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        web = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        let cfg = WKWebViewConfiguration()
+        cfg.userContentController.add(self, name: "tempo")   // página chama window.webkit.messageHandlers.tempo.postMessage({title, body})
+        web = WKWebView(frame: .zero, configuration: cfg)
         web.navigationDelegate = self
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -46,6 +48,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             self?.callBridge("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", NSNull()])
         }
         monitor.start()
+    }
+
+    /// Notificação do macOS vinda do site. Usa osascript, que funciona sem empacotar o app em .app.
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let d = message.body as? [String: Any], let title = d["title"] as? String, let body = d["body"] as? String else { return }
+        func q(_ x: String) -> String { x.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") }
+        let script = "display notification \"\(q(body))\" with title \"\(q(title))\""
+        let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript"); p.arguments = ["-e", script]
+        try? p.run()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

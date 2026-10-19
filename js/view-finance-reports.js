@@ -80,6 +80,7 @@ const GROUPS = {
 VIEWS.reports = () => {
   const r = S.rep; const d = reportData();
   const tot = d.entries.reduce((s, e) => s + entryMs(e), 0);
+  const brutoRep = d.entries.reduce((s, e) => s + entryBrutoMs(e), 0);
   const received = d.pays.reduce((s, x) => s + Number(x.amount), 0);
   // agrupamento
   const g = {}; d.entries.forEach(e => { const [k, n, c] = GROUPS[r.group][1](e); (g[k] ||= { n, c, ms: 0, s: 0 }); g[k].ms += entryMs(e); g[k].s++; });
@@ -111,7 +112,7 @@ VIEWS.reports = () => {
   </div></div>
 
   <div class="kpis">
-    <div class="kpi"><span class="k">Horas registradas</span><span class="v">${fmtH(tot)}</span><span class="s">${d.entries.length} sessões · média ${fmtH(workdays ? tot / workdays : 0)}/${byMonth ? 'mês' : 'dia útil'}</span></div>
+    <div class="kpi"><span class="k">Horas registradas</span><span class="v">${fmtH(tot)}</span><span class="s">${d.entries.length} sessões · média ${fmtH(workdays ? tot / workdays : 0)}/${byMonth ? 'mês' : 'dia útil'} · bruto ${fmtH(brutoRep)} · pausas ${fmtH(Math.max(0, brutoRep - tot))}</span></div>
     <div class="kpi"><span class="k">Recebido no período</span><span class="v">${fmtMoney0(received)}</span><span class="s">${d.pays.length} pagamento(s)</span></div>
     <div class="kpi"><span class="k">Recebido ÷ horas</span><span class="v">${tot > 60000 && received ? fmtMoney(received / hours(tot)) : '—'}</span><span class="s">valor por hora no período</span></div>
     <div class="kpi"><span class="k">Em revisões</span><span class="v">${fmtH(d.entries.filter(e => e.revision_id).reduce((s, e) => s + entryMs(e), 0))}</span><span class="s">${tot ? Math.round(d.entries.filter(e => e.revision_id).reduce((s, e) => s + entryMs(e), 0) / tot * 100) : 0}% do tempo</span></div>
