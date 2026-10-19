@@ -111,6 +111,7 @@ function openParty(kind, id) {
         <div class="kpis"><div class="kpi"><span class="k">Projetos</span><span class="v">${ps.length}</span></div><div class="kpi"><span class="k">Horas</span><span class="v">${fmtH(ms)}</span><span class="s">bruto ${fmtH(ps.reduce((t, p) => t + db.where('tempo_time_entries', e => e.project_id === p.id).reduce((u, e) => u + entryBrutoMs(e), 0), 0))}</span></div><div class="kpi"><span class="k">Orçado</span><span class="v">${fmtMoney0(sum(p => Number(p.budget)))}</span></div><div class="kpi"><span class="k">Em aberto</span><span class="v">${fmtMoney0(sum(remainingOf))}</span></div></div>
         <div class="props"><span class="k">CNPJ</span><span class="mono">${esc(x.cnpj || '—')}</span><span class="k">Contato</span><span>${esc(x.contact || '—')}</span><span class="k">Endereço</span><span>${esc(x.address || '—')}</span><span class="k">Observações</span><span class="muted">${esc(x.notes || '—')}</span><span class="k">Cadastrado em</span><span>${fmtDate(x.created_at)}</span></div>
         ${kind === 'agency' ? `<div class="stack" style="gap:6px"><div class="row between"><span class="lbl">Clientes</span><button class="btn sm" data-x="new-client">${icon('plus')} Cliente desta agência</button></div><div class="row">${clients(id).map(c => `<button class="btn sm ghost" data-x="open-client" data-id="${c.id}" style="padding:2px">${clientTag(c)}</button>`).join('') || '<span class="small muted">Nenhum cliente vinculado.</span>'}</div></div>` : ''}
+        ${kind === 'client' ? feeHTML(id, ps) : ''}
         <div class="panel"><div class="panel-h"><h3>Projetos</h3><span class="grow"></span>${kind === 'client' ? `<button class="btn sm" data-act="proj-new" data-client="${id}">${icon('plus')} Projeto</button>` : ''}</div><div class="panel-b tight">${ps.length ? `<div class="list">${ps.sort((a, b) => b.created_at.localeCompare(a.created_at)).map(p => `<div class="li" data-x="open-proj" data-id="${p.id}"><div class="grow"><div class="t">${esc(p.name)}</div><div class="meta">${kind === 'agency' ? esc(clientOf(p)?.name || '') + ' · ' : ''}${fmtH(projectMs(p.id))}${p.deadline ? ' · prazo ' + fmtDate(p.deadline) : ''}</div></div><div class="meta">${statusTag(p.status_id)}${statusTag(p.payment_status_id, false)}<span class="mono">${fmtMoney(p.budget)}</span></div></div>`).join('')}</div>` : '<div class="empty small">Nenhum projeto.</div>'}</div></div>
       </div>
       ${kind === 'agency' && isDirectAgency(x) ? `<div class="df"><span class="small muted grow">Agência interna: clientes sem agência contratante. Não pode ser editada nem excluída.</span></div>` : `<div class="df"><button class="btn danger left" data-x="del">${icon('trash')} Excluir</button><button class="btn" data-x="arch">${x.archived ? 'Desarquivar' : 'Arquivar'}</button><button class="btn primary" data-x="edit">${icon('edit')} Editar</button></div>`}`;
@@ -134,3 +135,36 @@ function openParty(kind, id) {
     }
   });
 }
+
+/* Fee mensal: pagamento fixo por mês, sem valor por projeto ("open bar"). Mostra quanto do mês já foi usado
+   em relação a um limite de horas que você define (só para não exagerar). Tudo fica por cliente e por mês. */
+function feeHTML(clientId, ps) {
+  const ym = S.feeYm || ymd(new Date()).slice(0, 7);
+  const map = db.setting('feeByMonth', {}) || {};
+  const val = map[`${clientId}|${ym}`];
+  const lim = map[`${clientId}|${ym}|h`];
+  const fps = ps.filter(p => statusName(p.payment_status_id) === 'Fee');
+  const ids = fps.map(p => p.id);
+  const usedMs = db.where('tempo_time_entries', e => ids.includes(e.project_id) && ymd(entryStart(e) || 0).slice(0, 7) === ym).reduce((t, e) => t + entryMs(e), 0);
+  const usedH = usedMs / 3600000; const pct = lim ? Math.min(100, usedH / lim * 100) : 0;
+  const warn = lim && usedH >= lim * .8;
+  return `<div class="panel"><div class="panel-h"><h3>Fee mensal</h3></div><div class="panel-b stack small">
+    <div class="row gap-s" style="flex-wrap:wrap"><input type="month" class="input" value="${ym}" data-on="fee-month" aria-label="Mês do fee" style="max-width:170px"><input class="input" inputmode="decimal" placeholder="Valor mensal" value="${val ? String(val).replace('.', ',') : ''}" data-on="fee-amount" data-id="${clientId}" data-ym="${ym}" aria-label="Valor mensal do fee" style="max-width:180px"><input class="input" inputmode="decimal" placeholder="Limite de horas" value="${lim ? String(lim).replace('.', ',') : ''}" data-on="fee-hours" data-id="${clientId}" data-ym="${ym}" aria-label="Limite de horas do mês" style="max-width:170px"></div>
+    <div class="muted">${fps.length ? 'Projetos no fee: ' + fps.map(p => esc(p.name)).join(' · ') : 'Nenhum projeto com pagamento Fee.'}</div>
+    <div>Pagamento do mês: <b>${val ? fmtMoney(val) : 'não definido'}</b></div>
+    <div class="row between"><span>Horas usadas no mês: <b class="${warn ? 'late' : ''}">${fmtH(usedMs)}</b>${lim ? ` de ${String(lim).replace('.', ',')} h` : ''}</span>${warn ? '<span class="late">Perto do limite</span>' : ''}</div>
+    ${lim ? `<div class="bar-track"><div class="bar-fill fill" style="--tb:${warn ? '#d64545' : '#2563eb'};width:${pct.toFixed(1)}%"></div></div>` : ''}</div></div>`;
+}
+CHANGES['fee-hours'] = (el) => {
+  const m = { ...(db.setting('feeByMonth', {}) || {}) }; const k = `${el.dataset.id}|${el.dataset.ym}|h`;
+  const v = Number(String(el.value).replace(',', '.'));
+  if (v > 0) m[k] = v; else delete m[k];
+  db.setSetting('feeByMonth', m); db.emit();
+};
+CHANGES['fee-month'] = (el) => { S.feeYm = el.value; render(); };
+CHANGES['fee-amount'] = (el) => {
+  const m = { ...(db.setting('feeByMonth', {}) || {}) }; const k = `${el.dataset.id}|${el.dataset.ym}`;
+  const v = Number(String(el.value).replace(/\./g, '').replace(',', '.'));
+  if (v > 0) m[k] = v; else delete m[k];
+  db.setSetting('feeByMonth', m); db.emit();
+};

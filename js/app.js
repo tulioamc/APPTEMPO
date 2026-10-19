@@ -386,6 +386,7 @@ async function boot() {
     return;
   }
   if (!db.all('tempo_work_types').length) seedConfig();
+  if (db.all('tempo_status_options').length && !db.where('tempo_status_options', s => s.kind === 'payment' && s.name === 'Fee').length) db.insert('tempo_status_options', { kind: 'payment', name: 'Fee', color: 'blue', category: 'closed', order: 9 }, true);
   ensureStatusKinds();
   ensureDirectAgency();
   ensureMonthSheets();
