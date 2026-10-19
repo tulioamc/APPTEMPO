@@ -75,7 +75,7 @@ final class ActivityMonitor {
     }
 
     /// Sites do Chrome que contam. Só o título da aba ativa é lido (não há endereço, histórico nem outros sites).
-    static let chromeSites = ["Behance", "Pinterest", "Magnific"]
+    static let chromeSites = ["Behance", "Pinterest", "Magnific", "Claude", "ChatGPT"]
 
     private func currentContext() -> Context? {
         guard let app = NSWorkspace.shared.frontmostApplication, let name = app.localizedName else { return nil }

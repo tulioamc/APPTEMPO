@@ -228,13 +228,6 @@ function suggestActivity(seg) {
   if (a.state === 'running') recordActivity(a, seg);
   // app que pausa: só marca no bruto (o cronômetro segue) e vira aviso para você conferir
   if (isPauseApp && toMs - fromMs >= idleLimit() * 60000) suggestPause(fromMs, toMs, 'app', seg.app);
-  const client = rule?.client_id ? db.get('tempo_clients', rule.client_id) : (seg.folder ? clientFromPath(seg.folder) : null);
-  const projSug = ruleProject && ruleProject.id !== a.project_id ? ruleProject : null;
-  const key = `act:${a.id}:${seg.from}:${seg.app}`;
-  const where = [seg.doc, seg.folder].filter(Boolean).join(' · ');
-  const sug = [client ? `Cliente sugerido: ${client.name}` : '', projSug ? `Projeto sugerido: ${projSug.name}` : ''].filter(Boolean).join(' · ');
-  addNotice({ kind: 'activity', key, title: `Uso de ${seg.app}: ${fmtDur(toMs - fromMs)}`, body: `${fmtTime(seg.from)}–${fmtTime(seg.to)}${where ? ' · ' + where : ''}${sug ? ' · ' + sug : ''}`, entity: 'entry', entity_id: a.id, project_id: a.project_id, data: { entry_id: a.id, client: client ? client.name : null, project_id: projSug ? projSug.id : null, client_id: client ? client.id : null, ...seg } });
-  db.emit();
 }
 CHANGES['pause-apps'] = (el) => { db.setSetting('pauseApps', el.value.split(',').map(x => x.trim()).filter(Boolean)); };
 
