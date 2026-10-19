@@ -127,7 +127,7 @@ function bigClock(ms) { const c = fmtClock(ms); return `${c.slice(0, 5)}<span cl
    (3) futuro app de Mac: window.TempoBridge.reportIdle(inicioISO, fimISO, app).
    Nada é aplicado sozinho: cada intervalo vira uma sugestão Aceitar/Ignorar. */
 let lastBeat = Date.now();
-const idleLimit = () => Number(db.setting('idleMinutes', 5)) || 5;
+const idleLimit = () => Number(db.setting('idleMinutes', 2)) || 2;
 function uncoveredGap(a, fromMs, toMs) {
   const cov = actList(a.id).map(r => [new Date(r.from).getTime(), new Date(r.to).getTime()]).filter(([x, y]) => y > fromMs && x < toMs).sort((p, q) => p[0] - q[0]);
   let best = null, cur = fromMs;
@@ -159,6 +159,9 @@ function heartbeat() {
   lastBeat = now;
 }
 setInterval(heartbeat, 20000);
+/* Atualiza os dados a cada minuto e ao voltar para a janela, para o Mac enxergar a sessão iniciada em outro lugar. */
+setInterval(() => db.refresh(), 60000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') db.refresh(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') heartbeat(); });
 window.TempoBridge = { reportIdle: (fromISO, toISO, app) => suggestPause(new Date(fromISO).getTime(), new Date(toISO).getTime(), 'mac', app), reportActivity: (seg) => suggestActivity(seg), version: 2 };
 

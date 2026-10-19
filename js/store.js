@@ -65,6 +65,15 @@ const db = {
     try { const snap = await this.adapter.loadAll(); if (snap) TABLES.forEach(t => this.data[t] = snap[t] || []); }
     catch (e) { this.syncError = e.message; }
   },
+  /* Busca do servidor de novo (sessões iniciadas em outro lugar, ex.: Chrome). Espera as gravações pendentes. */
+  async refresh() {
+    if (!this.adapter || !this.adapter.loadAll) return;
+    try {
+      if (this.adapter.queue) await this.adapter.queue;
+      const snap = await this.adapter.loadAll(); if (!snap) return;
+      TABLES.forEach(t => this.data[t] = snap[t] || []); this.emit();
+    } catch (e) { /* sem rede: tenta de novo na próxima vez */ }
+  },
   subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
   emit() { this.listeners.forEach(fn => fn()); },
   /* Envia ao adapter sem travar a interface; falhas aparecem na barra lateral. */
