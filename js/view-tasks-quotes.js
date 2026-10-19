@@ -45,6 +45,14 @@ const TCOLS = {
   hours: { label: 'Horas', ico: 'clock', w: 100, money: true, val: t => t.parent_id ? 0 : tMs(t), fmt: v => fmtDur(v), cell: t => { const ms = tMs(t); return ms ? fmtDur(ms) : ''; } },
   track: { label: '', w: 56, cell: t => `<button class="btn sm icon ghost" data-act="tk-track" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` }
 };
+function duplicateTasks(ids) {
+  ids.forEach(id => {
+    const t = db.get('tempo_tasks', id); if (!t) return;
+    const nt = db.insert('tempo_tasks', { project_id: t.project_id, parent_id: t.parent_id || null, name: `${t.name} (cópia)`, status_id: t.status_id, status_inherited: t.status_inherited !== false, deadline: t.deadline || null, notes: t.notes || '', order: 99, work_type_id: t.work_type_id || null }, true);
+    logEvent('task', t.project_id, 'created', `Tarefa “${nt.name}” duplicada`, null, null, { project_id: t.project_id });
+  });
+  db.emit(); toast(ids.length > 1 ? `${ids.length} tarefas duplicadas` : 'Tarefa duplicada');
+}
 CHANGES.tk = (el) => { S.task[el.dataset.k] = el.value; render(); };
 ACTIONS['tk-set'] = (el) => { S.task[el.dataset.k] = el.dataset.v; render(); };
 ACTIONS['tk-open'] = (el) => openProject(el.dataset.p || db.get('tempo_tasks', el.dataset.id)?.project_id, 'tasks');
