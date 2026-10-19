@@ -88,7 +88,8 @@ ACTIONS['tk-new'] = () => {
     if (!e.target.closest('[data-x="save"]')) return;
     const f = formData($('#tkf', l.box)); if (!f.project_id || !f.name.trim()) return toast('Escolha o projeto e dê um nome.');
     const p = db.get('tempo_projects', f.project_id);
-    db.insert('tempo_tasks', { project_id: p.id, parent_id: f.parent_id || null, name: f.name.trim(), status_id: p.status_id, status_inherited: true, deadline: f.deadline || null, notes: '', order: 99, work_type_id: f.work_type_id || null }, true);
+    db.insert('tempo_tasks', { project_id: p.id, parent_id: f.parent_id || null, name: f.name.trim(), status_id: newTaskStatusId(p.id), status_inherited: true, deadline: f.deadline || null, notes: '', order: 99, work_type_id: f.work_type_id || null }, true);
+    reopenProjectIfDone(p.id);
     logEvent('task', p.id, 'created', `${f.parent_id ? 'Subtarefa' : 'Tarefa'} “${f.name.trim()}” criada`, null, null, { project_id: p.id });
     db.emit(); l.close(); toast('Tarefa criada');
   });

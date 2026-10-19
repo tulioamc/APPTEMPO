@@ -149,7 +149,7 @@ function bindProjectDrawer(ly, id, st) {
   });
   ly.box.addEventListener('submit', (e) => {
     e.preventDefault(); const form = e.target; const f = formData(form); const kind = form.dataset.form;
-    if (kind === 'add-task') { if (!f.name.trim()) return; const pr = p(); db.insert('tempo_tasks', { project_id: id, parent_id: null, name: f.name.trim(), status_id: pr.status_id, status_inherited: true, deadline: null, notes: '', order: tasksOf(id).length, work_type_id: null }); logEvent('task', id, 'created', `Tarefa “${f.name.trim()}” criada`, null, null, { project_id: id }); setTimeout(() => ly.box.querySelector('[data-form="add-task"] input')?.focus(), 30); }
+    if (kind === 'add-task') { if (!f.name.trim()) return; const pr = p(); db.insert('tempo_tasks', { project_id: id, parent_id: null, name: f.name.trim(), status_id: newTaskStatusId(id), status_inherited: true, deadline: null, notes: '', order: tasksOf(id).length, work_type_id: null }); reopenProjectIfDone(id); logEvent('task', id, 'created', `Tarefa “${f.name.trim()}” criada`, null, null, { project_id: id }); setTimeout(() => ly.box.querySelector('[data-form="add-task"] input')?.focus(), 30); }
     if (kind === 'add-rev') {
       if (!f.description.trim()) return toast('Descreva o pedido de ajuste.');
       const n = db.where('tempo_revisions', r => r.project_id === id).length + 1;

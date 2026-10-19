@@ -155,7 +155,22 @@ function setTaskStatus(t, statusId) {
   const from = t.status_id;
   db.update('tempo_tasks', t.id, { status_id: statusId, status_inherited: false }, true);
   logEvent('task', t.id, 'status', `${t.parent_id ? 'Subtarefa' : 'Tarefa'} “${t.name}”: ${statusName(from)} → ${statusName(statusId)}`, from, statusId, { project_id: t.project_id });
+  if (statusCat(statusId) === 'active') reopenProjectIfDone(t.project_id);
   db.emit();
+}
+/* Projeto concluído com tarefa ativa não pode continuar concluído: volta para "em andamento". */
+function reopenProjectIfDone(pid) {
+  const pr = db.get('tempo_projects', pid); if (!pr || statusCat(pr.status_id) !== 'done') return;
+  const act = db.where('tempo_status_options', s => s.kind === 'work' && s.category === 'active').sort((a, b) => (a.order ?? 99) - (b.order ?? 99))[0];
+  if (!act) return;
+  db.update('tempo_projects', pid, { status_id: act.id }, true);
+  logEvent('project', pid, 'status', `Status: ${statusName(pr.status_id)} → ${act.name} (reaberto automaticamente)`, pr.status_id, act.id);
+}
+/* Status inicial de tarefa nova: se o projeto está concluído, a tarefa nasce "A fazer" e reabre o projeto. */
+function newTaskStatusId(pid) {
+  const pr = db.get('tempo_projects', pid);
+  if (pr && statusCat(pr.status_id) !== 'done') return pr.status_id;
+  return db.where('tempo_status_options', s => s.kind === 'work' && s.category === 'todo')[0]?.id || pr?.status_id || null;
 }
 function resetTaskInheritance(t) {
   const p = db.get('tempo_projects', t.project_id);
