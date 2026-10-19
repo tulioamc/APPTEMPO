@@ -1078,8 +1078,11 @@ function bankRowExtra(t) {
     const tot = rs.reduce((a, r) => a + Number(r.amount), 0);
     return `<span class="small muted">→ ${rs.map(r => esc(r.name)).join(', ')} (${fmtMoney0(tot)})</span> <button class="btn sm ghost" data-act="bank-unlink" data-id="${t.id}">Desvincular</button>`;
   }
-  if (t.reimb_row_id) { const r = db.get('tempo_reimb_rows', t.reimb_row_id); return r ? `<span class="small muted">→ Terapia: ${esc(r.name)}</span>` : ''; }
-  if (t.expense_id) { const e = db.get('tempo_expenses', t.expense_id); return e ? `<span class="small muted">→ ${esc(e.name)}</span>` : ''; }
+  const unl = `<button class="btn sm ghost" data-act="bank-unlink-any" data-id="${t.id}">Desvincular</button>`;
+  if (t.payment_id) { const p = db.get('tempo_payments', t.payment_id); const pr = p ? db.get('tempo_projects', p.project_id) : null; return `<span class="small muted">→ ${esc(pr?.name || 'Projeto')} (${fmtMoney0(p?.amount)})</span> ${unl}`; }
+  if (t.category === 'Fee' && bankIsPJ(t)) return `<span class="small muted">→ Fee</span> ${unl}`;
+  if (t.reimb_row_id) { const r = db.get('tempo_reimb_rows', t.reimb_row_id); return r ? `<span class="small muted">→ Terapia: ${esc(r.name)}</span> ${unl}` : ''; }
+  if (t.expense_id) { const e = db.get('tempo_expenses', t.expense_id); return e ? `<span class="small muted">→ ${esc(e.name)}</span> ${unl}` : ''; }
   if (t.flow !== 'out' && isReembOut(t.category)) return `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
   if (t.flow !== 'out' && isReembCat(t.category)) {
     // reembolso de terapia: linha da tabela de terapias (ou um custo, como plano de saúde)
@@ -1087,6 +1090,7 @@ function bankRowExtra(t) {
     const tb = rr ? `<button class="btn sm" data-act="bank-tlink" data-id="${t.id}" data-kind="reimb" data-target="${rr.id}">Vincular a terapia ${esc(rr.name)}</button>` : `<button class="btn sm ghost" data-act="bank-rlink" data-id="${t.id}">Vincular a terapia…</button>`;
     return `${tb} <button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
   }
+  if (t.flow === 'in' && bankIsPJ(t)) return `<button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Vincular a projeto…</button>`;
   if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">${isReembCat(t.category) ? 'Vincular a gasto…' : 'Vincular a entrada…'}</button>`; }
   const e = bankFixedMatch(t);
   if (e) return `<button class="btn sm" data-act="bank-link" data-id="${t.id}" data-eid="${e.id}">Vincular a ${esc(e.name)}</button>`;
@@ -1213,6 +1217,22 @@ ACTIONS['bank-unlink'] = async (el) => {
   const { error } = await db.adapter.client.from('tempo_bank_reimb_links').delete().eq('txn_id', id);
   if (error) return toast('Erro: ' + error.message);
   db.setSetting(bankSkipKey, { ...db.setting(bankSkipKey, {}), [id]: true });
+  await bankLoadTxns(); toast('Desvinculado'); render();
+};
+// Desfaz qualquer vínculo de um lançamento: projeto (pagamento criado pelo extrato é apagado), Fee, terapia, gasto e vínculos de vários pagamentos.
+ACTIONS['bank-unlink-any'] = async (el) => {
+  const t = (BANK.all.pf || []).concat(BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;
+  const cl = db.adapter.client;
+  const patch = { updated_at: new Date().toISOString(), payment_id: null, expense_id: null, reimb_row_id: null };
+  if (t.category === 'Fee' || (t.reimb_row_id && t.category === 'Terapia')) patch.category = null;
+  const { error } = await cl.from('tempo_bank_txns').update(patch).eq('id', t.id);
+  if (error) return toast('Erro: ' + error.message);
+  await cl.from('tempo_bank_payment_links').delete().eq('txn_id', t.id);
+  if (t.payment_id) {
+    const p = db.get('tempo_payments', t.payment_id);
+    const others = (BANK.every || []).some(b => b.id !== t.id && b.payment_id === t.payment_id);
+    if (p && p.note === 'Extrato' && !others) { await cl.from('tempo_payments').delete().eq('id', p.id); db.data.tempo_payments = db.data.tempo_payments.filter(x => x.id !== p.id); }
+  }
   await bankLoadTxns(); toast('Desvinculado'); render();
 };
 ACTIONS['bank-tlink'] = async (el) => {
