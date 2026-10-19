@@ -38,7 +38,7 @@ const DEFAULT_WORK_TYPES = [
 ];
 const DEFAULT_STATUS = {
   work: [['A fazer','gray','todo'],['Em andamento','blue','active'],['Aguardando cliente','orange','active'],['Enviado','purple','active'],['Aprovação','pink','active'],['Stand by','brown','active'],['Concluído','green','done'],['Cancelado','red','cancelled']],
-  payment: [['Não faturado','gray','open'],['Não Pago','red','open'],['Pago Parcial','yellow','open'],['Atrasado','orange','open'],['Pago','green','closed'],['Fee','blue','closed']],
+  payment: [['Não faturado','gray','open'],['Não Pago','red','open'],['Pago Parcial','yellow','open'],['Atrasado','orange','open'],['Pago','green','closed'],['Fee','blue','closed'],['Projeto pessoal','purple','closed']],
   quote: [['Rascunho','gray','open'],['Enviado','blue','open'],['Em negociação','yellow','open'],['Aprovado','green','won'],['Recusado','red','lost'],['Vencido','brown','lost']],
   reimb_pay: [['a Pagar','red','open'],['Pago','green','closed']],
   reimb_refund: [['a Pagar','yellow','open'],['Feito!','blue','closed'],['Negado','red','open'],['Parcial (Errado)','purple','open']],

@@ -207,7 +207,7 @@ function openProjectForm(id, clientId, onCreated) {
   });
   l.box.addEventListener('submit', (e) => e.preventDefault());
   l.box.addEventListener('change', (e) => { if (e.target.id === 'pf-client') $('#pf-fee-wrap', l.box).innerHTML = feeFieldInner(null, e.target.value); });
-  l.box.addEventListener('change', (e) => { if (e.target.id === 'pf-client' || e.target.id === 'pf-fee') syncFee(l.box); });
+  l.box.addEventListener('change', (e) => { if (e.target.id === 'pf-client' || e.target.id === 'pf-fee' || e.target.id === 'pf-pay') syncFee(l.box); });
   syncFee(l.box);
   l.box.addEventListener('click', (e) => {
     const b = e.target.closest('[data-x]'); if (!b) return;
@@ -249,6 +249,8 @@ function syncFee(box) {
   const on = !!(cb && cb.checked && !cb.disabled && fee);
   if (on) { pay.value = fee.id; pay.disabled = true; bud.value = ''; bud.readOnly = true; bud.title = 'Projeto no fee não tem valor por projeto'; }
   else { pay.disabled = false; bud.readOnly = false; bud.removeAttribute('title'); if (fee && pay.value === fee.id && naoFat) pay.value = naoFat.id; }
+  const pess = statuses('payment').find(x => x.name === 'Projeto pessoal');
+  if (pess && pay.value === pess.id) { bud.value = ''; bud.readOnly = true; bud.title = 'Projeto pessoal não tem receita'; }
 }
 function feePayId(chosenId, box) {
   const fee = statuses('payment').find(x => x.name === 'Fee'); const cb = $('#pf-fee', box);
