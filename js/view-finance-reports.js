@@ -429,7 +429,7 @@ const bnorm = (x) => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').to
 function bankFilterOn() { const f = BANK.f || {}; return !!(f.q || f.cat || f.meth || f.acc || f.min || f.max); }
 function bankFilterHTML(catBy) {
   const f = BANK.f || {};
-  const cats = [...new Set(Object.values(catBy).concat(bankCats()))];
+  const cats = [...new Set(Object.values(catBy).concat(bankCats()))].filter(c => c && c !== '__none').sort((a, b) => a.localeCompare(b, 'pt-BR'));
   return `<div class="panel-b" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;border-bottom:1px solid var(--line)">
     <div class="field"><label for="bf-q">Nome</label><input id="bf-q" class="input" value="${esc(f.q || '')}" placeholder="Buscar por nome" data-input="bank-f" data-k="q"></div>
     <div class="field"><label for="bf-cat">Categoria</label><select id="bf-cat" class="input" data-on="bank-f" data-k="cat"><option value="">Todas</option><option value="__none" ${f.cat === '__none' ? 'selected' : ''}>Sem categoria</option>${cats.map(c => `<option value="${esc(c)}" ${f.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
@@ -451,7 +451,9 @@ function bankInReportHTML(entity, ym, base, excl) {
   const years = [...new Set(base.filter(t => t.flow === 'in' && t.posted_on).map(t => t.posted_on.slice(0, 4)))].sort().reverse();
   const Y = BANK.inY || ym.slice(0, 4);
   const range = P === 'mes' ? [ym, ym] : P === 'q3' ? [inAddM(ym, -2), ym] : P === 'mx' ? [inAddM(ym, -(X - 1)), ym] : P === 'ano' ? [Y + '-01', Y + '-12'] : ['0000-00', '9999-12'];
-  const inRange = (t) => { const m = (t.posted_on || '').slice(0, 7); return m >= range[0] && m <= range[1]; };
+  const selM = BANK.inSel || {};
+  const inRange = (t) => { const m = (t.posted_on || '').slice(0, 7); return P === 'sel' ? !!selM[m] : (m >= range[0] && m <= range[1]); };
+  const allMonths = [...new Set(base.filter(t => t.flow === 'in' && t.scope === 'externa' && t.posted_on && !excl(t)).map(t => t.posted_on.slice(0, 7)))].sort().reverse();
   const ins = base.filter(t => t.flow === 'in' && t.scope === 'externa' && !excl(t) && inRange(t));
   const total = ins.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
   const byMes = {}, byCli = {}, agOf = {};
@@ -484,18 +486,22 @@ function bankInReportHTML(entity, ym, base, excl) {
   const rows = V === 'cli' ? cliRows : mesRows;
   const mx = Math.max(1, ...rows.map(r => r[1]));
   const nMeses = Object.keys(byMes).length;
-  const bars = rows.length ? `<div class="bars">${rows.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(V === 'mes' ? rbLabel(k) : k)}${V === 'cli' && agOf[k] ? ` <span class="faint small">· ${esc(agOf[k])}</span>` : ''}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / mx * 100}%"></div></div><span class="mono small">${fmtMoney0(v)} <span class="faint">${total ? Math.round(v / total * 100) : 0}%</span></span></div>`).join('')}</div>` : '<div class="empty small">Nenhuma entrada no período.</div>';
-  const segP = [['mes', 'Mês'], ['q3', 'Últimos 3 meses'], ['mx', 'Últimos ' + X + ' meses'], ['ano', 'Ano'], ['tudo', 'Tudo']];
+  const bars = rows.length ? `<div style="display:flex;flex-direction:column;gap:10px">${rows.map(([k, v]) => `<div style="display:flex;align-items:center;gap:12px"><span class="small" style="flex:0 0 200px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(k)}">${esc(V === 'mes' ? rbLabel(k) : k)}${V === 'cli' && agOf[k] ? ` <span class="faint">· ${esc(agOf[k])}</span>` : ''}</span><div style="flex:1;min-width:0;height:16px;border-radius:8px;background:var(--surface-2);overflow:hidden;margin-right:14px"><div style="height:100%;width:${v / mx * 100}%;border-radius:8px;background:var(--accent,#22a06b)"></div></div><span class="mono small" style="flex:0 0 150px;text-align:right;white-space:nowrap">${fmtMoney0(v)} <span class="faint">${total ? Math.round(v / total * 100) : 0}%</span></span></div>`).join('')}</div>` : '<div class="empty small">Nenhuma entrada no período.</div>';
+  const segP = [['mes', 'Mês'], ['q3', 'Últimos 3 meses'], ['mx', 'Últimos ' + X + ' meses'], ['ano', 'Ano'], ['sel', 'Meses escolhidos'], ['tudo', 'Tudo']];
+  const monthChips = P === 'sel' ? `<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">${allMonths.map(m => `<button class="btn sm ${selM[m] ? '' : 'ghost'}" data-act="bank-insel" data-v="${m}">${rbLabel(m)}</button>`).join('')}</div>` : '';
   const yearSel = P === 'ano' ? `<select data-on="bank-iny" class="input" style="width:auto;padding:4px 8px">${years.map(y => `<option value="${y}" ${y === Y ? 'selected' : ''}>${y}</option>`).join('')}</select>` : '';
   const xInp = P === 'mx' ? `<input type="number" min="1" value="${X}" data-on="bank-inx" class="input" style="width:70px;padding:4px 6px">` : '';
   return `<div class="panel bank-report" style="margin-bottom:12px"><div class="panel-h"><h3>Entradas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · ${ins.length} lançamento(s)</span></div><div class="panel-b">
     <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><div class="seg" style="flex-wrap:wrap">${segP.map(([k, l]) => `<button class="${P === k ? 'on' : ''}" data-act="bank-inp" data-v="${k}">${l}</button>`).join('')}</div>${xInp}${yearSel}</div>
     <div class="row" style="gap:16px;align-items:baseline;flex-wrap:wrap;margin-bottom:10px"><span><span class="small muted">Total</span> <b class="mono">${fmtMoney0(total)}</b></span><span><span class="small muted">Média por mês</span> <b class="mono">${fmtMoney0(nMeses ? total / nMeses : 0)}</b></span><span><span class="small muted">Meses com entrada</span> <b class="mono">${nMeses}</b></span></div>
     <div class="seg" style="margin-bottom:12px">${[['cli', 'Por cliente'], ['mes', 'Por mês']].map(([k, l]) => `<button class="${V === k ? 'on' : ''}" data-act="bank-inv" data-v="${k}">${l}</button>`).join('')}</div>
+    ${monthChips}
     ${bars}
   </div></div>`;
 }
-ACTIONS['bank-inp'] = (el) => { BANK.inP = el.dataset.v; render(); };
+ACTIONS['bank-inp'] = (el) => { BANK.inP = el.dataset.v; if (BANK.inP === 'sel' && !Object.keys(BANK.inSel || {}).length) BANK.inSel = { [bankMonthNow()]: true }; render(); };
+ACTIONS['bank-insel'] = (el) => { const sel = { ...(BANK.inSel || {}) }; const m = el.dataset.v; if (sel[m]) delete sel[m]; else sel[m] = true; BANK.inSel = sel; render(); };
+const bankMonthNow = () => (BANK.month || ymd(new Date()).slice(0, 7));
 ACTIONS['bank-inv'] = (el) => { BANK.inV = el.dataset.v; render(); };
 CHANGES['bank-inx'] = (el) => { BANK.inX = Math.max(1, Number(el.value) || 6); render(); };
 CHANGES['bank-iny'] = (el) => { BANK.inY = el.value; render(); };
@@ -540,7 +546,7 @@ function bankSummaryHTML(entity) {
   const listPool = entity === 'pj' && BANK.showT !== false ? poolOut.concat((BANK.all.pj || []).filter(t => t.flow === 'out' && t.scope === 'interna')) : poolOut;
   const outsAll = listPool.filter(passes).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
   const showTBtn = entity === 'pj' ? `<button class="btn sm ghost" data-act="bank-showt">${BANK.showT !== false ? 'Ocultar' : 'Mostrar'} transferências para PF</button>` : '';
-  const barInner = `${BANK.cmp ? '<button class="btn sm ghost" data-act="bank-cmp">Voltar ao mês</button>' : ''}${showTBtn}`;
+  const barInner = `${BANK.cmp ? '<button class="btn sm" data-act="bank-cmp" style="border:1px solid var(--line,#d8dbe0)">← Voltar ao mês</button>' : ''}${showTBtn}`;
   const bar = barInner ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">${barInner}</div>` : '';
   const closeRow = `<div class="row" style="gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;flex-wrap:wrap">${closed ? `<span class="tag tg" style="background:var(--surface-2)">Mês fechado em ${fmtDate(closed.closed_at)}</span><button class="btn sm ghost" data-act="bank-reopen" data-entity="${entity}" data-ym="${ym}">Reabrir</button>` : `<button class="btn sm ghost" data-act="bank-close" data-entity="${entity}" data-ym="${ym}">Fechar mês</button>`}</div>`;
   const rowHTML = (t) => {
@@ -614,13 +620,13 @@ function bankSummaryHTML(entity) {
     <div class="kpi"><span class="k">Sobra</span><span class="v">${fmtMoney0(ent + sai)}</span><span class="s">entradas − saídas</span></div>
     ${cartao ? `<div class="kpi"><span class="k">Fatura do cartão</span><span class="v">${fmtMoney0(cartao)}</span><span class="s">paga · conta uma vez, pelos itens</span></div>` : ''}
   </div>
-  ${inRep}
   <div class="bank-layout">
     <div class="panel bank-list"><div class="panel-h"><h3>Saídas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · por mês</span><span class="grow"></span><span class="row" style="gap:4px;align-items:center"><button class="btn sm ghost" data-act="bank-mprev" title="Mês anterior">‹</button><button class="btn sm" data-act="bank-mnow" style="min-width:150px">${rbLabel(ym)}</button><button class="btn sm ghost" data-act="bank-mnext" title="Próximo mês">›</button></span><button class="btn sm ${BANK.cmp ? 'on' : ''}" data-act="bank-cmp" style="margin-left:6px">${BANK.cmp ? 'Voltar ao mês' : 'Comparar meses'}</button><button class="btn sm ${fOn ? 'on' : ''}" data-act="bank-f-toggle" style="margin-left:6px">${icon('search')} Filtrar${bankFilterOn() ? ' · ativo' : ''}</button></div>
       ${fOn ? bankFilterHTML(catBy) : ''}
       <div class="panel-b"><div style="display:flex;flex-wrap:wrap;gap:28px;align-items:center;margin-bottom:10px">${entity === 'pf' ? `<div class="seg">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${`<div class="seg">${[['tudo', 'Tudo'], ['in', 'Entradas'], ['out', 'Saídas']].map(([k, l]) => `<button class="${lst === k ? 'on' : ''}" data-act="bank-lst" data-v="${k}">${l}</button>`).join('')}</div>`}</div><div style="max-height:65vh;overflow:auto">${groups || '<div class="empty small">Nenhum lançamento.</div>'}</div></div></div>
     ${report}
-  </div>${closeRow}`;
+  </div>
+  ${inRep}${closeRow}`;
 }
 CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
 ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };
@@ -907,16 +913,19 @@ CHANGES['bank-rmonth'] = (el) => { BANK.month = el.value; render(); };
 function monthSnap(entity, ym) {
   const withRe = BANK.reemb === true;
   const cats = {}; let ent = 0, sai = 0;
+  // Mesma resolução do relatório: categoria pela contraparte e fluxo (como no donut), senão a própria categoria.
+  const cm = {};
+  (BANK.every || []).forEach(x => { if (x.category) cm[(x.counterpart || '—') + '|' + (x.flow || '')] = x.category; });
   (BANK.all[entity] || []).forEach(t => {
     if (t.scope === 'interna' || !t.posted_on || t.posted_on.slice(0, 7) !== ym) return;
-    const v = Math.abs(Number(t.amount)), c = t.category || 'Sem categoria';
-    if (!withRe && (isReembCat(c) || c === 'Terapia')) return;
+    const v = Math.abs(Number(t.amount)), c = cm[(t.counterpart || '—') + '|' + (t.flow || '')] || t.category || 'Sem categoria';
+    if (t.flow === 'out' && (t.reimb_row_id || c === 'Terapia')) return;   // terapias ficam fora da comparação
+    if (!withRe && isReembCat(c)) return;
     if (t.flow === 'in') {
       if (abatesCat(c)) { const tg = c.split('→')[1]; cats[tg] = (cats[tg] || 0) - v; return; }   // estorno abate a categoria
       if (/^Estorno/.test(c)) return;
       ent += v; return;
     }
-    if (c === 'Terapia') { cats['Terapia reembolsável'] = (cats['Terapia reembolsável'] || 0) + v; return; }
     sai += v; cats[c] = (cats[c] || 0) + v;
   });
   return { ent, sai, sobra: ent - sai, cats };
