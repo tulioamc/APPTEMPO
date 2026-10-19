@@ -117,9 +117,7 @@ final class ActivityMonitor {
             let axApp = AXUIElementCreateApplication(app.processIdentifier)
             // um app travado não pode segurar o Tempo: no máximo 0,5 s por leitura
             AXUIElementSetMessagingTimeout(axApp, 0.5)
-            var winRef: CFTypeRef?
-            if AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &winRef) == .success, let winRef = winRef {
-                let win = winRef as! AXUIElement
+            if let win = frontWindow(axApp) {
                 var docRef: CFTypeRef?
                 if AXUIElementCopyAttributeValue(win, kAXDocumentAttribute as CFString, &docRef) == .success,
                    let s = docRef as? String, let url = URL(string: s), url.isFileURL {
@@ -128,13 +126,32 @@ final class ActivityMonitor {
                 }
                 if doc == nil && captureFileNames {
                     var titleRef: CFTypeRef?
-                    if AXUIElementCopyAttributeValue(win, kAXTitleAttribute as CFString, &titleRef) == .success {
-                        doc = titleRef as? String
+                    if AXUIElementCopyAttributeValue(win, kAXTitleAttribute as CFString, &titleRef) == .success,
+                       let title = titleRef as? String, !title.isEmpty {
+                        // Adobe põe o zoom e o modo no título ("Logo.ai @ 66,7% (RGB/Preview)"): fica só o nome
+                        doc = title.components(separatedBy: " @ ").first ?? title
                     }
                 }
             }
         }
         return Context(app: name, bundle: bundle, doc: doc, folder: folder)
+    }
+
+    /// Janela do app: a em foco; se o app não informa, a janela principal; se também não, a primeira aberta.
+    /// Adobe e outros apps às vezes não respondem à janela em foco.
+    private func frontWindow(_ axApp: AXUIElement) -> AXUIElement? {
+        for attr in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
+            var ref: CFTypeRef?
+            if AXUIElementCopyAttributeValue(axApp, attr as CFString, &ref) == .success, let ref = ref {
+                return (ref as! AXUIElement)
+            }
+        }
+        var list: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &list) == .success,
+           let wins = list as? [AXUIElement], let first = wins.first {
+            return first
+        }
+        return nil
     }
 
     /// Nome do site da lista se o título da janela do Chrome mencionar um deles; senão nil.
