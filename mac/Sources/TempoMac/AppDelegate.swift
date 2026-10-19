@@ -183,7 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     @objc private func toggleFolders(_ sender: NSMenuItem) { flip(sender, "captureFolders", defaultOn: true) }
-    @objc private func toggleFiles(_ sender: NSMenuItem) { flip(sender, "captureFileNames", defaultOn: false) }
+    @objc private func toggleFiles(_ sender: NSMenuItem) { flip(sender, "captureFileNames", defaultOn: true) }
 
     private func flip(_ sender: NSMenuItem, _ key: String, defaultOn: Bool) {
         let now = !(defaults.object(forKey: key) as? Bool ?? defaultOn)

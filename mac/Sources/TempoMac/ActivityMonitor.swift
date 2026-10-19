@@ -20,10 +20,11 @@ final class ActivityMonitor {
     private var segStart = Date()
     private var idleStart: Date?
     private let idleLimit: TimeInterval = 60
-    private let minSegment: TimeInterval = 60
+    private let minSegment: TimeInterval = 10
     private let selfBundle = Bundle.main.bundleIdentifier ?? "TempoMac"
 
-    private var captureFileNames: Bool { defaults.bool(forKey: "captureFileNames") }
+    // padrão ligado, igual ao item "Guardar nome do arquivo" do menu (antes lia padrão desligado e não gravava o arquivo)
+    private var captureFileNames: Bool { defaults.object(forKey: "captureFileNames") as? Bool ?? true }
     private var captureFolders: Bool { defaults.object(forKey: "captureFolders") as? Bool ?? true }
     private var excluded: Set<String> { Set(defaults.stringArray(forKey: "excludedApps") ?? []) }
 
