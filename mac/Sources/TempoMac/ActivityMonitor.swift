@@ -9,8 +9,8 @@ struct Context: Equatable {
     let folder: String?
 }
 
-/// Observa o app em primeiro plano e a ociosidade. Não grava nada sozinho: entrega segmentos para o site,
-/// que transforma em sugestão. Segmentos com menos de 2 minutos são descartados.
+/// Observa o app em primeiro plano e a ociosidade. Não grava nada sozinho: entrega segmentos para o site
+/// (pela fila do AppDelegate). Segmentos com menos de 10 segundos são descartados.
 final class ActivityMonitor {
     var onSegment: ((Date, Date, Context) -> Void)?
     var onIdle: ((Date, Date) -> Void)?

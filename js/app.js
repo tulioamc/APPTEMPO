@@ -121,21 +121,30 @@ setInterval(() => {
 }, 1000);
 function bigClock(ms) { const c = fmtClock(ms); return `${c.slice(0, 5)}<span class="sec">${c.slice(5)}</span>`; }
 
-/* ---------- inatividade: sugestões de pausa ----------
-   Fontes: (1) app/computador suspenso (intervalo sem "batimento" da página);
-   (2) Idle Detection do Chrome/Edge, quando ativada;
-   (3) futuro app de Mac: window.TempoBridge.reportIdle(inicioISO, fimISO, app).
-   Nada é aplicado sozinho: cada intervalo vira uma sugestão Aceitar/Ignorar. */
-let lastBeat = Date.now();
+/* ---------- inatividade: pausas ----------
+   Fontes: (1) app de Mac (mouse/teclado de verdade, e sono do computador) via window.TempoBridge.reportIdle;
+   (2) aba do navegador, só quando o Mac não está registrando ("suspenso");
+   (3) WhatsApp/Telegram (ver suggestActivity).
+   Pausa por ociosidade é aplicada sozinha; o aviso fica só no registro. */
 const idleLimit = () => Number(db.setting('idleMinutes', 2)) || 2;
+/* Só o app de Mac cria pausas e registra atividade sozinho. Navegador e celular não contam nada automaticamente. */
+const isMacApp = () => !!window.webkit?.messageHandlers?.tempo;
+/* Trechos já cobertos da sessão: atividade registrada e pausas aceitas. Pausa nova nunca sobrepõe esses trechos. */
+function coveredIntervals(a) {
+  const act = actList(a.id).map(r => [new Date(r.from).getTime(), new Date(r.to).getTime()]);
+  const paused = db.all('tempo_notices').filter(n => n.kind === 'pause' && n.status === 'accepted' && n.data?.entry_id === a.id)
+    .map(n => [new Date(n.data.from).getTime(), new Date(n.data.to).getTime()]);
+  return [...act, ...paused];
+}
 function uncoveredGap(a, fromMs, toMs) {
-  const cov = actList(a.id).map(r => [new Date(r.from).getTime(), new Date(r.to).getTime()]).filter(([x, y]) => y > fromMs && x < toMs).sort((p, q) => p[0] - q[0]);
+  const cov = coveredIntervals(a).filter(([x, y]) => y > fromMs && x < toMs).sort((p, q) => p[0] - q[0]);
   let best = null, cur = fromMs;
   cov.forEach(([x, y]) => { if (x > cur && (!best || x - cur > best[1] - best[0])) best = [cur, x]; cur = Math.max(cur, y); });
   if (toMs > cur && (!best || toMs - cur > best[1] - best[0])) best = [cur, toMs];
   return best || [fromMs, fromMs];
 }
 function suggestPause(fromMs, toMs, source, app) {
+  if (!isMacApp()) return;   // navegador e celular não criam pausa sozinhos
   const minMs = source === 'app' ? 60000 : idleLimit() * 60000;
   const a = activeEntry(); if (!a || toMs - fromMs < minMs) return;
   const segStart = new Date(a.segments[a.segments.length - 1].s).getTime(); fromMs = Math.max(fromMs, segStart);
@@ -151,22 +160,21 @@ function suggestPause(fromMs, toMs, source, app) {
   toast(`${icon('alert', 'ico')} Pausa sugerida: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`, { actions: [{ label: 'Revisar', run: () => go('timesheet') }] });
   notifyNative('Pausa sugerida', `${fmtDur(toMs - fromMs)} parado (${fmtTime(from)}–${fmtTime(to)})`);
 }
-function heartbeat() {
-  const now = Date.now(); const gap = now - lastBeat; const a = activeEntry();
-  // no app de Mac a janela pode ficar em segundo plano e o navegador pausa os temporizadores: isso não é pausa.
-  // Pausa só por ociosidade de verdade (mouse/teclado) ou por WhatsApp/Telegram.
-  if (!window.webkit?.messageHandlers?.tempo && a && a.state === 'running' && gap > 90000) suggestPause(lastBeat, now, 'suspenso');
-  lastBeat = now;
-}
-setInterval(heartbeat, 20000);
 /* Atualiza os dados a cada minuto e ao voltar para a janela, para o Mac enxergar a sessão iniciada em outro lugar. */
 setInterval(() => db.refresh(), 60000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') db.refresh(); });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') heartbeat(); });
-window.TempoBridge = { reportIdle: (fromISO, toISO, app) => suggestPause(new Date(fromISO).getTime(), new Date(toISO).getTime(), 'mac', app), reportActivity: (seg) => suggestActivity(seg), version: 2 };
+/* Ponte do app de Mac. O app guarda os eventos numa fila e só tira da fila quando esta função roda. */
+window.TempoBridge = {
+  reportIdle: async (fromISO, toISO, app) => {
+    try { await db.refresh(); suggestPause(new Date(fromISO).getTime(), new Date(toISO).getTime(), 'mac', app); }
+    catch (e) { console.warn('reportIdle', e); }
+  },
+  reportActivity: (seg) => suggestActivity(seg),
+  version: 3,
+};
 
 /* Atividade em primeiro plano vinda do app de Mac: { from, to, app, doc?, folder? }.
-   Vira sugestão só se houver sessão rodando e a atividade tiver ao menos 2 minutos. Nada é gravado sem Aceitar. */
+   Grava sozinha (sem Aceitar) se houver sessão rodando e a atividade tiver ao menos 10 segundos. */
 const pathNorm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 /* Sugere o cliente pelo caminho da pasta: procura nomes de cliente e de projeto nos pedaços do caminho,
    do mais profundo para o mais raso. Só sugere; nunca grava sozinho. */
@@ -232,8 +240,10 @@ function suggestStart(p, seg) {
   const unsaved = !seg.folder ? 'Arquivo ainda não salvo. ' : '';
   addNotice({ kind: 'start', key: `start:${e.id}`, title: p ? `Contando em ${p.name} desde ${fmtTime(seg.from)}` : `Contando em ${seg.app} sem projeto desde ${fmtTime(seg.from)}`, body: `${unsaved}Detectado em ${seg.app}${seg.folder ? ' · ' + seg.folder : ''}. Confirme para entrar no bruto, ou negue para arquivar.`, entity: 'entry', entity_id: e.id, project_id: pid, data: { project_id: pid, entry_id: e.id, snapshot: null, from: seg.from, app: seg.app, unsaved: !seg.folder } });
 }
-function suggestActivity(seg) {
-  if (!seg || !seg.app) return;
+async function suggestActivity(seg) {
+  if (!isMacApp() || !seg || !seg.app) return;   // atividade só vem do app de Mac
+  // dados atuais antes de gravar: com uma cópia antiga, a gravação apagaria registros feitos pelo outro lado
+  try { await db.refresh(); } catch (e) { console.warn('refresh', e); }
   if (!_pruned) { _pruned = true; pruneOldActivity(); }
   const fromMs = new Date(seg.from).getTime(), toMs = new Date(seg.to).getTime();
   // troca de app com menos de 10 s é ignorada; a partir disso entra no log e no gráfico

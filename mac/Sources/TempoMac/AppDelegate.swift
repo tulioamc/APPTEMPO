@@ -49,10 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                 "from": self?.iso(from) ?? "", "to": self?.iso(to) ?? "",
                 "app": ctx.app, "doc": ctx.doc ?? NSNull(), "folder": ctx.folder ?? NSNull()
             ]
-            self?.callBridge("reportActivity", [payload])
+            self?.enqueue("reportActivity", [payload])
         }
         monitor.onIdle = { [weak self] from, to in
-            self?.callBridge("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", NSNull()])
+            self?.enqueue("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", NSNull()])
         }
         // ao abrir, procura atualização em segundo plano (sem fazer nada se não houver mudança)
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.runUpdate(manual: false) }
@@ -139,17 +139,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     private func iso(_ d: Date) -> String { isoFormatter.string(from: d) }
 
-    /// Chama window.TempoBridge.<fn>(args...) na página. Se a página não estiver carregada, a chamada é ignorada.
-    private func callBridge(_ fn: String, _ args: [Any]) {
-        let literals = args.map { jsonLiteral($0) }.joined(separator: ",")
-        web.evaluateJavaScript("window.TempoBridge && window.TempoBridge.\(fn) && window.TempoBridge.\(fn)(\(literals))", completionHandler: nil)
+    /// Fila de eventos para window.TempoBridge. Fica guardada no Mac até a página confirmar o recebimento:
+    /// se a página ainda não carregou ou o computador estava dormindo, nada se perde.
+    private var outbox: [[String: String]] {
+        get { defaults.array(forKey: "outbox") as? [[String: String]] ?? [] }
+        set { defaults.set(newValue, forKey: "outbox") }
+    }
+    private var flushing = false
+
+    private func enqueue(_ fn: String, _ args: [Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: args),
+              let json = String(data: data, encoding: .utf8) else { return }
+        var q = outbox
+        q.append(["fn": fn, "json": json])
+        if q.count > 500 { q.removeFirst(q.count - 500) }   // limite: a fila não cresce para sempre
+        outbox = q
+        flush()
     }
 
-    private func jsonLiteral(_ v: Any) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: [v]),
-              let s = String(data: data, encoding: .utf8) else { return "null" }
-        return String(s.dropFirst().dropLast())
+    /// Entrega o primeiro evento da fila. Só tira da fila quando a página responde que recebeu.
+    private func flush() {
+        guard !flushing, let item = outbox.first, let fn = item["fn"], let json = item["json"] else { return }
+        flushing = true
+        let js = "(function(){ var b = window.TempoBridge; if (!b || typeof b.\(fn) !== 'function') return false; b.\(fn).apply(null, \(json)); return true; })()"
+        web.evaluateJavaScript(js) { [weak self] result, _ in
+            guard let self = self else { return }
+            self.flushing = false
+            if (result as? Bool) == true {
+                var q = self.outbox
+                if !q.isEmpty { q.removeFirst() }
+                self.outbox = q
+                self.flush()
+            } else {
+                // página ainda não está pronta: tenta de novo em instantes
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.flush() }
+            }
+        }
     }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { flush() }
 
     // MARK: - Menu da barra
 

@@ -150,19 +150,27 @@ function actStripHTML(e, A) {
   const now = Date.now();
   const segs = (e.segments || []).map(s => ({ a: new Date(s.s).getTime(), b: s.e ? new Date(s.e).getTime() : now }))
     .filter(x => x.b > x.a).sort((p, q) => p.a - q.a);
-  const total = segs.reduce((t, x) => t + (x.b - x.a), 0);
-  if (!total) return '';
-  // posição de um instante no tempo trabalhado (pausas não contam)
-  const toW = (t) => { let off = 0; for (const x of segs) { if (t <= x.a) return off; if (t < x.b) return off + (t - x.a); off += x.b - x.a; } return off; };
+  if (!segs.length) return '';
+  // a faixa cobre a sessão inteira (do começo ao fim); as pausas (espaços entre trabalhos) ficam hachuradas
+  const t0 = segs[0].a, t1 = Math.max(...segs.map(x => x.b)), span = t1 - t0;
+  if (span <= 0) return '';
+  const pct = (t) => (Math.min(Math.max(t, t0), t1) - t0) / span * 100;
+  const hhmm = (t) => fmtTime(new Date(t).toISOString());
   const byId = Object.fromEntries(A.groups.map(g => [g.id, g]));
+  let pauses = '';
+  for (let i = 1; i < segs.length; i++) {
+    const a = segs[i - 1].b, b = segs[i].a;
+    if (b <= a) continue;
+    pauses += `<span class="act-pause" style="position:absolute;top:0;bottom:0;left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%;background:repeating-linear-gradient(45deg,#C4C8D0 0 3px,transparent 3px 7px)" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}`)}"></span>`;
+  }
   let bars = '';
   A.records.forEach(r => {
     const g = byId[r.gid]; if (!g) return;
-    const wa = toW(new Date(r.from).getTime()), wb = toW(new Date(r.to).getTime());
-    if (wb <= wa) return;
-    bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" style="--tb:${g.color};left:${wa / total * 100}%;width:${Math.max(.3, (wb - wa) / total * 100)}%" data-tip="${esc(actTip(g))}"></span>`;
+    const x = pct(new Date(r.from).getTime()), y = pct(new Date(r.to).getTime());
+    if (y <= x) return;
+    bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" style="--tb:${g.color};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(actTip(g))}"></span>`;
   });
-  return `<div class="act-strip">${bars}</div>`;
+  return `<div class="act-strip">${pauses}${bars}</div>`;
 }
 
 function actChipsHTML(A, mode) {
@@ -174,7 +182,7 @@ function actSectionHTML(e) {
   if (!actList(e.id).length) return '';
   const prog = actAnalyze(e.id, 'program'), file = actAnalyze(e.id, 'file');
   const sec = (title, mode, A) => `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div>${actStripHTML(e, A)}${actChipsHTML(A, mode)}</div>`;
-  return `<div class="stack" style="gap:8px">${sec('Por programa', 'program', prog)}${sec('Por arquivo', 'file', file)}<span class="small muted">Passe o mouse para ver o tempo. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
+  return `<div class="stack" style="gap:8px">${sec('Por programa', 'program', prog)}${sec('Por arquivo / página', 'file', file)}<span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
 }
 
 /* Janela de um grupo de arquivos: desfazer, juntar com outro grupo ou mover o tempo para outro projeto/tarefa. */
@@ -268,5 +276,5 @@ function actProjectHTML(entries) {
     });
     return `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div><div class="act-strip">${bars}</div><div class="act-chips">${A.groups.map(g => `<span class="act-chip" data-g="${esc(g.id)}" style="--tb:${g.color}"><i></i>${esc(g.label)} <span class="faint">${fmtH(g.ms)}</span></span>`).join('')}</div></div>`;
   };
-  return `<div class="stack" style="gap:10px;margin-bottom:14px">${sec('Por programa', 'program')}${sec('Por arquivo', 'file')}</div>`;
+  return `<div class="stack" style="gap:10px;margin-bottom:14px">${sec('Por programa', 'program')}${sec('Por arquivo / página', 'file')}</div>`;
 }
