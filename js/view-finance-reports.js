@@ -432,12 +432,12 @@ function bankFilterHTML(catBy) {
   const f = BANK.f || {};
   const cats = [...new Set(Object.values(catBy).concat(bankCats()))].filter(c => c && c !== '__none').sort((a, b) => a.localeCompare(b, 'pt-BR'));
   return `<div class="panel-b" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;border-bottom:1px solid var(--line)">
-    <div class="field"><label for="bf-q">Nome</label><input id="bf-q" class="input" value="${esc(f.q || '')}" placeholder="Buscar por nome" data-input="bank-f" data-k="q"></div>
+    <div class="field"><label for="bf-q">Nome</label><input id="bf-q" class="input" value="${esc(f.q || '')}" placeholder="Buscar por nome" data-on="bank-f" data-k="q"></div>
     <div class="field"><label for="bf-cat">Categoria</label><select id="bf-cat" class="input" data-on="bank-f" data-k="cat"><option value="">Todas</option><option value="__none" ${f.cat === '__none' ? 'selected' : ''}>Sem categoria</option>${cats.map(c => `<option value="${esc(c)}" ${f.cat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
     <div class="field"><label for="bf-meth">Meio</label><select id="bf-meth" class="input" data-on="bank-f" data-k="meth"><option value="">Todos</option>${METHODS.map(x => `<option value="${x}" ${f.meth === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
     <div class="field"><label for="bf-acc">Conta</label><select id="bf-acc" class="input" data-on="bank-f" data-k="acc"><option value="">Todas</option><option value="pf" ${f.acc === 'pf' ? 'selected' : ''}>PF</option><option value="pj" ${f.acc === 'pj' ? 'selected' : ''}>PJ</option></select></div>
-    <div class="field"><label for="bf-min">Valor mínimo</label><input id="bf-min" class="input" type="number" min="0" value="${esc(f.min || '')}" data-input="bank-f" data-k="min"></div>
-    <div class="field"><label for="bf-max">Valor máximo</label><input id="bf-max" class="input" type="number" min="0" value="${esc(f.max || '')}" data-input="bank-f" data-k="max"></div>
+    <div class="field"><label for="bf-min">Valor mínimo</label><input id="bf-min" class="input" type="number" min="0" value="${esc(f.min || '')}" data-on="bank-f" data-k="min"></div>
+    <div class="field"><label for="bf-max">Valor máximo</label><input id="bf-max" class="input" type="number" min="0" value="${esc(f.max || '')}" data-on="bank-f" data-k="max"></div>
     <div class="row"><button class="btn sm ghost" data-act="bank-f-clear">Limpar filtro</button></div>
   </div>`;
 }
@@ -612,7 +612,7 @@ function bankSummaryHTML(entity) {
   if (BANK.cmp) return `${bar}${compareHTML(entity)}`;
   const inRep = bankInReportHTML(entity, ym, inBase, (t) => isExt(t) || (BANK.reemb !== true && isReimb(t)));
   const nSel = Object.keys(BANK.sel || {}).length;
-  const selBar = nSel ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-2);border-radius:10px"><b class="small">${nSel} selecionado(s)</b><button class="btn sm primary" data-act="bank-bulk-cat">Mudar categoria</button><button class="btn sm ghost" data-act="bank-bulk-clear">Limpar seleção</button></div>` : '';
+  const selBar = nSel ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-2);border-radius:10px"><b class="small">${nSel} selecionado(s)</b><button class="btn sm primary" data-act="bank-bulk-cat">Mudar categoria</button><button class="btn sm danger" data-act="bank-bulk-del">Excluir</button><button class="btn sm ghost" data-act="bank-bulk-clear">Limpar seleção</button></div>` : '';
   return `${bar}${selBar}<div class="kpis">
     <div class="kpi"><span class="k">${dot(GREEN)}Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas, sem reembolsos</span></div>
     <div class="kpi"><span class="k">${dot(RED)}Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">${entity === 'pf' ? 'PF + PJ, sem terapias' : 'só PJ, sem terapias'}</span></div>
@@ -906,6 +906,23 @@ CHANGES['bank-sel'] = (el) => {
   render();
 };
 ACTIONS['bank-bulk-clear'] = () => { BANK.sel = {}; render(); };
+// Excluir lançamentos selecionados (apaga também os vínculos com reembolsos/pagamentos).
+ACTIONS['bank-bulk-del'] = async () => {
+  const ids = Object.keys(BANK.sel || {});
+  if (!ids.length) return;
+  if (!await confirmBox({ title: `Excluir ${ids.length} lançamento(s)?`, body: 'Essa ação não pode ser desfeita.', ok: 'Excluir', danger: true })) return;
+  const cl = db.adapter.client;
+  const r1 = await cl.from('tempo_bank_reimb_links').delete().in('txn_id', ids);
+  if (r1.error) return toast('Erro: ' + r1.error.message);
+  const r2 = await cl.from('tempo_bank_payment_links').delete().in('txn_id', ids);
+  if (r2.error) return toast('Erro: ' + r2.error.message);
+  const r3 = await cl.from('tempo_bank_txns').delete().in('id', ids);
+  if (r3.error) return toast('Erro: ' + r3.error.message);
+  BANK.sel = {};
+  await bankLoadTxns();
+  toast(`${ids.length} lançamento(s) excluídos`);
+  render();
+};
 ACTIONS['bank-cmp'] = () => { BANK.cmp = !BANK.cmp; render(); };
 CHANGES['bank-rmonth'] = (el) => { BANK.month = el.value; render(); };
 // Soma de um mês: entradas, saídas (sem terapias), sobra e saídas por categoria.

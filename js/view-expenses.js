@@ -201,12 +201,12 @@ function exFilterHTML() {
   const f = exFilterState();
   const cats = Object.entries(EX_CATS).flatMap(([main, subs]) => subs.map(sub => `${main}/${sub}`));
   return `<div class="ex-filter panel-b" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end">
-    <div class="field"><label for="exf-q">Nome</label><input id="exf-q" class="input" value="${esc(f.q || '')}" placeholder="Buscar por nome" data-input="ex-f" data-k="q"></div>
+    <div class="field"><label for="exf-q">Nome</label><input id="exf-q" class="input" value="${esc(f.q || '')}" placeholder="Buscar por nome" data-on="ex-f" data-k="q"></div>
     <div class="field"><label for="exf-cat">Categoria</label><select id="exf-cat" class="input" data-on="ex-f" data-k="cat"><option value="">Todas</option>${cats.map(c => `<option value="${esc(c)}" ${f.cat === c ? 'selected' : ''}>${esc(c.replace('/', ' › '))}</option>`).join('')}</select></div>
     <div class="field"><label for="exf-st">Status</label><select id="exf-st" class="input" data-on="ex-f" data-k="st"><option value="">Todos</option>${[...new Set([...EX_STATUS.out, ...EX_STATUS.in])].map(x => `<option value="${esc(x)}" ${f.st === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
     <div class="field"><label for="exf-meth">Meio</label><select id="exf-meth" class="input" data-on="ex-f" data-k="meth"><option value="">Todos</option>${[...METHODS, '—'].map(x => `<option value="${x}" ${f.meth === x ? 'selected' : ''}>${x === '—' ? 'Sem vínculo' : x}</option>`).join('')}</select></div>
-    <div class="field"><label for="exf-min">Valor mínimo</label><input id="exf-min" class="input" type="number" min="0" value="${esc(f.min || '')}" data-input="ex-f" data-k="min"></div>
-    <div class="field"><label for="exf-max">Valor máximo</label><input id="exf-max" class="input" type="number" min="0" value="${esc(f.max || '')}" data-input="ex-f" data-k="max"></div>
+    <div class="field"><label for="exf-min">Valor mínimo</label><input id="exf-min" class="input" type="number" min="0" value="${esc(f.min || '')}" data-on="ex-f" data-k="min"></div>
+    <div class="field"><label for="exf-max">Valor máximo</label><input id="exf-max" class="input" type="number" min="0" value="${esc(f.max || '')}" data-on="ex-f" data-k="max"></div>
     <div class="row"><button class="btn sm ghost" data-act="ex-filter-clear">Limpar filtro</button></div>
   </div>`;
 }
