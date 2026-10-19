@@ -46,7 +46,7 @@ ACTIONS['notice-accept'] = (el) => {
   else if (n.kind === 'pause') { const a = db.get('tempo_time_entries', n.data.entry_id); if (a && a.state === 'running') applyPause(a, n, 'insert'); else decideNotice(n, 'ignored', 'Sessão já encerrada'); }
   else if (n.kind === 'activity') {
     const a = db.get('tempo_time_entries', n.data.entry_id);
-    if (a && a.state !== 'done') { const d = n.data; learnFolderRule(d.folder, a.project_id, (entryPath(a).client || {}).id); const line = `${fmtTime(d.from)}–${fmtTime(d.to)} ${d.app}${d.doc ? ' · ' + d.doc : ''}${d.folder ? ' (' + d.folder + ')' : ''}`; db.update('tempo_time_entries', a.id, { notes: (a.notes ? a.notes + '\n' : '') + line }, true); decideNotice(n, 'accepted', 'Adicionada à nota da sessão'); }
+    if (a && a.state !== 'done') { const d = n.data; learnFolderRule(d.folder, a.project_id, (entryPath(a).client || {}).id); recordActivity(a, { from: d.from, to: d.to, app: d.app, doc: d.doc || null, folder: d.folder || null }); decideNotice(n, 'accepted', 'Registrada na atividade da sessão'); }
     else decideNotice(n, 'ignored', 'Sessão já encerrada');
   }
   else decideNotice(n, 'accepted', 'Aceito');

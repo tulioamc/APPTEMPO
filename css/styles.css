@@ -726,10 +726,13 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .bank-cat-btn { background: none; border: 0; padding: 0; cursor: pointer; }
 
 /* pausas: cinza com listras, na faixa do dia */
-.act-strip { position: relative; height: 22px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
+.act-strip { position: relative; height: 26px; border-radius: 6px; background: #D9DCE2; overflow: hidden; margin-top: 6px; }
 .act-strip .act-track { position: absolute; top: 0; bottom: 0; background: #B8BDC6; opacity: .45; }
 .act-strip .seg-b { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
 .act-sec.focus .act-b:not(.on) { opacity: .2; }
+.act-foot { margin-top: 18px; padding-top: 10px; border-top: 1px dashed var(--border); opacity: .85; }
+.act-foot .lbl { font-size: .8em; }
+.act-log { font-size: .72em; color: var(--fg-3); line-height: 1.5; margin-bottom: 8px; font-family: var(--mono, monospace); }
 .act-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .act-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 2px 9px; font-size: .8em; cursor: pointer; color: var(--fg); }
 .act-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--tb); display: inline-block; }

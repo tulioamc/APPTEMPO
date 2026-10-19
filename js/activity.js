@@ -139,26 +139,25 @@ function actMoveGroup(entryId, g, pick) {
 /* Dica do bloco: cada grupo com o tempo de cada versão/arquivo. */
 const actTip = (g) => `${g.label}\n${g.items.map(i => `${i.doc || i.app}: ${fmtDur(i.ms)}`).join('\n')}${g.items.length > 1 ? `\nTotal ${fmtDur(g.ms)}` : ''}`;
 
+/* Uma faixa só, com 100% da largura = todo o tempo da sessão. Cada trecho ocupa a parte proporcional ao seu tempo;
+   o que não tem registro fica cinza. Os pausas saem da conta (a faixa mostra só o tempo trabalhado). */
 function actStripHTML(e, A) {
-  const days = [...new Set([...e.segments.map(s => ymd(new Date(s.s))), ...A.records.map(r => ymd(new Date(r.from)))])].sort();
+  const now = Date.now();
+  const segs = (e.segments || []).map(s => ({ a: new Date(s.s).getTime(), b: s.e ? new Date(s.e).getTime() : now }))
+    .filter(x => x.b > x.a).sort((p, q) => p.a - q.a);
+  const total = segs.reduce((t, x) => t + (x.b - x.a), 0);
+  if (!total) return '';
+  // posição de um instante no tempo trabalhado (pausas não contam)
+  const toW = (t) => { let off = 0; for (const x of segs) { if (t <= x.a) return off; if (t < x.b) return off + (t - x.a); off += x.b - x.a; } return off; };
   const byId = Object.fromEntries(A.groups.map(g => [g.id, g]));
-  return days.map(day => {
-    const base = new Date(`${day}T${pad(ACT_START_H)}:00`).getTime();
-    const pos = (t) => Math.min(1, Math.max(0, (t - base) / ACT_SPAN)) * 100;
-    const wid = (a, b) => Math.max(.3, pos(b) - pos(a));
-    let bars = '';
-    e.segments.forEach(s => {
-      const a = new Date(s.s).getTime(), b = s.e ? new Date(s.e).getTime() : Date.now();
-      if (b <= base || a >= base + ACT_SPAN) return;
-      bars += `<span class="act-track" style="left:${pos(a)}%;width:${wid(a, b)}%"></span>`;
-    });
-    A.records.forEach(r => {
-      const a = new Date(r.from).getTime(), b = new Date(r.to).getTime(); const g = byId[r.gid];
-      if (!g || ymd(new Date(a)) !== day || b <= a) return;
-      bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" style="--tb:${g.color};left:${pos(a)}%;width:${wid(a, b)}%" data-tip="${esc(actTip(g))}"></span>`;
-    });
-    return `<div class="act-strip">${bars}</div>`;
-  }).join('');
+  let bars = '';
+  A.records.forEach(r => {
+    const g = byId[r.gid]; if (!g) return;
+    const wa = toW(new Date(r.from).getTime()), wb = toW(new Date(r.to).getTime());
+    if (wb <= wa) return;
+    bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" style="--tb:${g.color};left:${wa / total * 100}%;width:${Math.max(.3, (wb - wa) / total * 100)}%" data-tip="${esc(actTip(g))}"></span>`;
+  });
+  return `<div class="act-strip">${bars}</div>`;
 }
 
 function actChipsHTML(A, mode) {

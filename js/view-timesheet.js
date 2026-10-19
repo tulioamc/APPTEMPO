@@ -244,6 +244,10 @@ function openEntryModal(id) {
   const today = S.tsDay || ymd(new Date());
   let segs = e ? clone(e.segments) : [{ s: new Date(`${today}T09:00`).toISOString(), e: new Date(`${today}T10:00`).toISOString() }];
   let showPicker = !e;
+  const LOG_RE = /^\d{2}:\d{2}–\d{2}:\d{2} .+$/;
+  const allLines = (e?.notes || '').split('\n');
+  const logLines = allLines.filter(l => LOG_RE.test(l));
+  const userNotes = allLines.filter(l => !LOG_RE.test(l)).join('\n');
   let openSeg = null; // intervalo com a caixa aberta para edição
   const hm = (iso) => `${pad(new Date(iso).getHours())}:${pad(new Date(iso).getMinutes())}`;
   const partesDe = (iso) => iso ? { d: fmtDate(ymd(new Date(iso))), t: hm(iso) } : { d: '', t: '' };
@@ -284,15 +288,16 @@ function openEntryModal(id) {
         <div class="field"><label for="em-wt">Tipo de trabalho</label><select id="em-wt" class="input" name="work_type_id">${options(workTypes(), e?.work_type_id || defaultWorkType(sel), { empty: true, emptyLabel: 'Sem tipo' })}</select></div>
         <div class="field"><label for="em-rev">Rodada de revisão</label><select id="em-rev" class="input" name="revision_id" ${revs.length ? '' : 'disabled'}>${options(revs, e?.revision_id, { empty: true, emptyLabel: revs.length ? 'Não é revisão' : 'Projeto sem rodadas', label: r => `Rodada ${r.number} — ${r.description.slice(0, 40)}` })}</select></div>
       </div>
+      ${e ? actSectionHTML(e) : ''}
       <div class="stack" style="gap:8px">
         <div class="row between"><span class="lbl">Intervalos trabalhados</span><span class="mono small">Total ${fmtDur(total)}</span></div>
         ${segDaysHTML()}
         <div class="row"><button class="btn sm" data-x="addseg">${icon('plus')} Adicionar intervalo (após pausa)</button>${e && e.state !== 'done' ? '<span class="small muted">Deixe o último fim vazio para continuar contando.</span>' : ''}</div>
       </div>
-      ${e ? actSectionHTML(e) : ''}
-      <div class="field"><label for="em-notes">Notas</label><textarea id="em-notes" class="input" name="notes">${esc(e?.notes || '')}</textarea></div>
+      <div class="field"><label for="em-notes">Notas</label><textarea id="em-notes" class="input" name="notes">${esc(userNotes)}</textarea></div>
       ${e ? `<div class="field"><label for="em-reason">Motivo da correção</label><input id="em-reason" class="input" name="reason" placeholder="Ex.: esqueci de pausar no almoço"><span class="hint">Fica guardado no histórico da sessão junto com os horários anteriores.</span></div>` : ''}
       ${e?.edits?.length ? `<div class="stack" style="gap:6px"><span class="lbl">Histórico de correções</span><div class="timeline">${e.edits.slice().reverse().map(x => `<div class="tl"><span class="w">${fmtDateTime(x.at)}</span><span class="b"></span><span>${esc(x.reason || 'Sem motivo informado')}<br><span class="faint small">Antes: ${x.before.map(s => `${fmtTime(s.s)}–${s.e ? fmtTime(s.e) : '…'}`).join(', ')}</span></span></div>`).join('')}</div></div>` : ''}
+      ${logLines.length ? `<div class="act-foot"><div class="act-log">${logLines.map(esc).join('<br>')}</div></div>` : ''}
     </div>
     <div class="df">${e ? `<button class="btn danger left" data-x="del">${icon('trash')} Excluir</button>` : ''}<button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="save">Salvar</button></div>`;
   };
@@ -337,7 +342,7 @@ function openEntryModal(id) {
         if (i && new Date(s.s) < new Date(segs[i - 1].e)) return toast('Os intervalos não podem se sobrepor.');
       }
       if (!running && new Date(segs[segs.length - 1].e) > new Date()) return toast('O apontamento não pode terminar no futuro.');
-      const data = { ...selToEntry(sel), work_type_id: f.work_type_id || null, revision_id: f.revision_id || null, notes: f.notes, segments: segs };
+      const data = { ...selToEntry(sel), work_type_id: f.work_type_id || null, revision_id: f.revision_id || null, notes: [(f.notes || '').replace(/\s+$/, ''), ...logLines].filter(Boolean).join('\n'), segments: segs };
       if (e) {
         const changed = JSON.stringify(e.segments) !== JSON.stringify(segs);
         if (running) { data.state = segs[segs.length - 1].e ? 'paused' : 'running'; }
