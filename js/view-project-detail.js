@@ -38,12 +38,12 @@ function pdOverview(p) {
     <span class="k">Status</span><div>${comboBtn('work', p.status_id, 'proj-status', p.id)} <span class="small faint">propaga para tarefas que herdam</span></div>
     <span class="k">Pagamento</span><div>${comboBtn('payment', p.payment_status_id, 'proj-pay', p.id)}</div>
     <span class="k">Prazo atual</span><div class="row"><input type="date" class="input sm" style="width:auto" value="${p.deadline || ''}" data-pd="deadline"> ${deadlineCell(p)}</div>
-    <span class="k">Prazo original</span><div>${p.deadline_original ? fmtDate(p.deadline_original) : '—'} ${changes.length ? `<span class="small muted">· ${changes.length} adiamento(s)</span>` : ''}</div>
+    <span class="k">Prazo original</span><div class="row"><input type="date" class="input sm" style="width:auto" value="${p.deadline_original || ''}" data-pd="orig" aria-label="Prazo original"> ${changes.length ? `<span class="small muted">· ${changes.length} adiamento(s)</span>` : ''}</div>
     <span class="k">Entrega</span><div>${p.sent_at ? fmtDateTime(p.sent_at) : '—'} ${del ? (del.late ? `<span class="tag c-red">${del.days} dia(s) de atraso</span>` : `<span class="tag c-green">no prazo</span>`) : ''}</div>
     <span class="k">Observação</span><div class="muted">${esc(p.notes || '—')}</div>
     ${p.description ? `<span class="k">Descrição</span><div class="muted">${esc(p.description)}</div>` : ''}
   </div>
-  ${changes.length ? `<div class="stack" style="gap:6px"><span class="lbl">Alterações de prazo</span><div class="timeline">${changes.map(d => `<div class="tl"><span class="w">${fmtDate(d.at)}</span><span class="b"></span><span>${fmtDate(d.from)} → <b>${d.to ? fmtDate(d.to) : 'sem prazo'}</b>${d.reason ? ` <span class="muted">— ${esc(d.reason)}</span>` : ''}</span></div>`).join('')}</div></div>` : ''}
+  ${changes.length ? `<div class="stack" style="gap:6px"><span class="lbl">Alterações de prazo</span><div class="timeline">${changes.map(d => `<div class="tl"><span class="w">${fmtDate(d.at)}</span><span class="b"></span><span>${fmtDate(d.from)} → <b>${d.to ? fmtDate(d.to) : 'sem prazo'}</b>${d.reason ? ` <span class="muted">— ${esc(d.reason)}</span>` : ''} <button class="btn sm icon ghost" data-x="del-change" data-id="${d.id}" aria-label="Apagar alteração" title="Apagar esta alteração do histórico">${icon('trash')}</button></span></div>`).join('')}</div></div>` : ''}
   <div class="panel"><div class="panel-h"><h3>Marcos do projeto</h3></div><div class="panel-b stack">
     <div class="grid2">${MILESTONES.map(([k, lab]) => `<div class="field"><label for="ms-${k}">${lab}</label><input id="ms-${k}" type="datetime-local" class="input sm" value="${toLocalInput(p[k])}" data-pd="ms" data-k="${k}"></div>`).join('')}</div>
     <div class="stack" style="gap:4px"><span class="lbl">Intervalos entre etapas</span>
@@ -132,6 +132,7 @@ function bindProjectDrawer(ly, id, st) {
       ['tempo_tasks', 'tempo_time_entries', 'tempo_revisions', 'tempo_payments', 'tempo_deadline_changes', 'tempo_status_history'].forEach(t => db.where(t, r => r.project_id === id).forEach(r => db.remove(t, r.id, true)));
       ly.close(); db.remove('tempo_projects', id); toast('Projeto excluído');
     }
+    if (x === 'del-change') { if (!await confirmBox({ title: 'Apagar esta alteração?', body: 'Remove só a linha do histórico de prazo. O prazo atual não muda.', ok: 'Apagar', danger: true })) return; db.remove('tempo_deadline_changes', bid, true); ly.refresh(); toast('Alteração apagada'); }
     if (x === 'inherit') resetTaskInheritance(db.get('tempo_tasks', bid));
     if (x === 'add-sub') { const t = db.get('tempo_tasks', bid); db.insert('tempo_tasks', { project_id: id, parent_id: t.id, name: 'Nova subtarefa', status_id: t.status_id, status_inherited: true, deadline: null, notes: '', order: subtasksOf(t.id).length }); setTimeout(() => { const ins = $$('[data-pd="tname"]', ly.box); const last = ins.find(i => db.get('tempo_tasks', i.dataset.id)?.name === 'Nova subtarefa'); last?.select(); }, 30); }
     if (x === 'del-task') {
@@ -182,6 +183,7 @@ function bindProjectDrawer(ly, id, st) {
     if (k === 'ms') { const label = MILESTONES.find(m => m[0] === el.dataset.k)?.[1]; quiet({ [el.dataset.k]: fromLocalInput(el.value) }); if (el.value) logEvent('project', id, 'milestone', `${label}: ${fmtDateTime(fromLocalInput(el.value))}`); ly.refresh(); }
     if (k === 'budget') { quiet({ budget: moneyVal(el) }); logEvent('project', id, 'budget', `Orçamento: ${fmtMoney(moneyVal(el)) || 'removido'}`); ly.refresh(); }
     if (k === 'remaining') { quiet({ remaining_override: moneyVal(el) }); ly.refresh(); }
+    if (k === 'orig') { quiet({ deadline_original: el.value || null }); logEvent('project', id, 'deadline_original', `Prazo original: ${el.value ? fmtDate(el.value) : 'removido'}`); ly.refresh(); toast('Prazo original corrigido'); }
     if (k === 'tname') { if (el.value.trim()) { db.update('tempo_tasks', el.dataset.id, { name: el.value.trim() }, true); render(); } }
     if (k === 'tstatus') setTaskStatus(db.get('tempo_tasks', el.dataset.id), el.value);
     if (k === 'twt') { db.update('tempo_tasks', el.dataset.id, { work_type_id: el.value || null }, true); render(); }
