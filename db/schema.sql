@@ -125,6 +125,7 @@ create table if not exists tempo_deadline_changes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   project_id uuid not null references tempo_projects(id) on delete cascade,
+  task_id uuid references tempo_tasks(id) on delete cascade,
   "from" date, "to" date, reason text, at timestamptz not null default now(),
   created_at timestamptz not null default now(), updated_at timestamptz
 );

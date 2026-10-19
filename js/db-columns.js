@@ -137,6 +137,7 @@ window.DB_COLUMNS = {
   "id",
   "user_id",
   "project_id",
+  "task_id",
   "from",
   "to",
   "reason",

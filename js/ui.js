@@ -144,6 +144,18 @@ document.addEventListener('change', (e) => { const el = e.target.closest('[data-
 document.addEventListener('input', (e) => { const el = e.target.closest('[data-input]'); if (el && CHANGES[el.dataset.input]) CHANGES[el.dataset.input](el, e); });
 // Enter num campo de data confirma o que está digitado (sai do campo e dispara a mudança), sem reabrir o seletor.
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches && e.target.matches('input[type="date"], input[type="datetime-local"]')) { e.preventDefault(); e.target.blur(); } });
+// Campo de data vazio: ao clicar, mostra a data de hoje como sugestão; digitar troca só a parte digitada.
+// Se sair sem mexer, volta a ficar vazio.
+document.addEventListener('focusin', (e) => {
+  const el = e.target; if (!el.matches || !el.matches('input[type="date"]') || el.value) return;
+  el.dataset.prefill = '1'; el.value = ymd(new Date());
+}, true);
+document.addEventListener('input', (e) => { if (e.target.dataset && e.target.dataset.prefill) e.target.dataset.touched = '1'; }, true);
+document.addEventListener('focusout', (e) => {
+  const el = e.target; if (!el.dataset || !el.dataset.prefill) return;
+  if (!el.dataset.touched) el.value = '';
+  delete el.dataset.prefill; delete el.dataset.touched;
+}, true);
 
 ACTIONS['pick-swatch'] = (el) => {
   const wrap = el.closest('.swatches'); $$('.swatch', wrap).forEach(s => s.classList.toggle('on', s === el));

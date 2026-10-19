@@ -197,7 +197,30 @@ function changeDeadline(p, newDate, reason) {
   } else if (newDate) logEvent('project', p.id, 'deadline', `Prazo definido: ${fmtDate(newDate)}`, null, newDate);
   db.emit();
 }
-const deadlineChanges = (pid) => db.where('tempo_deadline_changes', d => d.project_id === pid).sort((a, b) => a.at.localeCompare(b.at));
+/* Prazo de tarefa: adiamento com motivo fica no histórico da tarefa (não conta como adiamento do projeto). */
+function changeTaskDeadline(t, newDate, reason, isAdjust = false) {
+  if (isAdjust && t.deadline && newDate) return createAdjustTask(t, newDate, reason);
+  if ((t.deadline || '') === (newDate || '')) return;
+  const from = t.deadline || null;
+  db.update('tempo_tasks', t.id, { deadline: newDate || null }, true);
+  if (from) {
+    db.insert('tempo_deadline_changes', { project_id: t.project_id, task_id: t.id, from, to: newDate, reason: reason || '', at: nowISO() }, true);
+    logEvent('task', t.id, 'deadline', `Prazo da tarefa “${t.name}”: ${fmtDate(from)} → ${newDate ? fmtDate(newDate) : 'sem prazo'}${reason ? ' — ' + reason : ''}`, from, newDate, { project_id: t.project_id });
+  }
+  db.emit();
+}
+/* Ajuste: a tarefa original fica como foi entregue; o novo prazo vai para uma tarefa "[Ajuste NN] nome". */
+const ADJUST_RE = /^\[Ajuste \d+\]\s*/;
+function createAdjustTask(t, newDate, reason) {
+  const base = t.name.replace(ADJUST_RE, '');
+  const n = db.where('tempo_tasks', x => x.project_id === t.project_id && x.name.replace(ADJUST_RE, '') === base && ADJUST_RE.test(x.name)).length + 1;
+  const todo = db.where('tempo_status_options', s => s.kind === 'work' && s.category === 'todo')[0];
+  const nt = db.insert('tempo_tasks', { project_id: t.project_id, parent_id: t.parent_id || null, name: `[Ajuste ${String(n).padStart(2, '0')}] ${base}`, status_id: todo?.id || t.status_id, status_inherited: false, deadline: newDate, notes: reason || '', order: 99, work_type_id: t.work_type_id || null }, true);
+  logEvent('task', nt.id, 'created', `Ajuste ${String(n).padStart(2, '0')} de “${base}”${reason ? ' — ' + reason : ''}`, null, null, { project_id: t.project_id });
+  db.emit();
+  return nt;
+}
+const deadlineChanges = (pid) => db.where('tempo_deadline_changes', d => d.project_id === pid && !d.task_id).sort((a, b) => a.at.localeCompare(b.at));
 function deliveryInfo(p) {
   if (!p.sent_at || !p.deadline) return null;
   const late = daysBetween(p.deadline, ymd(p.sent_at));

@@ -63,6 +63,7 @@ function pdTasks(p) {
     <span class="mono small faint" style="min-width:52px;text-align:right" title="Líquido">${fmtDur(isSub ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : taskMs(t.id))}</span><span class="mono small faint" style="min-width:52px;text-align:right" title="Bruto (com pausas)">${fmtDur(db.where('tempo_time_entries', e => (isSub ? e.task_id === t.id : (e.task_id === t.id || subtasksOf(t.id).some(x => x.id === e.task_id)))).reduce((s, e) => s + entryBrutoMs(e), 0))}</span>
     <button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>
     ${!isSub ? `<button class="btn sm icon ghost" data-x="add-sub" data-id="${t.id}" aria-label="Adicionar subtarefa">${icon('plus')}</button>` : ''}
+    ${!isSub && !ADJUST_RE.test(t.name) ? `<button class="btn sm ghost" data-x="add-adjust" data-id="${t.id}" title="Registrar um ajuste desta tarefa (cria [Ajuste NN] para você preencher o prazo)">Ajuste</button>` : ''}
     <button class="btn sm icon ghost" data-x="del-task" data-id="${t.id}" aria-label="Excluir">${icon('trash')}</button>
   </div>`;
   return `<div class="banner info small">${icon('layers')} Mudar o status do projeto atualiza só as tarefas marcadas como <b>herdado</b>. Ao mudar uma tarefa manualmente, ela vira exceção e não afeta o projeto nem as outras tarefas.</div>
@@ -132,6 +133,7 @@ function bindProjectDrawer(ly, id, st) {
       ['tempo_tasks', 'tempo_time_entries', 'tempo_revisions', 'tempo_payments', 'tempo_deadline_changes', 'tempo_status_history'].forEach(t => db.where(t, r => r.project_id === id).forEach(r => db.remove(t, r.id, true)));
       ly.close(); db.remove('tempo_projects', id); toast('Projeto excluído');
     }
+    if (x === 'add-adjust') { const t = db.get('tempo_tasks', bid); const nt = createAdjustTask(t, null, 'Registrado manualmente'); setTimeout(() => { const ins = $$('[data-pd="tdl"]', ly.box).find(i => i.dataset.id === nt.id); ins?.focus(); }, 30); }
     if (x === 'del-change') { if (!await confirmBox({ title: 'Apagar esta alteração?', body: 'Remove só a linha do histórico de prazo. O prazo atual não muda.', ok: 'Apagar', danger: true })) return; db.remove('tempo_deadline_changes', bid, true); ly.refresh(); toast('Alteração apagada'); }
     if (x === 'inherit') resetTaskInheritance(db.get('tempo_tasks', bid));
     if (x === 'add-sub') { const t = db.get('tempo_tasks', bid); db.insert('tempo_tasks', { project_id: id, parent_id: t.id, name: 'Nova subtarefa', status_id: t.status_id, status_inherited: true, deadline: null, notes: '', order: subtasksOf(t.id).length }); setTimeout(() => { const ins = $$('[data-pd="tname"]', ly.box); const last = ins.find(i => db.get('tempo_tasks', i.dataset.id)?.name === 'Nova subtarefa'); last?.select(); }, 30); }
@@ -187,8 +189,19 @@ function bindProjectDrawer(ly, id, st) {
     if (k === 'tname') { if (el.value.trim()) { db.update('tempo_tasks', el.dataset.id, { name: el.value.trim() }, true); render(); } }
     if (k === 'tstatus') setTaskStatus(db.get('tempo_tasks', el.dataset.id), el.value);
     if (k === 'twt') { db.update('tempo_tasks', el.dataset.id, { work_type_id: el.value || null }, true); render(); }
-    if (k === 'tdl') { db.update('tempo_tasks', el.dataset.id, { deadline: el.value || null }, true); render(); }
+    if (k === 'tdl') {
+      const t = db.get('tempo_tasks', el.dataset.id); if (!t) return;
+      if (!await taskDeadlineFlow(t, el.value || null)) { el.value = t.deadline || ''; return; }
+      render();
+    }
   });
+}
+/* Mudança de prazo de tarefa: pede o motivo e, se já havia prazo, pergunta se é ajuste. Retorna false se cancelou. */
+async function taskDeadlineFlow(t, v) {
+  if (!t.deadline || !v) { changeTaskDeadline(t, v || null, ''); return true; }
+  const reason = await askReason(t.deadline, v); if (reason === null) return false;
+  const isAdjust = await confirmBox({ title: 'O motivo é ajuste?', body: 'Se for ajuste, a tarefa original fica como foi entregue e o novo prazo vai para uma tarefa “[Ajuste NN]”. Se não for, é um adiamento comum da tarefa.', ok: 'Sim, é ajuste' });
+  changeTaskDeadline(t, v, reason, isAdjust); return true;
 }
 let askingReason = false;
 function askReason(from, to) {
