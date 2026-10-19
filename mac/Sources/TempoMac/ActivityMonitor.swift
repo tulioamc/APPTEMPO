@@ -74,9 +74,17 @@ final class ActivityMonitor {
         CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
     }
 
+    /// Sites do Chrome que contam. Só o título da aba ativa é lido (não há endereço, histórico nem outros sites).
+    static let chromeSites = ["Behance", "Pinterest", "Magnific"]
+
     private func currentContext() -> Context? {
         guard let app = NSWorkspace.shared.frontmostApplication, let name = app.localizedName else { return nil }
         let bundle = app.bundleIdentifier ?? name
+        if bundle == "com.google.Chrome" {
+            // Chrome só conta quando a aba ativa é um dos sites da lista; outros sites não são registrados.
+            guard AXIsProcessTrusted(), let site = chromeSite(app.processIdentifier) else { return nil }
+            return Context(app: name, bundle: bundle, doc: site, folder: nil)
+        }
         var doc: String?
         var folder: String?
         // Pasta e nome do arquivo exigem permissão de Acessibilidade. Sem ela, só o nome do app é registrado.
@@ -102,5 +110,17 @@ final class ActivityMonitor {
             }
         }
         return Context(app: name, bundle: bundle, doc: doc, folder: folder)
+    }
+
+    /// Nome do site da lista se o título da janela do Chrome mencionar um deles; senão nil.
+    private func chromeSite(_ pid: pid_t) -> String? {
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.5)
+        var winRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &winRef) == .success, let winRef = winRef else { return nil }
+        var titleRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(winRef as! AXUIElement, kAXTitleAttribute as CFString, &titleRef) == .success,
+              let title = titleRef as? String else { return nil }
+        return ActivityMonitor.chromeSites.first { title.range(of: $0, options: .caseInsensitive) != nil }
     }
 }

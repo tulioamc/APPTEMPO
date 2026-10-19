@@ -726,6 +726,15 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .bank-cat-btn { background: none; border: 0; padding: 0; cursor: pointer; }
 
 /* pausas: cinza com listras, na faixa do dia */
+.act-strip { position: relative; height: 22px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
+.act-strip .act-track { position: absolute; top: 0; bottom: 0; background: #B8BDC6; opacity: .45; }
+.act-strip .seg-b { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+.act-sec.focus .act-b:not(.on) { opacity: .2; }
+.act-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.act-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 2px 9px; font-size: .8em; cursor: pointer; color: var(--fg); }
+.act-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--tb); display: inline-block; }
+.act-chip.on { border-color: var(--tb); }
+.act-sec.focus .act-chip:not(.on) { opacity: .4; }
 .day-strip .seg-b.pausa { background: repeating-linear-gradient(45deg, var(--tb) 0 4px, transparent 4px 7px); opacity: .7; }
 
 .strip-tip { position: fixed; z-index: 450; display: none; pointer-events: none; background: var(--fg); color: var(--bg); padding: 6px 9px; border-radius: 6px; font-size: .8em; line-height: 1.4; white-space: pre-line; box-shadow: var(--shadow); max-width: 280px; }

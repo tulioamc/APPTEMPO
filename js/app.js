@@ -225,6 +225,7 @@ function suggestActivity(seg) {
   const rule = folderRule(seg.folder);
   const ruleProject = rule ? db.get('tempo_projects', rule.project_id) : null;
   if (!a) { if (!isPauseApp && (ruleProject || DESIGN_APP_RE.test(seg.app))) suggestStart(ruleProject, seg); return; }
+  if (a.state === 'running') recordActivity(a, seg);
   // app que pausa: só marca no bruto (o cronômetro segue) e vira aviso para você conferir
   if (isPauseApp && toMs - fromMs >= idleLimit() * 60000) suggestPause(fromMs, toMs, 'app', seg.app);
   const client = rule?.client_id ? db.get('tempo_clients', rule.client_id) : (seg.folder ? clientFromPath(seg.folder) : null);

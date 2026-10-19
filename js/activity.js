@@ -1,0 +1,235 @@
+/* Atividade por programa e por arquivo dentro de cada sessão.
+   Registro bruto: db.setting('act:<entryId>') = [{from,to,app,doc,folder}] — cada versão fica separada.
+   Agrupamento automático: mesmo programa e (mesmo nome em qualquer pasta, ou mesmo nome sem número de versão na mesma pasta).
+   Ajuste manual: db.setting('actLinks') = {itemKey: groupId}. "Desfazer" vira 'solo:<chave>'; "Agrupar" copia o id do grupo de destino.
+   Mover: o tempo do grupo sai desta sessão e vira uma sessão nova no projeto/tarefa escolhido. */
+
+const ACT_COLORS = ['#F59E0B', '#7C3AED', '#2563EB', '#60A5FA', '#DB2777', '#059669', '#92400E', '#64748B'];
+const ACT_START_H = 7, ACT_SPAN = 17 * 3600000;
+
+function actList(entryId) { return db.setting('act:' + entryId, []) || []; }
+
+/* Chamado a cada segmento de Mac vindo com sessão rodando (ver suggestActivity em app.js). */
+function recordActivity(a, seg) {
+  const list = actList(a.id);
+  if (list.some(x => x.from === seg.from && x.app === seg.app && x.doc === (seg.doc || null))) return;
+  db.setSetting('act:' + a.id, [...list, { from: seg.from, to: seg.to, app: seg.app, doc: seg.doc || null, folder: seg.folder || null }]);
+}
+
+const actKeyOf = (x) => [x.app || '', x.folder || '', x.doc || ''].join('|');
+/* "Video Promo 01.aep" -> "video promo.aep" (só número de versão separado por espaço, _ ou -) */
+const actStripVer = (doc) => String(doc || '').toLowerCase().replace(/[\s_-]+(v\s?\d{1,3}|\d{1,3})(?=\.[^.]+$|$)/, '').trim();
+
+/* Agrupamento automático por união: mesmo nome em qualquer pasta, ou mesmo nome sem versão na mesma pasta. */
+function actRoots(keys) {
+  const parent = {}; keys.forEach(k => { parent[k.key] = k.key; });
+  const find = (x) => (parent[x] === x ? x : (parent[x] = find(parent[x])));
+  for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
+    const a = keys[i], b = keys[j];
+    if (!a.doc || !b.doc || a.app !== b.app) continue;
+    const same = a.doc.toLowerCase() === b.doc.toLowerCase() || (a.folder === b.folder && actStripVer(a.doc) === actStripVer(b.doc));
+    if (same) parent[find(a.key)] = find(b.key);
+  }
+  return find;
+}
+
+/* Analisa a sessão: grupos (ordenados por tempo e com cor) e cada registro bruto com seu grupo.
+   mode 'program' agrupa por programa; 'file' agrupa por arquivo (com os ajustes manuais). */
+function actAnalyze(entryId, mode) {
+  const list = actList(entryId);
+  if (!list.length) return { groups: [], records: [] };
+  const info = {};
+  list.forEach(x => { const k = actKeyOf(x); info[k] = info[k] || { key: k, app: x.app, doc: x.doc, folder: x.folder }; });
+  const find = actRoots(Object.values(info));
+  const links = db.setting('actLinks', {}) || {};
+  const gidOf = (x) => mode === 'program' ? 'p:' + x.app : (links[actKeyOf(x)] || 'a:' + find(actKeyOf(x)));
+  const groups = {};
+  const records = list.map(x => {
+    const id = gidOf(x), ms = new Date(x.to) - new Date(x.from), k = actKeyOf(x);
+    const g = groups[id] || (groups[id] = { id, items: {}, ms: 0 });
+    const it = g.items[k] || (g.items[k] = { key: k, app: x.app, doc: x.doc, ms: 0 });
+    it.ms += ms; g.ms += ms;
+    return { ...x, gid: id, ms };
+  });
+  const sorted = Object.values(groups).sort((a, b) => b.ms - a.ms).map((g, i) => {
+    const items = Object.values(g.items).sort((a, b) => b.ms - a.ms);
+    const names = [...new Set(items.map(it => it.doc || it.app))];
+    const label = mode === 'program' ? items[0].app : (names.length <= 2 ? names.join(' · ') : `${names.slice(0, 2).join(' · ')} +${names.length - 2}`);
+    return { id: g.id, items, ms: g.ms, label, color: ACT_COLORS[i % ACT_COLORS.length] };
+  });
+  return { groups: sorted, records };
+}
+
+function actUngroup(g) {
+  const links = { ...(db.setting('actLinks', {}) || {}) };
+  g.items.forEach(i => { links[i.key] = 'solo:' + i.key; });
+  db.setSetting('actLinks', links); db.emit();
+}
+function actMerge(g, targetId) {
+  const links = { ...(db.setting('actLinks', {}) || {}) };
+  g.items.forEach(i => { links[i.key] = targetId; });
+  db.setSetting('actLinks', links); db.emit();
+}
+
+/* ---------- mover o tempo de um arquivo para outro projeto/tarefa ---------- */
+function actMergeIntervals(iv) {
+  const s = iv.slice().sort((p, q) => p.a - q.a); const out = [];
+  s.forEach(c => { const last = out[out.length - 1]; if (last && c.a <= last.b) last.b = Math.max(last.b, c.b); else out.push({ ...c }); });
+  return out;
+}
+/* Segmentos de sessão (ISO) com os trechos "cortes" (ms) retirados. Trecho aberto (e null) continua aberto. */
+function actSubtract(segs, cuts) {
+  const out = [];
+  segs.forEach(s => {
+    let pieces = [{ s: new Date(s.s).getTime(), e: s.e ? new Date(s.e).getTime() : null, why: s.why }];
+    cuts.forEach(c => {
+      pieces = pieces.flatMap(p => {
+        const pe = p.e ?? Infinity;
+        if (c.b <= p.s || c.a >= pe) return [p];
+        const res = [];
+        if (c.a > p.s) res.push({ s: p.s, e: c.a, why: p.why });
+        if (c.b < pe) res.push({ s: c.b, e: p.e, why: p.why });
+        return res;
+      });
+    });
+    out.push(...pieces);
+  });
+  return out.filter(p => p.e === null || p.e > p.s)
+    .map(p => ({ s: new Date(p.s).toISOString(), e: p.e === null ? null : new Date(p.e).toISOString(), ...(p.why ? { why: p.why } : {}) }))
+    .sort((p, q) => new Date(p.s) - new Date(q.s));
+}
+/* Partes dos segmentos que caem dentro dos cortes: é o tempo que vai para o novo registro. */
+function actIntersect(segs, cuts, now) {
+  const out = [];
+  segs.forEach(s => {
+    const a = new Date(s.s).getTime(), b = s.e ? new Date(s.e).getTime() : now;
+    cuts.forEach(c => { const x = Math.max(a, c.a), y = Math.min(b, c.b); if (y > x) out.push({ s: new Date(x).toISOString(), e: new Date(y).toISOString() }); });
+  });
+  return out.sort((p, q) => new Date(p.s) - new Date(q.s));
+}
+
+function actMoveGroup(entryId, g, pick) {
+  const e = db.get('tempo_time_entries', entryId); if (!e) return false;
+  const keys = new Set(g.items.map(i => i.key));
+  const list = actList(entryId);
+  const mine = list.filter(x => keys.has(actKeyOf(x)));
+  const cuts = actMergeIntervals(mine.map(x => ({ a: new Date(x.from).getTime(), b: new Date(x.to).getTime() })).filter(c => c.b > c.a));
+  const now = Date.now();
+  const moved = actIntersect(e.segments || [], cuts, now);
+  if (!moved.length) return false;
+  const p = db.get('tempo_projects', pick.project_id); if (!p) return false;
+  const c = clientOf(p);
+  const rest = actSubtract(e.segments || [], cuts);
+  const label = tkProjectLabel(p);
+  // o registro novo leva o tempo do arquivo e os registros brutos dele
+  const nova = db.insert('tempo_time_entries', {
+    project_id: p.id, client_id: c?.id || null, agency_id: c?.agency_id || null, task_id: pick.task_id || null,
+    work_type_id: p.work_type_id || null, revision_id: null, notes: `Movido de outra sessão: ${g.label}`,
+    state: 'done', segments: moved, edits: [{ at: nowISO(), reason: `Arquivo ${g.label} movido para ${label}`, before: e.segments }],
+  });
+  db.setSetting('act:' + nova.id, mine);
+  // a sessão de origem perde esse tempo (e os registros brutos desse arquivo)
+  db.setSetting('act:' + entryId, list.filter(x => !keys.has(actKeyOf(x))));
+  if (!rest.length && e.state !== 'running') db.remove('tempo_time_entries', e.id);
+  else db.update('tempo_time_entries', e.id, { segments: rest.length ? rest : [{ s: nowISO(), e: null }], edits: [...(e.edits || []), { at: nowISO(), reason: `${g.label} movido para ${label}`, before: e.segments }] }, true);
+  db.emit();
+  return true;
+}
+
+/* Dica do bloco: cada grupo com o tempo de cada versão/arquivo. */
+const actTip = (g) => `${g.label}\n${g.items.map(i => `${i.doc || i.app}: ${fmtDur(i.ms)}`).join('\n')}${g.items.length > 1 ? `\nTotal ${fmtDur(g.ms)}` : ''}`;
+
+function actStripHTML(e, A) {
+  const days = [...new Set([...e.segments.map(s => ymd(new Date(s.s))), ...A.records.map(r => ymd(new Date(r.from)))])].sort();
+  const byId = Object.fromEntries(A.groups.map(g => [g.id, g]));
+  return days.map(day => {
+    const base = new Date(`${day}T${pad(ACT_START_H)}:00`).getTime();
+    const pos = (t) => Math.min(1, Math.max(0, (t - base) / ACT_SPAN)) * 100;
+    const wid = (a, b) => Math.max(.3, pos(b) - pos(a));
+    let bars = '';
+    e.segments.forEach(s => {
+      const a = new Date(s.s).getTime(), b = s.e ? new Date(s.e).getTime() : Date.now();
+      if (b <= base || a >= base + ACT_SPAN) return;
+      bars += `<span class="act-track" style="left:${pos(a)}%;width:${wid(a, b)}%"></span>`;
+    });
+    A.records.forEach(r => {
+      const a = new Date(r.from).getTime(), b = new Date(r.to).getTime(); const g = byId[r.gid];
+      if (!g || ymd(new Date(a)) !== day || b <= a) return;
+      bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" style="--tb:${g.color};left:${pos(a)}%;width:${wid(a, b)}%" data-tip="${esc(actTip(g))}"></span>`;
+    });
+    return `<div class="act-strip">${bars}</div>`;
+  }).join('');
+}
+
+function actChipsHTML(A, mode) {
+  return `<div class="act-chips">${A.groups.map(g => `<button type="button" class="act-chip" data-x="act-chip" data-g="${esc(g.id)}" data-mode="${mode}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
+}
+
+/* Bloco da tela "Revisar sessão": uma faixa por programa e uma por arquivo. */
+function actSectionHTML(e) {
+  if (!actList(e.id).length) return '';
+  const prog = actAnalyze(e.id, 'program'), file = actAnalyze(e.id, 'file');
+  const sec = (title, mode, A) => `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div>${actStripHTML(e, A)}${actChipsHTML(A, mode)}</div>`;
+  return `<div class="stack" style="gap:8px">${sec('Por programa', 'program', prog)}${sec('Por arquivo', 'file', file)}<span class="small muted">Passe o mouse para ver o tempo. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
+}
+
+/* Janela de um grupo de arquivos: desfazer, juntar com outro grupo ou mover o tempo para outro projeto/tarefa. */
+function openActGroup(entryId, gid, onDone) {
+  const A = actAnalyze(entryId, 'file');
+  const g = A.groups.find(x => x.id === gid); if (!g) return;
+  const others = A.groups.filter(x => x.id !== gid);
+  openLayer({
+    render: () => `<div class="dh"><h2>${esc(g.label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+      <div class="db stack" style="gap:8px">
+        <span class="lbl">Tempo por versão</span>
+        ${g.items.map(i => `<div class="row between"><span>${esc(i.doc || i.app)}</span><span class="mono small">${fmtDur(i.ms)}</span></div>`).join('')}
+        <div class="row between"><span class="lbl">Total</span><span class="mono small">${fmtDur(g.ms)}</span></div>
+        ${g.items.length > 1 ? `<div class="row"><button class="btn" data-x="act-ungroup">Desfazer agrupamento</button></div>` : ''}
+        ${others.length ? `<div class="field"><label for="act-target">Agrupar com outro</label><select id="act-target" class="input">${others.map(o => `<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('')}</select></div><div class="row"><button class="btn" data-x="act-merge">Agrupar</button></div>` : ''}
+        <div class="field"><label for="act-proj">Mover este tempo para o projeto</label><select id="act-proj" class="input"><option value="">Escolha um projeto</option>${tkProjectsSorted().map(p => `<option value="${esc(p.id)}">${esc(tkProjectLabel(p))}</option>`).join('')}</select></div>
+        <div class="field"><label for="act-task">Tarefa (opcional)</label><select id="act-task" class="input" disabled><option value="">Sem tarefa</option></select></div>
+        <div class="row"><button class="btn" data-x="act-move">Mover</button><span class="small muted">Sai desta sessão e vai para o projeto escolhido.</span></div>
+      </div>
+      <div class="df"><button class="btn" data-act="close-layer">Fechar</button></div>`,
+    onMount: (ly) => {
+      const proj = ly.box.querySelector('#act-proj'), task = ly.box.querySelector('#act-task');
+      proj.addEventListener('change', () => {
+        const tasks = proj.value ? db.where('tempo_tasks', t => t.project_id === proj.value) : [];
+        task.innerHTML = `<option value="">Sem tarefa</option>${tasks.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}`;
+        task.disabled = !proj.value;
+      });
+      ly.box.addEventListener('click', async (ev) => {
+        const b = ev.target.closest('[data-x]'); if (!b) return;
+        const x = b.dataset.x;
+        if (x === 'act-ungroup') { actUngroup(g); }
+        else if (x === 'act-merge') { actMerge(g, ly.box.querySelector('#act-target').value); }
+        else if (x === 'act-move') {
+          if (!proj.value) return toast('Escolha um projeto.');
+          const label = tkProjectLabel(db.get('tempo_projects', proj.value));
+          if (!await confirmBox({ title: 'Mover tempo?', body: `O tempo de ${g.label} sai desta sessão e vai para ${label}.`, ok: 'Mover' })) return;
+          if (!actMoveGroup(entryId, g, { project_id: proj.value, task_id: task.value || null })) return toast('Nada para mover.');
+          toast('Tempo movido');
+        }
+        else return;
+        ly.close(); onDone && onDone();
+      });
+    },
+  });
+}
+
+/* Destaque: ao passar o mouse sobre um trecho ou chip, os outros grupos da mesma faixa esmaecem. */
+document.addEventListener('mouseover', (e) => {
+  const t = e.target.closest?.('.act-b[data-g], .act-chip[data-g]'); if (!t) return;
+  const wrap = t.closest('.act-sec'); if (!wrap) return;
+  const g = t.dataset.g;
+  wrap.classList.add('focus');
+  wrap.querySelectorAll('.act-b, .act-chip').forEach(x => x.classList.toggle('on', x.dataset.g === g));
+});
+document.addEventListener('mouseout', (e) => {
+  const t = e.target.closest?.('.act-b[data-g], .act-chip[data-g]'); if (!t) return;
+  const next = e.relatedTarget?.closest?.('.act-b[data-g], .act-chip[data-g]');
+  if (next && t.closest('.act-sec') === next.closest('.act-sec')) return;
+  const wrap = t.closest('.act-sec'); if (!wrap) return;
+  wrap.classList.remove('focus');
+  wrap.querySelectorAll('.on').forEach(x => x.classList.remove('on'));
+});
