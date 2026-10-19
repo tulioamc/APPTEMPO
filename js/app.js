@@ -232,7 +232,7 @@ function suggestActivity(seg) {
   if (!seg || !seg.app) return;
   if (!_pruned) { _pruned = true; pruneOldActivity(); }
   const fromMs = new Date(seg.from).getTime(), toMs = new Date(seg.to).getTime();
-  if (!(toMs > fromMs) || toMs - fromMs < 120000) return;
+  if (!(toMs > fromMs) || toMs - fromMs < 60000) return;
   const a = activeEntry();
   const pauseApps = (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
   const isPauseApp = pauseApps.includes(String(seg.app).toLowerCase());

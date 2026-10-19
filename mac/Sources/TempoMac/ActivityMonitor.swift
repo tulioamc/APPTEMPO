@@ -20,7 +20,7 @@ final class ActivityMonitor {
     private var segStart = Date()
     private var idleStart: Date?
     private let idleLimit: TimeInterval = 60
-    private let minSegment: TimeInterval = 120
+    private let minSegment: TimeInterval = 60
     private let selfBundle = Bundle.main.bundleIdentifier ?? "TempoMac"
 
     private var captureFileNames: Bool { defaults.bool(forKey: "captureFileNames") }
