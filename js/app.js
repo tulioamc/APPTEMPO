@@ -88,7 +88,7 @@ function render() {
   const v = view();
   const scrollKeep = keepScroll();
   // preserva foco/cursor quando a tela é redesenhada durante a digitação
-  const ae = document.activeElement; const fid = ae && ae.id && $('.content')?.contains(ae) ? ae.id : null; const sel = fid && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null;
+  const ae = document.activeElement; const fid = ae && ae.id && $('.content')?.contains(ae) ? ae.id : null; const sel = fid && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null; const fval = fid ? ae.value : null;
   $('.sidebar').innerHTML = sidebarHTML();
   $('.page-title').textContent = v.title;
   $('.crumb').textContent = NAV.find(n => n.id === S.route) ? (['registry', 'import', 'prefs'].includes(S.route) ? 'Cadastros' : 'Workspace') : '';
@@ -100,7 +100,7 @@ function render() {
   restoreScroll(scrollKeep);
   document.title = 'Tempo';
   v.after && v.after();
-  if (fid) { const el = document.getElementById(fid); if (el) { el.focus(); if (sel && el.setSelectionRange) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
+  if (fid) { const el = document.getElementById(fid); if (el) { if (fval != null && el.value !== fval) el.value = fval; el.focus(); if (sel && el.setSelectionRange) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
 }
 db.subscribe(() => { render(); layers.forEach(l => l.live && l.refresh()); });
 

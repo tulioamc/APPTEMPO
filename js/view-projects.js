@@ -1,8 +1,10 @@
 /* =====================================================================
    PROJETOS — tabela (estilo Notion), quadro, lista e calendário
    ===================================================================== */
+// Projeto cancelado não tem pagamento pendente: mostra traço em vez de "Não Pago".
+function payTag(p, pill = false) { return statusCat(p.status_id) === 'cancelled' ? '<span class="faint">—</span>' : statusTag(p.payment_status_id, pill); }
 const projEdit = {
-  name: { type: 'text', required: true, get: p => p.name, set: (p, v) => { logEvent('project', p.id, 'rename', `Nome: ${p.name} → ${v}`); db.update('tempo_projects', p.id, { name: v }); } },
+  name:{ type: 'text', required: true, get: p => p.name, set: (p, v) => { logEvent('project', p.id, 'rename', `Nome: ${p.name} → ${v}`); db.update('tempo_projects', p.id, { name: v }); } },
   client: { type: 'combo', kind: 'client', get: p => p.client_id, set: (p, v) => COMBO_TARGETS['proj-client'](p.id, v) },
   deadline: { type: 'date', get: p => p.deadline, set: async (p, v) => { if (!p.deadline) return changeDeadline(p, v, ''); const r = await askReason(p.deadline, v); if (r !== null) changeDeadline(p, v, r); } },
   status: { type: 'combo', kind: 'work', get: p => p.status_id, set: (p, v) => setProjectStatus(p, v) },
@@ -19,7 +21,7 @@ const PCOLS = {
   name:     { label: 'Projeto', ico: 'text', w: 300, sort: p => p.name, cell: p => `<span class="cell-name"><span class="ct">${esc(p.name)}</span>${openBtn('proj-open', p.id)}</span>`, cls: 'name', edit: projEdit.name },
   deadline: { label: 'Prazo', ico: 'cal', w: 120, sort: p => p.deadline || '9999', cell: p => deadlineCell(p), edit: projEdit.deadline },
   status:   { label: 'Status', ico: 'spin', w: 160, sort: p => db.get('tempo_status_options', p.status_id)?.order ?? 99, cell: p => statusTag(p.status_id), edit: projEdit.status },
-  pay:      { label: 'Pagamento', ico: 'arrowIn', w: 130, sort: p => db.get('tempo_status_options', p.payment_status_id)?.order ?? 99, cell: p => statusTag(p.payment_status_id, false), edit: projEdit.pay },
+  pay:      { label: 'Pagamento', ico: 'arrowIn', w: 130, sort: p => db.get('tempo_status_options', p.payment_status_id)?.order ?? 99, cell: p => payTag(p, false), edit: projEdit.pay },
   budget:   { label: 'Orçamento', ico: 'hash', w: 140, money: true, sort: p => Number(p.budget) || 0, val: p => Number(p.budget) || 0, cell: p => fmtMoney(p.budget), edit: projEdit.budget },
   remaining:{ label: 'Valor restante', ico: 'hash', w: 140, money: true, sort: p => remainingOf(p) || 0, val: p => remainingOf(p) || 0, cell: p => { const r = remainingOf(p); return r ? fmtMoney(r) : ''; }, edit: projEdit.remaining },
   paid:     { label: 'Valor pago', ico: 'hash', w: 140, money: true, sort: p => paidOf(p), val: p => paidOf(p), cell: p => { const v = paidOf(p); return v ? fmtMoney(v) : ''; } },
@@ -57,7 +59,7 @@ function filterProjects(f) {
     if (f.to && rd > f.to) return false;
     if (f.situ === 'active' && ['done', 'cancelled'].includes(statusCat(p.status_id))) return false;
     if (f.situ === 'done' && statusCat(p.status_id) !== 'done') return false;
-    if (f.situ === 'falta' && statusCat(p.payment_status_id) !== 'open') return false;
+    if (f.situ === 'falta' && (statusCat(p.status_id) === 'cancelled' || statusCat(p.payment_status_id) !== 'open')) return false;
     return true;
   });
 }
@@ -132,7 +134,7 @@ function projectBoard(list) {
         return `<div class="kcard" draggable="true" data-id="${p.id}" data-act="proj-open">
           <div class="row" style="gap:6px">${clientTag(clientOf(p))}</div>
           <div class="t">${esc(p.name)}</div>
-          <div class="m">${p.deadline ? `<span class="row" style="gap:4px">${icon('cal', 'ico')}${deadlineCell(p)}</span>` : ''}${statusTag(p.payment_status_id, false)}${tk.length ? `<span>${dn}/${tk.length} tarefas</span>` : ''}</div>
+          <div class="m">${p.deadline ? `<span class="row" style="gap:4px">${icon('cal', 'ico')}${deadlineCell(p)}</span>` : ''}${payTag(p, false)}${tk.length ? `<span>${dn}/${tk.length} tarefas</span>` : ''}</div>
           <div class="m"><span class="mono">${fmtMoney(p.budget) || ''}</span><span class="grow"></span><span class="mono">${projectMs(p.id) ? fmtH(projectMs(p.id)) : ''}</span></div>
           <select class="input sm move" data-on="kan-move" data-id="${p.id}" aria-label="Mover para">${options(statuses('work'), p.status_id)}</select>
         </div>`;
@@ -154,7 +156,7 @@ function projectList(list) {
   return `<div class="list">${[...list].sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999')).map(p => `
     <div class="li" data-act="proj-open" data-id="${p.id}">
       <div class="grow"><div class="meta">${clientTag(clientOf(p))}</div><div class="t" style="margin-top:2px">${esc(p.name)}</div></div>
-      <div class="meta">${statusTag(p.status_id)}${statusTag(p.payment_status_id, false)}${p.deadline ? `<span class="row" style="gap:4px">${icon('cal', 'ico')}${deadlineCell(p)}</span>` : ''}<span class="mono" style="min-width:96px;text-align:right">${fmtMoney(p.budget) || '—'}</span></div>
+      <div class="meta">${statusTag(p.status_id)}${payTag(p, false)}${p.deadline ? `<span class="row" style="gap:4px">${icon('cal', 'ico')}${deadlineCell(p)}</span>` : ''}<span class="mono" style="min-width:96px;text-align:right">${fmtMoney(p.budget) || '—'}</span></div>
     </div>`).join('')}</div>`;
 }
 
