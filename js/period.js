@@ -7,7 +7,7 @@ const PAUSE_LABEL = { mac: 'Ocioso (mouse e teclado)', sono: 'Computador fechado
 const pauseLabel = (k) => PAUSE_LABEL[k] || k;
 
 /* Início e fim (inclusive) do período que contém o dia. */
-function periodRange(day, p) {
+function tsPeriodRange(day, p) {
   const d0 = new Date(day); d0.setHours(0, 0, 0, 0);
   if (p === 'semana') { const s = new Date(d0); s.setDate(s.getDate() - ((s.getDay() + 6) % 7)); return [s, new Date(s.getFullYear(), s.getMonth(), s.getDate() + 6)]; }
   if (p === 'q15') return [new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() - 14), d0];
@@ -51,7 +51,7 @@ function reportStrip(entries, day, mode) {
 function reportPanelHTML(day) {
   const p = db.setting('tsPeriod', 'dia');
   const v = db.setting('tsReportView', 'tudo');
-  const [a, b] = periodRange(day, p);
+  const [a, b] = tsPeriodRange(day, p);
   const days = [];
   for (let d = new Date(a); d <= b; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) days.push(new Date(d));
   const es = days.flatMap(d => entriesOn(d));
