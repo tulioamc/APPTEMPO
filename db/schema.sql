@@ -249,3 +249,16 @@ create table if not exists tempo_bank_txns (
   expense_id uuid, payment_id uuid references tempo_payments(id) on delete set null, created_at timestamptz not null default now(), updated_at timestamptz,
   unique (user_id, fitid)
 );
+-- Uma entrada bancária cobre vários pagamentos (ex.: um PIX de três projetos). amount = parcela desta entrada em cada pagamento.
+create table if not exists tempo_bank_payment_links (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  txn_id uuid not null references tempo_bank_txns(id) on delete cascade,
+  payment_id uuid not null references tempo_payments(id) on delete cascade,
+  amount numeric(14,2) not null,
+  created_at timestamptz not null default now(), updated_at timestamptz,
+  unique (txn_id, payment_id)
+);
+alter table tempo_bank_payment_links enable row level security;
+drop policy if exists own_rows on tempo_bank_payment_links;
+create policy own_rows on tempo_bank_payment_links for all using (user_id = auth.uid()) with check (user_id = auth.uid());

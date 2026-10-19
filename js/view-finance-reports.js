@@ -343,12 +343,15 @@ async function bankAutoCategory() {
 // Contraparte marcada como Fee (sem projeto fixo) recebe a categoria Fee.
 const bankIsPJ = (t) => (BANK.all.pj || []).some(x => x.id === t.id);
 async function bankAutoPJ() {
-  const cl = db.adapter.client; const learned = {}; const fee = new Set();
+  const cl = db.adapter.client; const learned = {}; const lastFee = {};
   (BANK.every || []).forEach(t => {
     if (t.flow !== 'in' || !t.counterpart || !bankIsPJ(t)) return;
     if (t.payment_id) { const p = db.get('tempo_payments', t.payment_id); if (p && !learned[t.counterpart]) learned[t.counterpart] = p.project_id; }
-    if (t.category === 'Fee') fee.add(t.counterpart);
+    if (t.category === 'Fee' && (t.posted_on || '') > (lastFee[t.counterpart] || '')) lastFee[t.counterpart] = t.posted_on;
   });
+  // Fee só vale enquanto a contraparte ainda paga fee (último fee nos últimos 60 dias).
+  const cutoff = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
+  const fee = new Set(Object.keys(lastFee).filter(k => lastFee[k] >= cutoff));
   const taken = new Set((BANK.every || []).map(t => t.payment_id).filter(Boolean));
   let did = false;
   for (const t of (BANK.every || [])) {

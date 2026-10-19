@@ -277,5 +277,14 @@ window.DB_COLUMNS = {
   "payment_id",
   "created_at",
   "updated_at"
+ ],
+ "tempo_bank_payment_links": [
+  "id",
+  "user_id",
+  "txn_id",
+  "payment_id",
+  "amount",
+  "created_at",
+  "updated_at"
  ]
 };
