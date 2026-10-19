@@ -128,9 +128,18 @@ function bigClock(ms) { const c = fmtClock(ms); return `${c.slice(0, 5)}<span cl
    Nada é aplicado sozinho: cada intervalo vira uma sugestão Aceitar/Ignorar. */
 let lastBeat = Date.now();
 const idleLimit = () => Number(db.setting('idleMinutes', 5)) || 5;
+function uncoveredGap(a, fromMs, toMs) {
+  const cov = actList(a.id).map(r => [new Date(r.from).getTime(), new Date(r.to).getTime()]).filter(([x, y]) => y > fromMs && x < toMs).sort((p, q) => p[0] - q[0]);
+  let best = null, cur = fromMs;
+  cov.forEach(([x, y]) => { if (x > cur && (!best || x - cur > best[1] - best[0])) best = [cur, x]; cur = Math.max(cur, y); });
+  if (toMs > cur && (!best || toMs - cur > best[1] - best[0])) best = [cur, toMs];
+  return best || [fromMs, fromMs];
+}
 function suggestPause(fromMs, toMs, source, app) {
   const a = activeEntry(); if (!a || toMs - fromMs < idleLimit() * 60000) return;
   const segStart = new Date(a.segments[a.segments.length - 1].s).getTime(); fromMs = Math.max(fromMs, segStart);
+  // inatividade não pode cobrir uso de app: a pausa vai só para o maior trecho sem atividade registrada
+  if (source !== 'app') [fromMs, toMs] = uncoveredGap(a, fromMs, toMs);
   if (toMs - fromMs < idleLimit() * 60000) return;
   if (pausesOf(a.id).some(n => Math.abs(new Date(n.data.from) - fromMs) < 60000)) return;
   const from = new Date(fromMs).toISOString(), to = new Date(toMs).toISOString();
@@ -143,7 +152,9 @@ function suggestPause(fromMs, toMs, source, app) {
 }
 function heartbeat() {
   const now = Date.now(); const gap = now - lastBeat; const a = activeEntry();
-  if (a && a.state === 'running' && gap > 90000) suggestPause(lastBeat, now, 'suspenso');
+  // no app de Mac a janela pode ficar em segundo plano e o navegador pausa os temporizadores: isso não é pausa.
+  // Pausa só por ociosidade de verdade (mouse/teclado) ou por WhatsApp/Telegram.
+  if (!window.webkit?.messageHandlers?.tempo && a && a.state === 'running' && gap > 90000) suggestPause(lastBeat, now, 'suspenso');
   lastBeat = now;
 }
 setInterval(heartbeat, 20000);
