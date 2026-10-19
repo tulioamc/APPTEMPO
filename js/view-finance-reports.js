@@ -339,12 +339,44 @@ async function bankAutoCategory() {
   }
   return true;
 }
+// Entrada da conta PJ: contraparte já ligada a um projeto vira pagamento daquele projeto (valor com folga de 6%; senão cria).
+// Contraparte marcada como Fee (sem projeto fixo) recebe a categoria Fee.
+const bankIsPJ = (t) => (BANK.all.pj || []).some(x => x.id === t.id);
+async function bankAutoPJ() {
+  const cl = db.adapter.client; const learned = {}; const fee = new Set();
+  (BANK.every || []).forEach(t => {
+    if (t.flow !== 'in' || !t.counterpart || !bankIsPJ(t)) return;
+    if (t.payment_id) { const p = db.get('tempo_payments', t.payment_id); if (p && !learned[t.counterpart]) learned[t.counterpart] = p.project_id; }
+    if (t.category === 'Fee') fee.add(t.counterpart);
+  });
+  const taken = new Set((BANK.every || []).map(t => t.payment_id).filter(Boolean));
+  let did = false;
+  for (const t of (BANK.every || [])) {
+    if (t.flow !== 'in' || t.payment_id || !t.counterpart || !bankIsPJ(t)) continue;
+    if (fee.has(t.counterpart) && !t.category) {
+      const { error } = await cl.from('tempo_bank_txns').update({ category: 'Fee', updated_at: new Date().toISOString() }).eq('id', t.id);
+      if (error) { toast('Erro: ' + error.message); break; }
+      t.category = 'Fee'; did = true; continue;
+    }
+    const pid = learned[t.counterpart]; if (!pid) continue;
+    const amt = Math.abs(Number(t.amount));
+    let p = db.all('tempo_payments').find(x => x.project_id === pid && !taken.has(x.id) && (x.date == null || x.date === t.posted_on) && x.amount != null && Math.abs(Number(x.amount) - amt) <= Math.max(5, Number(x.amount) * 0.06));
+    if (!p) p = db.insert('tempo_payments', { project_id: pid, amount: amt, date: t.posted_on, note: 'Extrato' });
+    else db.update('tempo_payments', p.id, { amount: amt, date: t.posted_on });
+    taken.add(p.id);
+    const { error } = await cl.from('tempo_bank_txns').update({ payment_id: p.id, updated_at: new Date().toISOString() }).eq('id', t.id);
+    if (error) { toast('Erro: ' + error.message); break; }
+    t.payment_id = p.id; did = true;
+  }
+  return did;
+}
 async function bankLoadTxns() {
   await bankLoadRaw();
   let changed = await bankAutoTherapy();
   if (await bankAutoCategory()) changed = true;
   if (await bankAutoReimb()) changed = true;
   if (await bankAutoFixed()) changed = true;
+  if (await bankAutoPJ()) changed = true;
   if (changed) await bankLoadRaw();
 }
 // Gasto fixo aprendido: a contraparte → nomes de gasto fixo que você já vinculou a ela.
@@ -1084,8 +1116,11 @@ function bankPickDialog(t) {
   const fixedBlock = `<div class="field"><span class="lbl">Custos fixos do mês</span><div class="stack" style="gap:6px">${exps.length ? exps.map(e => btn('expense', e.id, e.name, e.amount)).join('') : '<span class="small muted">Nenhum custo fixo neste mês.</span>'}</div></div>`;
   const therBlock = `<div class="field"><span class="lbl">Terapias do mês ${ym}</span><div class="stack" style="gap:6px">${rows.length ? rows.map(r => btn('reimb', r.id, r.name, r.amount)).join('') : '<span class="small muted">Nenhuma linha de terapia neste mês.</span>'}</div></div>`;
   // Saída: custo fixo primeiro. Entrada: terapias primeiro.
+  // Entrada da PJ: projeto (cria o pagamento) ou Fee, sem projeto fixo.
+  const projBlock = (t.flow === 'in' && bankIsPJ(t)) ? `<div class="field"><span class="lbl">Projeto (pagamento recebido)</span><div class="stack" style="gap:6px">${btn('fee', 'fee', 'Fee (sem projeto fixo)', Math.abs(Number(t.amount)))}${db.all('tempo_projects').filter(p => !p.archived).map(p => { const c = clientOf(p); return btn('project', p.id, (c ? c.name + ' · ' : '') + p.name, p.budget); }).join('')}</div></div>` : '';
   const html = `<div class="dh"><h2>Vincular lançamento</h2></div><div class="db">
     <p style="margin:0">${esc(t.counterpart || t.memo)} · ${fmtMoney(Math.abs(Number(t.amount)))} · ${fmtDate(t.posted_on)}</p>
+    ${projBlock}
     ${t.flow === 'out' ? (/sul\s*americ/i.test(t.counterpart || '') ? fixedBlock : fixedBlock + therBlock) : therBlock + fixedBlock}
     </div><div class="df"><button class="btn" data-x="no">Cancelar</button></div>`;
   return new Promise(res => {
@@ -1182,6 +1217,20 @@ ACTIONS['bank-tlink'] = async (el) => {
   await linkBankTxn(t, el.dataset.kind, el.dataset.target);
 };
 async function linkBankTxn(t, kind, id) {
+  if (kind === 'fee' || kind === 'project') {
+    const cl = db.adapter.client; const patch = { updated_at: new Date().toISOString() };
+    if (kind === 'fee') patch.category = 'Fee';
+    else {
+      const amt = Math.abs(Number(t.amount)); const taken = (BANK.every || []).map(b => b.payment_id).filter(Boolean);
+      let p = db.all('tempo_payments').find(x => x.project_id === id && !taken.includes(x.id) && x.date == null && x.amount != null && Math.abs(Number(x.amount) - amt) <= Math.max(5, Number(x.amount) * 0.06));
+      if (p) db.update('tempo_payments', p.id, { amount: amt, date: t.posted_on });
+      else p = db.insert('tempo_payments', { project_id: id, amount: amt, date: t.posted_on, note: 'Extrato' });
+      patch.payment_id = p.id;
+    }
+    const { error } = await cl.from('tempo_bank_txns').update(patch).eq('id', t.id);
+    if (error) return toast('Erro: ' + error.message);
+    await bankLoadTxns(); toast('Vinculado'); render(); return;
+  }
   if (kind === 'reimb' && t.flow !== 'out') {
     const ids = Array.isArray(id) ? id : [id];
     const { error } = await db.adapter.client.from('tempo_bank_reimb_links').insert(ids.map(r => ({ reimb_row_id: r, txn_id: t.id })));

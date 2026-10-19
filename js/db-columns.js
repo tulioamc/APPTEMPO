@@ -274,6 +274,7 @@ window.DB_COLUMNS = {
   "category",
   "review_status",
   "expense_id",
+  "payment_id",
   "created_at",
   "updated_at"
  ]
