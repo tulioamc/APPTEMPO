@@ -57,6 +57,7 @@ function filterProjects(f) {
     if (f.to && rd > f.to) return false;
     if (f.situ === 'active' && ['done', 'cancelled'].includes(statusCat(p.status_id))) return false;
     if (f.situ === 'done' && statusCat(p.status_id) !== 'done') return false;
+    if (f.situ === 'falta' && statusCat(p.payment_status_id) !== 'open') return false;
     return true;
   });
 }
@@ -69,7 +70,7 @@ function filterBar(f, ns, { situ = false, extra = '' } = {}) {
     ${'q' in f ? `<input id="${ns}-q" class="input search" placeholder="Buscar projeto, cliente ou agência" value="${esc(f.q)}" data-input="flt" data-ns="${ns}" data-k="q">` : ''}
     <div class="flt-wrap"><button class="btn sm flt-toggle" data-act="flt-toggle" data-ns="${ns}" aria-expanded="${S.fltOpen?.[ns] ? 'true' : 'false'}">${icon('sort')} Filtros${active ? ` (${active})` : ''}</button>
     <div class="flt-more">
-    ${situ ? `<div class="seg">${[['all', 'Todos'], ['active', 'Ativos'], ['done', 'Concluídos']].map(([v, l]) => `<button class="${f.situ === v ? 'on' : ''}" data-act="flt-set" data-ns="${ns}" data-k="situ" data-v="${v}">${l}</button>`).join('')}</div>` : ''}
+
     <select id="${ns}-agency" class="input" data-on="flt" data-ns="${ns}" data-k="agency" aria-label="Agência">${options(agencies(), f.agency, { empty: true, emptyLabel: 'Todas as agências' })}<option value="__none" ${f.agency === '__none' ? 'selected' : ''}>Sem agência (direto)</option></select>
     <select id="${ns}-client" class="input" data-on="flt" data-ns="${ns}" data-k="client" aria-label="Cliente">${options(f.agency ? clients(f.agency) : clients(), f.client, { empty: true, emptyLabel: 'Todos os clientes' })}</select>
     <select id="${ns}-status" class="input" data-on="flt" data-ns="${ns}" data-k="status" aria-label="Status">${options(statuses('work'), f.status, { empty: true, emptyLabel: 'Todos os status' })}</select>
@@ -91,11 +92,13 @@ document.addEventListener('mousedown', (e) => {
   if (e.target.closest?.('.filters')) return;
   S.fltOpen = {}; render();
 });
-ACTIONS['flt-set'] = (el) => { fltState(el.dataset.ns)[el.dataset.k] = el.dataset.v; render(); };
+ACTIONS['flt-set'] = (el) => { fltState(el.dataset.ns)[el.dataset.k] = el.dataset.v; if (el.dataset.ns === 'proj' && el.dataset.k === 'situ') db.setSetting('projSitu', el.dataset.v); render(); };
 ACTIONS['flt-clear'] = (el) => { const f = fltState(el.dataset.ns); ['q', 'agency', 'client', 'status', 'pay', 'wt', 'year', 'month', 'from', 'to'].forEach(k => { if (k in f) f[k] = ''; }); render(); };
 
+const SITU_OPTS = [['all', 'Todos'], ['active', 'Ativos'], ['done', 'Concluídos'], ['falta', 'Falta pagamento']];
 VIEWS.projects = () => {
   const f = S.proj;
+  if (f.situ === undefined) f.situ = db.setting('projSitu', 'all') || 'all';
   const list = filterProjects(f);
   const views = [['table', 'Tabela', 'table'], ['board', 'Quadro', 'board'], ['list', 'Lista', 'list'], ['cal', 'Calendário', 'cal']];
   let body = '';
@@ -106,6 +109,7 @@ VIEWS.projects = () => {
   else body = projectCalendar(list);
   const html = `<div class="panel">
     <div class="panel-h"><div class="seg" role="tablist">${views.map(([v, l, i]) => `<button class="${f.view === v ? 'on' : ''}" data-act="proj-view" data-v="${v}" role="tab">${icon(i)}<span>${l}</span></button>`).join('')}</div>
+    <div class="seg">${SITU_OPTS.map(([v, l]) => `<button class="${f.situ === v ? 'on' : ''}" data-act="flt-set" data-ns="proj" data-k="situ" data-v="${v}">${l}</button>`).join('')}</div>
     <span class="grow"></span>${f.view === 'table' ? colsBtn('projects') : ''}</div>
     ${filterBar(f, 'proj', { situ: true })}
     <div class="panel-b tight">${body}</div>

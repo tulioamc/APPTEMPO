@@ -75,7 +75,12 @@ final class ActivityMonitor {
     }
 
     /// Sites do Chrome que contam. Só o título da aba ativa é lido (não há endereço, histórico nem outros sites).
-    static let chromeSites = ["Behance", "Pinterest", "Magnific", "Claude", "ChatGPT"]
+    /// (texto que aparece no título da aba, nome que aparece no Tempo)
+    static let chromeSites: [(match: String, label: String)] = [
+        ("Behance", "Behance"), ("Pinterest", "Pinterest"), ("Magnific", "Magnific"),
+        ("Claude", "Claude"), ("ChatGPT", "ChatGPT"),
+        ("Google Meet", "Reunião"), ("Meet –", "Reunião"),
+    ]
 
     private func currentContext() -> Context? {
         guard let app = NSWorkspace.shared.frontmostApplication, let name = app.localizedName else { return nil }
@@ -121,6 +126,6 @@ final class ActivityMonitor {
         var titleRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(winRef as! AXUIElement, kAXTitleAttribute as CFString, &titleRef) == .success,
               let title = titleRef as? String else { return nil }
-        return ActivityMonitor.chromeSites.first { title.range(of: $0, options: .caseInsensitive) != nil }
+        return ActivityMonitor.chromeSites.first { title.range(of: $0.match, options: .caseInsensitive) != nil }?.label
     }
 }

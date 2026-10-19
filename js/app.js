@@ -135,6 +135,9 @@ function suggestPause(fromMs, toMs, source, app) {
   if (pausesOf(a.id).some(n => Math.abs(new Date(n.data.from) - fromMs) < 60000)) return;
   const from = new Date(fromMs).toISOString(), to = new Date(toMs).toISOString();
   addNotice({ kind: 'pause', key: `pause:${a.id}:${from}`, title: `Pausa sugerida: ${fmtDur(toMs - fromMs)}`, body: `Parado entre ${fmtTime(from)} e ${fmtTime(to)}; voltou às ${fmtTime(to)}.`, entity: 'entry', entity_id: a.id, project_id: a.project_id, data: { entry_id: a.id, from, to, source, app: app || null } });
+  // inatividade vira pausa sozinha (sem aprovação): o aviso fica só para registro
+  const auto = db.all('tempo_notices').find(x => x.key === `pause:${a.id}:${from}`);
+  if (auto) { applyPause(a, auto, 'insert'); toast(`${icon('alert', 'ico')} Pausa aplicada: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`); return; }
   toast(`${icon('alert', 'ico')} Pausa sugerida: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`, { actions: [{ label: 'Revisar', run: () => go('timesheet') }] });
   notifyNative('Pausa sugerida', `${fmtDur(toMs - fromMs)} parado (${fmtTime(from)}–${fmtTime(to)})`);
 }
