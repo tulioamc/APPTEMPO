@@ -738,13 +738,13 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .act-swatch:hover { border-color: var(--fg); }
 .act-swatch.none { background: var(--surface-2); color: var(--fg-3); font-size: 14px; line-height: 20px; }
 .act-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.act-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in oklab, var(--tb) 45%, transparent); background: color-mix(in oklab, var(--tb) 16%, var(--surface)); border-radius: 6px; padding: 3px 9px; font-size: .8em; font-weight: 500; cursor: pointer; color: color-mix(in oklab, var(--tb) 55%, #101217); }
+.act-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in oklab, var(--tb) 45%, transparent); background: color-mix(in oklab, var(--tb) 16%, var(--surface)); border-radius: 6px; padding: 3px 9px; font-size: .8em; font-weight: 500; cursor: pointer; color: color-mix(in oklab, var(--tb) 80%, #101217); }
 .act-chip-total { font-weight: 600; cursor: default; }
 .act-chip-sub { cursor: default; }
 :root[data-theme="dark"] .act-chip, :root:not([data-theme="light"]) .act-chip { color: color-mix(in oklab, var(--tb) 40%, #fff); }
 .act-chip i { width: 8px; height: 8px; border-radius: 2px; background: var(--tb); display: inline-block; }
 .act-chip.on { border-color: var(--tb); }
-.act-sec.focus .act-chip:not(.on) { opacity: .4; }
+.act-sec.focus .act-chip:not(.on) { opacity: .75; }
 /* pausas: mesma listra na linha do tempo principal e nas faixas da sessão (cor vem de --ph) */
 .day-strip .seg-b.pausa, .act-strip .seg-b.pausa { background: repeating-linear-gradient(45deg, var(--ph, #A1A1AA) 0 4px, transparent 4px 7px); box-shadow: none; opacity: .9; }
 
