@@ -3,7 +3,7 @@
 # Saída: SEM_MUDANCA ou ATUALIZADO. Usado pelo próprio app (menu "Atualizar app" e ao abrir).
 set -e
 cd "$(dirname "$0")"
-REPO="$(cd ../.. && pwd)"
+REPO="$(cd .. && pwd)"
 before=$(git -C "$REPO" rev-parse HEAD)
 git -C "$REPO" pull --ff-only -q
 after=$(git -C "$REPO" rev-parse HEAD)

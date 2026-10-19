@@ -317,7 +317,7 @@ function fireReminder(r) {
   if (a && ['stop', 'context', 'review_session'].includes(r.kind)) { actions.push({ label: 'Encerrar', primary: true, run: () => ACTIONS['ts-stop']() }); actions.push({ label: 'Revisar', run: () => openEntryModal(a.id) }); }
   if (r.kind === 'review_day') actions.push({ label: 'Abrir Time Sheet', primary: true, run: () => { S.tsDay = ymd(new Date()); go('timesheet'); } });
   actions.push({ label: 'Dispensar', run: () => {} });
-  toast(`<div class="row">${icon('bell')}<b>${esc(r.name)}</b></div><div class="small">${reminderText(r)}</div>`, { cls: 'rem', sticky: true, actions });
+  toast(`<div class="row">${icon('bell', 'ico')}<b>${esc(r.name)}</b></div><div class="small">${reminderText(r)}</div>`, { cls: 'rem', sticky: true, actions });
   try { if ('Notification' in window && Notification.permission === 'granted') new Notification('Tempo — ' + r.name, { body: reminderText(r).replace(/<[^>]+>/g, '') }); } catch (e) {}
 }
 function checkReminders() {
