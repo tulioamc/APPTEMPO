@@ -237,12 +237,31 @@ function actChipsHTML(A, mode) {
   return `<div class="act-chips">${A.groups.map(g => `<button type="button" class="act-chip" data-x="act-chip" data-g="${esc(g.id)}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
 }
 
+/* Pausas da sessão em caixinhas: o total, e dentro dele ócio, bloqueada, WhatsApp, Telegram e manual, com o tempo de cada um. */
+function pauseChipsHTML(e) {
+  const tot = {};
+  const add = (key, label, ms, color) => { const t = tot[key] || (tot[key] = { label, ms: 0, color }); t.ms += ms; };
+  entryGaps(e).forEach(g => {
+    const ms = new Date(g.e) - new Date(g.s); if (!(ms > 0)) return;
+    const w = String(g.why || '').trim().toLowerCase();
+    if (w === 'mac' || w === 'ocioso' || w.includes('ocios')) add('idle', 'Ócio (mouse e teclado)', ms, PAUSE_HATCH.idle);
+    else if (w === 'sono' || w === 'suspenso') add('lock', 'Bloqueada / dormiu', ms, '#9CA3AF');
+    else if (pauseKind(g.why) === 'telegram') add('telegram', 'Telegram', ms, PAUSE_HATCH.telegram);
+    else if (pauseKind(g.why) === 'whatsapp') { const name = g.why === 'app' ? 'WhatsApp' : String(g.why); add('wa:' + name, name, ms, PAUSE_HATCH.whatsapp); }
+    else add('manual', 'Manual', ms, '#A1A1AA');
+  });
+  const items = Object.values(tot).sort((x, y) => y.ms - x.ms);
+  if (!items.length) return '';
+  const total = items.reduce((sum, i) => sum + i.ms, 0);
+  return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#64748B">Pausas <span class="faint">${fmtDur(total)}</span></span>${items.map(i => `<span class="act-chip act-chip-sub" style="--tb:${i.color}"><i></i>${esc(i.label)} <span class="faint">${fmtDur(i.ms)}</span></span>`).join('')}</div>`;
+}
+
 /* Bloco da tela "Revisar sessão": uma faixa por programa e uma por arquivo. */
 function actSectionHTML(e) {
   if (!actList(e.id).length) return '';
   const prog = actAnalyze(e.id, 'program'), file = actAnalyze(e.id, 'file');
   const sec = (title, mode, A) => `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div>${actStripHTML(e, A)}${actChipsHTML(A, mode)}</div>`;
-  return `<div class="stack" style="gap:8px">${sec('Por programa', 'program', prog)}${sec('Por arquivo / página', 'file', file)}<span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
+  return `<div class="stack" style="gap:8px">${sec('Por programa', 'program', prog)}${sec('Por arquivo / página', 'file', file)}<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div><span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
 }
 
 /* Log discreto no fim do formulário da sessão: cada registro de atividade (programa e arquivo) e cada pausa, por horário.
