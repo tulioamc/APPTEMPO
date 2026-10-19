@@ -66,15 +66,7 @@ VIEWS.timesheet = () => {
       <button class="btn sm" data-act="ts-manual">${icon('plus')} Apontamento manual</button>
     </div>
     <div class="panel-b tight">
-      ${entries.length ? entries.map(e => {
-        const x = entryPath(e); const sub = [x.agency?.name || (x.client ? 'Direto' : null), x.client?.name, x.project?.name, x.subtask ? x.task?.name : null].filter(Boolean).join(' › ');
-        return `<div class="entry" data-act="ts-edit" data-id="${e.id}">
-          <span class="when">${fmtTime(entryStart(e))}–${e.state === 'done' ? fmtTime(entryEnd(e)) : '…'}</span>
-          <div class="what"><div class="t">${esc(entryTitle(e))} ${e.state !== 'done' ? `<span class="tag pill c-blue small">${e.state === 'running' ? 'em andamento' : 'pausada'}</span>` : ''}${e.edits?.length ? ' <span class="inh" title="Editada">editada</span>' : ''}${e.revision_id ? ' <span class="inh">revisão</span>' : ''}</div>
-          <div class="p">${esc(sub || 'Sem projeto')}${e.notes && x.project ? ' · ' + esc(e.notes.split('\n')[0]) : ''}</div></div>
-          <div class="row" style="justify-content:flex-end;gap:10px"><span class="hide-sm">${wtTag(e.work_type_id)}</span><span class="dur" ${e.state !== 'done' ? `data-tick="${e.id}"` : ''}>${e.state !== 'done' ? fmtClock(entryMs(e)) : fmtDur(entryMs(e))}</span></div>
-        </div>`;
-      }).join('') : `<div class="empty">${icon('clock')}<b>Nenhum registro em ${isToday(day) ? 'hoje' : fmtDate(S.tsDay)}</b><span>Inicie o cronômetro ou lance um apontamento manual se esqueceu de registrar.</span></div>`}
+      ${entries.length ? groupedRowsHTML(entries) : `<div class="empty">${icon('clock')}<b>Nenhum registro em ${isToday(day) ? 'hoje' : fmtDate(S.tsDay)}</b><span>Inicie o cronômetro ou lance um apontamento manual se esqueceu de registrar.</span></div>`}
     </div>
   </div>`;
   return { title: 'Time Sheet', actions: a ? '' : `<button class="btn primary" data-act="ts-start">${icon('play')} Iniciar registro</button>`, html: `<div class="home-grid"><div class="home-main">${html}</div>${sidePanelHTML()}</div>` };
@@ -363,3 +355,43 @@ document.addEventListener('mousemove', (e) => {
   stripTip.style.left = Math.max(8, x) + 'px'; stripTip.style.top = (e.clientY - stripTip.offsetHeight - 10 < 8 ? e.clientY + 16 : e.clientY - stripTip.offsetHeight - 10) + 'px';
 });
 document.addEventListener('mouseout', (e) => { if (stripTip && e.target.closest?.('.seg-b[data-tip]')) stripTip.style.display = 'none'; });
+
+
+/* Sessões do mesmo projeto, tarefa e título (ex.: várias do "Time Sheet") viram um item recolhível.
+   Ao abrir, mostram todas; as tags de tipo de todas as sessões do grupo aparecem no item. Sessões em andamento ficam sozinhas. */
+function entrySub(e) {
+  const x = entryPath(e);
+  return [x.agency?.name || (x.client ? 'Direto' : null), x.client?.name, x.project?.name, x.subtask ? x.task?.name : null].filter(Boolean).join(' › ');
+}
+function entryRowHTML(e) {
+  const x = entryPath(e); const sub = entrySub(e);
+  return `<div class="entry" data-act="ts-edit" data-id="${e.id}">
+          <span class="when">${fmtTime(entryStart(e))}–${e.state === 'done' ? fmtTime(entryEnd(e)) : '…'}</span>
+          <div class="what"><div class="t">${esc(entryTitle(e))} ${e.state !== 'done' ? `<span class="tag pill c-blue small">${e.state === 'running' ? 'em andamento' : 'pausada'}</span>` : ''}${e.edits?.length ? ' <span class="inh" title="Editada">editada</span>' : ''}${e.revision_id ? ' <span class="inh">revisão</span>' : ''}</div>
+          <div class="p">${esc(sub || 'Sem projeto')}${e.notes && x.project ? ' · ' + esc(e.notes.split('\n')[0]) : ''}</div></div>
+          <div class="row" style="justify-content:flex-end;gap:10px"><span class="hide-sm">${wtTag(e.work_type_id)}</span><span class="dur" ${e.state !== 'done' ? `data-tick="${e.id}"` : ''}>${e.state !== 'done' ? fmtClock(entryMs(e)) : fmtDur(entryMs(e))}</span></div>
+        </div>`;
+}
+function groupedRowsHTML(entries) {
+  const groups = new Map();
+  entries.forEach(e => {
+    const key = e.state === 'done' ? `${entryTitle(e)}|${entrySub(e)}` : `run:${e.id}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  });
+  return [...groups.values()].map(list => {
+    if (list.length === 1) return entryRowHTML(list[0]);
+    const first = list.reduce((m, e) => (new Date(entryStart(e)) < new Date(m) ? entryStart(e) : m), entryStart(list[0]));
+    const last = list.reduce((m, e) => (new Date(entryEnd(e)) > new Date(m) ? entryEnd(e) : m), entryEnd(list[0]));
+    const tags = [...new Set(list.map(e => e.work_type_id || ''))].map(id => wtTag(id || null)).join('');
+    const total = list.reduce((s, e) => s + entryMs(e), 0);
+    return `<details class="grp-det">
+      <summary class="entry grp-sum">
+        <span class="when">${fmtTime(first)}–${fmtTime(last)}</span>
+        <div class="what"><div class="t">${esc(entryTitle(list[0]))} <span class="tag pill small">${list.length} sessões</span></div><div class="p">${esc(entrySub(list[0]) || 'Sem projeto')}</div></div>
+        <div class="row" style="justify-content:flex-end;gap:10px"><span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${tags}</span><span class="dur">${fmtDur(total)}</span><span class="faint grp-caret">▾</span></div>
+      </summary>
+      <div class="grp-kids">${list.map(entryRowHTML).join('')}</div>
+    </details>`;
+  }).join('');
+}
