@@ -390,7 +390,8 @@ function bankSummaryHTML(entity) {
   const listPool = entity === 'pj' && BANK.showT !== false ? poolOut.concat((BANK.all.pj || []).filter(t => t.flow === 'out' && t.scope === 'interna')) : poolOut;
   const outsAll = listPool.filter(passes).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
   const showTBtn = entity === 'pj' ? `<button class="btn sm ghost" data-act="bank-showt">${BANK.showT !== false ? 'Ocultar' : 'Mostrar'} transferências para PF</button>` : '';
-  const bar = `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">${BANK.cmp ? '<button class="btn sm ghost" data-act="bank-cmp">Voltar ao mês</button>' : ''}<input type="month" value="${ym}" data-on="bank-month" style="font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">${showTBtn}</div>`;
+  const barInner = `${BANK.cmp ? '<button class="btn sm ghost" data-act="bank-cmp">Voltar ao mês</button>' : ''}${showTBtn}`;
+  const bar = barInner ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">${barInner}</div>` : '';
   const closeRow = `<div class="row" style="gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;flex-wrap:wrap">${closed ? `<span class="tag tg" style="background:var(--surface-2)">Mês fechado em ${fmtDate(closed.closed_at)}</span><button class="btn sm ghost" data-act="bank-reopen" data-entity="${entity}" data-ym="${ym}">Reabrir</button>` : `<button class="btn sm ghost" data-act="bank-close" data-entity="${entity}" data-ym="${ym}">Fechar mês</button>`}</div>`;
   const rowHTML = (t) => {
     const k = t.counterpart || '—';
@@ -409,7 +410,7 @@ function bankSummaryHTML(entity) {
       <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
       <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">${catTag(cat)}${autoCat[k] === cat ? ' <span class="faint small">sugerido</span>' : ''}</button>`
         : sug ? `<span class="bank-cat-btn" style="cursor:default">${catTag(sug)} <span class="faint small">sugerido</span></span>`
-        : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">Definir categoria</button>`}</span>
+        : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">Definir categoria</button>`}${t.tag ? ` <button class="tag tg" data-act="bank-tag" data-id="${t.id}" title="Marcação de pessoa. Clique para trocar" style="background:var(--surface-2);cursor:pointer">${esc(t.tag)}</button>` : ` <button class="btn sm ghost" data-act="bank-tag" data-id="${t.id}" title="Marcar pessoa">+ pessoa</button>`}</span>
       <span class="small muted bm">${bankRowExtra(t)}</span></div>`;
   };
   BANK.openM = BANK.openM || {};
@@ -453,7 +454,7 @@ function bankSummaryHTML(entity) {
   const fOn = bankFilterOn() || BANK.fOpen;
   if (BANK.cmp) return `${bar}${compareHTML(entity)}`;
   const nSel = Object.keys(BANK.sel || {}).length;
-  const selBar = nSel ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-2);border-radius:10px"><b class="small">${nSel} selecionado(s)</b><button class="btn sm primary" data-act="bank-bulk-cat">Mudar categoria</button><button class="btn sm ghost" data-act="bank-bulk-clear">Limpar seleção</button></div>` : '';
+  const selBar = nSel ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-2);border-radius:10px"><b class="small">${nSel} selecionado(s)</b><button class="btn sm primary" data-act="bank-bulk-cat">Mudar categoria</button><button class="btn sm" data-act="bank-bulk-tag">Marcar pessoa</button><button class="btn sm ghost" data-act="bank-bulk-clear">Limpar seleção</button></div>` : '';
   return `${bar}${selBar}<div class="kpis">
     <div class="kpi"><span class="k">${dot(GREEN)}Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas, sem reembolsos</span></div>
     <div class="kpi"><span class="k">${dot(RED)}Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">${entity === 'pf' ? 'PF + PJ, sem terapias' : 'só PJ, sem terapias'}</span></div>
@@ -496,7 +497,8 @@ const CAT_RULES = [
   [/farma\b|medicament|drogasil|extra farma|dose certa|rd saude|tradicao medic/i, 'Remédios'],
   [/\bbar\b|boteco|cervej|chopp|cinema|cinemark|ingresso|teatro|show|sympla|steam|playstation|playst|xbox|livrar|kaizen|barraca|esperanto|choribar|rosa e silva/i, 'Lazer'],
   [/posto|gasolin|combust|ipiranga|shell|petrobras|petrocal|petroservice|multipostos|auto posto|estacion|uber(?! ?eats)|99app|\b99\b|cabify|pedagio|ped[aá]gio|estacionamento|park\b|parking|detran|cloudpark|pop \d|nutag/i, 'Transporte'],
-  [/farm[aá]c|drogaria|droga|raia|pacheco|laborat|consult[oó]rio|cl[ií]nica|hospital|academ|smart fit|dentist|fitness|barbear|cabeleireir|beleza|perfum|assistencia dos funcion|caixa de assist|kali/i, 'Saúde'],
+  [/barbear|cabeleireir|beleza|perfum|cosm[eé]t|est[eé]tica|sal[aã]o|manicure|depila|kali/i, 'Estética'],
+  [/farm[aá]c|drogaria|droga|raia|pacheco|laborat|consult[oó]rio|cl[ií]nica|hospital|academ|smart fit|dentist|fitness|assistencia dos funcion|caixa de assist/i, 'Saúde'],
   [/inditex|centauro|osklen|\bosk\b/i, 'Roupas'],
   [/booking|airasia|12go|2c2p|hotel|flight|cars on/i, 'Viagem'],
   [/contador|contabil|cart[oó]rio|junta comercial|receita federal|receita|\bdas\b|inss|darf|simples nacional|cnpj|registro|taxa|pjbank/i, 'Contabilidade'],
@@ -730,6 +732,42 @@ CHANGES['bank-sel'] = (el) => {
   render();
 };
 ACTIONS['bank-bulk-clear'] = () => { BANK.sel = {}; render(); };
+// Marcação de pessoa (Rafa, Alice): independe da categoria; fica depois dela.
+const BANK_TAGS = ['Rafa', 'Alice'];
+function bankTagPick(current) {
+  return new Promise(res => {
+    let done = false;
+    const opts = [...BANK_TAGS, '__none'];
+    const l = openLayer({
+      html: `<div class="dh"><h2>Marcar pessoa</h2></div><div class="db"><p style="margin:0">Marcação extra, pode ficar em qualquer categoria.</p>
+        <div class="row" style="flex-wrap:wrap;gap:6px">${opts.map(o => `<button class="btn sm${o === current ? ' primary' : ''}" data-t="${esc(o)}">${o === '__none' ? 'Sem marca' : esc(o)}</button>`).join('')}</div></div>`,
+      onClose: () => { if (!done) res(undefined); }
+    });
+    l.box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-t]'); if (!b) return;
+      done = true; res(b.dataset.t === '__none' ? null : b.dataset.t); l.close();
+    });
+  });
+}
+async function bankSetTag(ids, tag) {
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ tag, updated_at: new Date().toISOString() }).in('id', ids);
+  if (error) return toast('Erro: ' + error.message);
+  await bankLoadTxns(); render();
+}
+ACTIONS['bank-tag'] = async (el) => {
+  const t = (BANK.every || []).find(x => x.id === el.dataset.id); if (!t) return;
+  const v = await bankTagPick(t.tag || null);
+  if (v === undefined || v === t.tag) return;
+  await bankSetTag([t.id], v);
+};
+ACTIONS['bank-bulk-tag'] = async () => {
+  const ids = Object.keys(BANK.sel || {});
+  if (!ids.length) return;
+  const v = await bankTagPick(null);
+  if (v === undefined) return;   // fechou sem escolher
+  await bankSetTag(ids, v);
+  BANK.sel = {};
+};
 ACTIONS['bank-cmp'] = () => { BANK.cmp = !BANK.cmp; render(); };
 CHANGES['bank-cmpa'] = (el) => { BANK.cmpA = el.value; render(); };
 CHANGES['bank-cmpb'] = (el) => { BANK.cmpB = el.value; render(); };
