@@ -86,6 +86,10 @@ const agencyOf = (p) => { const c = clientOf(p); return c ? db.get('tempo_agenci
 function entryMs(e, at = Date.now()) {
   return (e.segments || []).reduce((sum, s) => sum + ((s.e ? new Date(s.e) : at) - new Date(s.s)), 0);
 }
+/* Pausas são as lacunas entre segmentos. Bruto = do início ao fim; pausas = soma das lacunas; líquido = entryMs. */
+function entryGaps(e) { const segs = e.segments || []; const out = []; for (let i = 0; i < segs.length - 1; i++) { const a = segs[i].e, b = segs[i + 1].s; if (a && b && new Date(b) > new Date(a)) out.push({ s: a, e: b, why: segs[i].why || null }); } return out; }
+function entryPauseMs(e) { return entryGaps(e).reduce((t, g) => t + (new Date(g.e) - new Date(g.s)), 0); }
+function entryBrutoMs(e, at = Date.now()) { const segs = e.segments || []; if (!segs.length) return 0; const last = segs[segs.length - 1]; return (last.e ? new Date(last.e) : at) - new Date(segs[0].s); }
 const entryStart = (e) => e.segments?.[0]?.s;
 const entryEnd = (e) => { const l = e.segments?.[e.segments.length - 1]; return l ? l.e : null; };
 const activeEntry = () => db.all('tempo_time_entries').find(e => e.state === 'running' || e.state === 'paused') || null;

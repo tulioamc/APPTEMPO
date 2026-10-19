@@ -716,3 +716,6 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .bank-row .bn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bank-row .bm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bank-cat-btn { background: none; border: 0; padding: 0; cursor: pointer; }
+
+/* pausas: cinza com listras, na faixa do dia */
+.day-strip .seg-b.pausa { background: repeating-linear-gradient(45deg, var(--tb) 0 4px, transparent 4px 7px); opacity: .7; }

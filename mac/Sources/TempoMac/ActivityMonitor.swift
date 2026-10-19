@@ -1,0 +1,104 @@
+import AppKit
+import ApplicationServices
+
+/// Contexto de uso: app em primeiro plano, e (se permitido) pasta e nome do arquivo da janela ativa.
+struct Context: Equatable {
+    let app: String
+    let bundle: String
+    let doc: String?
+    let folder: String?
+}
+
+/// Observa o app em primeiro plano e a ociosidade. Não grava nada sozinho: entrega segmentos para o site,
+/// que transforma em sugestão. Segmentos com menos de 2 minutos são descartados.
+final class ActivityMonitor {
+    var onSegment: ((Date, Date, Context) -> Void)?
+    var onIdle: ((Date, Date) -> Void)?
+
+    private let defaults = UserDefaults.standard
+    private var current: Context?
+    private var segStart = Date()
+    private var idleStart: Date?
+    private let idleLimit: TimeInterval = 60
+    private let minSegment: TimeInterval = 120
+    private let selfBundle = Bundle.main.bundleIdentifier ?? "TempoMac"
+
+    private var captureFileNames: Bool { defaults.bool(forKey: "captureFileNames") }
+    private var captureFolders: Bool { defaults.object(forKey: "captureFolders") as? Bool ?? true }
+    private var excluded: Set<String> { Set(defaults.stringArray(forKey: "excludedApps") ?? []) }
+
+    func start() {
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.tick()
+        }
+        Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.tick() }
+        tick()
+    }
+
+    func tick() {
+        let now = Date()
+        let idle = idleSeconds()
+        if idle >= idleLimit {
+            if idleStart == nil {
+                let start = now.addingTimeInterval(-idle)
+                idleStart = start
+                closeSegment(at: start)
+            }
+            return
+        }
+        if let start = idleStart {
+            onIdle?(start, now)
+            idleStart = nil
+            current = nil
+            segStart = now
+        }
+        let ctx = currentContext()
+        if ctx != current {
+            closeSegment(at: now)
+            current = ctx
+            segStart = now
+        }
+    }
+
+    private func closeSegment(at end: Date) {
+        guard let ctx = current else { return }
+        let long = end.timeIntervalSince(segStart) >= minSegment
+        if long && ctx.bundle != selfBundle && !excluded.contains(ctx.bundle) {
+            onSegment?(segStart, end, ctx)
+        }
+        current = nil
+    }
+
+    /// Segundos desde o último mouse ou teclado (não precisa de permissão especial).
+    private func idleSeconds() -> TimeInterval {
+        CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+    }
+
+    private func currentContext() -> Context? {
+        guard let app = NSWorkspace.shared.frontmostApplication, let name = app.localizedName else { return nil }
+        let bundle = app.bundleIdentifier ?? name
+        var doc: String?
+        var folder: String?
+        // Pasta e nome do arquivo exigem permissão de Acessibilidade. Sem ela, só o nome do app é registrado.
+        if AXIsProcessTrusted() {
+            let axApp = AXUIElementCreateApplication(app.processIdentifier)
+            var winRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &winRef) == .success, let winRef = winRef {
+                let win = winRef as! AXUIElement
+                var docRef: CFTypeRef?
+                if AXUIElementCopyAttributeValue(win, kAXDocumentAttribute as CFString, &docRef) == .success,
+                   let s = docRef as? String, let url = URL(string: s), url.isFileURL {
+                    if captureFolders { folder = (url.path as NSString).deletingLastPathComponent }
+                    if captureFileNames { doc = url.lastPathComponent }
+                }
+                if doc == nil && captureFileNames {
+                    var titleRef: CFTypeRef?
+                    if AXUIElementCopyAttributeValue(win, kAXTitleAttribute as CFString, &titleRef) == .success {
+                        doc = titleRef as? String
+                    }
+                }
+            }
+        }
+        return Context(app: name, bundle: bundle, doc: doc, folder: folder)
+    }
+}

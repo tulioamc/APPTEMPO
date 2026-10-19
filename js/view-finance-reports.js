@@ -906,8 +906,6 @@ CHANGES['bank-sel'] = (el) => {
 };
 ACTIONS['bank-bulk-clear'] = () => { BANK.sel = {}; render(); };
 ACTIONS['bank-cmp'] = () => { BANK.cmp = !BANK.cmp; render(); };
-CHANGES['bank-cmpa'] = (el) => { BANK.cmpA = el.value; render(); };
-CHANGES['bank-cmpb'] = (el) => { BANK.cmpB = el.value; render(); };
 CHANGES['bank-rmonth'] = (el) => { BANK.month = el.value; render(); };
 // Soma de um mês: entradas, saídas (sem terapias), sobra e saídas por categoria.
 function monthSnap(entity, ym) {
@@ -917,7 +915,7 @@ function monthSnap(entity, ym) {
   const cm = {};
   (BANK.every || []).forEach(x => { if (x.category) cm[(x.counterpart || '—') + '|' + (x.flow || '')] = x.category; });
   (BANK.all[entity] || []).forEach(t => {
-    if (t.scope === 'interna' || !t.posted_on || t.posted_on.slice(0, 7) !== ym) return;
+    if (t.scope === 'interna' || t.scope === 'cartao' || !t.posted_on || t.posted_on.slice(0, 7) !== ym) return;   // pagamento de fatura não é gasto: as compras do cartão já entram
     const v = Math.abs(Number(t.amount)), c = cm[(t.counterpart || '—') + '|' + (t.flow || '')] || t.category || 'Sem categoria';
     if (t.flow === 'out' && (t.reimb_row_id || c === 'Terapia')) return;   // terapias ficam fora da comparação
     if (!withRe && isReembCat(c)) return;
@@ -930,57 +928,53 @@ function monthSnap(entity, ym) {
   });
   return { ent, sai, sobra: ent - sai, cats };
 }
-// Comparador: escolhe dois meses e mostra lado a lado (números, barras e tabela).
+const CMP_COLS = ['#2563eb', '#f59e0b', '#22a06b', '#d64545', '#8b5cf6', '#0ea5e9'];
+const cmpMonthsOf = () => { const cur = BANK.month || ymd(new Date()).slice(0, 7); return (BANK.cmpList && BANK.cmpList.length) ? BANK.cmpList : [cur, bankPrevYm(cur)]; };
+CHANGES['bank-cmp-add'] = (el) => { const v = el.value; if (!v) return; const l = cmpMonthsOf(); if (!l.includes(v) && l.length < CMP_COLS.length) BANK.cmpList = [...l, v]; render(); };
+ACTIONS['bank-cmp-rm'] = (el) => { const v = el.dataset.k; const l = cmpMonthsOf(); if (l.length > 1) BANK.cmpList = l.filter(m => m !== v); render(); };
+// Comparador: quantos meses quiser (até 6), lado a lado, com números, barras e tabela.
 function compareHTML(entity) {
-  const A_C = '#2563eb', B_C = '#f59e0b', GREEN = '#22a06b', RED = '#d64545';
+  const GREEN = '#22a06b', RED = '#d64545';
   const months = [...new Set((BANK.all[entity] || []).filter(t => t.scope !== 'interna' && t.posted_on).map(t => t.posted_on.slice(0, 7)))].sort().reverse();
-  const cur = BANK.month || ymd(new Date()).slice(0, 7);
-  const A = BANK.cmpA || cur, B = BANK.cmpB || bankPrevYm(A);
-  const all = [...new Set([...months, A, B])].sort().reverse();
-  const sa = monthSnap(entity, A), sb = monthSnap(entity, B);
-  const opts = (sel) => all.map(m => `<option value="${m}" ${m === sel ? 'selected' : ''}>${rbLabel(m)}</option>`).join('');
+  const L = cmpMonthsOf();
+  const col = (i) => CMP_COLS[i % CMP_COLS.length];
+  const snaps = L.map(m => monthSnap(entity, m));
+  const two = L.length === 2;
+  const addOpts = `<option value="">+ mês</option>` + months.filter(m => !L.includes(m)).map(m => `<option value="${m}">${rbLabel(m)}</option>`).join('');
   const diff = (a, b, inverse) => {
     const d = a - b, pct = b ? Math.round(d / Math.abs(b) * 100) : null;
     const good = inverse ? d <= 0 : d >= 0;
     return `<span style="color:${d === 0 ? 'var(--fg-2)' : good ? GREEN : RED};font-weight:600">${d === 0 ? '—' : (d > 0 ? '▲ ' : '▼ ') + fmtMoney0(Math.abs(d))}${pct !== null && d !== 0 ? ` <span class="small">(${pct > 0 ? '+' : ''}${pct}%)</span>` : ''}</span>`;
   };
-  const kpi = (label, a, b, inverse) => `<div class="kpi" style="flex:1;min-width:200px">
+  const kpi = (label, key, inverse) => `<div class="kpi" style="flex:1;min-width:200px">
       <span class="k">${label}</span>
-      <span class="v" style="color:${A_C}">${fmtMoney0(a)}</span>
-      <span class="s"><span style="color:${B_C}">● ${fmtMoney0(b)}</span> · ${diff(a, b, inverse)}</span></div>`;
-  const keys = [...new Set([...Object.keys(sa.cats), ...Object.keys(sb.cats)])]
-    .filter(k => Math.abs(sa.cats[k] || 0) + Math.abs(sb.cats[k] || 0) > 0)
-    .sort((x, y) => Math.max(Math.abs(sb.cats[y] || 0), Math.abs(sa.cats[y] || 0)) - Math.max(Math.abs(sb.cats[x] || 0), Math.abs(sa.cats[x] || 0)));
-  const mx = Math.max(1, ...keys.map(k => Math.max(Math.abs(sa.cats[k] || 0), Math.abs(sb.cats[k] || 0))));
+      <div style="display:flex;flex-wrap:wrap;gap:2px 14px">${L.map((m, i) => `<span class="v" style="color:${col(i)};${L.length > 2 ? 'font-size:1.05em' : ''}">${fmtMoney0(snaps[i][key])}</span>`).join('')}</div>
+      ${two ? `<span class="s">${diff(snaps[0][key], snaps[1][key], inverse)}</span>` : ''}</div>`;
+  const keys = [...new Set(snaps.flatMap(s => Object.keys(s.cats)))]
+    .filter(k => snaps.some(s => Math.abs(s.cats[k] || 0) > 0))
+    .sort((x, y) => Math.max(...snaps.map(s => Math.abs(s.cats[y] || 0))) - Math.max(...snaps.map(s => Math.abs(s.cats[x] || 0))));
+  const mx = Math.max(1, ...keys.flatMap(k => snaps.map(s => Math.abs(s.cats[k] || 0))));
   const bar = (v, c) => `<div style="height:9px;border-radius:5px;background:${c};width:${Math.max(0, Math.abs(v) / mx * 100)}%;min-width:${v ? 2 : 0}px"></div>`;
-  const rows = keys.map(k => {
-    const a = sa.cats[k] || 0, b = sb.cats[k] || 0;
-    return `<div style="display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)">
+  const rows = keys.map(k => `<div style="display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)">
       <span style="font-size:.92em">${esc(k)}</span>
-      <div style="display:grid;gap:4px">
-        <div class="row" style="gap:8px;align-items:center">${bar(a, A_C)}<span class="mono small" style="white-space:nowrap;color:${A_C}">${fmtMoney0(a)}</span></div>
-        <div class="row" style="gap:8px;align-items:center">${bar(b, B_C)}<span class="mono small" style="white-space:nowrap;color:${B_C}">${fmtMoney0(b)}</span></div>
-      </div></div>`;
-  }).join('');
-  const tableRows = keys.map(k => {
-    const a = sa.cats[k] || 0, b = sb.cats[k] || 0;
-    return `<tr><td>${esc(k)}</td><td class="num" style="color:${A_C}">${fmtMoney0(a)}</td><td class="num" style="color:${B_C}">${fmtMoney0(b)}</td><td class="num">${diff(a, b, true)}</td></tr>`;
-  }).join('');
-  return `<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>Comparar dois meses</h3><span class="faint small">${BANK.reemb === true ? 'com reembolsos' : 'sem reembolsos'}</span></div>
+      <div style="display:grid;gap:4px">${L.map((m, i) => { const v = snaps[i].cats[k] || 0; return `<div class="row" style="gap:8px;align-items:center">${bar(v, col(i))}<span class="mono small" style="white-space:nowrap;color:${col(i)}">${fmtMoney0(v)}</span></div>`; }).join('')}</div>
+    </div>`).join('');
+  const tableRows = keys.map(k => `<tr><td>${esc(k)}</td>${L.map((m, i) => `<td class="num" style="color:${col(i)}">${fmtMoney0(snaps[i].cats[k] || 0)}</td>`).join('')}${two ? `<td class="num">${diff(snaps[0].cats[k] || 0, snaps[1].cats[k] || 0, true)}</td>` : ''}</tr>`).join('');
+  const chips = L.map((m, i) => `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 4px 3px 10px;border:1px solid var(--line,#d8dbe0);border-radius:999px;font-size:.9em"><span style="width:9px;height:9px;border-radius:50%;background:${col(i)}"></span>${rbLabel(m)}${L.length > 1 ? `<button data-act="bank-cmp-rm" data-k="${m}" title="Remover" style="border:0;background:none;cursor:pointer;color:var(--fg-3);font-size:1.15em;line-height:1;padding:0 4px">×</button>` : ''}</span>`).join('');
+  return `<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>Comparar meses</h3><span class="faint small">${BANK.reemb === true ? 'com reembolsos' : 'sem reembolsos'}</span></div>
     <div class="panel-b">
-      <div class="row" style="gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
-        <label class="row small" style="gap:6px;align-items:center"><span style="width:10px;height:10px;border-radius:50%;background:${A_C}"></span>Mês 1 <select data-on="bank-cmpa" class="input" style="width:auto;min-width:170px">${opts(A)}</select></label>
-        <span class="faint">vs</span>
-        <label class="row small" style="gap:6px;align-items:center"><span style="width:10px;height:10px;border-radius:50%;background:${B_C}"></span>Mês 2 <select data-on="bank-cmpb" class="input" style="width:auto;min-width:170px">${opts(B)}</select></label>
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+        ${chips}
+        ${L.length < CMP_COLS.length ? `<select data-on="bank-cmp-add" class="input" style="width:auto;padding:3px 8px;font-size:.9em">${addOpts}</select>` : ''}
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
-        ${kpi('Entradas', sa.ent, sb.ent, false)}
-        ${kpi('Saídas', sa.sai, sb.sai, true)}
-        ${kpi('Sobra', sa.sobra, sb.sobra, false)}
+        ${kpi('Entradas', 'ent', false)}
+        ${kpi('Saídas', 'sai', true)}
+        ${kpi('Sobra', 'sobra', false)}
       </div>
-      <div class="row small" style="gap:16px;margin-bottom:6px"><b>Saídas por categoria</b><span style="color:${A_C}">● ${rbLabel(A)}</span><span style="color:${B_C}">● ${rbLabel(B)}</span></div>
+      <div class="row small" style="gap:16px;margin-bottom:6px;flex-wrap:wrap"><b>Saídas por categoria</b>${L.map((m, i) => `<span style="color:${col(i)}">● ${rbLabel(m)}</span>`).join('')}</div>
       ${keys.length ? rows : '<div class="empty small">Nenhuma saída nesses meses.</div>'}
-      <div style="margin-top:16px;overflow:auto"><table class="grid compact"><thead><tr><th>Categoria</th><th class="num" style="color:${A_C}">${rbLabel(A)}</th><th class="num" style="color:${B_C}">${rbLabel(B)}</th><th class="num">Diferença</th></tr></thead><tbody>${tableRows}</tbody></table></div>
+      <div style="margin-top:16px;overflow:auto"><table class="grid compact"><thead><tr><th>Categoria</th>${L.map((m, i) => `<th class="num" style="color:${col(i)}">${rbLabel(m)}</th>`).join('')}${two ? '<th class="num">Diferença</th>' : ''}</tr></thead><tbody>${tableRows}</tbody></table></div>
       <details style="margin-top:16px"><summary class="small" style="cursor:pointer"><b>Todos os meses</b></summary><div style="margin-top:10px">${trendHTML(entity)}</div></details>
     </div></div>`;
 }

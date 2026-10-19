@@ -54,6 +54,13 @@ function sidebarHTML() {
   </div>`;
 }
 
+function topTimerHTML() {
+  const a = activeEntry();
+  if (!a) return `<button class="btn icon" data-act="ts-start" aria-label="Iniciar registro" title="Iniciar registro">${icon('play')}</button>`;
+  return a.state === 'running'
+    ? `<button class="btn icon" data-act="ts-pause" aria-label="Pausar" title="Pausar">${icon('pause')}</button>`
+    : `<button class="btn icon" data-act="ts-resume" aria-label="Retomar" title="Retomar">${icon('play')}</button>`;
+}
 function mobileTimerHTML() {
   const a = activeEntry();
   if (!a) return `<div class="grow"><div class="t">00:00:00</div><div class="p">Nenhuma sessão ativa</div></div><button class="btn primary" data-act="ts-start">${icon('play')} Iniciar</button>`;
@@ -85,7 +92,7 @@ function render() {
   $('.sidebar').innerHTML = sidebarHTML();
   $('.page-title').textContent = v.title;
   $('.crumb').textContent = NAV.find(n => n.id === S.route) ? (['registry', 'import', 'prefs'].includes(S.route) ? 'Cadastros' : 'Workspace') : '';
-  $('.top-actions').innerHTML = v.actions || '';
+  $('.top-actions').innerHTML = (v.actions || '') + topTimerHTML();
   const demo = db.setting('demo', false);
   const banner = demo ? `<div class="banner info">${icon('db', 'ico')}<span class="grow"><b>Dados fictícios</b> para testar as telas. Nada é salvo: ao recarregar, o app volta a este exemplo.</span><button class="btn sm" data-act="demo-clear">Começar vazio</button></div>` : '';
   $('.content').innerHTML = banner + v.html;
@@ -137,7 +144,62 @@ function heartbeat() {
 }
 setInterval(heartbeat, 20000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') heartbeat(); });
-window.TempoBridge = { reportIdle: (fromISO, toISO, app) => suggestPause(new Date(fromISO).getTime(), new Date(toISO).getTime(), 'mac', app), version: 1 };
+window.TempoBridge = { reportIdle: (fromISO, toISO, app) => suggestPause(new Date(fromISO).getTime(), new Date(toISO).getTime(), 'mac', app), reportActivity: (seg) => suggestActivity(seg), version: 2 };
+
+/* Atividade em primeiro plano vinda do app de Mac: { from, to, app, doc?, folder? }.
+   Vira sugestão só se houver sessão rodando e a atividade tiver ao menos 2 minutos. Nada é gravado sem Aceitar. */
+const pathNorm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+/* Sugere o cliente pelo caminho da pasta: procura nomes de cliente e de projeto nos pedaços do caminho,
+   do mais profundo para o mais raso. Só sugere; nunca grava sozinho. */
+function clientFromPath(folder) {
+  const parts = String(folder || '').split('/').map(pathNorm).filter(p => p.length >= 3).reverse();
+  const clients = db.all('tempo_clients'), projects = db.all('tempo_projects');
+  for (const part of parts) {
+    const c = clients.find(x => pathNorm(x.name) === part) || projects.map(p => ({ p, c: clients.find(x => x.id === p.client_id) })).find(o => o.c && pathNorm(o.p.name) === part)?.c;
+    if (c) return c;
+  }
+  for (const part of parts) {
+    const c = clients.find(x => { const n = pathNorm(x.name); return n.length >= 4 && part.includes(n); });
+    if (c) return c;
+  }
+  return null;
+}
+const FOLDER_STOP = new Set(['projetos', 'projeto', 'arquivos', 'arquivo', 'desktop', 'documentos', 'documents', 'downloads', 'pasta', 'library', 'volumes', 'icloud', 'drive', 'mobile documents', 'com apple cloud docs', 'final', 'finais', 'sources', 'assets', 'trabalho']);
+/* Pedaços da pasta que servem de chave: sem /Users/<nome>, do mais fundo para o mais raso. */
+function folderParts(folder) {
+  const n = String(folder || '').split('/').map(pathNorm);
+  const cut = n.findIndex(p => p === 'users' || p === 'home');
+  return n.slice(cut >= 0 ? cut + 2 : 0).filter(p => p.length >= 3 && !FOLDER_STOP.has(p)).reverse();
+}
+function folderRule(folder) {
+  const rules = db.setting('folderRules', []) || [];
+  for (const part of folderParts(folder)) { const r = rules.find(x => x.key === part); if (r) return r; }
+  return null;
+}
+/* Aprende: ao aceitar uma sugestão ligada a um projeto, a pasta passa a apontar para ele. Última confirmação vence. */
+function learnFolderRule(folder, projectId, clientId) {
+  const parts = folderParts(folder); if (!parts.length || !projectId) return;
+  const rules = (db.setting('folderRules', []) || []).filter(r => !parts.includes(r.key));
+  parts.forEach(k => rules.push({ key: k, project_id: projectId, client_id: clientId || null }));
+  db.setSetting('folderRules', rules);
+}
+function suggestActivity(seg) {
+  const a = activeEntry(); if (!a || !seg || !seg.app) return;
+  const fromMs = new Date(seg.from).getTime(), toMs = new Date(seg.to).getTime();
+  if (!(toMs > fromMs) || toMs - fromMs < 120000) return;
+  const pauseApps = (db.setting('pauseApps', []) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
+  if (pauseApps.includes(String(seg.app).toLowerCase()) && toMs - fromMs >= idleLimit() * 60000) suggestPause(fromMs, toMs, 'app', seg.app);
+  const rule = folderRule(seg.folder);
+  const ruleProject = rule ? db.get('tempo_projects', rule.project_id) : null;
+  const client = rule?.client_id ? db.get('tempo_clients', rule.client_id) : (seg.folder ? clientFromPath(seg.folder) : null);
+  const projSug = ruleProject && ruleProject.id !== a.project_id ? ruleProject : null;
+  const key = `act:${a.id}:${seg.from}:${seg.app}`;
+  const where = [seg.doc, seg.folder].filter(Boolean).join(' · ');
+  const sug = [client ? `Cliente sugerido: ${client.name}` : '', projSug ? `Projeto sugerido: ${projSug.name}` : ''].filter(Boolean).join(' · ');
+  addNotice({ kind: 'activity', key, title: `Uso de ${seg.app}: ${fmtDur(toMs - fromMs)}`, body: `${fmtTime(seg.from)}–${fmtTime(seg.to)}${where ? ' · ' + where : ''}${sug ? ' · ' + sug : ''}`, entity: 'entry', entity_id: a.id, project_id: a.project_id, data: { entry_id: a.id, client: client ? client.name : null, project_id: projSug ? projSug.id : null, client_id: client ? client.id : null, ...seg } });
+  db.emit();
+}
+CHANGES['pause-apps'] = (el) => { db.setSetting('pauseApps', el.value.split(',').map(x => x.trim()).filter(Boolean)); };
 
 let idleDetector = null;
 async function startIdleDetection(ask) {
@@ -166,7 +228,7 @@ function applyPause(a, n, mode) {
   }
   const out = []; segs.forEach(s => { const S0 = new Date(s.s), E0 = s.e ? new Date(s.e) : null; const F = new Date(f), T = new Date(t);
     if (E0 && E0 <= F || S0 >= T) { out.push(s); return; }
-    if (S0 < F) out.push({ s: s.s, e: f });
+    if (S0 < F) out.push({ s: s.s, e: f, why: sug.source });
     if (!E0 || E0 > T) out.push({ s: t, e: s.e });
   });
   db.update('tempo_time_entries', a.id, { segments: out, edits: auditEdit(a, before, `Pausa de ${fmtDur(new Date(t) - new Date(f))} inserida (${fmtTime(f)}–${fmtTime(t)})`) }, true);
@@ -177,7 +239,7 @@ function pauseSuggestionsHTML(a) {
   return `<div class="sugs"><div class="row between"><b class="small">${icon('alert', 'ico')} ${list.length} pausa(s) sugerida(s)</b>${list.length > 1 ? `<button class="btn sm" data-act="sug-all" data-id="${a.id}">Aceitar todas</button>` : ''}</div>
     ${list.map(n => `<div class="sug"><div class="grow small">${pauseText(n)}</div>${noticeButtons(n)}</div>`).join('')}</div>`;
 }
-const PAUSE_SRC = { suspenso: 'app ou computador suspenso', ocioso: 'sem mouse/teclado', mac: 'app de Mac' };
+const PAUSE_SRC = { suspenso: 'modo espera / computador suspenso', ocioso: 'sem mouse/teclado', mac: 'app de Mac', app: 'app de pausa' };
 function pauseText(n) { const x = n.data; return `Você ficou parado <b>${fmtDur(new Date(x.to) - new Date(x.from))}</b> (${fmtTime(x.from)}–${fmtTime(x.to)}) e voltou às <b>${fmtTime(x.to)}</b>.<span class="faint"> ${PAUSE_SRC[x.source] || ''}${x.app ? ' · ' + esc(x.app) : ''}</span>`; }
 ACTIONS['sug-all'] = (el) => { pausesOf(el.dataset.id).forEach(n => applyPause(db.get('tempo_time_entries', el.dataset.id), n)); db.emit(); toast('Pausas inseridas'); };
 

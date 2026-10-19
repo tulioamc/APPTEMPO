@@ -17,6 +17,7 @@ VIEWS.timesheet = () => {
   const a = activeEntry();
   const day = parseYmd(S.tsDay); const entries = entriesOn(day);
   const dayMs = entries.reduce((s, e) => s + entryMs(e), 0);
+  const brutoDay = entries.reduce((s, e) => s + entryBrutoMs(e), 0);
   const ws = new Date(day); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7));
   const week = [...Array(7)].map((_, i) => { const d = new Date(ws); d.setDate(d.getDate() + i); return { d, ms: entriesOn(d).reduce((s, e) => s + entryMs(e), 0) }; });
   const weekMs = week.reduce((s, x) => s + x.ms, 0); const maxW = Math.max(...week.map(x => x.ms), 3600000);
@@ -54,7 +55,7 @@ VIEWS.timesheet = () => {
   <div class="ts-hero">
     ${timer}
     <div class="panel">
-      <div class="panel-h"><h3>${isToday(day) ? 'Hoje' : longDate(day)}</h3><span class="grow"></span><span class="mono" style="font-weight:600;font-size:1.1em" data-tick-day="${S.tsDay}">${fmtDur(dayMs)}</span></div>
+      <div class="panel-h"><h3>${isToday(day) ? 'Hoje' : longDate(day)}</h3><span class="grow"></span><span class="small muted" style="margin-right:10px">bruto ${fmtDur(brutoDay)} · pausas ${fmtDur(Math.max(0, brutoDay - dayMs))}</span><span class="mono" style="font-weight:600;font-size:1.1em" data-tick-day="${S.tsDay}">${fmtDur(dayMs)}</span></div>
       <div class="panel-b stack">
         <div>${strip}</div>
         ${typeRows.length ? `<div class="bars">${typeRows.map(([k, ms]) => { const w = db.get('tempo_work_types', k); return `<div class="bar-row"><span class="lab row" style="gap:6px"><span class="cdot fill" style="--tb:${hexOf(w?.color || 'gray')}"></span>${esc(w?.name || 'Sem tipo')}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf(w?.color || 'gray')};width:${(ms / dayMs * 100).toFixed(1)}%"></div></div><span class="val">${fmtDur(ms)}</span></div>`; }).join('')}</div>` : '<div class="muted small">Nenhum registro neste dia.</div>'}
@@ -95,10 +96,16 @@ function dayStrip(entries, day) {
   let bars = '';
   entries.forEach(e => {
     const w = db.get('tempo_work_types', e.work_type_id);
+    const path = entryPath(e); const col = path.project?.color || path.client?.color || w?.color;
     e.segments.forEach((s, i) => {
       const st = Math.max(0, new Date(s.s) - base), en = Math.min(span, (s.e ? new Date(s.e) : Date.now()) - base);
       if (en <= 0 || st >= span) return;
-      bars += `<span class="seg-b fill" ${!s.e ? `data-strip-live="${base.getTime()}"` : ''} data-st="${st}" style="--tb:${hexOf(w?.color)};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" title="${esc(entryTitle(e))} · ${fmtTime(s.s)}–${s.e ? fmtTime(s.e) : 'agora'}"></span>`;
+      bars += `<span class="seg-b fill" ${!s.e ? `data-strip-live="${base.getTime()}"` : ''} data-st="${st}" style="--tb:${hexOf(col)};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" title="${esc(entryTitle(e))} · ${fmtTime(s.s)}–${s.e ? fmtTime(s.e) : 'agora'}"></span>`;
+    });
+    entryGaps(e).forEach(g => {
+      const st = Math.max(0, new Date(g.s) - base), en = Math.min(span, new Date(g.e) - base);
+      if (en <= 0 || st >= span) return;
+      bars += `<span class="seg-b fill pausa" style="--tb:#B8BDC6;left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" title="Pausa · ${fmtTime(g.s)}–${fmtTime(g.e)}${g.why ? ' · ' + esc(g.why) : ''}"></span>`;
     });
   });
   return `<div class="day-strip" aria-label="Linha do tempo do dia">${bars}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;

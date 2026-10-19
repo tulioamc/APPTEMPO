@@ -34,12 +34,18 @@ function decideNotice(n, status, decision, extra) {
 const noticeButtons = (n) => {
   if (n.status !== 'pending') return '';
   if (n.kind === 'pause') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Aceitar</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
+  if (n.kind === 'activity') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Adicionar à nota</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'todo') return '';
   return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
 };
 ACTIONS['notice-accept'] = (el) => {
   const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
   if (n.kind === 'pause') { const a = db.get('tempo_time_entries', n.data.entry_id); if (a && a.state === 'running') applyPause(a, n, 'insert'); else decideNotice(n, 'ignored', 'Sessão já encerrada'); }
+  else if (n.kind === 'activity') {
+    const a = db.get('tempo_time_entries', n.data.entry_id);
+    if (a && a.state !== 'done') { const d = n.data; learnFolderRule(d.folder, a.project_id, (entryPath(a).client || {}).id); const line = `${fmtTime(d.from)}–${fmtTime(d.to)} ${d.app}${d.doc ? ' · ' + d.doc : ''}${d.folder ? ' (' + d.folder + ')' : ''}`; db.update('tempo_time_entries', a.id, { notes: (a.notes ? a.notes + '\n' : '') + line }, true); decideNotice(n, 'accepted', 'Adicionada à nota da sessão'); }
+    else decideNotice(n, 'ignored', 'Sessão já encerrada');
+  }
   else decideNotice(n, 'accepted', 'Aceito');
   db.emit();
 };
