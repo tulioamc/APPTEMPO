@@ -214,6 +214,7 @@ async function bankLoadRaw() {
   BANK.every = every;
   BANK.learned = bankBuildLearned(every);
   BANK.links = await bankFetchAll(() => cl.from('tempo_bank_reimb_links').select('*').order('reimb_row_id'));
+  BANK.plinks = await bankFetchAll(() => cl.from('tempo_bank_payment_links').select('*').order('txn_id'));
 }
 // Pagamentos às terapeutas e à dentista ligam sozinhos à linha da tabela de terapias do mesmo mês (pelo nome).
 const bankFamily = (name) => {
@@ -356,7 +357,9 @@ async function bankAutoPJ() {
   let did = false;
   for (const t of (BANK.every || [])) {
     if (t.flow !== 'in' || t.payment_id || !t.counterpart || !bankIsPJ(t)) continue;
-    if (fee.has(t.counterpart) && !t.category) {
+    // Regras de Fee: Brenda (e Pala Films, alias) só vira fee a partir de 12/01/2026; depois disso, valor < 15.000 não é fee.
+    const feeOk = !((/brenda|pala films/i.test(t.counterpart) && (t.posted_on || '') < '2026-01-12') || ((t.posted_on || '') >= '2026-01-12' && Math.abs(Number(t.amount)) < 15000));
+    if (fee.has(t.counterpart) && feeOk && !t.category) {
       const { error } = await cl.from('tempo_bank_txns').update({ category: 'Fee', updated_at: new Date().toISOString() }).eq('id', t.id);
       if (error) { toast('Erro: ' + error.message); break; }
       t.category = 'Fee'; did = true; continue;
@@ -440,6 +443,62 @@ function bankFilterHTML(catBy) {
 CHANGES['bank-f'] = (el) => { BANK.f = { ...(BANK.f || {}), [el.dataset.k]: el.value }; render(); };
 ACTIONS['bank-f-toggle'] = () => { BANK.fOpen = !BANK.fOpen; render(); };
 ACTIONS['bank-f-clear'] = () => { BANK.f = {}; render(); };
+// Relatório de entradas: período (mês, últimos 3, últimos X, ano, tudo) e agrupamento por cliente ou por mês.
+const inAddM = (ym, n) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+function bankInReportHTML(entity, ym, base, excl) {
+  const P = BANK.inP || 'mes';
+  const X = Math.max(1, Number(BANK.inX) || 6);
+  const years = [...new Set(base.filter(t => t.flow === 'in' && t.posted_on).map(t => t.posted_on.slice(0, 4)))].sort().reverse();
+  const Y = BANK.inY || ym.slice(0, 4);
+  const range = P === 'mes' ? [ym, ym] : P === 'q3' ? [inAddM(ym, -2), ym] : P === 'mx' ? [inAddM(ym, -(X - 1)), ym] : P === 'ano' ? [Y + '-01', Y + '-12'] : ['0000-00', '9999-12'];
+  const inRange = (t) => { const m = (t.posted_on || '').slice(0, 7); return m >= range[0] && m <= range[1]; };
+  const ins = base.filter(t => t.flow === 'in' && t.scope === 'externa' && !excl(t) && inRange(t));
+  const total = ins.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const byMes = {}, byCli = {}, agOf = {};
+  const pl = BANK.plinks || [];
+  const addC = (k, v, ag) => { byCli[k] = (byCli[k] || 0) + v; if (ag) agOf[k] = ag; };
+  ins.forEach(t => {
+    const a = Math.abs(Number(t.amount));
+    const m = (t.posted_on || '').slice(0, 7);
+    byMes[m] = (byMes[m] || 0) + a;
+    const links = pl.filter(l => l.txn_id === t.id);
+    const parts = links.length ? links.map(l => ({ v: Number(l.amount), pid: l.payment_id })) : (t.payment_id ? [{ v: a, pid: t.payment_id }] : []);
+    if (!parts.length) {
+      const cp = t.counterpart || '—';
+      if (!bankIsPJ(t)) addC(cp, a);
+      else addC(cp + (t.category === 'Fee' ? ' · Fee' : ' · sem vínculo'), a);
+      return;
+    }
+    parts.forEach(pt => {
+      const p = db.get('tempo_payments', pt.pid);
+      const pr = p && db.get('tempo_projects', p.project_id);
+      const c = pr && clientOf(pr);
+      if (!c) { addC((t.counterpart || '—') + ' · sem projeto', pt.v); return; }
+      const ag = c.agency_id ? db.get('tempo_agencies', c.agency_id) : null;
+      addC(c.name, pt.v, ag ? ag.name : 'Cliente direto');
+    });
+  });
+  const cliRows = Object.entries(byCli).sort((a, b) => b[1] - a[1]);
+  const mesRows = Object.entries(byMes).sort((a, b) => a[0] < b[0] ? 1 : -1);
+  const V = BANK.inV || 'cli';
+  const rows = V === 'cli' ? cliRows : mesRows;
+  const mx = Math.max(1, ...rows.map(r => r[1]));
+  const nMeses = Object.keys(byMes).length;
+  const bars = rows.length ? `<div class="bars">${rows.map(([k, v]) => `<div class="bar-row"><span class="lab">${esc(V === 'mes' ? rbLabel(k) : k)}${V === 'cli' && agOf[k] ? ` <span class="faint small">· ${esc(agOf[k])}</span>` : ''}</span><div class="bar-track"><div class="bar-fill fill" style="width:${v / mx * 100}%"></div></div><span class="mono small">${fmtMoney0(v)} <span class="faint">${total ? Math.round(v / total * 100) : 0}%</span></span></div>`).join('')}</div>` : '<div class="empty small">Nenhuma entrada no período.</div>';
+  const segP = [['mes', 'Mês'], ['q3', 'Últimos 3 meses'], ['mx', 'Últimos ' + X + ' meses'], ['ano', 'Ano'], ['tudo', 'Tudo']];
+  const yearSel = P === 'ano' ? `<select data-on="bank-iny" class="input" style="width:auto;padding:4px 8px">${years.map(y => `<option value="${y}" ${y === Y ? 'selected' : ''}>${y}</option>`).join('')}</select>` : '';
+  const xInp = P === 'mx' ? `<input type="number" min="1" value="${X}" data-on="bank-inx" class="input" style="width:70px;padding:4px 6px">` : '';
+  return `<div class="panel bank-report" style="margin-bottom:12px"><div class="panel-h"><h3>Entradas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · ${ins.length} lançamento(s)</span></div><div class="panel-b">
+    <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><div class="seg" style="flex-wrap:wrap">${segP.map(([k, l]) => `<button class="${P === k ? 'on' : ''}" data-act="bank-inp" data-v="${k}">${l}</button>`).join('')}</div>${xInp}${yearSel}</div>
+    <div class="row" style="gap:16px;align-items:baseline;flex-wrap:wrap;margin-bottom:10px"><span><span class="small muted">Total</span> <b class="mono">${fmtMoney0(total)}</b></span><span><span class="small muted">Média por mês</span> <b class="mono">${fmtMoney0(nMeses ? total / nMeses : 0)}</b></span><span><span class="small muted">Meses com entrada</span> <b class="mono">${nMeses}</b></span></div>
+    <div class="seg" style="margin-bottom:12px">${[['cli', 'Por cliente'], ['mes', 'Por mês']].map(([k, l]) => `<button class="${V === k ? 'on' : ''}" data-act="bank-inv" data-v="${k}">${l}</button>`).join('')}</div>
+    ${bars}
+  </div></div>`;
+}
+ACTIONS['bank-inp'] = (el) => { BANK.inP = el.dataset.v; render(); };
+ACTIONS['bank-inv'] = (el) => { BANK.inV = el.dataset.v; render(); };
+CHANGES['bank-inx'] = (el) => { BANK.inX = Math.max(1, Number(el.value) || 6); render(); };
+CHANGES['bank-iny'] = (el) => { BANK.inY = el.value; render(); };
 function bankSummaryHTML(entity) {
   const ym = BANK.month || ymd(new Date()).slice(0, 7);
   const key = entity + ':' + ym;
@@ -544,6 +603,7 @@ function bankSummaryHTML(entity) {
   const GREEN = '#22a06b', RED = '#d64545';
   const fOn = bankFilterOn() || BANK.fOpen;
   if (BANK.cmp) return `${bar}${compareHTML(entity)}`;
+  const inRep = bankInReportHTML(entity, ym, inBase, (t) => isExt(t) || (BANK.reemb !== true && isReimb(t)));
   const nSel = Object.keys(BANK.sel || {}).length;
   const selBar = nSel ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-2);border-radius:10px"><b class="small">${nSel} selecionado(s)</b><button class="btn sm primary" data-act="bank-bulk-cat">Mudar categoria</button><button class="btn sm ghost" data-act="bank-bulk-clear">Limpar seleção</button></div>` : '';
   return `${bar}${selBar}<div class="kpis">
@@ -554,6 +614,7 @@ function bankSummaryHTML(entity) {
     <div class="kpi"><span class="k">Sobra</span><span class="v">${fmtMoney0(ent + sai)}</span><span class="s">entradas − saídas</span></div>
     ${cartao ? `<div class="kpi"><span class="k">Fatura do cartão</span><span class="v">${fmtMoney0(cartao)}</span><span class="s">paga · conta uma vez, pelos itens</span></div>` : ''}
   </div>
+  ${inRep}
   <div class="bank-layout">
     <div class="panel bank-list"><div class="panel-h"><h3>Saídas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · por mês</span><span class="grow"></span><span class="row" style="gap:4px;align-items:center"><button class="btn sm ghost" data-act="bank-mprev" title="Mês anterior">‹</button><button class="btn sm" data-act="bank-mnow" style="min-width:150px">${rbLabel(ym)}</button><button class="btn sm ghost" data-act="bank-mnext" title="Próximo mês">›</button></span><button class="btn sm ${BANK.cmp ? 'on' : ''}" data-act="bank-cmp" style="margin-left:6px">${BANK.cmp ? 'Voltar ao mês' : 'Comparar meses'}</button><button class="btn sm ${fOn ? 'on' : ''}" data-act="bank-f-toggle" style="margin-left:6px">${icon('search')} Filtrar${bankFilterOn() ? ' · ativo' : ''}</button></div>
       ${fOn ? bankFilterHTML(catBy) : ''}
@@ -1121,14 +1182,34 @@ function bankPickDialog(t) {
   const exps = db.all('tempo_expenses').filter(e => e.month === ym && e.kind === 'out' && e.amount != null);
   const btn = (kind, id, label, val) => `<button class="btn sm" style="justify-content:space-between;width:100%" data-kind="${kind}" data-id="${id}">${esc(label)} <span class="mono small">${fmtMoney(val)}</span></button>`;
   const fixedBlock = `<div class="field"><span class="lbl">Custos fixos do mês</span><div class="stack" style="gap:6px">${exps.length ? exps.map(e => btn('expense', e.id, e.name, e.amount)).join('') : '<span class="small muted">Nenhum custo fixo neste mês.</span>'}</div></div>`;
-  const therBlock = `<div class="field"><span class="lbl">Terapias do mês ${ym}</span><div class="stack" style="gap:6px">${rows.length ? rows.map(r => btn('reimb', r.id, r.name, r.amount)).join('') : '<span class="small muted">Nenhuma linha de terapia neste mês.</span>'}</div></div>`;
+  // Terapias vêm só da conta PF: entrada da PJ nunca é terapia.
+  const isPJin = t.flow === 'in' && bankIsPJ(t);
+  const therContent = isPJin ? '<span class="small muted">Terapias só recebem entradas da conta PF.</span>'
+    : (rows.length ? rows.map(r => btn('reimb', r.id, r.name, r.amount)).join('') : '<span class="small muted">Nenhuma linha de terapia neste mês.</span>');
+  const therBlock = `<div class="field"><span class="lbl">Terapias do mês ${ym}</span><div class="stack" style="gap:6px">${therContent}</div></div>`;
   // Saída: custo fixo primeiro. Entrada: terapias primeiro.
   // Entrada da PJ: projeto (cria o pagamento) ou Fee, sem projeto fixo.
-  const projBlock = (t.flow === 'in' && bankIsPJ(t)) ? `<div class="field"><span class="lbl">Projeto (pagamento recebido)</span><div class="stack" style="gap:6px">${btn('fee', 'fee', 'Fee (sem projeto fixo)', Math.abs(Number(t.amount)))}${db.all('tempo_projects').filter(p => !p.archived).map(p => { const c = clientOf(p); return btn('project', p.id, (c ? c.name + ' · ' : '') + p.name, p.budget); }).join('')}</div></div>` : '';
+  // Projetos sem pagamento vinculado a nenhuma entrada. Recente = criado nos últimos 6 meses (em relação à entrada); Antigo = mais antigo.
+  const linkedPay = new Set((BANK.every || []).map(b => b.payment_id).filter(Boolean));
+  const allPays = db.all('tempo_payments');
+  const hasLink = (p) => allPays.some(x => x.project_id === p.id && linkedPay.has(x.id));
+  const cut = (() => { const d = new Date((t.posted_on || '') + 'T12:00:00'); d.setMonth(d.getMonth() - 6); return d.toISOString().slice(0, 10); })();
+  const dateOf = (p) => String(p.started_at || p.created_at || '').slice(0, 10);
+  const pend = db.all('tempo_projects').filter(p => !p.archived && !hasLink(p)).sort((a, b) => ((clientOf(a)?.name || '') + a.name).localeCompare((clientOf(b)?.name || '') + b.name));
+  const rowP = (p) => { const c = clientOf(p); return btn('project', p.id, (c ? c.name + ' · ' : '') + p.name, p.budget).replace('class="btn sm"', 'class="btn sm bpk-p"'); };
+  const recList = pend.filter(p => dateOf(p) >= cut).map(rowP).join('') || '<span class="small muted">Nenhum projeto recente sem vínculo.</span>';
+  const oldList = pend.filter(p => dateOf(p) < cut).map(rowP).join('') || '<span class="small muted">Nenhum projeto antigo sem vínculo.</span>';
+  const projBlock = (t.flow === 'in' && bankIsPJ(t)) ? `<div class="field"><span class="lbl">Projeto (pagamento recebido)</span>
+    <div class="row" style="gap:6px;margin-bottom:6px"><button class="btn sm" data-tab="rec">Recente (6 meses)</button><button class="btn sm ghost" data-tab="old">Antigo</button><button class="btn sm ghost" data-tab="ther">Terapias</button></div>
+    <input id="bpk-q" class="input" placeholder="Buscar cliente ou projeto" autocomplete="off" style="margin-bottom:6px">
+    <div class="stack" style="gap:6px">${btn('fee', 'fee', 'Fee (sem projeto fixo)', Math.abs(Number(t.amount)))}
+      <div id="bpk-rec" class="stack" style="gap:6px">${recList}</div>
+      <div id="bpk-old" class="stack" style="gap:6px;display:none">${oldList}</div>
+      <div id="bpk-ther" class="stack" style="gap:6px;display:none">${therBlock}</div></div></div>` : '';
   const html = `<div class="dh"><h2>Vincular lançamento</h2></div><div class="db">
     <p style="margin:0">${esc(t.counterpart || t.memo)} · ${fmtMoney(Math.abs(Number(t.amount)))} · ${fmtDate(t.posted_on)}</p>
     ${projBlock}
-    ${t.flow === 'out' ? (/sul\s*americ/i.test(t.counterpart || '') ? fixedBlock : fixedBlock + therBlock) : therBlock + fixedBlock}
+    ${t.flow === 'out' ? (/sul\s*americ/i.test(t.counterpart || '') ? fixedBlock : fixedBlock + therBlock) : (isPJin ? fixedBlock : therBlock + fixedBlock)}
     </div><div class="df"><button class="btn" data-x="no">Cancelar</button></div>`;
   return new Promise(res => {
     let done = false;
@@ -1136,6 +1217,17 @@ function bankPickDialog(t) {
     l.box.addEventListener('click', (e) => {
       const b = e.target.closest('[data-kind]'); if (b) { done = true; res({ kind: b.dataset.kind, id: b.dataset.id }); l.close(); return; }
       if (e.target.closest('[data-x]')) { done = true; res(null); l.close(); }
+    });
+    l.box.addEventListener('click', (e) => {
+      const tab = e.target.closest('[data-tab]'); if (!tab) return;
+      const key = tab.dataset.tab;
+      ['rec', 'old', 'ther'].forEach(k => { const el = l.box.querySelector('#bpk-' + k); if (el) el.style.display = k === key ? '' : 'none'; });
+      l.box.querySelectorAll('[data-tab]').forEach(b => b.className = 'btn sm' + (b.dataset.tab === key ? '' : ' ghost'));
+    });
+    l.box.addEventListener('input', (e) => {
+      if (e.target.id !== 'bpk-q') return;
+      const q = bnorm(e.target.value);
+      l.box.querySelectorAll('.bpk-p').forEach(el => { el.style.display = bnorm(el.textContent).includes(q) ? '' : 'none'; });
     });
   });
 }

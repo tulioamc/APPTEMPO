@@ -177,7 +177,7 @@ ACTIONS['ex-color-set'] = (el) => { exSetColor(el.dataset.key, el.dataset.c || n
 CHANGES['ex-free'] = (el) => exSetColor(el.dataset.key, el.value);
 // Filtro escondido: só aparece quando o botão Filtrar está aberto.
 const exFilterState = () => S.exF || {};
-const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const normExp = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 // Meio de pagamento de um gasto = meio do lançamento do extrato vinculado a ele.
 let EX_METHOD = {};
 function exMethodMap() {
@@ -188,7 +188,7 @@ function exMethodMap() {
 function exMatch(r) {
   const f = exFilterState();
   if (f.meth && (EX_METHOD[r.id] || '—') !== f.meth) return false;
-  if (f.q && !norm(r.name).includes(norm(f.q))) return false;
+  if (f.q && !normExp(r.name).includes(normExp(f.q))) return false;
   if (f.cat && `${r.cat || ''}` !== f.cat) return false;
   if (f.st && r.status !== f.st) return false;
   const a = Math.abs(Number(r.amount) || 0);
