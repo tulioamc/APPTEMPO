@@ -220,6 +220,7 @@ window.DB_COLUMNS = {
   "note",
   "date",
   "amount",
+  "paid_on",
   "pay_id",
   "refund_id",
   "req_id",

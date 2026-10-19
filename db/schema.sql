@@ -186,7 +186,7 @@ create table if not exists tempo_reimb_rows (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   month text not null,                  -- YYYY-MM (uma tabela por mês)
-  name text, note text, date date, amount numeric(14,2),
+  name text, note text, date date, amount numeric(14,2), paid_on date,
   pay_id uuid references tempo_status_options(id) on delete set null,
   refund_id uuid references tempo_status_options(id) on delete set null,
   req_id uuid references tempo_status_options(id) on delete set null,
