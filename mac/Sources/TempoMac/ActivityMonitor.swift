@@ -109,6 +109,8 @@ final class ActivityMonitor {
         let bundle = app.bundleIdentifier ?? name
         // o próprio Tempo também aparece na linha do tempo, como "Tempo"
         if bundle == selfBundle { return Context(app: "Tempo", bundle: bundle, doc: nil, folder: nil) }
+        // o Finder só conta como app: não guarda pasta nem nome de arquivo
+        if bundle == "com.apple.finder" { return Context(app: name, bundle: bundle, doc: nil, folder: nil) }
         if bundle == "com.google.Chrome" {
             // Chrome só conta quando a aba ativa é um dos sites da lista; outros sites não são registrados.
             guard AXIsProcessTrusted(), let site = chromeSite(app.processIdentifier) else { return nil }

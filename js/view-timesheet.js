@@ -326,7 +326,7 @@ function openEntryModal(id) {
     r.disabled = !revs.length; r.innerHTML = options(revs, '', { empty: true, emptyLabel: revs.length ? 'Não é revisão' : 'Projeto sem rodadas', label: x => `Rodada ${x.number} — ${x.description.slice(0, 40)}` });
     const d = defaultWorkType(sel); if (d && w) w.value = d;
   };
-  const l = openLayer({ wide: true, render: render_, onMount: (ly) => { if (showPicker) bindPicker(ly, sel, () => syncRev(ly)); } });
+  const l = openLayer({ wide: true, render: render_, onClose: () => { ACT_SEL = null; }, onMount: (ly) => { if (showPicker) bindPicker(ly, sel, () => syncRev(ly)); } });
   const keepForm = () => { const f = formData(l.box); return f; };
   window.actRedrawHook = () => redraw();   // a faixa de atividade chama isto depois de mover um intervalo
   const redraw = () => { const f = keepForm(); l.refresh(); ['work_type_id', 'revision_id', 'notes', 'reason'].forEach(k => { const el = l.box.querySelector(`[name="${k}"]`); if (el && f[k] !== undefined) el.value = f[k]; }); };
@@ -341,11 +341,17 @@ function openEntryModal(id) {
     segs[i][k] = new Date(`${dia}T${hora}`).toISOString(); redraw();
   });
   l.box.addEventListener('click', async (ev) => {
+    // clicar num trecho da faixa "Por programa": esse trecho / todos / selecionar
+    const sg = ev.target.closest('.act-strip[data-mode="program"] .act-b[data-g]');
+    if (sg && !ACT_SEL) {
+      const chip = Array.from(l.box.querySelectorAll('[data-x="act-chip"]')).find(c => c.dataset.g === sg.dataset.g);
+      return openProgChoice([e.id], sg.dataset.g, chip ? chip.dataset.label : 'Programa', { seg: { a: +sg.dataset.a, b: +sg.dataset.b }, redraw });
+    }
     const b = ev.target.closest('[data-x]'); if (!b) return;
     const x = b.dataset.x;
     if (x === 'edit-seg') { const i = Number(b.dataset.i); openSeg = openSeg === i ? null : i; redraw(); return; }
     if (x === 'pick') { showPicker = true; redraw(); }
-    if (x === 'act-chip') { if (b.dataset.mode === 'file') openActGroup(e.id, b.dataset.g, redraw); else openActColor(b.dataset.g, b.dataset.label || 'Programa', redraw); return; }
+    if (x === 'act-chip') { if (b.dataset.mode === 'file') openActGroup(e.id, b.dataset.g, redraw); else openProgChoice([e.id], b.dataset.g, b.dataset.label || 'Programa', { redraw }); return; }
     if (x === 'addseg') { const last = segs[segs.length - 1]; const base = last.e ? new Date(last.e) : new Date(); const s = new Date(base.getTime() + 30 * 60000); segs.push({ s: s.toISOString(), e: new Date(s.getTime() + 3600000).toISOString() }); redraw(); }
     if (x === 'delseg') { segs.splice(Number(b.dataset.i), 1); openSeg = null; redraw(); }
     if (x === 'del') {

@@ -110,8 +110,8 @@ const appFamily = (app) => {
 const docPre = (doc) => { const m = String(doc || '').match(/^(.+?__)/); return m ? m[1] : null; };
 const shortName = (s, max = 30) => { s = String(s || ''); return s.length > max ? s.slice(0, max - 9) + '…' + s.slice(-8) : s; };
 function actAnalyzeList(list0, mode) {
-  // registros antigos do Terminal podem ter guardado o nome de usuário como arquivo: aqui ele vira só "Terminal"
-  const list = list0.map(x => (/^terminal$/i.test(String(x.app || '')) ? { ...x, doc: null, folder: null } : x));
+  // Terminal e Finder não têm arquivo nem pasta na análise (registros antigos podem ter guardado nome de usuário ou pasta): viram só o app
+  const list = list0.map(x => (/^(terminal|finder)$/i.test(String(x.app || '')) ? { ...x, doc: null, folder: null } : x));
   if (!list.length) return { groups: [], records: [] };
   const info = {};
   list.forEach(x => { const k = actKeyOf(x); info[k] = info[k] || { key: k, app: x.app, doc: x.doc, folder: x.folder }; });
@@ -294,7 +294,7 @@ const pauseKind = (why) => {
 };
 const pauseHatch = (why) => PAUSE_HATCH[pauseKind(why)];
 
-function actStripHTML(e, A) {
+function actStripHTML(e, A, mode = '') {
   const now = Date.now();
   const segs = (e.segments || []).map(s => ({ a: new Date(s.s).getTime(), b: s.e ? new Date(s.e).getTime() : now, why: s.why || null }))
     .filter(x => x.b > x.a).sort((p, q) => p.a - q.a);
@@ -316,9 +316,13 @@ function actStripHTML(e, A) {
     const g = byId[r.gid]; if (!g) return;
     const x = pct(new Date(r.from).getTime()), y = pct(new Date(r.to).getTime());
     if (y <= x) return;
-    bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" style="--tb:${g.color};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(actTip(g))}"></span>`;
+    bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" style="--tb:${g.color};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(actTip(g))}"></span>`;
   });
-  return `<div class="act-strip" data-ent="${esc(e.id)}" data-t0="${t0}" data-span="${span}" style="position:relative">${pauses}${bars}</div>`;
+  // trechos marcados para mover (seleção em andamento nesta sessão)
+  if (mode === 'program' && ACT_SEL && ACT_SEL.key === e.id) {
+    ACT_SEL.ranges.concat(ACT_SEL.drag ? [ACT_SEL.drag] : []).forEach(r => { const x = pct(r.a), y = pct(r.b); if (y > x) bars += `<span class="res-sel-range" style="left:${x}%;width:${Math.max(.3, y - x)}%"></span>`; });
+  }
+  return `<div class="act-strip" data-ent="${esc(e.id)}" data-mode="${mode}" data-t0="${t0}" data-span="${span}" style="position:relative">${pauses}${bars}</div>`;
 }
 
 function actChipsHTML(A, mode) {
@@ -337,8 +341,8 @@ function pauseChipsHTML(e) {
 function actSectionHTML(e) {
   if (!actList(e.id).length) return '';
   const prog = actAnalyze(e.id, 'program'), file = actAnalyze(e.id, 'file');
-  const sec = (title, mode, A) => `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div>${actStripHTML(e, A)}${actChipsHTML(A, mode)}</div>`;
-  return `<div class="stack" style="gap:8px">${sec('Por programa', 'program', prog)}${sec('Por arquivo / página', 'file', file)}<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div><span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
+  const sec = (title, mode, A) => `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div>${actStripHTML(e, A, mode)}${actChipsHTML(A, mode)}</div>`;
+  return `<div class="stack" style="gap:8px">${actSelBarHTML(e.id)}${sec('Por programa', 'program', prog)}${sec('Por arquivo / página', 'file', file)}<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div><span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
 }
 
 /* Log discreto no fim do formulário da sessão: cada registro de atividade (programa e arquivo) e cada pausa, por horário.
@@ -403,52 +407,121 @@ function openActGroup(entryId, gid, onDone) {
   });
 }
 
-/* Move o tempo de um programa (de todas as sessões dadas) para um projeto/tarefa.
-   opts.onSelect: oferece "só alguns trechos" e leva ao modo de marcar no gráfico; opts.ranges: trechos já marcados. */
-function openProgMove(ids, gid, label, opts = {}) {
+/* Move o tempo de um programa (das sessões dadas, em todos os trechos ou só nos marcados) para um projeto/tarefa. */
+function openProgMove(entryIds, gid, label, opts = {}) {
   const ranges = opts.ranges && opts.ranges.length ? opts.ranges : null;
-  const N = progMsOf(ids, gid, ranges);
+  const N = progMsOf(entryIds, gid, ranges);
   openLayer({
     render: () => `<div class="dh"><h2>${esc(label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
       <div class="db stack" style="gap:10px">
-        ${!ranges && opts.onSelect ? `<div class="stack" style="gap:6px" id="pm-modes">
-          <label class="row" style="gap:8px;cursor:pointer"><input type="radio" name="pm-mode" value="todas" checked> Todos os trechos deste resumo <span class="mono small muted">${fmtDur(N)}</span></label>
-          <label class="row" style="gap:8px;cursor:pointer"><input type="radio" name="pm-mode" value="trechos"> Só alguns trechos (marcar no gráfico)</label>
-        </div>` : ''}
-        <div class="row between"><span class="lbl">${ranges ? 'Trechos marcados' : 'Tempo deste programa'}</span><span class="mono small">${fmtDur(N)}</span></div>
+        <div class="row between"><span class="lbl">${ranges ? 'Trechos marcados' : 'Todos os trechos'}</span><span class="mono small">${fmtDur(N)}</span></div>
         <div class="field"><label for="pm-proj">Mover para o projeto</label><select id="pm-proj" class="input"><option value="">Escolha um projeto</option>${tkProjectsSorted().map(p => `<option value="${esc(p.id)}">${esc(tkProjectLabel(p))}</option>`).join('')}</select></div>
         <div class="field"><label for="pm-task">Tarefa (opcional)</label><select id="pm-task" class="input" disabled><option value="">Sem tarefa</option></select></div>
-        <div class="row" style="gap:8px"><button class="btn" data-x="pm-move" id="pm-move">Mover</button>${opts.onSelect && !ranges ? `<button class="btn" data-x="pm-mark" id="pm-mark" style="display:none">Marcar trechos no gráfico</button>` : ''}<span class="small muted">${ranges ? 'Só os trechos marcados saem desta(s) sessão(ões).' : 'Só o que aparece neste resumo, agora. Não se repete em outros trechos ou no futuro.'}</span></div>
+        <div class="row" style="gap:8px"><button class="btn" data-x="pm-move">Mover</button><span class="small muted">${ranges ? 'Só os trechos marcados saem da sessão.' : 'Só o que aparece aqui, agora. Não se repete em outros trechos ou no futuro.'}</span></div>
       </div>
       <div class="df"><button class="btn" data-act="close-layer">Fechar</button></div>`,
     onMount: (ly) => {
       const proj = ly.box.querySelector('#pm-proj'), task = ly.box.querySelector('#pm-task');
-      const mv = ly.box.querySelector('#pm-move'), mk = ly.box.querySelector('#pm-mark');
-      ly.box.querySelectorAll('input[name="pm-mode"]').forEach(r => r.addEventListener('change', () => {
-        const trechos = ly.box.querySelector('input[name="pm-mode"]:checked')?.value === 'trechos';
-        mv.style.display = trechos ? 'none' : ''; if (mk) mk.style.display = trechos ? '' : 'none';
-      }));
       proj.addEventListener('change', () => {
         const tasks = proj.value ? db.where('tempo_tasks', t => t.project_id === proj.value) : [];
         task.innerHTML = `<option value="">Sem tarefa</option>${tasks.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}`;
         task.disabled = !proj.value;
       });
       ly.box.addEventListener('click', async (ev) => {
-        const m = ev.target.closest('[data-x="pm-mark"]');
-        if (m) { ly.close(); opts.onSelect && opts.onSelect(); return; }
         const b = ev.target.closest('[data-x="pm-move"]'); if (!b) return;
         if (!proj.value) return toast('Escolha um projeto.');
         if (!N) return toast('Nada para mover.');
         const dest = tkProjectLabel(db.get('tempo_projects', proj.value));
-        const quem = ranges ? `Os trechos marcados de ${label}` : `Todo o tempo de ${label} neste resumo`;
+        const quem = ranges ? `Os trechos marcados de ${label}` : `Todo o tempo de ${label} nesta(s) sessão(ões)`;
         if (!await confirmBox({ title: 'Mover programa?', body: `${quem} vai para ${dest}.`, ok: 'Mover' })) return;
         let moved = 0;
-        ids.forEach(id => { const g = actAnalyze(id, 'program').groups.find(x => x.id === gid); if (g && actMoveGroup(id, g, { project_id: proj.value, task_id: task.value || null }, ranges)) moved++; });
+        entryIds.forEach(id => { const g = actAnalyze(id, 'program').groups.find(x => x.id === gid); if (g && actMoveGroup(id, g, { project_id: proj.value, task_id: task.value || null }, ranges)) moved++; });
         if (!moved) return toast('Nada para mover.');
         toast('Tempo movido');
         ly.close(); opts.onDone && opts.onDone();
       });
     },
+  });
+}
+
+/* Seleção de trechos na faixa "Por programa" (revisão ou resumo): arrastar marca trechos do programa. */
+let ACT_SEL = null;   // { key, entryIds, gid, label, ranges: [{a,b}], drag, dragging, start, redraw, done }
+const ACT_MIN_MS = 60000;
+const actSelKey = (ids) => ids.join(',');
+function actSelBarHTML(key) {
+  if (!ACT_SEL || ACT_SEL.key !== key) return '';
+  const tot = actMergeIntervals(ACT_SEL.ranges).reduce((t, r) => t + (r.b - r.a), 0);
+  return `<div class="res-sel-bar"><span class="small">Arraste sobre a faixa <b>Por programa</b> para marcar trechos de <b>${esc(ACT_SEL.label)}</b>.</span>
+    <span class="mono small muted">${ACT_SEL.ranges.length} trecho(s) · ${fmtDur(tot)}</span><span class="grow"></span>
+    <button class="btn sm ghost" data-x="act-sel-cancel">Cancelar</button><button class="btn sm ghost" data-x="act-sel-clear">Limpar</button><button class="btn sm primary" data-x="act-sel-done" ${ACT_SEL.ranges.length ? '' : 'disabled'}>Concluir</button></div>`;
+}
+/* Faixa com vários dias/sessões (resumo cronológico) tem data-slices; faixa de uma sessão usa t0 e span. */
+function resPctToMs(slices, pct) {
+  const s = slices.find(x => pct >= x.l && pct <= x.l + x.w) || (pct < slices[0].l ? slices[0] : slices[slices.length - 1]);
+  return s.st + (s.w > 0 ? Math.min(s.w, Math.max(0, pct - s.l)) / s.w : 0) * s.span;
+}
+const actStripTime = (st, x) => {
+  const r = st.getBoundingClientRect(); const p = Math.min(1, Math.max(0, (x - r.left) / r.width));
+  if (st.dataset.slices) return resPctToMs(JSON.parse(st.dataset.slices), p * 100);
+  return +st.dataset.t0 + p * +st.dataset.span;
+};
+function actSelOverlays(key, slices) {
+  if (!ACT_SEL || ACT_SEL.key !== key) return '';
+  let out = '';
+  ACT_SEL.ranges.concat(ACT_SEL.drag ? [ACT_SEL.drag] : []).forEach(r => slices.forEach(s => {
+    const a = Math.max(r.a, s.st), b = Math.min(r.b, s.st + s.span); if (b <= a) return;
+    out += `<span class="res-sel-range" style="left:${s.l + (a - s.st) / s.span * s.w}%;width:${Math.max(.3, (b - a) / s.span * s.w)}%"></span>`;
+  }));
+  return out;
+}
+document.addEventListener('mousedown', (ev) => {
+  if (!ACT_SEL || ev.button !== 0) return;
+  const st = ev.target.closest?.('.act-strip[data-mode="program"]'); if (!st || st.dataset.ent !== ACT_SEL.key) return;
+  ev.preventDefault();
+  const t = actStripTime(st, ev.clientX);
+  ACT_SEL.dragging = true; ACT_SEL.start = t; ACT_SEL.drag = { a: t, b: t }; ACT_SEL.redraw();
+});
+document.addEventListener('mousemove', (ev) => {
+  if (!ACT_SEL || !ACT_SEL.dragging) return;
+  const st = document.querySelector(`.act-strip[data-mode="program"][data-ent="${ACT_SEL.key}"]`); if (!st) return;
+  const t = actStripTime(st, ev.clientX);
+  ACT_SEL.drag = { a: Math.min(ACT_SEL.start, t), b: Math.max(ACT_SEL.start, t) }; ACT_SEL.redraw();
+});
+document.addEventListener('mouseup', () => {
+  if (!ACT_SEL || !ACT_SEL.dragging) return;
+  ACT_SEL.dragging = false; const d = ACT_SEL.drag; ACT_SEL.drag = null;
+  if (d && d.b - d.a >= ACT_MIN_MS) ACT_SEL.ranges = actMergeIntervals(ACT_SEL.ranges.concat([d]));
+  ACT_SEL.redraw();
+});
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest?.('[data-x^="act-sel-"]'); if (!b || !ACT_SEL) return;
+  const x = b.dataset.x;
+  if (x === 'act-sel-cancel') { const s0 = ACT_SEL; ACT_SEL = null; return s0.redraw(); }
+  if (x === 'act-sel-clear') { ACT_SEL.ranges = []; return ACT_SEL.redraw(); }
+  if (x === 'act-sel-done' && ACT_SEL.ranges.length) { const s0 = ACT_SEL; ACT_SEL = null; return openProgMove(s0.entryIds, s0.gid, s0.label, { ranges: s0.ranges, onDone: s0.done }); }
+});
+/* Menu do programa (clicar no chip ou num trecho): esse trecho, todos os trechos, selecionar trechos ou mudar cor.
+   opts.seg: trecho clicado; opts.redraw: atualiza a tela; opts.done: depois de mover. */
+function openProgChoice(entryIds, gid, label, opts = {}) {
+  const seg = opts.seg || null;
+  openLayer({
+    render: () => `<div class="dh"><h2>${esc(label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+      <div class="db stack" style="gap:8px">
+        ${seg ? `<button class="btn" data-x="pc-seg">Esse trecho <span class="mono small muted">${fmtDur(seg.b - seg.a)}</span></button>` : ''}
+        <button class="btn" data-x="pc-all">Todos os trechos de ${esc(label)}</button>
+        <button class="btn" data-x="pc-sel">Selecionar trechos</button>
+        <button class="btn ghost" data-x="pc-color">Mudar cor</button>
+      </div>`,
+    onMount: (ly) => ly.box.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-x]'); if (!b) return;
+      const x = b.dataset.x;
+      ly.close();
+      const done = opts.done || opts.redraw;
+      if (x === 'pc-color') return openActColor(gid, label, opts.redraw);
+      if (x === 'pc-seg') return openProgMove(entryIds, gid, label, { ranges: [seg], onDone: done });
+      if (x === 'pc-all') return openProgMove(entryIds, gid, label, { onDone: done });
+      if (x === 'pc-sel') { ACT_SEL = { key: actSelKey(entryIds), entryIds, gid, label, ranges: [], drag: null, dragging: false, start: 0, redraw: opts.redraw, done }; opts.redraw(); }
+    }),
   });
 }
 
