@@ -411,7 +411,7 @@ setTimeout(() => { try { logSweep(); logPurge(); } catch (e) { console.warn('log
 setInterval(() => scanAlerts(), 300000);
 setInterval(() => ensureMonthSheets(), 3600000);
 // ao abrir o app, busca extratos e avisos de Pix novos (também acontece ao abrir PJ/PF)
-setTimeout(() => { if (db.adapter && db.adapter.persistent) bankRefresh(); }, 4000);
+setTimeout(() => { checkEntries(); if (db.adapter && db.adapter.persistent) bankRefresh(); }, 4000);
 
 /* ---------- aparência ---------- */
 function applyAppearance() {

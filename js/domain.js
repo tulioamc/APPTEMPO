@@ -295,6 +295,21 @@ function stopEntry(e, at) {
   if (!last.e) last.e = at || nowISO();
   db.update('tempo_time_entries', e.id, { state: 'done', segments: segs });
 }
+/* Conferência dos registros (ao abrir o app): sessão encerrada não pode ter trecho aberto, porque ele contaria até agora.
+   Remove o trecho aberto e deixa rastro no histórico de correções. */
+function checkEntries() {
+  let fixed = 0;
+  db.all('tempo_time_entries').forEach(e => {
+    if (e.state !== 'done') return;
+    const segs = e.segments || [];
+    const keep = segs.filter(s => s.e);
+    if (keep.length === segs.length || !keep.length) return;
+    db.update('tempo_time_entries', e.id, { segments: keep, edits: auditEdit(e, segs, 'Trecho aberto removido de sessão encerrada (conferência)') }, true);
+    fixed++;
+  });
+  if (fixed) toast(`Conferência: ${fixed} sessão(ões) com trecho aberto foram corrigidas.`);
+  return fixed;
+}
 function auditEdit(e, before, reason) {
   const edits = [...(e.edits || []), { at: nowISO(), reason: reason || '', before }];
   return edits;
