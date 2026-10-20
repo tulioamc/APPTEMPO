@@ -252,6 +252,8 @@ function actMoveGroup(entryId, g, pick, ranges = null) {
   // trava: se o mesmo tempo já está lançado nesse projeto, não cria duplicata (só tira da origem)
   if (!segsCoveredIn(moved, p.id, e.id)) {
     // o registro novo leva o tempo do arquivo e os registros brutos dele
+    // o espaço entre os pedaços recebidos não é tempo deste projeto: guarda de onde era (a origem) e não entra em pausa nem no bruto
+    moved.forEach((x, i) => { if (i < moved.length - 1 && new Date(moved[i + 1].s) > new Date(x.e)) { x.why = 'moved'; x.movedFrom = e.project_id; } });
     const nova = db.insert('tempo_time_entries', {
       project_id: p.id, client_id: c?.id || null, agency_id: c?.agency_id || null, task_id: pick.task_id || null,
       work_type_id: lastWorkType(p.id), revision_id: null, notes: `Movido de outra sessão: ${g.label}`,
@@ -294,6 +296,22 @@ const pauseKind = (why) => {
 };
 const pauseHatch = (why) => PAUSE_HATCH[pauseKind(why)];
 
+/* Espaço "fora" de um lançamento (trecho movido ou trabalho recebido), na faixa de qualquer tela. */
+function actMovedSpanHTML(seg, x, w) {
+  const recebido = !seg.movedTo && !!seg.movedFrom;   // espaço entre pedaços recebidos: o trabalho foi em outro projeto
+  const idOutro = seg.movedTo || seg.movedFrom || '';
+  const dst = db.get('tempo_projects', idOutro);
+  const nome = dst ? tkProjectLabel(dst) : null;
+  const cor = (dst && (clientOf(dst)?.color || dst.color)) || '#94A3B8';
+  const texto = recebido ? 'Trabalho em ' + (nome || 'outro projeto') : (nome ? 'Movido → ' + nome : 'Movido');
+  const dica = recebido ? texto + ' · clique para abrir' : (nome ? 'Movido para ' + nome + ' · clique para abrir' : 'Movido');
+  return `<span class="act-moved" data-pid="${esc(idOutro)}" style="left:${x}%;width:${w}%;--mv:${esc(cor)}" data-tip="${esc(dica)}">${w > 6 ? esc(texto) : ''}</span>`;
+}
+/* Checkbox "Mostrar trabalho em outros projetos": aparece só se houver espaços "fora" nas sessões. Igual na revisão e no resumo. */
+function actForaToggleHTML(ents) {
+  if (!ents.some(e => (e.segments || []).some(x => x.why === 'moved'))) return '';
+  return `<label class="row small" style="gap:6px;cursor:pointer"><input type="checkbox" data-x="act-fora-toggle" ${db.setting('actShowFora', true) ? 'checked' : ''}> Mostrar trabalho em outros projetos</label>`;
+}
 function actStripHTML(e, A, mode = '') {
   const now = Date.now();
   const segs = (e.segments || []).map(s => ({ a: new Date(s.s).getTime(), b: s.e ? new Date(s.e).getTime() : now, why: s.why || null }))
@@ -308,19 +326,17 @@ function actStripHTML(e, A, mode = '') {
   let pauses = '';
   for (let i = 1; i < segs.length; i++) {
     const a = segs[i - 1].b, b = segs[i].a;
-    if (b <= a || segs[i - 1].why === 'moved') continue;
+    if (b <= a || isForaWhy(segs[i - 1].why)) continue;
     pauses += `<span class="seg-b pausa act-pause" style="--ph:${pauseHatch(segs[i - 1].why)};--pg:${pauseGapOf(pauseHatch(segs[i - 1].why))};left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
   }
   let bars = '';
   // trechos que saíram desta sessão para outro projeto: lacuna clicável com o destino
-  for (let i = 0; i < segs.length - 1; i++) {
+  const mostrarFora = db.setting('actShowFora', true);
+  for (let i = 0; i < segs.length - 1 && mostrarFora; i++) {
     const a = e.segments[i].e, b = e.segments[i + 1].s;
     if (e.segments[i].why !== 'moved' || !a || !b || new Date(b) <= new Date(a)) continue;
     const x = pct(new Date(a).getTime()), y = pct(new Date(b).getTime());
-    const dst = db.get('tempo_projects', e.segments[i].movedTo);
-    const nome = dst ? tkProjectLabel(dst) : 'outro projeto';
-    const cor = (dst && (clientOf(dst)?.color || dst.color)) || '#94A3B8';
-    bars += `<span class="act-moved" data-pid="${esc(e.segments[i].movedTo || '')}" style="left:${x}%;width:${Math.max(.3, y - x)}%;--mv:${esc(cor)}" data-tip="${esc('Movido para ' + nome + ' · clique para abrir')}">${(y - x) > 6 ? 'Movido → ' + esc(nome) : ''}</span>`;
+    bars += actMovedSpanHTML(e.segments[i], x, Math.max(.3, y - x));
   }
   A.records.forEach(r => {
     const g = byId[r.gid]; if (!g) return;
@@ -352,7 +368,8 @@ function actSectionHTML(e) {
   if (!actList(e.id).length) return '';
   const prog = actAnalyze(e.id, 'program'), file = actAnalyze(e.id, 'file');
   const sec = (title, mode, A) => `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div>${actStripHTML(e, A, mode)}${actChipsHTML(A, mode)}</div>`;
-  return `<div class="stack" style="gap:8px">${actSelBarHTML(e.id)}${sec('Por programa', 'program', prog)}${sec('Por arquivo / página', 'file', file)}<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div><span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
+  const toggle = actForaToggleHTML([e]);
+  return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${sec('Por programa', 'program', prog)}${sec('Por arquivo / página', 'file', file)}<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div><span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
 }
 
 /* Log discreto no fim do formulário da sessão: cada registro de atividade (programa e arquivo) e cada pausa, por horário.

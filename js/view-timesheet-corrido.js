@@ -103,6 +103,9 @@ function openResumo(title, ids) {
       l.box.addEventListener('click', (ev) => {
         const modo = ev.target.closest('[data-rmode]');
         if (modo) { db.setSetting('resMode', modo.dataset.rmode); ACT_SEL = null; l.refresh(); return; }
+        if (ev.target.closest('[data-x="act-fora-toggle"]')) { db.setSetting('actShowFora', !db.setting('actShowFora', true)); return l.refresh(); }
+        const mv = ev.target.closest('.act-moved[data-pid]');
+        if (mv && mv.dataset.pid) { l.close(); return openProject(mv.dataset.pid); }
         if (ACT_SEL) return;   // enquanto marca trechos, o clique só serve para arrastar
         const chipEl = ev.target.closest('[data-x="res-prog"]');
         if (chipEl) return menuPrograma(chipEl.dataset.g, chipEl.dataset.label);
@@ -142,6 +145,10 @@ function resumoHTML(title, es) {
       slices.push({ e: x.e.id, l: base, w: wS, st: x.st, span: x.span });
       const pos = (a, b) => ({ l: base + Math.max(0, a - x.st) / x.span * wS, w: Math.max(.3, (Math.min(x.span, b - x.st) - Math.max(0, a - x.st)) / x.span * wS) });
       an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}" data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" title="${esc(r.app)}${r.doc ? ' · ' + esc(r.doc) : ''}" style="--tb:${colorOf[r.gid] || 'var(--accent)'};left:${q.l}%;width:${q.w}%"></span>`; });
+      if (db.setting('actShowFora', true)) (x.e.segments || []).forEach((sg, k, arr) => {
+        if (sg.why !== 'moved' || k >= arr.length - 1 || !sg.e || !arr[k + 1].s) return;
+        const q = pos(new Date(sg.e).getTime(), new Date(arr[k + 1].s).getTime()); if (q.w > 0) parts += actMovedSpanHTML(sg, q.l, q.w);
+      });
       entryGaps(x.e).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" title="Pausa · ${esc(pauseLabel(g.why))}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
       if (i > 0) parts += `<span class="act-sep" style="left:${base}%"></span>`;
       off += wS;
@@ -165,6 +172,7 @@ function resumoHTML(title, es) {
   return `<div class="dh"><div class="grow"><span class="small muted">Resumo</span><h2 style="margin-top:2px">${esc(title)}</h2></div>${toggles}<button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
   <div class="db stack" style="gap:12px">
     <div class="small muted">Bruto ${fmtDur(totalBruto)} · trabalho ${fmtDur(totalTrab)} · pausas ${fmtDur(totalPausa)} · ${es.length} sessão(ões)</div>
+    ${actForaToggleHTML(es)}
     ${actSelBarHTML(key)}
     <div class="act-sec">${bar}<div class="small muted">${note}</div>${legendHTML}</div>
     <div><div class="lbl">Sessões</div>${sessions}</div>

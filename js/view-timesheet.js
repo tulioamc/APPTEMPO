@@ -352,6 +352,7 @@ function openEntryModal(id) {
     }
     const b = ev.target.closest('[data-x]'); if (!b) return;
     const x = b.dataset.x;
+    if (x === 'act-fora-toggle') { db.setSetting('actShowFora', !db.setting('actShowFora', true)); return redraw(); }
     if (x === 'edit-seg') { const i = Number(b.dataset.i); openSeg = openSeg === i ? null : i; redraw(); return; }
     if (x === 'pick') { showPicker = true; redraw(); }
     if (x === 'act-chip') { if (b.dataset.mode === 'file') openActGroup(e.id, b.dataset.g, redraw); else openProgChoice([e.id], b.dataset.g, b.dataset.label || 'Programa', { redraw }); return; }

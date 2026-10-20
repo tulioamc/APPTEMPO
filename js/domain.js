@@ -88,16 +88,18 @@ function entryMs(e, at = Date.now()) {
 }
 /* Pausas são as lacunas entre segmentos. Bruto = do início ao fim; pausas = soma das lacunas; líquido = entryMs. */
 /* Lacunas que são pausa (o motivo fica no segmento anterior). Lacuna "moved" = trecho que saiu desta sessão para outro projeto: não é pausa. */
-function entryGaps(e) { const segs = e.segments || []; const out = []; for (let i = 0; i < segs.length - 1; i++) { const a = segs[i].e, b = segs[i + 1].s; if (a && b && new Date(b) > new Date(a) && segs[i].why !== 'moved') out.push({ s: a, e: b, why: segs[i].why || null }); } return out; }
+/* Lacuna "fora" = tempo que não é deste lançamento (trecho movido para outro projeto, ou tempo em outros programas no destino). Não é pausa nem entra no bruto. */
+const isForaWhy = (w) => w === 'moved' || w === 'fora';
+function entryGaps(e) { const segs = e.segments || []; const out = []; for (let i = 0; i < segs.length - 1; i++) { const a = segs[i].e, b = segs[i + 1].s; if (a && b && new Date(b) > new Date(a) && !isForaWhy(segs[i].why)) out.push({ s: a, e: b, why: segs[i].why || null }); } return out; }
 /* Lacunas de trecho movido: saem do bruto da sessão de origem (o tempo já está no projeto de destino). */
-function entryMovedMs(e) { const segs = e.segments || []; let t = 0; for (let i = 0; i < segs.length - 1; i++) { const a = segs[i].e, b = segs[i + 1].s; if (segs[i].why === 'moved' && a && b && new Date(b) > new Date(a)) t += new Date(b) - new Date(a); } return t; }
+function entryMovedMs(e) { const segs = e.segments || []; let t = 0; for (let i = 0; i < segs.length - 1; i++) { const a = segs[i].e, b = segs[i + 1].s; if (isForaWhy(segs[i].why) && a && b && new Date(b) > new Date(a)) t += new Date(b) - new Date(a); } return t; }
 /* Intervalos do bruto de uma sessão (início→fim, sem as lacunas movidas). */
 function entryBruIntervals(e, at = Date.now()) {
   const segs = e.segments || []; if (!segs.length) return [];
   const out = []; let a = new Date(segs[0].s).getTime();
   for (let i = 0; i < segs.length - 1; i++) {
     const end = segs[i].e ? new Date(segs[i].e).getTime() : at, start = new Date(segs[i + 1].s).getTime();
-    if (segs[i].why === 'moved' && segs[i].e && start > end) { if (end > a) out.push([a, end]); a = start; }
+    if (isForaWhy(segs[i].why) && segs[i].e && start > end) { if (end > a) out.push([a, end]); a = start; }
   }
   const l = segs[segs.length - 1]; const b = l.e ? new Date(l.e).getTime() : at;
   if (b > a) out.push([a, b]);
@@ -337,9 +339,109 @@ function migrateMovedGaps() {
   db.setSetting('migMovedGaps', true);
   return n;
 }
+/* Migração (uma vez): nos lançamentos de destino de trechos movidos, o espaço entre os pedaços recebidos fica como "movido" (não é pausa, não entra no bruto). */
+function migrateForaGaps() {
+  if (db.setting('migFora3', false)) return 0;
+  let n = 0;
+  db.all('tempo_time_entries').forEach(d => {
+    if (!/^Movido de outra sessão/.test(d.notes || '')) return;
+    const segs = d.segments || []; const out = segs.map(x => ({ ...x })); let changed = false;
+    for (let i = 0; i < segs.length - 1; i++) {
+      if (segs[i].e && segs[i + 1].s && new Date(segs[i + 1].s) > new Date(segs[i].e) && !isForaWhy(segs[i].why)) { out[i] = { ...out[i], why: 'moved' }; changed = true; n++; }
+    }
+    if (changed) db.update('tempo_time_entries', d.id, { segments: out }, true);
+  });
+  db.setSetting('migFora3', true);
+  return n;
+}
+/* Migração (uma vez): lacunas que já eram trechos movidos para outro projeto viram "movido", com o destino.
+   Uma lacuna conta como movida se os lançamentos "Movido de outra sessão" cobrem quase todo o seu tempo. */
+function migrateMovedGaps() {
+  if (db.setting('migMovedGaps', false)) return 0;
+  const T = (x) => new Date(x).getTime();
+  const all = db.all('tempo_time_entries');
+  const dests = all.filter(d => /^Movido de outra sessão/.test(d.notes || '') && (d.segments || []).length);
+  let n = 0;
+  all.forEach(o => {
+    const segs = o.segments || []; const out = segs.map(x => ({ ...x })); let changed = false;
+    for (let i = 0; i < segs.length - 1; i++) {
+      const a = segs[i].e, b = segs[i + 1].s;
+      if (!a || !b || T(b) <= T(a) || segs[i].why === 'moved') continue;
+      const A = T(a), B = T(b), len = B - A;
+      let total = 0, best = null, bestC = 0;
+      dests.forEach(d => {
+        if (d.id === o.id) return;
+        const c = (d.segments || []).filter(x => x.e && T(x.s) >= A - 1000 && T(x.e) <= B + 1000).reduce((t, x) => t + (T(x.e) - T(x.s)), 0);
+        total += c; if (c > bestC) { bestC = c; best = d; }
+      });
+      if (best && total >= len * 0.9) { out[i] = { ...out[i], why: 'moved', movedTo: best.project_id }; changed = true; n++; }
+    }
+    if (changed) db.update('tempo_time_entries', o.id, { segments: out, edits: auditEdit(o, segs, 'Lacuna de trecho movido marcada (migração)') }, true);
+  });
+  db.setSetting('migMovedGaps', true);
+  return n;
+}
+/* Migração (uma vez): nos lançamentos de destino de trechos movidos, o espaço entre os pedaços conta como tempo do projeto (sem pausa). */
+function migrateForaGaps() {
+  if (db.setting('migFora2', false)) return 0;
+  let n = 0;
+  db.all('tempo_time_entries').forEach(d => {
+    if (!/^Movido de outra sessão/.test(d.notes || '')) return;
+    const segs = d.segments || []; const out = segs.map(x => ({ ...x })); let changed = false;
+    for (let i = 0; i < segs.length - 1; i++) {
+      if (segs[i].e && segs[i + 1].s && new Date(segs[i + 1].s) > new Date(segs[i].e)) { out[i] = { ...out[i], e: segs[i + 1].s, why: null }; changed = true; n++; }
+    }
+    if (changed) db.update('tempo_time_entries', d.id, { segments: out }, true);
+  });
+  db.setSetting('migFora2', true);
+  return n;
+}
+/* Migração (uma vez): lacunas que já eram trechos movidos para outro projeto viram "movido", com o destino.
+   Uma lacuna conta como movida se os lançamentos "Movido de outra sessão" cobrem quase todo o seu tempo. */
+function migrateMovedGaps() {
+  if (db.setting('migMovedGaps', false)) return 0;
+  const T = (x) => new Date(x).getTime();
+  const all = db.all('tempo_time_entries');
+  const dests = all.filter(d => /^Movido de outra sessão/.test(d.notes || '') && (d.segments || []).length);
+  let n = 0;
+  all.forEach(o => {
+    const segs = o.segments || []; const out = segs.map(x => ({ ...x })); let changed = false;
+    for (let i = 0; i < segs.length - 1; i++) {
+      const a = segs[i].e, b = segs[i + 1].s;
+      if (!a || !b || T(b) <= T(a) || segs[i].why === 'moved') continue;
+      const A = T(a), B = T(b), len = B - A;
+      let total = 0, best = null, bestC = 0;
+      dests.forEach(d => {
+        if (d.id === o.id) return;
+        const c = (d.segments || []).filter(x => x.e && T(x.s) >= A - 1000 && T(x.e) <= B + 1000).reduce((t, x) => t + (T(x.e) - T(x.s)), 0);
+        total += c; if (c > bestC) { bestC = c; best = d; }
+      });
+      if (best && total >= len * 0.9) { out[i] = { ...out[i], why: 'moved', movedTo: best.project_id }; changed = true; n++; }
+    }
+    if (changed) db.update('tempo_time_entries', o.id, { segments: out, edits: auditEdit(o, segs, 'Lacuna de trecho movido marcada (migração)') }, true);
+  });
+  db.setSetting('migMovedGaps', true);
+  return n;
+}
+/* Migração (uma vez): nos lançamentos de destino de trechos movidos, o espaço entre os pedaços é "fora" e não pausa. */
+function migrateForaGaps() {
+  if (db.setting('migFora1', false)) return 0;
+  let n = 0;
+  db.all('tempo_time_entries').forEach(d => {
+    if (!/^Movido de outra sessão/.test(d.notes || '')) return;
+    const segs = d.segments || []; const out = segs.map(x => ({ ...x })); let changed = false;
+    for (let i = 0; i < segs.length - 1; i++) {
+      if (segs[i].e && segs[i + 1].s && new Date(segs[i + 1].s) > new Date(segs[i].e) && !isForaWhy(segs[i].why)) { out[i] = { ...out[i], why: 'moved' }; changed = true; n++; }
+    }
+    if (changed) db.update('tempo_time_entries', d.id, { segments: out }, true);
+  });
+  db.setSetting('migFora1', true);
+  return n;
+}
 /* Conferência dos registros (ao abrir o app): sessão encerrada não pode ter trecho aberto, porque ele contaria até agora.
    Remove o trecho aberto e deixa rastro no histórico de correções. */
 function checkEntries() {
+  migrateForaGaps();
   const movidos = migrateMovedGaps();
   if (movidos) toast(`${movidos} lacuna(s) de trecho movido marcada(s) com o destino.`);
   let fixed = 0;
