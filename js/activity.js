@@ -319,7 +319,8 @@ function actStripHTML(e, A, mode = '') {
     const x = pct(new Date(a).getTime()), y = pct(new Date(b).getTime());
     const dst = db.get('tempo_projects', e.segments[i].movedTo);
     const nome = dst ? tkProjectLabel(dst) : 'outro projeto';
-    bars += `<span class="act-moved" data-pid="${esc(e.segments[i].movedTo || '')}" style="left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc('Movido para ' + nome + ' · clique para abrir')}">${(y - x) > 6 ? 'Movido → ' + esc(nome) : ''}</span>`;
+    const cor = (dst && (clientOf(dst)?.color || dst.color)) || '#94A3B8';
+    bars += `<span class="act-moved" data-pid="${esc(e.segments[i].movedTo || '')}" style="left:${x}%;width:${Math.max(.3, y - x)}%;--mv:${esc(cor)}" data-tip="${esc('Movido para ' + nome + ' · clique para abrir')}">${(y - x) > 6 ? 'Movido → ' + esc(nome) : ''}</span>`;
   }
   A.records.forEach(r => {
     const g = byId[r.gid]; if (!g) return;

@@ -927,5 +927,5 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .res-strip { user-select: none; cursor: crosshair; }
 
 /* Trecho movido para outro projeto: lacuna clicável na faixa da sessão */
-.act-strip .act-moved { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, #CBD5E1 0 4px, #E2E8F0 4px 8px); color: #475569; font-size: 10px; line-height: 26px; padding: 0 4px; white-space: nowrap; overflow: hidden; cursor: pointer; border-radius: 2px; }
+.act-strip .act-moved { position: absolute; top: 0; bottom: 0; background: linear-gradient(to bottom, var(--mv, #94A3B8) 0 50%, #CBD5E1 50% 100%); color: #1E293B; font-weight: 600; font-size: 10px; line-height: 26px; padding: 0 4px; white-space: nowrap; overflow: hidden; cursor: pointer; border-radius: 2px; }
 .act-strip .act-moved:hover { outline: 1px solid var(--accent); }
