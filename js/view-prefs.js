@@ -15,12 +15,13 @@ function prefAppearance() {
     <div class="field"><span class="lbl">Cor de destaque</span><div class="row">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="swatch ${ac === k ? 'on' : ''}" style="background:${c};width:30px;height:30px" data-act="set" data-k="accent" data-v="${k}" title="${k}" aria-label="${k}"></button>`).join('')}</div></div>
   </div></div>
   <div class="panel"><div class="panel-h"><h3>Texto</h3></div><div class="panel-b stack">
-    <div class="field"><label for="pf-font">Fonte</label><select id="pf-font" class="input" style="max-width:360px" data-on="set" data-k="font">${Object.entries(FONTS).map(([k, [l]]) => `<option value="${k}" ${fo === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <div class="field"><label for="pf-font">Fonte</label><select id="pf-font" class="input" style="max-width:360px" data-on="set" data-k="font">${Object.entries(FONTS).map(([k, [l]]) => `<option value="${k}" ${fo === k ? 'selected' : ''}>${l}</option>`).join('')}${Object.entries(customFontsOf()).map(([k, f]) => `<option value="${k}" ${fo === k ? 'selected' : ''}>${esc(f.label)}</option>`).join('')}</select>
       <span class="hint">A BR Sonoma é uma fonte paga da Brink e não está no Google Fonts. Ela aparece se estiver instalada no aparelho; senão, o app usa a Manrope, que tem desenho parecido. Na versão publicada dá para incluir a BR Sonoma se você tiver a licença web.</span></div>
     <div class="field"><label for="pf-fs">Tamanho do texto: <span class="mono">${fs}px</span></label><input id="pf-fs" type="range" min="12" max="18" step="1" value="${fs}" data-on="set" data-k="fontSize" style="max-width:360px;accent-color:var(--accent)"></div>
     <div class="field"><label for="pf-rp">Altura das linhas: clientes, trabalhos e geral <span class="mono">${rp}px</span></label><input id="pf-rp" type="range" min="0" max="12" step="1" value="${rp}" data-on="set" data-k="rowPad" style="max-width:360px;accent-color:var(--accent)"><span class="hint">3 = padrão.</span><div class="field"><span class="lbl">Prévia</span><div style="max-width:420px;border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden"><table class="grid" style="width:100%"><thead><tr><th>Cliente</th><th>Trabalho</th><th>Status</th></tr></thead><tbody><tr><td>LEAN</td><td>KV Magrão</td><td>Em andamento</td></tr><tr><td>BAQUESOLTO</td><td>FILME</td><td>Concluído</td></tr></tbody></table></div></div></div><div class="field"><label for="pf-rf">Altura das linhas: financeiro <span class="mono">${rf}px</span></label><input id="pf-rf" type="range" min="0" max="12" step="1" value="${rf}" data-on="set" data-k="rowPadFin" style="max-width:360px;accent-color:var(--accent)"><span class="hint">0 = bem fina, para ver mais lançamentos na tela.</span><div class="field"><span class="lbl">Prévia</span><div style="max-width:420px;border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden"><table class="grid fin" style="width:100%"><thead><tr><th>Data</th><th>Projeto</th><th>Valor</th></tr></thead><tbody><tr><td>13/10</td><td>KV Magrão</td><td>R$ 19.700,00</td></tr><tr><td>15/10</td><td>Enxoval de Motion</td><td>R$ 8.000,00</td></tr></tbody></table></div></div></div>
     <div class="field"><span class="lbl">Prévia</span><div style="max-width:420px;border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden"><table class="grid" style="width:100%"><thead><tr><th>Nome</th><th>Data</th><th>Valor</th></tr></thead><tbody><tr><td>Aloma</td><td class="mono small">13/10</td><td class="num">R$ 1.960,00</td></tr><tr><td>Homero</td><td class="mono small">13/10</td><td class="num">R$ 1.250,00</td></tr><tr><td>Raquel</td><td class="mono small">13/10</td><td class="num">R$ 1.500,00</td></tr></tbody></table></div></div>
   </div></div>
+  ${themePanelHTML()}
   <div class="panel"><div class="panel-h"><h3>Cards</h3></div><div class="panel-b stack">
     <div class="field"><label for="pf-rd">Raio das bordas (px)</label><div class="row"><input id="pf-rd" type="number" min="0" max="28" step="1" class="input" style="width:100px" value="${rd}" data-on="set" data-k="radius"><button class="btn sm" data-act="set" data-k="radius" data-v="${DEFAULT_RADIUS}">Restaurar padrão (${DEFAULT_RADIUS}px)</button></div></div>
     <div class="row"><div class="kpi" style="width:200px"><span class="k">Exemplo</span><span class="v">12,5 h</span><span class="s">prévia do card</span></div></div>
@@ -273,3 +274,103 @@ function prefIntegrations() {
   const cards = PLANNED.map(([t, d]) => `<div class="panel"><div class="panel-h"><h3>${esc(t)}</h3><span class="tag c-gray">etapa futura</span></div><div class="panel-b small">${esc(d)}</div></div>`).join('');
   return prefIntegrationsBase() + cards;
 }
+
+/* ---------- temas: destaque, fundo e texto + fonte própria, salvos com nome ---------- */
+let themeDraft = null;     // rascunho do editor de tema (não salvo)
+let themePreview = null;   // prévia ao vivo enquanto se escolhe as cores
+const loadedFonts = new Set();
+const themesOf = () => db.setting('themes', []) || [];
+const customFontsOf = () => db.setting('customFonts', {}) || {};
+const activeThemeOf = () => themesOf().find(t => t.id === db.setting('activeTheme', '')) || null;
+const themeDraftGet = () => themeDraft || (activeThemeOf() && { ...activeThemeOf() }) || { name: '', accent: '#2E43D6', bg: '#F6F7F9', fg: '#15171C' };
+function themeVars(t) {
+  const mix = (a, p, b) => `color-mix(in srgb, ${a} ${p}%, ${b})`;
+  const lum = (h) => { const n = parseInt(h.slice(1), 16); return ((n >> 16) * .2126 + ((n >> 8) & 255) * .7152 + (n & 255) * .0722) / 255; };
+  return {
+    '--bg': t.bg, '--surface': t.bg, '--surface-2': mix(t.bg, 94, t.fg), '--surface-3': mix(t.bg, 88, t.fg),
+    '--line': mix(t.bg, 84, t.fg), '--line-strong': mix(t.bg, 72, t.fg), '--fg': t.fg, '--fg-2': mix(t.fg, 72, t.bg), '--fg-3': mix(t.fg, 55, t.bg),
+    '--accent': t.accent, '--accent-fg': lum(t.accent) > .55 ? '#15171C' : '#FFFFFF', '--accent-soft': mix(t.accent, 12, t.bg), '--accent-line': mix(t.accent, 35, t.bg)
+  };
+}
+const THEME_KEYS = Object.keys(themeVars({ accent: '#000000', bg: '#FFFFFF', fg: '#000000' }));
+function applyThemeVars() {
+  const root = document.documentElement; const t = themePreview || activeThemeOf();
+  if (!t) { THEME_KEYS.forEach(k => root.style.removeProperty(k)); return; }
+  const v = themeVars(t); THEME_KEYS.forEach(k => root.style.setProperty(k, v[k]));
+}
+const fontFamilyOf = (k) => {
+  if (FONTS[k]) return FONTS[k][1];
+  if (customFontsOf()[k]) {
+    Object.entries(customFontsOf()).forEach(([id, f]) => {
+      if (loadedFonts.has(id)) return; loadedFonts.add(id);
+      try { new FontFace('tempo-' + id, `url("${f.data}")`).load().then(ff => document.fonts.add(ff)).catch(() => {}); } catch (e) { /* sem suporte: segue com a padrão */ }
+    });
+    return `"tempo-${k}", "Manrope", sans-serif`;
+  }
+  return FONTS.sonoma[1];
+};
+function themeColorField(k, label, c) {
+  return `<label class="theme-pick" style="display:flex;flex-direction:column;gap:4px"><span class="small faint">${label}</span><input type="color" value="${c}" data-input="theme-draft" data-k="${k}" aria-label="${label}"></label>`;
+}
+function themePanelHTML() {
+  const d = themeDraftGet(), cur = db.setting('activeTheme', ''), fo = db.setting('font', 'sonoma'), fonts = customFontsOf(), themes = themesOf();
+  return `<div class="panel"><div class="panel-h"><h3>Temas</h3></div><div class="panel-b stack">
+    <span class="hint">Escolha as cores de destaque, de fundo e de texto, e a fonte. Salve o conjunto com um nome e aplique quando quiser. As cores valem nos modos Claro e Escuro.</span>
+    <div class="row" style="flex-wrap:wrap;gap:8px">
+      <button class="btn sm ${!cur ? 'primary' : ''}" data-act="theme-apply" data-id="">Padrão do app</button>
+      ${themes.map(t => `<span class="row" style="gap:4px"><button class="btn sm ${cur === t.id ? 'primary' : ''}" data-act="theme-apply" data-id="${t.id}"><span class="swatch-mini" style="background:${t.accent}"></span>${esc(t.name)}</button><button class="btn sm ghost" data-act="theme-del" data-id="${t.id}" title="Excluir tema" aria-label="Excluir tema ${esc(t.name)}">×</button></span>`).join('')}
+    </div>
+    <div class="row" style="gap:16px;flex-wrap:wrap;align-items:flex-end">
+      ${themeColorField('accent', 'Destaque', d.accent)}
+      ${themeColorField('bg', 'Fundo', d.bg)}
+      ${themeColorField('fg', 'Texto', d.fg)}
+    </div>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <input class="input" style="max-width:240px" placeholder="Nome do tema" aria-label="Nome do tema" value="${esc(d.name || '')}" data-input="theme-name">
+      <button class="btn primary" data-act="theme-save">Salvar tema</button>
+      <button class="btn" data-act="theme-reset-draft">Voltar às cores do app</button>
+    </div>
+    <div class="field"><span class="lbl">Fonte própria</span>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <label class="btn sm" style="cursor:pointer">Enviar fonte do computador<input type="file" accept=".woff2,.woff,.ttf,.otf" data-on="font-upload" style="display:none"></label>
+        ${Object.entries(fonts).map(([k, f]) => `<span class="row" style="gap:4px"><button class="btn sm ${fo === k ? 'primary' : ''}" data-act="set" data-k="font" data-v="${k}">${esc(f.label)}</button><button class="btn sm ghost" data-act="font-del" data-id="${k}" title="Excluir fonte" aria-label="Excluir fonte ${esc(f.label)}">×</button></span>`).join('')}
+      </div>
+      <span class="hint">.woff2, .woff, .ttf ou .otf, até 2 MB. Fica salva no app e entra na lista de fontes acima.</span>
+    </div>
+  </div></div>`;
+}
+CHANGES['theme-draft'] = (el) => { themeDraft = { ...themeDraftGet(), [el.dataset.k]: el.value }; themePreview = themeDraft; applyThemeVars(); };
+CHANGES['theme-name'] = (el) => { themeDraft = { ...themeDraftGet(), name: el.value }; };
+ACTIONS['theme-apply'] = (el) => {
+  const id = el.dataset.id; themePreview = null; themeDraft = null;
+  if (id) { const t = themesOf().find(x => x.id === id); if (t && t.font) db.setSetting('font', t.font); }
+  db.setSetting('activeTheme', id);
+};
+ACTIONS['theme-save'] = () => {
+  const d = themeDraftGet(); const list = themesOf();
+  const t = { id: 't' + Date.now().toString(36), name: (d.name || '').trim() || `Tema ${list.length + 1}`, accent: d.accent, bg: d.bg, fg: d.fg, font: db.setting('font', 'sonoma') };
+  db.setSetting('themes', [...list, t]); db.setSetting('activeTheme', t.id);
+  themePreview = null; themeDraft = null; toast(`Tema "${t.name}" salvo`);
+};
+ACTIONS['theme-del'] = (el) => {
+  const list = themesOf().filter(t => t.id !== el.dataset.id);
+  db.setSetting('themes', list); if (db.setting('activeTheme', '') === el.dataset.id) db.setSetting('activeTheme', '');
+  toast('Tema excluído');
+};
+ACTIONS['theme-reset-draft'] = () => { themeDraft = null; themePreview = null; applyThemeVars(); render(); };
+ACTIONS['font-del'] = (el) => {
+  const fonts = { ...customFontsOf() }; delete fonts[el.dataset.id];
+  db.setSetting('customFonts', fonts); if (db.setting('font', 'sonoma') === el.dataset.id) db.setSetting('font', 'sonoma');
+  toast('Fonte excluída');
+};
+CHANGES['font-upload'] = (el) => {
+  const f = el.files && el.files[0]; if (!f) return;
+  if (f.size > 2 * 1024 * 1024) { toast('Fonte grande demais (máximo 2 MB)'); el.value = ''; return; }
+  const r = new FileReader();
+  r.onload = () => {
+    const id = 'f' + Date.now().toString(36), label = f.name.replace(/\.(woff2?|ttf|otf)$/i, '');
+    db.setSetting('customFonts', { ...customFontsOf(), [id]: { label, data: r.result } });
+    db.setSetting('font', id); toast(`Fonte "${label}" adicionada`);
+  };
+  r.readAsDataURL(f);
+};

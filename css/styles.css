@@ -901,3 +901,11 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 /* To-do: cabeçalho de cada dia (botão com chevron para recolher) */
 .todo-day { margin-top: 8px; }
 .todo-dayh { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg-2); border-radius: 6px; padding: 2px 8px; font: inherit; font-size: 12px; cursor: pointer; margin-bottom: 4px; }
+
+/* Menu lateral: título de grupo recolhível */
+.nav-fold { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: 0; font: inherit; cursor: pointer; text-align: left; }
+.nav-fold svg { width: 12px; height: 12px; opacity: .7; }
+
+/* Temas */
+.swatch-mini { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--line-strong); }
+.theme-pick input[type=color] { width: 56px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; }

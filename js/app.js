@@ -32,6 +32,7 @@ function pendingOf(id) {
 }
 const NAV = [
   { id: 'timesheet', label: 'Time Sheet', icon: 'clock' },
+  { id: 'todo', label: 'To-do', icon: 'check' },
   { group: 'PJ' },
   { id: 'registry', label: 'Agências e clientes', icon: 'users' },
   { id: 'projects', label: 'Projetos', icon: 'folder' },
@@ -46,7 +47,6 @@ const NAV = [
   { id: 'shared', label: 'Despesas Rafa', icon: 'users' },
   { id: 'reportspf', label: 'Relatórios PF', icon: 'chart' },
   { group: 'Geral' },
-  { id: 'todo', label: 'To-do', icon: 'check' },
   { id: 'notices', label: 'Avisos', icon: 'bell', pend: true },
   { id: 'lixeira', label: 'Lixeira de log', icon: 'trash' },
   { id: 'prefs', label: 'Configurações', icon: 'gear' }
@@ -71,11 +71,23 @@ ACTIONS.pend = (el) => {
 };
 ACTIONS['toggle-nav'] = () => { S.navOpen = !S.navOpen; $('.app').classList.toggle('nav-open', S.navOpen); };
 
+/* Menu lateral: cada grupo (PJ, PF, Geral) recolhe ou expande com o chevron; o estado fica salvo. */
+function sidebarNavHTML() {
+  const folded = db.setting('navFold', []) || [];
+  let cur = null; const out = [];
+  NAV.forEach(n => {
+    if (n.group) { cur = n.group; const f = folded.includes(n.group); out.push(`<button class="nav-group nav-fold" data-act="nav-fold" data-g="${n.group}" aria-expanded="${!f}">${n.group}${icon(f ? 'chevR' : 'chevD')}</button>`); return; }
+    if (cur && folded.includes(cur)) return;
+    out.push(`<button class="nav-btn ${S.route === n.id ? 'active' : ''}" data-act="go" data-route="${n.id}" ${S.route === n.id ? 'aria-current="page"' : ''}>${icon(n.icon)}<span>${n.label}</span>${n.pend && pendingOf(n.id).length ? `<span class="count pend-count" data-act="pend" data-id="${n.id}" role="button" tabindex="0" title="Ver o que está pendente">${pendingOf(n.id).length}</span>` : ''}</button>`);
+  });
+  return out.join('');
+}
+ACTIONS['nav-fold'] = (el) => { const g = el.dataset.g; const cur = db.setting('navFold', []) || []; db.setSetting('navFold', cur.includes(g) ? cur.filter(x => x !== g) : [...cur, g]); render(); };
+
 function sidebarHTML() {
   const a = activeEntry();
   return `<div class="brand"><div class="brand-mark">${icon('clock')}</div><div><div class="brand-name">Tempo</div><div class="brand-sub">time sheet e projetos</div></div></div>
-  ${NAV.map(n => n.group ? `<div class="nav-group">${n.group}</div>` :
-    `<button class="nav-btn ${S.route === n.id ? 'active' : ''}" data-act="go" data-route="${n.id}" ${S.route === n.id ? 'aria-current="page"' : ''}>${icon(n.icon)}<span>${n.label}</span>${n.pend && pendingOf(n.id).length ? `<span class="count pend-count" data-act="pend" data-id="${n.id}" role="button" tabindex="0" title="Ver o que está pendente">${pendingOf(n.id).length}</span>` : ''}</button>`).join('')}
+  ${sidebarNavHTML()}
   <div class="sidebar-foot">
     ${a ? `<button class="mini-timer" data-act="go" data-route="timesheet"><span class="row small"><span class="dot ${a.state === 'running' ? 'live' : 'paused'}"></span>${a.state === 'running' ? 'Registrando' : 'Pausado'}</span><span class="t" data-tick="${a.id}">${fmtClock(entryMs(a))}</span><span class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(entryTitle(a))}</span>${pausesOf(a.id).length ? `<span class="small" style="color:var(--warn);font-weight:600">${pausesOf(a.id).length} pausa(s) para revisar</span>` : ''}</button>` : ''}
     <div class="data-mode"><span class="dot ${db.adapter.persistent ? 'live' : 'mem'}"></span>${db.syncError ? 'Falha de sincronização' : db.adapter.persistent ? 'Sincronizado' : 'Em memória · some ao recarregar'} · ${APP_VERSION}${` · <a href="#" class="btn sm ghost" data-act="app-update" title="${window.TEMPO_NEW_VERSION ? 'Nova versão ' + esc(window.TEMPO_NEW_VERSION) + ' disponível' : 'Recarregar com a versão mais nova'}" ${window.TEMPO_NEW_VERSION ? 'style="color:var(--accent);font-weight:600"' : ''}>Atualizar</a>`}${db.adapter.persistent ? ` · <a href="#" class="btn sm ghost" data-act="signout">Sair</a>` : ''}</div>
@@ -408,7 +420,8 @@ function applyAppearance() {
   const [l, d] = ACCENTS[db.setting('accent', 'cobalto')] || ACCENTS.cobalto;
   const css = (c, dark) => `--accent:${c};--accent-soft:color-mix(in srgb, ${c} ${dark ? 22 : 12}%, var(--surface));--accent-line:color-mix(in srgb, ${c} ${dark ? 45 : 35}%, var(--surface));--accent-fg:${dark ? '#0D1030' : '#FFFFFF'};`;
   $('#accent-style').textContent = `:root{${css(l)}} @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${css(d, 1)}}} :root[data-theme="dark"]{${css(d, 1)}}`;
-  root.style.setProperty('--font-ui', (FONTS[db.setting('font', 'sonoma')] || FONTS.sonoma)[1]);
+  root.style.setProperty('--font-ui', fontFamilyOf(db.setting('font', 'sonoma')));
+  applyThemeVars();
   root.style.setProperty('--fs', db.setting('fontSize', 14) + 'px');
   root.style.setProperty('--row-pad', db.setting('rowPad', 3) + 'px');
   root.style.setProperty('--row-pad-fin', db.setting('rowPadFin', 0) + 'px');
