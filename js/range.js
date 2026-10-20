@@ -210,7 +210,7 @@ function openRangeMenu(entryId, a, b, x, y) {
 let actDrag = null;
 const actStripX = (strip, ev) => { const r = strip.getBoundingClientRect(); return Math.min(1, Math.max(0, (ev.clientX - r.left) / (r.width || 1))); };
 document.addEventListener('mousedown', (ev) => {
-  const strip = ev.target.closest?.('.act-strip[data-ent], .day-strip[data-report]'); if (!strip || ev.button !== 0) return;
+  const strip = ev.target.closest?.('.act-strip[data-ent], .day-strip[data-report], .res-strip[data-slices]'); if (!strip || ev.button !== 0) return;
   const x = actStripX(strip, ev);
   actDrag = { strip, x0: x, x1: x, moved: false };
   ev.preventDefault();
@@ -237,6 +237,16 @@ document.addEventListener('mouseup', (ev) => {
   const t0 = Number(d.strip.dataset.t0), span = Number(d.strip.dataset.span);
   const a = t0 + lo * span, b = t0 + hi * span;
   if (b - a < 60000) return;   // seleção menor que 1 minuto não vale
+  if (d.strip.dataset.slices) {   // resumo cronológico: a seleção fica dentro de uma sessão (fatia)
+    const sl = JSON.parse(d.strip.dataset.slices);
+    const lp = lo * 100, hp = hi * 100;
+    const f = sl.find(x => lp >= x.l && lp < x.l + x.w); if (!f) return;
+    const hp2 = Math.min(hp, f.l + f.w);
+    const sa = f.st + (lp - f.l) / f.w * f.span, sb = f.st + (hp2 - f.l) / f.w * f.span;
+    if (sb - sa < 60000) return;
+    const se = db.get('tempo_time_entries', f.e); if (se) openZoomOf([se], sa, sb);
+    return;
+  }
   if (d.strip.dataset.report) {   // relatório do dia: arrastar faz zoom direto
     const ents = (d.strip.dataset.ents || '').split(',').map(id => db.get('tempo_time_entries', id)).filter(Boolean);
     return openZoomOf(ents, a, b);

@@ -120,36 +120,36 @@ function resumoHTML(title, es) {
   let bar = '', note = '';
   if (mode === 'cron') {
     let off = 0, parts = '';
+    const slices = [];
     sess.forEach((x, i) => {
       const base = off, wS = x.span / totalSpan * 100;
+      slices.push({ e: x.e.id, l: base, w: wS, st: x.st, span: x.span });
       const pos = (a, b) => ({ l: base + Math.max(0, a - x.st) / x.span * wS, w: Math.max(.3, (Math.min(x.span, b - x.st) - Math.max(0, a - x.st)) / x.span * wS) });
-      an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" title="${esc(r.app)}${r.doc ? ' · ' + esc(r.doc) : ''}" style="--tb:${colorOf[r.gid] || 'var(--accent)'};left:${q.l}%;width:${q.w}%"></span>`; });
+      an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}" title="${esc(r.app)}${r.doc ? ' · ' + esc(r.doc) : ''}" style="--tb:${colorOf[r.gid] || 'var(--accent)'};left:${q.l}%;width:${q.w}%"></span>`; });
       entryGaps(x.e).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" title="Pausa · ${esc(pauseLabel(g.why))}" style="--ph:${pauseHatch(g.why)};left:${q.l}%;width:${q.w}%"></span>`; });
       if (i > 0) parts += `<span class="act-sep" style="left:${base}%"></span>`;
       off += wS;
     });
-    bar = `<div class="act-strip" style="height:34px">${parts}</div>`;
+    bar = `<div class="act-strip res-strip" data-slices="${esc(JSON.stringify(slices))}" style="height:34px">${parts}</div>`;
     note = 'Cada sessão ocupa uma fatia proporcional à sua duração, na ordem em que aconteceram. Os programas e as pausas ficam no lugar em que aconteceram dentro de cada fatia.';
   } else {
     const tot = Math.max(1, totalBruto);
     let off = 0, parts = '';
-    an.groups.forEach(g => { const w = g.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" title="${esc(g.label)} · ${fmtDur(g.ms)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
+    an.groups.forEach(g => { const w = g.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" data-g="${esc(g.id)}" title="${esc(g.label)} · ${fmtDur(g.ms)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
     pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).forEach(bk => { const w = bk.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" title="${esc(bk.label)} · ${fmtDur(bk.ms)}" style="--ph:${bk.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
     const restMs = Math.max(0, totalBruto - an.groups.reduce((t, g) => t + g.ms, 0) - totalPausa);
     if (restMs > 1000 && off < 100) parts += `<span class="act-track" style="left:${off}%;width:${100 - off}%"></span>`;
     bar = `<div class="act-strip" style="height:34px">${parts}</div>`;
     note = 'Tudo junto: cada programa soma o tempo de todas as sessões, e as pausas ficam por categoria. A barra inteira é o bruto.';
   }
-  const legendChips = an.groups.map(g => `<span class="act-chip" style="--tb:${g.color}"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></span>`).join('');
+  const legendChips = an.groups.map(g => `<span class="act-chip" data-g="${esc(g.id)}" style="--tb:${g.color}"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></span>`).join('');
   const pauseChips = pauseBucketChip ? pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).map(pauseBucketChip).join('') : '';
-  const legendHTML = `<div class="act-sec"><div class="lbl">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || '<span class="muted small">Sem pausas.</span>'}</div></div>`;
+  const legendHTML = `<div class="lbl">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || '<span class="muted small">Sem pausas.</span>'}</div>`;
   const sessions = es.map(e => `<div class="row between small res-row"><span><span class="mono">${fmtTime(entryStart(e))}–${fmtTime(entryEnd(e))}</span> · ${esc(entryTitle(e))}</span><span class="mono">${fmtDur(entryMs(e))}</span></div>`).join('');
   return `<div class="dh"><div class="grow"><span class="small muted">Resumo</span><h2 style="margin-top:2px">${esc(title)}</h2></div>${toggles}<button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
   <div class="db stack" style="gap:12px">
     <div class="small muted">Bruto ${fmtDur(totalBruto)} · trabalho ${fmtDur(totalTrab)} · pausas ${fmtDur(totalPausa)} · ${es.length} sessão(ões)</div>
-    ${bar}
-    <div class="small muted">${note}</div>
-    ${legendHTML}
+    <div class="act-sec">${bar}<div class="small muted">${note}</div>${legendHTML}</div>
     <div><div class="lbl">Sessões</div>${sessions}</div>
   </div>`;
 }

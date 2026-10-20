@@ -15,10 +15,11 @@ VIEWS.tasks = () => {
   };
   const tops = db.all('tempo_tasks').filter(t => !t.parent_id);
   const rows = []; let count = 0, ms = 0;
+  const folded = new Set(db.setting('tkFold', []) || []);
   [...tops].sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999')).forEach(t => {
     const subs = subtasksOf(t.id).filter(match);
     if (!match(t) && !subs.length) return;
-    rows.push([t, false, match(t)]); subs.forEach(s => rows.push([s, true, true]));
+    rows.push([t, false, match(t)]); if (!folded.has(t.id) || q) subs.forEach(s => rows.push([s, true, true]));
   });
   rows.forEach(([t, sub, m]) => { if (m) { count++; ms += sub ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : 0; } });
   rows.filter(r => !r[1]).forEach(([t]) => { ms += db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0); });
@@ -35,9 +36,16 @@ VIEWS.tasks = () => {
   </div>`;
   return { title: 'Tarefas', actions: `<button class="btn primary" data-act="tk-new">${icon('plus')} Nova tarefa</button>`, html };
 };
+/* Botão de recolher/expandir subtarefas de uma tarefa principal (estado guardado nas configurações). */
+function tkFoldBtn(t) {
+  if (t.parent_id) return '';
+  const n = subtasksOf(t.id).length; if (!n) return '';
+  const isFolded = (db.setting('tkFold', []) || []).includes(t.id);
+  return `<button class="btn sm icon ghost" data-act="tk-fold" data-id="${t.id}" style="margin-right:4px;flex:none" aria-label="${isFolded ? 'Expandir' : 'Recolher'} subtarefas" title="${isFolded ? 'Expandir' : 'Recolher'} subtarefas">${icon(isFolded ? 'chevR' : 'chevD')}</button>${isFolded ? `<span class="faint small" style="margin-right:6px">${n}</span>` : ''}`;
+}
 const tMs = (t) => t.parent_id ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : taskMs(t.id);
 const TCOLS = {
-  name: { label: 'Tarefa', ico: 'text', w: 300, cls: t => 'name' + (t.parent_id ? ' sub' : ''), cell: t => `<span class="cell-name"><span class="ct">${t.parent_id ? '<span class="faint">↳ </span>' : ''}${esc(t.name)} ${t.status_inherited !== false ? '<span class="inh">herdado</span>' : ''}</span>${openBtn('tk-open', t.id, `data-p="${t.project_id}"`)}</span>`, edit: { type: 'text', required: true, get: t => t.name, set: (t, v) => db.update('tempo_tasks', t.id, { name: v }) } },
+  name: { label: 'Tarefa', ico: 'text', w: 300, cls: t => 'name' + (t.parent_id ? ' sub' : ''), cell: t => `<span class="cell-name">${tkFoldBtn(t)}<span class="ct">${t.parent_id ? '<span class="faint">↳ </span>' : ''}${esc(t.name)} ${t.status_inherited !== false ? '<span class="inh" title="Acompanha o status do projeto">H</span>' : ''}</span>${openBtn('tk-open', t.id, `data-p="${t.project_id}"`)}</span>`, edit: { type: 'text', required: true, get: t => t.name, set: (t, v) => db.update('tempo_tasks', t.id, { name: v }) } },
   project: { label: 'Cliente › Projeto', ico: 'folder', w: 280, cell: t => { const p = db.get('tempo_projects', t.project_id); return `<span class="row" style="gap:6px;flex-wrap:nowrap">${clientTag(clientOf(p))}<span class="muted">${esc(p.name)}</span></span>`; } },
   status: { label: 'Status', ico: 'spin', w: 170, cell: t => statusTag(t.status_id), edit: { type: 'combo', kind: 'work', get: t => t.status_id, set: (t, v) => setTaskStatus(t, v) } },
   deadline: { label: 'Prazo', ico: 'cal', w: 120, cell: t => { const late = t.deadline && t.deadline < ymd(new Date()) && !['done', 'cancelled'].includes(statusCat(t.status_id)); return `<span style="${late ? 'color:var(--danger);font-weight:600' : ''}">${fmtDate(t.deadline)}</span>`; }, edit: { type: 'date', get: t => t.deadline, set: async (t, v) => { await taskDeadlineFlow(t, v); } } },
@@ -54,6 +62,7 @@ function duplicateTasks(ids) {
   db.emit(); toast(ids.length > 1 ? `${ids.length} tarefas duplicadas` : 'Tarefa duplicada');
 }
 CHANGES.tk = (el) => { S.task[el.dataset.k] = el.value; render(); };
+ACTIONS['tk-fold'] = (el) => { const id = el.dataset.id; const cur = db.setting('tkFold', []) || []; db.setSetting('tkFold', cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]); render(); };
 ACTIONS['tk-set'] = (el) => { S.task[el.dataset.k] = el.dataset.v; render(); };
 ACTIONS['tk-open'] = (el) => openProject(el.dataset.p || db.get('tempo_tasks', el.dataset.id)?.project_id, 'tasks');
 CHANGES['tk-status'] = (el) => { setTaskStatus(db.get('tempo_tasks', el.dataset.id), el.value); toast('Status da tarefa atualizado'); };

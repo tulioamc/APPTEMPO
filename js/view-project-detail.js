@@ -57,7 +57,7 @@ function pdTasks(p) {
   const row = (t, isSub) => `<div class="task-row ${isSub ? 'sub' : ''}">
     <input class="input sm n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome">
     ${comboBtn('work', t.status_id, 'task-status', t.id)}
-    ${t.status_inherited !== false ? '<span class="inh" title="Acompanha o status do projeto">herdado</span>' : `<button class="btn sm ghost" data-x="inherit" data-id="${t.id}" title="Voltar a acompanhar o status do projeto">${icon('undo')} herdar</button>`}
+    ${t.status_inherited !== false ? '<span class="inh" title="Acompanha o status do projeto">H</span>' : `<button class="btn sm ghost" data-x="inherit" data-id="${t.id}" title="Voltar a acompanhar o status do projeto">${icon('undo')} herdar</button>`}
     ${!isSub ? comboBtn('wt', t.work_type_id, 'task-wt', t.id, { cls: 'hide-sm' }) : ''}
     <input type="date" class="input sm" style="width:auto" value="${t.deadline || ''}" data-pd="tdl" data-id="${t.id}" aria-label="Prazo">
     <input class="input sm" style="width:130px" value="${esc(t.owner || '')}" placeholder="Responsável" data-pd="owner" data-id="${t.id}" aria-label="Responsável">
