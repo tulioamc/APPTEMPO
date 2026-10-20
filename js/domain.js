@@ -122,7 +122,9 @@ function segsCoveredIn(segs, pid, excludeId) {
 }
 const entryStart = (e) => e.segments?.[0]?.s;
 const entryEnd = (e) => { const l = e.segments?.[e.segments.length - 1]; return l ? l.e : null; };
-const activeEntry = () => db.all('tempo_time_entries').find(e => e.state === 'running' || e.state === 'paused') || null;
+const openEntries = () => db.all('tempo_time_entries').filter(e => e.state === 'running' || e.state === 'paused');
+// a sessão em foco: a que está rodando; se não houver, a última pausada
+const activeEntry = () => openEntries().find(e => e.state === 'running') || openEntries()[0] || null;
 function entriesOn(day) { const k = ymd(day); return db.all('tempo_time_entries').filter(e => entryStart(e) && ymd(entryStart(e)) === k).sort((a, b) => new Date(entryStart(b)) - new Date(entryStart(a))); }
 function entryPath(e) {
   const p = db.get('tempo_projects', e.project_id), t = db.get('tempo_tasks', e.task_id);
@@ -305,7 +307,8 @@ function startEntry(sel) {
   db.setSetting('lastSeen', Date.now());
   return e;
 }
-function pauseEntry(e, at) { const segs = clone(e.segments); segs[segs.length - 1].e = at || nowISO(); db.update('tempo_time_entries', e.id, { state: 'paused', segments: segs }); }
+// troca: o tempo de agora até a volta vai para o projeto "to" (fica como "Trabalho em …", sem pausa)
+function pauseEntry(e, at, troca) { const segs = clone(e.segments); const last = segs[segs.length - 1]; last.e = at || nowISO(); if (troca) { last.why = 'moved'; last.troca = true; last.movedTo = troca.to; } db.update('tempo_time_entries', e.id, { state: 'paused', segments: segs }); }
 function resumeEntry(e) { const segs = clone(e.segments); segs.push({ s: nowISO(), e: null }); db.update('tempo_time_entries', e.id, { state: 'running', segments: segs }); }
 function stopEntry(e, at) {
   const segs = clone(e.segments); const last = segs[segs.length - 1];

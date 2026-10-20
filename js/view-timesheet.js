@@ -57,6 +57,7 @@ VIEWS.timesheet = () => {
       <div class="field"><label for="ts-notes">Notas da sessão</label><textarea id="ts-notes" class="input" data-on="ts-notes" placeholder="Interrupções, espera pelo cliente, próximo passo…" style="min-height:56px">${esc(a.notes)}</textarea></div>
       <div class="timer-actions">
         ${a.state === 'running' ? `<button class="btn" data-act="ts-pause">${icon('pause')} Pausar</button>` : `<button class="btn primary" data-act="ts-resume">${icon('play')} Retomar</button>`}
+        <button class="btn" data-act="ts-switch">Trocar de projeto</button>
         <button class="btn danger" data-act="ts-stop">${icon('stop')} Encerrar</button>
         <button class="btn ghost" data-act="ts-edit" data-id="${a.id}">${icon('edit')} Revisar sessão</button>
       </div>
@@ -143,10 +144,37 @@ ACTIONS['ts-quick'] = (el) => {
 };
 ACTIONS['ts-pause'] = () => { const a = activeEntry(); if (a?.state === 'running') { pauseEntry(a); toast('Sessão pausada'); } };
 ACTIONS['ts-resume'] = () => { const a = activeEntry(); if (a?.state === 'paused') { resumeEntry(a); toast('Sessão retomada'); } };
-ACTIONS['ts-stop'] = async () => { let a = activeEntry(); if (!a) return;
+ACTIONS['ts-stop'] = async () => { let a = activeEntry(); if (!a) return; const todas = openEntries();
   const ps = pausesOf(a.id);
   if (ps.length) { const n = ps.length; const ok = await confirmBox({ title: `${n} pausa(s) sugerida(s)`, body: `Antes de encerrar: inserir ${n === 1 ? 'a pausa sugerida' : 'as ' + n + ' pausas sugeridas'} na sessão? <br><span class="small muted">Se não, as sugestões ficam registradas como ignoradas na aba Avisos.</span>`, ok: 'Inserir e encerrar' }); if (ok) ps.forEach(n => applyPause(db.get('tempo_time_entries', a.id), n)); else ps.forEach(n => decideNotice(n, 'ignored', 'Ignorada ao encerrar a sessão')); a = db.get('tempo_time_entries', a.id); }
-  stopEntry(a); toast(`Sessão encerrada · ${fmtDur(entryMs(a))}`, { actions: [{ label: 'Revisar', run: () => openEntryModal(a.id) }] }); };
+  todas.forEach(x => stopEntry(x)); toast(todas.length > 1 ? `${todas.length} sessões encerradas` : `Sessão encerrada · ${fmtDur(entryMs(a))}`, { actions: [{ label: 'Revisar', run: () => openEntryModal(a.id) }] }); };
+/* Troca de projeto sem pausar: a sessão atual fica aberta, mas parada, e o tempo enquanto a outra roda vira "Trabalho em …". */
+function switchTo(proj, taskId) {
+  const cur = db.all('tempo_time_entries').find(e => e.state === 'running') || null;
+  const same = (x) => x.project_id === proj.id && (x.task_id || null) === (taskId || null);
+  if (cur && same(cur)) return toast('Já está nesse projeto.');
+  const alvo = openEntries().find(x => x.id !== cur?.id && same(x)) || null;
+  if (cur) pauseEntry(cur, null, { to: proj.id });
+  if (alvo) resumeEntry(alvo);
+  else { const c = clientOf(proj); db.insert('tempo_time_entries', { agency_id: c?.agency_id || null, client_id: c?.id || null, project_id: proj.id, task_id: taskId || null, work_type_id: lastWorkType(proj.id), revision_id: null, notes: '', state: 'running', segments: [{ s: nowISO(), e: null }], edits: [] }); }
+  db.emit();
+  toast(`Agora em ${tkProjectLabel(proj)}`);
+}
+ACTIONS['ts-switch'] = () => {
+  const l = openLayer({
+    render: () => `<div class="dh"><h2>Trocar de projeto</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+      <div class="db stack" style="gap:8px">
+        <div class="field"><label for="sw-proj">Projeto</label><select id="sw-proj" class="input"><option value="">Escolha um projeto</option>${tkProjectsSorted().map(p => `<option value="${esc(p.id)}">${esc(tkProjectLabel(p))}</option>`).join('')}</select></div>
+        <div class="field"><label for="sw-task">Tarefa (opcional)</label><select id="sw-task" class="input" disabled><option value="">Sem tarefa</option></select></div>
+        <div class="row"><button class="btn primary" data-x="sw-ok">Trocar</button><span class="small muted">A sessão atual fica aberta e para de contar até você voltar.</span></div>
+      </div>`,
+    onMount: (ly) => {
+      const proj = ly.box.querySelector('#sw-proj'), task = ly.box.querySelector('#sw-task');
+      proj.addEventListener('change', () => { const ts = proj.value ? db.where('tempo_tasks', t => t.project_id === proj.value) : []; task.innerHTML = `<option value="">Sem tarefa</option>${ts.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}`; task.disabled = !proj.value; });
+      ly.box.addEventListener('click', (ev) => { const b = ev.target.closest('[data-x="sw-ok"]'); if (!b) return; if (!proj.value) return toast('Escolha um projeto.'); const p = db.get('tempo_projects', proj.value); ly.close(); switchTo(p, task.value || null); });
+    },
+  });
+};
 ACTIONS['ts-edit'] = (el) => openEntryModal(el.dataset.id);
 ACTIONS['ts-manual'] = () => openEntryModal(null);
 

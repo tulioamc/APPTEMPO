@@ -298,14 +298,14 @@ const pauseHatch = (why) => PAUSE_HATCH[pauseKind(why)];
 
 /* Espaço "fora" de um lançamento (trecho movido ou trabalho recebido), na faixa de qualquer tela. */
 function actMovedSpanHTML(seg, x, w) {
-  const recebido = !seg.movedTo && !!seg.movedFrom;   // espaço entre pedaços recebidos: o trabalho foi em outro projeto
+  const recebido = !!seg.troca || (!seg.movedTo && !!seg.movedFrom);   // troca de projeto ou pedaços recebidos: o trabalho foi em outro projeto
   const idOutro = seg.movedTo || seg.movedFrom || '';
   const dst = db.get('tempo_projects', idOutro);
   const nome = dst ? tkProjectLabel(dst) : null;
   const cor = (dst && (clientOf(dst)?.color || dst.color)) || '#94A3B8';
   const texto = recebido ? 'Trabalho em ' + (nome || 'outro projeto') : (nome ? 'Movido → ' + nome : 'Movido');
   const dica = recebido ? texto + ' · clique para abrir' : (nome ? 'Movido para ' + nome + ' · clique para abrir' : 'Movido');
-  return `<span class="act-moved" data-pid="${esc(idOutro)}" style="left:${x}%;width:${w}%;--mv:${esc(cor)}" data-tip="${esc(dica)}">${w > 6 ? esc(texto) : ''}</span>`;
+  return `<span class="act-moved" data-pid="${esc(idOutro)}" style="left:${x}%;width:${w}%;--mv:${esc(cor)}" data-tip="${esc(dica)}"></span>`;   // o texto aparece só no hover (data-tip)
 }
 /* Checkbox "Mostrar trabalho em outros projetos": aparece só se houver espaços "fora" nas sessões. Igual na revisão e no resumo. */
 function actForaToggleHTML(ents) {

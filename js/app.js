@@ -97,9 +97,10 @@ function sidebarHTML() {
 function topTimerHTML() {
   const a = activeEntry();
   if (!a) return `<button class="btn icon" data-act="ts-start" aria-label="Iniciar registro" title="Iniciar registro">${icon('play')}</button>`;
-  return a.state === 'running'
+  const trocar = `<button class="btn sm ghost" data-act="ts-switch" title="Trocar de projeto sem pausar">Trocar</button>`;
+  return (a.state === 'running'
     ? `<button class="btn icon" data-act="ts-pause" aria-label="Pausar" title="Pausar">${icon('pause')}</button>`
-    : `<button class="btn icon" data-act="ts-resume" aria-label="Retomar" title="Retomar">${icon('play')}</button>`;
+    : `<button class="btn icon" data-act="ts-resume" aria-label="Retomar" title="Retomar">${icon('play')}</button>`) + trocar;
 }
 function mobileTimerHTML() {
   const a = activeEntry();

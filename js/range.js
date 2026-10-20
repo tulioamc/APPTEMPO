@@ -124,6 +124,25 @@ function openZoomOf(ents, a, b) {
     const x = pct(g.s), y = pct(g.e);
     pauses += `<span class="seg-b pausa act-pause" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(`Pausa ${hhmm(g.s)}–${hhmm(g.e)} · ${fmtDur(g.e - g.s)}\n${pauseWhy(g.why)}`)}"></span>`;
   });
+  /* Barra de projetos: o tempo de cada sessão no intervalo (inclusive trabalho sem registro de programa), na cor do cliente. */
+  const projCol = (p) => { const c = clientOf(p); return hexOf((c && c.color) || (agOfProject(p)?.color) || 'gray'); };
+  let projBar = '', projLegend = ''; const projSeen = new Map();
+  ents.forEach(e => {
+    const p = e.project_id && db.get('tempo_projects', e.project_id); if (!p) return;
+    entryBruIntervals(e).forEach(([s0, e0]) => {
+      const s1 = Math.max(s0, a), e1 = Math.min(e0, b); if (e1 <= s1) return;
+      const cur = projSeen.get(p.id) || { p, ms: 0, ivs: [] };
+      cur.ms += e1 - s1; cur.ivs.push([s1, e1]); projSeen.set(p.id, cur);
+    });
+  });
+  [...projSeen.values()].forEach(pr => {
+    const col = projCol(pr.p), lbl = tkProjectLabel(pr.p);
+    pr.ivs.forEach(([s1, e1]) => {
+      const x = pct(s1), y = pct(e1); if (y <= x) return;
+      projBar += `<span class="seg-b fill act-b" style="--tb:${col};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(`${lbl} · ${fmtDur(pr.ms)}`)}"></span>`;
+    });
+    projLegend += `<span class="act-chip" style="--tb:${col}" title="${esc(lbl)}"><i></i>${esc(pr.p.name)} · ${fmtDur(pr.ms)}</span>`;
+  });
   let bars = '';
   A.records.forEach(r => {
     const g = A.groups.find(x => x.id === r.gid); if (!g) return;
@@ -137,6 +156,7 @@ function openZoomOf(ents, a, b) {
   ];
   openLayer({
     render: () => `<div class="dh"><h2>Zoom · ${hhmm(a)}–${hhmm(b)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+      <div class="act-sec" style="width:100%"><div class="act-strip" style="position:relative;height:26px;width:100%;border-radius:0;margin-top:0">${projBar}</div>${projLegend ? `<div class="row small" style="gap:8px;flex-wrap:wrap;margin:6px 0 10px">${projLegend}</div>` : ''}</div>
       <div class="act-sec" style="width:100%"><div class="act-strip" style="position:relative;height:44px;width:100%;border-radius:0;margin-top:0">${pauses}${bars}</div></div>
       <div class="db stack" style="gap:12px">
         <div class="day-axis"><span>${hhmm(a)}</span><span>${fmtDur(span)}</span><span>${hhmm(b)}</span></div>
