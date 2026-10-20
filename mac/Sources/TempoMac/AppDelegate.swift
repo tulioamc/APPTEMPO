@@ -1,11 +1,13 @@
 import AppKit
 import ApplicationServices
 import WebKit
+import Carbon.HIToolbox
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
     private var web: WKWebView!
     private var statusItem: NSStatusItem!
+    private var quickTodoKey: EventHotKeyRef?
     private var timerRunning = false
     private var timerPaused = false
     private var timerMs: Double = 0
@@ -212,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         appMenu.addItem(withTitle: "Mostrar Tempo", action: #selector(showWindow), keyEquivalent: "")
         appMenu.addItem(withTitle: "Recarregar", action: #selector(reload), keyEquivalent: "r")
         appMenu.addItem(withTitle: "Atualizar app", action: #selector(updateNow), keyEquivalent: "u")
+        appMenu.addItem(withTitle: "Nova to-do… (⌃⌥T de qualquer tela)", action: #selector(quickTodo), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Sair", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
@@ -228,6 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         editMenu.addItem(withTitle: "Selecionar tudo", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = editMenu
         NSApp.mainMenu = main
+        registerQuickTodoHotKey()
     }
 
     private func toggleItem(_ title: String, key: String, defaultOn: Bool, action: Selector) -> NSMenuItem {
@@ -249,4 +253,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     @objc private func showWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc private func reload() { web.reload() }
+    /* ⌃⌥T em qualquer app: abre a caixinha de to-do (Carbon: atalho global sem permissão extra). */
+    private func registerQuickTodoHotKey() {
+        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        InstallEventHandler(GetApplicationEventTarget(), { _, _, userData -> OSStatus in
+            guard let userData = userData else { return noErr }
+            let app = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
+            DispatchQueue.main.async { app.quickTodo() }
+            return noErr
+        }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), nil)
+        let id = EventHotKeyID(signature: OSType(0x54445430), id: 1)   // 'TDT0'
+        RegisterEventHotKey(UInt32(kVK_ANSI_T), UInt32(controlKey | optionKey), id, GetApplicationEventTarget(), 0, &quickTodoKey)
+    }
+    /* ⌃⌥T: caixinha para anotar uma to-do sem trocar de tela; o texto vai para o To-do do app. */
+    @objc private func quickTodo() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Nova to-do"
+        alert.informativeText = "Ex.: Pegar Rafa às 16h · [30min] · !seg,qua"
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 340, height: 24))
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Adicionar")
+        alert.addButton(withTitle: "Cancelar")
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let data = try? JSONSerialization.data(withJSONObject: [text]), let arr = String(data: data, encoding: .utf8) else { return }
+        web.evaluateJavaScript("window.todoQuickAdd && window.todoQuickAdd(\(arr)[0])", completionHandler: nil)
+    }
 }

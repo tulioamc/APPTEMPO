@@ -31,13 +31,25 @@ function decideNotice(n, status, decision, extra) {
   if (!n) return;
   db.update('tempo_notices', n.id, { status, decision: decision || '', decided_at: nowISO(), snooze_until: null, ...(extra || {}) }, true);
 }
+/* Avisos ligados a um projeto ganham o play "Começar" (abre o Iniciar registro já no projeto). */
 const noticeButtons = (n) => {
+  const base = noticeBtnsBase(n);
+  if (!base || !n.data?.project_id) return base;
+  return base.replace(/<\/div>$/, `<button class="btn sm icon ghost" data-act="notice-play" data-id="${n.id}" title="Começar registro" aria-label="Começar registro">${icon('play')}</button></div>`);
+};
+ACTIONS['notice-play'] = (el) => {
+  const n = db.get('tempo_notices', el.dataset.id); const p = n?.data?.project_id ? db.get('tempo_projects', n.data.project_id) : null;
+  if (!p) return openStartModal({});
+  const c = clientOf(p);
+  openStartModal({ agency_id: c?.agency_id || '__none', client_id: p.client_id, project_id: p.id });
+};
+const noticeBtnsBase = (n) => {
   if (n.status !== 'pending') return '';
   if (n.kind === 'pause') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Aceitar</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'activity') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Adicionar à nota</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'todo') return '';
   if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
-  return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">To-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
+  return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Virar to-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
 };
 ACTIONS['notice-accept'] = (el) => {
   const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
@@ -62,8 +74,9 @@ ACTIONS['notice-deny'] = (el) => {
   db.emit();
 };
 /* Aviso vira item do To-do (lateral do Time Sheet). O aviso sai da lista de pendentes. */
-ACTIONS['notice-todo'] = (el) => {
+ACTIONS['notice-todo'] = async (el) => {
   const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
+  if (!await confirmBox({ title: 'Virar to-do?', body: `"${n.title}" vai para a lista de to-do e sai dos avisos.`, ok: 'Virar to-do' })) return;
   db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: n.title, body: n.body || '', data: n.data || {}, decision: '', decided_at: null, snooze_until: null }, true);
   decideNotice(n, 'accepted', 'Mandado para o to-do');
   db.emit(); toast('Mandado para o to-do');
@@ -168,9 +181,35 @@ function todoDueLabel(data) {
 /* To-do manual */
 ACTIONS['todo-add'] = () => {
   const inp = $('#todo-new'); const raw = (inp?.value || '').trim(); if (!raw) return;
-  const p = parseTodoText(raw);
-  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {}, decision: '', decided_at: null, snooze_until: null }, true);
-  db.emit();
+  if (todoAddRaw(raw) && inp) inp.value = '';
+};
+/* Cria um to-do a partir do texto: "!seg,qua" = fixo; "[1h]" ou "[30min]" = tempo estimado. */
+function todoAddRaw(raw) {
+  const fm = raw.match(/\s!([a-zçã,]+)\s*$/i);
+  if (fm) {
+    const words = fm[1].toLowerCase().split(',').map(x => x.trim());
+    const days = (words.includes('diario') || words.includes('todo')) ? [0, 1, 2, 3, 4, 5, 6] : words.map(w => TODO_DAYS[w]);
+    if (days.length && days.every(d => d !== undefined)) {
+      const fixed = { id: uid(), title: raw.slice(0, fm.index).trim(), days };
+      todoSetSilent('todoFixed', [...(db.setting('todoFixed', []) || []), fixed]);
+      if (days.includes(new Date().getDay())) db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: fixed.title, body: '', data: { fixed: fixed.id }, decision: '', decided_at: null, snooze_until: null }, true);
+      db.emit(); return true;
+    }
+  }
+  const em = raw.match(/\s\[(\d+)(h|min)\]\s*$/i);
+  const est = em ? Number(em[1]) * (em[2].toLowerCase() === 'h' ? 60 : 1) : null;
+  const text = em ? raw.slice(0, em.index).trim() : raw;
+  const p = parseTodoText(text);
+  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: { ...(p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {}), ...(est ? { est } : {}) }, decision: '', decided_at: null, snooze_until: null }, true);
+  db.emit(); return true;
+}
+/* Ponte para o app de Mac (⇧⌘T): recebe o texto e cria o to-do. */
+window.todoQuickAdd = (text) => { const t = String(text || '').trim(); if (t) todoAddRaw(t); };
+ACTIONS['todo-play'] = (el) => {
+  const n = db.get('tempo_notices', el.dataset.id); const t = n?.data?.taskId ? db.get('tempo_tasks', n.data.taskId) : null;
+  if (!t) return openStartModal({});
+  const p = db.get('tempo_projects', t.project_id); const c = clientOf(p);
+  openStartModal({ agency_id: c?.agency_id || '__none', client_id: p.client_id, project_id: p.id, task_id: t.parent_id || t.id, sub_id: t.parent_id ? t.id : '' });
 };
 ACTIONS['todo-toggle'] = (el) => {
   const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
@@ -230,14 +269,125 @@ ACTIONS['todo-save'] = (el) => {
   db.emit();
 };
 
+/* To-do: item (um só modelo para o painel e para a aba). */
+function todoItemHTML(t) {
+  const est = t.data?.est;
+  const real = t.data?.taskId ? db.where('tempo_time_entries', e => e.task_id === t.data.taskId).reduce((s, e) => s + entryMs(e), 0) : 0;
+  const estTxt = est ? `<span class="todo-due">${real ? fmtDur(real) + ' / ' : 'est. '}${fmtDur(est * 60000)}</span>` : '';
+  return `<div class="todo ${t.status === 'done' ? 'done' : ''}"><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-save'](this)">` : `<span class="grow todo-title" data-act="todo-edit" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${estTxt}${t.data?.adiou ? `<span class="todo-due">adiou ${t.data.adiou}x</span>` : ''}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="btn sm icon ghost" data-act="todo-play" data-id="${t.id}" aria-label="Começar registro" title="Começar registro">${icon('play')}</button><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`;
+}
+/* Abertos primeiro; concluídos agrupados por dia da resolução, mais recentes primeiro.
+   recentDays: mostra só os concluídos dos últimos N dias (o painel usa 7). */
+function todoGroupsHTML(todos, recentDays) {
+  const cutoff = recentDays ? Date.now() - recentDays * 864e5 : -Infinity;
+  const open = todos.filter(t => t.status !== 'done');
+  const done = todos.filter(t => t.status === 'done' && new Date(t.decided_at || t.created_at || 0).getTime() >= cutoff);
+  const byDay = {};
+  done.forEach(t => { const k = ymd(new Date(t.decided_at || t.created_at || Date.now())); (byDay[k] = byDay[k] || []).push(t); });
+  const folded = db.setting('todoFold', []) || [];
+  const groups = Object.keys(byDay).sort().reverse().map(k => {
+    const [y, m, d] = k.split('-');
+    const closed = folded.includes(k);
+    return `<div class="todo-day"><button class="todo-dayh" data-act="todo-fold" data-day="${k}">${d}.${m}.${y} ${icon(closed ? 'chevR' : 'chevD')}</button>${closed ? '' : byDay[k].map(todoItemHTML).join('')}</div>`;
+  }).join('');
+  return (open.map(todoItemHTML).join('') + groups) || '<span class="faint small">Nada por enquanto.</span>';
+}
+ACTIONS['todo-fold'] = (el) => {
+  const k = el.dataset.day; const cur = db.setting('todoFold', []) || [];
+  db.setSetting('todoFold', cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k]);
+  render();
+};
+
+/* ---- To-do: regras automáticas (uma vez por dia, sem disparar re-render) ---- */
+const TODO_DAYS = { dom: 0, seg: 1, ter: 2, qua: 3, qui: 4, sex: 5, sab: 6 };
+const TODO_DAY_NAMES = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+const todoToday = () => ymd(new Date());
+const todoSetSilent = (key, value) => { const st = db.data.tempo_settings.find(r => r.key === key); if (st) db.update('tempo_settings', st.id, { value }, true); else db.insert('tempo_settings', { key, value }, true); };
+const todoDueDay = (n) => n.data?.due ? n.data.due.slice(0, 10) : null;
+const todoIsLate = (n) => n.status !== 'done' && !!n.data?.due && new Date(n.data.end ? n.data.due.slice(0, 10) + 'T' + n.data.end : n.data.due) < new Date();
+
+/* Quem ficou aberto de um dia para o outro ganha +1 em "adiou". */
+function todoCarry() {
+  const today = todoToday();
+  if (db.setting('todoCarryDay', '') === today) return;
+  db.all('tempo_notices').filter(n => n.kind === 'todo' && n.status !== 'done' && ymd(new Date(n.created_at || Date.now())) < today)
+    .forEach(n => db.update('tempo_notices', n.id, { data: { ...(n.data || {}), adiou: (n.data?.adiou || 0) + 1 } }, true));
+  todoSetSilent('todoCarryDay', today);
+}
+/* Fixos: criam o to-do do dia nos dias da semana escolhidos. */
+function todoFixedApply() {
+  const today = todoToday(); if (db.setting('todoFixedDay', '') === today) return;
+  const wd = new Date().getDay();
+  (db.setting('todoFixed', []) || []).forEach(f => {
+    if (!f.days.includes(wd)) return;
+    const exists = db.all('tempo_notices').some(n => n.kind === 'todo' && n.data?.fixed === f.id && ymd(new Date(n.created_at || 0)) === today);
+    if (!exists) db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: f.title, body: '', data: { fixed: f.id }, decision: '', decided_at: null, snooze_until: null }, true);
+  });
+  todoSetSilent('todoFixedDay', today);
+}
+/* Sugestões: tarefas com prazo nos próximos 3 dias e avisos de conta/cobrança/prazo pendentes. */
+function todoSuggestions() {
+  const lim = ymd(new Date(Date.now() + 3 * 864e5));
+  const open = new Set(db.all('tempo_notices').filter(n => n.kind === 'todo' && n.status !== 'done').map(n => n.title));
+  const out = [];
+  db.all('tempo_tasks').forEach(t => {
+    if (!t.deadline || t.deadline > lim || ['done', 'cancelled'].includes(statusCat(t.status_id))) return;
+    const p = db.get('tempo_projects', t.project_id); if (!p || p.archived) return;
+    const title = `${t.name} · ${p.name}`; if (!open.has(title)) out.push({ title, deadline: t.deadline, taskId: t.id });
+  });
+  db.all('tempo_notices').filter(n => n.status === 'pending' && ['conta', 'cobranca', 'prazo'].includes(n.kind)).forEach(n => {
+    if (!open.has(n.title)) out.push({ title: n.title, deadline: todoDueDay(n) });
+  });
+  return out.sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999')).slice(0, 6);
+}
+ACTIONS['todo-suggest'] = (el) => {
+  const dl = el.dataset.deadline;
+  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: el.dataset.title, body: '', data: { ...(dl ? { due: `${dl}T18:00`, deadline: true } : {}), ...(el.dataset.task ? { taskId: el.dataset.task } : {}) }, decision: '', decided_at: null, snooze_until: null }, true);
+  db.emit();
+};
+/* To-do criado a partir de uma tarefa: quando a tarefa é concluída (ou cancelada), o to-do é marcado sozinho. */
+function todoSyncLinked() {
+  db.all('tempo_notices').filter(n => n.kind === 'todo' && n.status !== 'done' && n.data?.taskId).forEach(n => {
+    const t = db.get('tempo_tasks', n.data.taskId);
+    if (t && ['done', 'cancelled'].includes(statusCat(t.status_id))) db.update('tempo_notices', n.id, { status: 'done', decided_at: nowISO() }, true);
+  });
+}
+ACTIONS['todo-fixed-del'] = (el) => { todoSetSilent('todoFixed', (db.setting('todoFixed', []) || []).filter(f => f.id !== el.dataset.id)); db.emit(); };
+ACTIONS['todo-tab'] = (el) => { S.todoTab = el.dataset.v; render(); };
+
+/* Aba To-do: resumo do dia, filtros, sugestões, fixos e a lista por dia. */
+VIEWS.todo = () => {
+  todoCarry(); todoFixedApply(); todoSyncLinked();
+  const all = db.all('tempo_notices').filter(n => n.kind === 'todo');
+  const today = todoToday();
+  const dayOf = (iso) => ymd(new Date(iso || 0));
+  const todayTotal = all.filter(n => (n.status === 'done' && dayOf(n.decided_at) === today) || (n.status !== 'done' && (todoDueDay(n) === today || todoIsLate(n))));
+  const todayDone = todayTotal.filter(n => n.status === 'done').length;
+  const tab = S.todoTab || 'open';
+  const pick = { open: n => n.status !== 'done', hoje: n => n.status !== 'done' && (todoDueDay(n) === today || todoIsLate(n)), atrasadas: n => todoIsLate(n), feitas: n => n.status === 'done' };
+  const TABS = [['open', 'Abertas'], ['hoje', 'Hoje'], ['atrasadas', 'Atrasadas'], ['feitas', 'Concluídas']];
+  const fixed = db.setting('todoFixed', []) || [];
+  const sug = tab === 'open' ? todoSuggestions() : [];
+  const html = `<div class="panel"><div class="panel-b" style="padding:16px;max-width:720px">
+    <div class="row between"><b>To-do</b><span class="faint small">Hoje: ${todayDone} de ${todayTotal.length} feitas</span></div>
+    <form class="row gap-s" style="margin-top:10px" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h · fixo: Pagar Rafa !seg,qua" autocomplete="off"><button class="btn sm" data-act="todo-add">Adicionar</button></form>
+    <div class="seg" style="margin-top:12px">${TABS.map(([v, l]) => `<button class="${tab === v ? 'on' : ''}" data-act="todo-tab" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="todo-list" style="margin-top:12px">${todoGroupsHTML(all.filter(pick[tab] || pick.open))}</div>
+    ${sug.length ? `<div class="lbl" style="margin-top:16px">Sugestões</div>${sug.map(x => `<div class="row between small res-row"><span>${esc(x.title)}${x.deadline ? ` <span class="${x.deadline === todoToday() ? 'late' : 'faint'}">· ${x.deadline === todoToday() ? 'entrega hoje' : 'prazo ' + fmtDate(x.deadline)}</span>` : ''}</span><button class="btn sm" data-act="todo-suggest" data-title="${esc(x.title)}" data-deadline="${x.deadline || ''}" data-task="${x.taskId || ''}">Criar to-do</button></div>`).join('')}` : ''}
+    ${tab === 'open' && fixed.length ? `<div class="lbl" style="margin-top:16px">Fixos</div>${fixed.map(f => `<div class="row between small res-row"><span>${esc(f.title)} <span class="faint">· ${f.days.length === 7 ? 'todo dia' : f.days.map(d => TODO_DAY_NAMES[d]).join(', ')}</span></span><button class="icon-btn ghost" data-act="todo-fixed-del" data-id="${f.id}" title="Remover fixo">×</button></div>`).join('')}` : ''}
+  </div></div>`;
+  return { title: 'To-do', html };
+};
+
 /* Painel lateral da tela inicial (Time Sheet): to-do + avisos pendentes. */
 function sidePanelHTML() {
+  todoCarry(); todoFixedApply(); todoSyncLinked();
   const todos = db.all('tempo_notices').filter(n => n.kind === 'todo').sort((a, b) => (a.status === 'done') - (b.status === 'done') || (a.data?.due || '\uffff').localeCompare(b.data?.due || '\uffff') || (a.created_at || '').localeCompare(b.created_at || ''));
   const pend = db.all('tempo_notices').filter(n => n.status === 'pending' && n.kind !== 'reminder').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 6);
   return `<aside class="side-panel">
     <div class="card"><div class="row between"><b>To-do</b><span class="faint small">${todos.filter(t => t.status !== 'done').length} abertas</span></div>
       <form class="row gap-s" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h" autocomplete="off"><button class="btn sm" data-act="todo-add">Adicionar</button></form>
-      <div class="todo-list">${todos.length ? todos.map(t => `<div class="todo ${t.status === 'done' ? 'done' : ''}"><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-save'](this)">` : `<span class="grow todo-title" data-act="todo-edit" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`).join('') : '<span class="faint small">Nada por enquanto.</span>'}</div>
+      <div class="todo-list">${todoGroupsHTML(todos, 7)}</div>
     </div>
     <div class="card"><div class="row between"><b>Avisos</b><button class="btn sm ghost" data-act="go" data-route="notices">Ver todos</button></div>
       ${pend.length ? pend.map(n => `<div class="side-notice" data-act="notice-open" data-id="${n.id}" style="cursor:pointer" title="Ir até o item para resolver"><div class="small"><b>${esc(n.title)}</b>${n.kind === 'pause' ? '' : `<div class="faint">${esc(n.body || '')}</div>`}</div>${noticeButtons(n)}</div>`).join('') : '<span class="faint small">Sem avisos pendentes.</span>'}
@@ -245,13 +395,23 @@ function sidePanelHTML() {
 }
 
 /* Tela Avisos: abas por situação, agrupadas por dia (mais recentes primeiro). */
+/* Aba Histórico: tabela com tudo que já foi avisado e a situação de cada item. */
+function noticeHistoryView() {
+  const all = db.all('tempo_notices').filter(n => n.kind !== 'todo').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  const tabs = [['pending', 'Pendentes'], ['snoozed', 'Adiados'], ['accepted', 'Aceitos'], ['ignored', 'Ignorados'], ['all', 'Todos'], ['historico', 'Histórico']];
+  const ST = { pending: 'Pendente', accepted: 'Aceito', ignored: 'Ignorado', snoozed: 'Adiado', done: 'Feito' };
+  const rows = all.map(n => `<tr><td class="mono small">${n.created_at ? fmtDate(ymd(new Date(n.created_at))) : ''}</td><td class="small">${esc(noticeKind(n.kind)[0])}</td><td>${esc(n.title)}</td><td class="small">${esc(ST[n.status] || n.status)}</td><td class="mono small">${n.decided_at ? fmtDate(ymd(new Date(n.decided_at))) : ''}</td></tr>`).join('');
+  return { title: 'Avisos', actions: '', html: `<div class="seg">${tabs.map(([k, l]) => `<button class="${k === 'historico' ? 'on' : ''}" data-act="notice-filter" data-f="${k}">${l}</button>`).join('')}</div>
+    <div class="panel" style="margin-top:12px"><div class="panel-b tight"><table class="grid"><thead><tr><th>Criado</th><th>Tipo</th><th>Aviso</th><th>Situação</th><th>Decidido em</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="faint">Nenhum aviso ainda.</td></tr>'}</tbody></table></div></div>` };
+}
 VIEWS.notices = () => {
   const f = S.nt || 'pending';
+  if (f === 'historico') return noticeHistoryView();
   const all = db.all('tempo_notices').filter(n => n.kind !== 'todo');
   const count = (k) => all.filter(n => k === 'all' || n.status === k).length;
   const list = all.filter(n => f === 'all' || n.status === f).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   const groups = {}; list.forEach(n => { const k = (n.created_at || '').slice(0, 10); (groups[k] = groups[k] || []).push(n); });
-  const tabs = [['pending', 'Pendentes'], ['snoozed', 'Adiados'], ['accepted', 'Aceitos'], ['ignored', 'Ignorados'], ['all', 'Todos']];
+  const tabs = [['pending', 'Pendentes'], ['snoozed', 'Adiados'], ['accepted', 'Aceitos'], ['ignored', 'Ignorados'], ['all', 'Todos'], ['historico', 'Histórico']];
   const badge = (n) => { const [label] = noticeKind(n.kind); const st = { pending: 'Pendente', accepted: 'Aceito', ignored: 'Ignorado', snoozed: 'Adiado', done: 'Feito' }[n.status] || n.status; return `<span class="tag">${label}</span> <span class="faint small">${st}${n.decided_at ? ' em ' + fmtDateTime(n.decided_at) : ''}${n.decision && n.kind !== 'pause' ? ' · ' + esc(n.decision) : ''}</span>`; };
   const html = `<div class="seg">${tabs.map(([k, l]) => `<button class="${f === k ? 'on' : ''}" data-act="notice-filter" data-f="${k}">${l} <span class="faint">${count(k)}</span></button>`).join('')}</div>
     ${Object.keys(groups).sort().reverse().map(day => `<div class="card"><b class="small">${fmtDate(day)}</b>

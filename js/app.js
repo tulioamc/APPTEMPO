@@ -46,6 +46,7 @@ const NAV = [
   { id: 'shared', label: 'Despesas Rafa', icon: 'users' },
   { id: 'reportspf', label: 'Relatórios PF', icon: 'chart' },
   { group: 'Geral' },
+  { id: 'todo', label: 'To-do', icon: 'check' },
   { id: 'notices', label: 'Avisos', icon: 'bell', pend: true },
   { id: 'lixeira', label: 'Lixeira de log', icon: 'trash' },
   { id: 'prefs', label: 'Configurações', icon: 'gear' }

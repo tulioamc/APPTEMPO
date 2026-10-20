@@ -897,3 +897,7 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .pf-col > div:last-child { height: 2.7em; line-height: 1.35; text-align: center; }
 .pf-help { margin: 0 0 10px; line-height: 1.45; }
 .pf-scope { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--surface-3, var(--surface-2)); color: var(--fg-2); }
+
+/* To-do: cabeçalho de cada dia (botão com chevron para recolher) */
+.todo-day { margin-top: 8px; }
+.todo-dayh { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg-2); border-radius: 6px; padding: 2px 8px; font: inherit; font-size: 12px; cursor: pointer; margin-bottom: 4px; }

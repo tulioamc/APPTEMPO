@@ -13,6 +13,27 @@ function selToEntry(sel) {
   return { agency_id: c ? (c.agency_id || null) : (sel.agency_id && sel.agency_id !== '__none' ? sel.agency_id : null), client_id: c?.id || null, project_id: p?.id || null, task_id: sel.sub_id || sel.task_id || null };
 }
 
+/* Resumo do dia: bruto, trabalho, pausas, meta do dia e lacunas (intervalos sem registro acima de 15 min). */
+function dayReviewHTML(day, entries) {
+  const metaH = Number(db.setting('metaDia', 6)) || 6;
+  const metaMs = metaH * 3600000;
+  const trab = entries.reduce((s, e) => s + entryMs(e), 0);
+  const bruto = unionBrutoMs(entries);
+  const pct = Math.min(100, trab / metaMs * 100);
+  const ivs = entries.flatMap(e => (e.segments || []).filter(x => x.e).map(x => [new Date(x.s).getTime(), new Date(x.e).getTime()])).sort((a, b) => a[0] - b[0]);
+  const gaps = []; let end = null;
+  ivs.forEach(([a, b]) => { if (end !== null && a - end > 15 * 60000) gaps.push([end, a]); end = end === null ? b : Math.max(end, b); });
+  if (!entries.length) return '';
+  return `<div class="card" style="margin:0 0 12px">
+    <div class="row between"><b>Resumo do dia</b><span class="faint small">Meta <input class="input sm mono" type="number" min="1" step="0.5" value="${metaH}" data-on="meta-dia" style="width:64px;text-align:right"> h</span></div>
+    <div class="small muted" style="margin-top:4px">Bruto ${fmtDur(bruto)} · trabalho ${fmtDur(trab)} · pausas ${fmtDur(Math.max(0, bruto - trab))}</div>
+    <div style="height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin:8px 0"><span style="display:block;height:100%;width:${pct}%;background:var(--accent)"></span></div>
+    <div class="small">${pct >= 100 ? 'Meta batida' : `Faltam ${fmtDur(Math.max(0, metaMs - trab))} para a meta`}</div>
+    ${gaps.length ? `<div class="lbl" style="margin-top:10px">Lacunas</div>${gaps.map(([a, b]) => `<div class="row between small"><span class="mono">${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}</span><span class="row" style="gap:8px"><span class="mono">${fmtDur(b - a)}</span><button class="btn sm ghost" data-act="ts-manual">Lançar</button></span></div>`).join('')}` : ''}
+  </div>`;
+}
+CHANGES['meta-dia'] = (el) => { db.setSetting('metaDia', Number(el.value) || 6); render(); };
+
 VIEWS.timesheet = () => {
   const a = activeEntry();
   const day = parseYmd(S.tsDay);
@@ -58,7 +79,7 @@ VIEWS.timesheet = () => {
     ${timer}
     ${reportPanelHTML(day)}
   </div>
-
+  ${dayReviewHTML(day, entries)}
   <div class="panel">
     <div class="panel-h">
       <div class="date-nav"><button class="btn sm icon" data-act="ts-shift" data-d="-1" aria-label="Dia anterior">${icon('chevL')}</button><input type="date" id="ts-date" class="input sm" style="width:auto" value="${S.tsDay}" data-on="ts-date"><button class="btn sm icon" data-act="ts-shift" data-d="1" aria-label="Próximo dia">${icon('chevR')}</button>${!isToday(day) ? `<button class="btn sm" data-act="ts-day" data-day="${ymd(new Date())}">Hoje</button>` : ''}</div>
@@ -193,6 +214,14 @@ function bindPicker(layer, sel, rerender) {
 const blankSel = () => ({ agency_id: '', client_id: '', project_id: '', task_id: '', sub_id: '' });
 function defaultWorkType(sel) { const t = db.get('tempo_tasks', sel.sub_id) || db.get('tempo_tasks', sel.task_id); const p = t?.parent_id ? db.get('tempo_tasks', t.parent_id) : null; return t?.work_type_id || p?.work_type_id || ''; }
 
+/* Revisão ao iniciar: mostra a última sessão concluída daquela tarefa antes de começar. */
+function lastSessionText(sel) {
+  const tid = sel.sub_id || sel.task_id; if (!tid) return '';
+  const last = db.where('tempo_time_entries', e => e.state === 'done' && e.task_id === tid).sort((a, b) => (entryStart(b) || '').localeCompare(entryStart(a) || ''))[0];
+  if (!last) return '';
+  const note = (last.notes || '').split('\n').find(l => l.trim() && !/^\d{2}:\d{2}–/.test(l));
+  return `Última sessão desta tarefa: ${fmtDate(ymd(new Date(entryStart(last))))} · ${fmtTime(entryStart(last))}–${fmtTime(entryEnd(last))} · ${fmtDur(entryMs(last))}${note ? ' · ' + note : ''}`;
+}
 function openStartModal(preset) {
   if (activeEntry()) { toast('Já existe uma sessão ativa. Encerre ou pause antes de iniciar outra.'); go('timesheet'); return; }
   const sel = Object.assign(blankSel(), preset || {});
@@ -203,6 +232,7 @@ function openStartModal(preset) {
     html: `<div class="dh">${icon('play')}<h2>Iniciar registro</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db">
       <div data-picker></div>
+      <div id="st-last" class="small muted"></div>
       <div class="grid2">
         <div class="field"><label for="st-wt">Tipo de trabalho</label><select id="st-wt" class="input" name="work_type_id">${options(workTypes(), defaultWorkType(sel), { empty: true, emptyLabel: 'Sem tipo' })}</select></div>
         <div class="field"><label for="st-notes">Notas</label><input id="st-notes" class="input" name="notes" placeholder="Opcional"></div>
@@ -212,7 +242,9 @@ function openStartModal(preset) {
     </div>
     <div class="df"><span class="left small muted">Sem seleção, vira uma sessão avulsa.</span><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="go">${icon('play')} Iniciar</button></div>`
   });
-  bindPicker(l, sel, () => { const w = $('#st-wt', l.box); const d = defaultWorkType(sel); if (d && w) w.value = d; });
+  const showLast = () => { const el = $('#st-last', l.box); if (el) el.textContent = lastSessionText(sel); };
+  bindPicker(l, sel, () => { const w = $('#st-wt', l.box); const d = defaultWorkType(sel); if (d && w) w.value = d; showLast(); });
+  showLast();
   l.box.addEventListener('click', (e) => {
     if (!e.target.closest('[data-x="go"]')) return;
     const f = formData(l.box);
