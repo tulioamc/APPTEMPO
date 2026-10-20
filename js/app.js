@@ -415,7 +415,7 @@ setInterval(() => ensureMonthSheets(), 3600000);
 function applyAppearance() {
   if (typeof applyExCats === 'function') applyExCats();
   const root = document.documentElement;
-  const theme = db.setting('theme', 'system');
+  const pt = themePreview || activeThemeOf(); const theme = (pt && pt.mode) || db.setting('theme', 'system');   // tema com base Dia/Noite manda no modo
   if (theme === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', theme);
   const [l, d] = ACCENTS[db.setting('accent', 'cobalto')] || ACCENTS.cobalto;
   const css = (c, dark) => `--accent:${c};--accent-soft:color-mix(in srgb, ${c} ${dark ? 22 : 12}%, var(--surface));--accent-line:color-mix(in srgb, ${c} ${dark ? 45 : 35}%, var(--surface));--accent-fg:${dark ? '#0D1030' : '#FFFFFF'};`;

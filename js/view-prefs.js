@@ -282,7 +282,7 @@ const loadedFonts = new Set();
 const themesOf = () => db.setting('themes', []) || [];
 const customFontsOf = () => db.setting('customFonts', {}) || {};
 const activeThemeOf = () => themesOf().find(t => t.id === db.setting('activeTheme', '')) || null;
-const themeDraftGet = () => themeDraft || (activeThemeOf() && { ...activeThemeOf() }) || { name: '', accent: '#2E43D6', bg: '#F6F7F9', fg: '#15171C' };
+const themeDraftGet = () => themeDraft || (activeThemeOf() && { ...activeThemeOf() }) || { name: '', mode: 'light', accent: '#2E43D6', bg: '#F6F7F9', fg: '#15171C' };
 function themeVars(t) {
   const mix = (a, p, b) => `color-mix(in srgb, ${a} ${p}%, ${b})`;
   const lum = (h) => { const n = parseInt(h.slice(1), 16); return ((n >> 16) * .2126 + ((n >> 8) & 255) * .7152 + (n & 255) * .0722) / 255; };
@@ -320,6 +320,7 @@ function themePanelHTML() {
       <button class="btn sm ${!cur ? 'primary' : ''}" data-act="theme-apply" data-id="">Padrão do app</button>
       ${themes.map(t => `<span class="row" style="gap:4px"><button class="btn sm ${cur === t.id ? 'primary' : ''}" data-act="theme-apply" data-id="${t.id}"><span class="swatch-mini" style="background:${t.accent}"></span>${esc(t.name)}</button><button class="btn sm ghost" data-act="theme-del" data-id="${t.id}" title="Excluir tema" aria-label="Excluir tema ${esc(t.name)}">×</button></span>`).join('')}
     </div>
+    <div class="row" style="gap:8px;align-items:center"><span class="small faint">Base</span><div class="seg">${[['light', 'Dia'], ['dark', 'Noite']].map(([k, l]) => `<button class="${(d.mode || 'light') === k ? 'on' : ''}" data-act="theme-mode" data-v="${k}">${l}</button>`).join('')}</div></div>
     <div class="row" style="gap:16px;flex-wrap:wrap;align-items:flex-end">
       ${themeColorField('accent', 'Destaque', d.accent)}
       ${themeColorField('bg', 'Fundo', d.bg)}
@@ -348,7 +349,7 @@ ACTIONS['theme-apply'] = (el) => {
 };
 ACTIONS['theme-save'] = () => {
   const d = themeDraftGet(); const list = themesOf();
-  const t = { id: 't' + Date.now().toString(36), name: (d.name || '').trim() || `Tema ${list.length + 1}`, accent: d.accent, bg: d.bg, fg: d.fg, font: db.setting('font', 'sonoma') };
+  const t = { id: 't' + Date.now().toString(36), name: (d.name || '').trim() || `Tema ${list.length + 1}`, mode: d.mode || 'light', accent: d.accent, bg: d.bg, fg: d.fg, font: db.setting('font', 'sonoma') };
   db.setSetting('themes', [...list, t]); db.setSetting('activeTheme', t.id);
   themePreview = null; themeDraft = null; toast(`Tema "${t.name}" salvo`);
 };
@@ -376,3 +377,5 @@ CHANGES['font-upload'] = (el) => {
 };
 
 ACTIONS['font-pick'] = () => { const i = document.getElementById('font-file'); if (i) i.click(); };
+
+ACTIONS['theme-mode'] = (el) => { themeDraft = { ...themeDraftGet(), mode: el.dataset.v }; themePreview = themeDraft; applyAppearance(); render(); };
