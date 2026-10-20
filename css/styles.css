@@ -939,3 +939,12 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .usage-ms { text-align: right; }
 .usage-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; max-height: 240px; overflow: auto; }
 @media (max-width: 640px) { .usage-row { grid-template-columns: 1fr 64px; } .usage-bar { grid-column: 1 / -1; grid-row: 2; } }
+
+/* Seleção múltipla de programas/arquivos (Shift + clique) */
+.act-chip.is-pick { box-shadow: 0 0 0 2px var(--tb, #2E43D6); font-weight: 600; }
+.act-b.act-dim { opacity: .25; }
+.act-pick-sum { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-size: 13px; }
+
+/* Destaque de pasta/pausas: o resto da faixa esmaece */
+.seg-b.act-dim { opacity: .25; }
+.seg-b.act-hl { box-shadow: inset 0 0 0 2px #1E293B; }

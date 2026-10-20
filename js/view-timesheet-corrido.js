@@ -125,6 +125,7 @@ function resumoHTML(title, es) {
   const tagged = es.flatMap((e, i) => actList(e.id).map(r => ({ ...r, _i: i })));
   const an = actAnalyzeList(tagged, 'program');
   const colorOf = Object.fromEntries(an.groups.map(g => [g.id, g.color]));
+  const parentOf = Object.fromEntries(an.groups.map(g => [g.id, g.parent || null]));
   const totalBruto = unionBrutoMs(es);
   const totalTrab = es.reduce((s, e) => s + entryMs(e), 0);
   const pausas = pauseGapsOf(es);
@@ -144,12 +145,12 @@ function resumoHTML(title, es) {
       const base = off, wS = x.span / totalSpan * 100;
       slices.push({ e: x.e.id, l: base, w: wS, st: x.st, span: x.span });
       const pos = (a, b) => ({ l: base + Math.max(0, a - x.st) / x.span * wS, w: Math.max(.3, (Math.min(x.span, b - x.st) - Math.max(0, a - x.st)) / x.span * wS) });
-      an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}" data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" title="${esc(r.app)}${r.doc ? ' · ' + esc(r.doc) : ''}" style="--tb:${colorOf[r.gid] || 'var(--accent)'};left:${q.l}%;width:${q.w}%"></span>`; });
+      an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}"${parentOf[r.gid] ? ` data-par="${esc(parentOf[r.gid])}" data-tbc="${esc(colorOf[r.gid])}"` : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" title="${esc(r.app)}${r.doc ? ' · ' + esc(r.doc) : ''}" style="--tb:${parentOf[r.gid] ? '#94A3B8' : (colorOf[r.gid] || 'var(--accent)')};left:${q.l}%;width:${q.w}%"></span>`; });
       if (db.setting('actShowFora', true)) (x.e.segments || []).forEach((sg, k, arr) => {
         if (sg.why !== 'moved' || k >= arr.length - 1 || !sg.e || !arr[k + 1].s) return;
         const q = pos(new Date(sg.e).getTime(), new Date(arr[k + 1].s).getTime()); if (q.w > 0) parts += actMovedSpanHTML(sg, q.l, q.w);
       });
-      pauseGapsOf([x.e]).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" title="Pausa · ${esc(pauseLabel(g.why))}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
+      pauseGapsOf([x.e]).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" data-pk="${pauseKind(g.why || 'manual')}" title="Pausa · ${esc(pauseLabel(g.why))}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
       if (i > 0) parts += `<span class="act-sep" style="left:${base}%"></span>`;
       off += wS;
     });
@@ -158,14 +159,14 @@ function resumoHTML(title, es) {
   } else {
     const tot = Math.max(1, totalBruto);
     let off = 0, parts = '';
-    an.groups.forEach(g => { const w = g.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" data-g="${esc(g.id)}" title="${esc(g.label)} · ${fmtDur(g.ms)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
-    pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).forEach(bk => { const w = bk.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" title="${esc(bk.label)} · ${fmtDur(bk.ms)}" style="--ph:${bk.color};--pg:${pauseGapOf(bk.color)};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
+    an.groups.filter(g => !g.hidden).forEach(g => { const w = g.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" data-g="${esc(g.id)}" title="${esc(g.label)} · ${fmtDur(g.ms)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
+    pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).forEach(bk => { const w = bk.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" data-pk="${bk.kind}" title="${esc(bk.label)} · ${fmtDur(bk.ms)}" style="--ph:${bk.color};--pg:${pauseGapOf(bk.color)};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
     const restMs = Math.max(0, totalBruto - an.groups.reduce((t, g) => t + g.ms, 0) - totalPausa);
     if (restMs > 1000 && off < 100) parts += `<span class="act-track" style="left:${off}%;width:${100 - off}%"></span>`;
     bar = `<div class="act-strip" style="height:34px">${parts}</div>`;
     note = 'Tudo junto: cada programa soma o tempo de todas as sessões, e as pausas ficam por categoria. A barra inteira é o bruto.';
   }
-  const legendChips = an.groups.map(g => `<button type="button" class="act-chip" data-x="res-prog" data-g="${esc(g.id)}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="Clique para ver as opções deste programa"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('');
+  const legendChips = an.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="res-prog" data-g="${esc(g.id)}" data-ms="${g.ms}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="Clique para ver as opções deste programa"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('');
   const pauseChips = pauseBucketChip ? pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).map(pauseBucketChip).join('') : '';
   const legendHTML = `<div class="lbl">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || '<span class="muted small">Sem pausas.</span>'}</div>`;
   const sessions = es.map(e => `<div class="row between small res-row"><span><span class="mono">${fmtTime(entryStart(e))}–${fmtTime(entryEnd(e))}</span> · ${esc(entryTitle(e))}</span><span class="mono">${fmtDur(entryMs(e))}</span></div>`).join('');

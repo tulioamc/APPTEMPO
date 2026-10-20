@@ -134,7 +134,18 @@ function actAnalyzeList(list0, mode) {
     it.ms += ms; g.ms += ms;
     return { ...x, gid: id, ms };
   });
-  const sorted = Object.values(groups).sort((a, b) => b.ms - a.ms).map((g, i) => {
+  // Apps de sistema e de pouca utilidade (ajustes, fotos, extensões, Spotify, teclado...) viram a pasta "Outros".
+  // Cada um continua com o próprio endereço, tempo e organização: só fica oculto nos chips e aparece ao abrir "Outros".
+  const OTHERS_RE = /ajustes do sistema|system settings|system preferences|^fotos$|^photos$|itens de in[ií]cio|extens[õo]es|^notas$|^notes$|spotify|^teclado$|^keyboard$|armazenamento|^storage$|^rel[óo]gio$|^clock$|configura[çc][õo]es/i;
+  const isOther = (g) => g.items.length > 0 && g.items.every(it => OTHERS_RE.test(String(it.app || '').trim()));
+  let arr = Object.values(groups);
+  const oth = arr.filter(isOther);
+  if (oth.length) {
+    const ids = new Set(oth.map(g => g.id));
+    arr = arr.map(g => (ids.has(g.id) ? { ...g, parent: 'outros', hidden: true } : g));
+    arr.push({ id: 'outros', items: oth.flatMap(g => g.items), ms: oth.reduce((t, g) => t + g.ms, 0) });
+  }
+  const sorted = arr.sort((a, b) => b.ms - a.ms).map((g, i) => {
     const items = Object.values(g.items).sort((a, b) => b.ms - a.ms);
     // Terminal: a janela não tem nome de arquivo útil (aparece com o nome de usuário), então aparece como "Terminal" e em cinza
     const termOnly = items.every(it => /^terminal$/i.test(String(it.app || '')));
@@ -147,6 +158,8 @@ function actAnalyzeList(list0, mode) {
       const exts = [...new Set(items.map(it => (String(it.doc || '').match(/\.[^.]+$/) || [''])[0]))];
       label = docPre(items[0].doc) + (exts.length === 1 ? exts[0] : '');
     } else label = names.length <= 2 ? names.map(n => shortName(n)).join(' · ') : `${names.slice(0, 2).map(n => shortName(n)).join(' · ')} +${names.length - 2}`;
+    if (g.id === 'outros') return { id: 'outros', items, ms: g.ms, label: 'Outros', color: '#94A3B8' };
+    if (g.parent) return { id: g.id, items, ms: g.ms, label, color: groupColor(g.id, i), parent: g.parent, hidden: true };
     const color = termOnly ? '#374151' : groupColor(g.id, i);
     return { id: g.id, items, ms: g.ms, label, color };
   });
@@ -329,7 +342,7 @@ function actStripHTML(e, A, mode = '') {
   for (let i = 1; i < segs.length; i++) {
     const a = segs[i - 1].b, b = segs[i].a;
     if (b <= a || isForaWhy(segs[i - 1].why)) continue;
-    pauses += `<span class="seg-b pausa act-pause" style="--ph:${pauseHatch(segs[i - 1].why)};--pg:${pauseGapOf(pauseHatch(segs[i - 1].why))};left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
+    pauses += `<span class="seg-b pausa act-pause" data-pk="${pauseKind(segs[i - 1].why || 'manual')}" style="--ph:${pauseHatch(segs[i - 1].why)};--pg:${pauseGapOf(pauseHatch(segs[i - 1].why))};left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
   }
   let bars = '';
   // trechos que saíram desta sessão para outro projeto: lacuna clicável com o destino
@@ -344,7 +357,7 @@ function actStripHTML(e, A, mode = '') {
     const g = byId[r.gid]; if (!g) return;
     const x = pct(new Date(r.from).getTime()), y = pct(new Date(r.to).getTime());
     if (y <= x) return;
-    bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" style="--tb:${g.color};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(actTip(g))}"></span>`;
+    bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}"${g.parent ? ` data-par="${esc(g.parent)}" data-tbc="${esc(g.color)}"` : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" style="--tb:${g.parent ? '#94A3B8' : g.color};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(actTip(g))}"></span>`;
   });
   // trechos marcados para mover (seleção em andamento nesta sessão)
   if (mode === 'program' && ACT_SEL && ACT_SEL.key === e.id) {
@@ -354,7 +367,7 @@ function actStripHTML(e, A, mode = '') {
 }
 
 function actChipsHTML(A, mode) {
-  return `<div class="act-chips">${A.groups.map(g => `<button type="button" class="act-chip" data-x="act-chip" data-g="${esc(g.id)}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)}${mode === 'file' && g.items.length > 1 ? ` <span class="act-more" title="Ver os ${g.items.length} arquivos">+${g.items.length}</span>` : ''} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
+  return `<div class="act-chips">${A.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="act-chip"${g.id === 'outros' ? ' data-hl="outros"' : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)}${mode === 'file' && g.items.length > 1 ? ` <span class="act-more" title="Ver os ${g.items.length} arquivos">+${g.items.length}</span>` : ''} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
 }
 
 /* Pausas da sessão em caixinhas: o total, e dentro dele ócio, bloqueada, WhatsApp, Telegram e manual, com o tempo de cada um. */
@@ -391,6 +404,7 @@ function actLogFootHTML(e, legacyLines) {
 
 /* Janela de um grupo de arquivos: desfazer, juntar com outro grupo ou mover o tempo para outro projeto/tarefa. */
 function openActGroup(entryId, gid, onDone) {
+  if (gid === 'outros') return openOthersPanel([entryId], 'file', onDone);
   const A = actAnalyze(entryId, 'file');
   const g = A.groups.find(x => x.id === gid); if (!g) return;
   const others = A.groups.filter(x => x.id !== gid);
@@ -546,6 +560,7 @@ document.addEventListener('click', (ev) => {
 /* Menu do programa (clicar no chip ou num trecho): esse trecho, todos os trechos, selecionar trechos ou mudar cor.
    opts.seg: trecho clicado; opts.redraw: atualiza a tela; opts.done: depois de mover. */
 function openProgChoice(entryIds, gid, label, opts = {}) {
+  if (gid === 'outros') return openOthersPanel(entryIds, 'program', opts.redraw);
   const seg = opts.seg || null;
   openLayer({
     render: () => `<div class="dh"><h2>${esc(label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
@@ -569,8 +584,9 @@ function openProgChoice(entryIds, gid, label, opts = {}) {
 }
 
 /* Janela de cor de um programa (e de qualquer grupo). */
+let ACT_COLOR_CTX = null;   // quem abriu o seletor: a tela é redesenhada depois de escolher a cor
 function openActColor(gid, label, onDone) {
-  openLayer({
+  const l = openLayer({
     render: () => `<div class="dh"><h2>${esc(label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
       <div class="db"><span class="lbl">Cor na linha do tempo</span>${actSwatches(gid)}</div>`,
     onMount: (ly) => ly.box.addEventListener('click', (ev) => {
@@ -578,18 +594,21 @@ function openActColor(gid, label, onDone) {
       actSetColor(gid, b.dataset.c); ly.close(); onDone && onDone();
     }),
   });
+  ACT_COLOR_CTX = { onDone, layer: l };
 }
 
-/* Cor personalizada: o seletor de cor do sistema grava a cor do grupo. */
+/* Cor personalizada: o seletor de cor do sistema grava a cor do grupo e redesenha a tela. */
 document.addEventListener('change', (ev) => {
   const i = ev.target.closest?.('input[data-x="act-custom"]'); if (!i || !i.dataset.g) return;
   actSetColor(i.dataset.g, i.value);
   toast('Cor aplicada');
+  const ctx = ACT_COLOR_CTX; ACT_COLOR_CTX = null;
+  if (ctx) { if (ctx.layer && ctx.layer.close) ctx.layer.close(); ctx.onDone && ctx.onDone(); }
 });
 
 /* Destaque: ao passar o mouse sobre um trecho ou chip, os outros grupos da mesma faixa esmaecem. */
 document.addEventListener('mouseover', (e) => {
-  const t = e.target.closest?.('.act-b[data-g], .act-chip[data-g]'); if (!t) return;
+  const t = e.target.closest?.('.act-b[data-g], .act-chip[data-g]'); if (!t || t.dataset.hl) return;
   const wrap = t.closest('.act-sec'); if (!wrap) return;
   const g = t.dataset.g;
   wrap.classList.add('focus');
@@ -622,3 +641,89 @@ function actProjectHTML(entries) {
   };
   return `<div class="stack" style="gap:10px;margin-bottom:14px">${sec('Por programa', 'program')}${sec('Por arquivo / página', 'file')}</div>`;
 }
+
+
+/* Seleção múltipla: Shift + clique num programa/arquivo (chips) marca vários e mostra a soma deles, com o % do total.
+   Funciona igual na revisão, no resumo e onde houver chips de tempo. O clique sem Shift continua como antes. */
+function actPickPaint(box) {
+  const set = new Set((box.dataset.pick || '').split('|').filter(Boolean));
+  const chips = [...box.querySelectorAll('[data-g][data-ms]')];
+  chips.forEach(c => c.classList.toggle('is-pick', set.has(c.dataset.g)));
+  const total = chips.reduce((t, c) => t + Number(c.dataset.ms || 0), 0);
+  const picked = chips.filter(c => set.has(c.dataset.g)).reduce((t, c) => t + Number(c.dataset.ms || 0), 0);
+  let sum = box.nextElementSibling && box.nextElementSibling.classList.contains('act-pick-sum') ? box.nextElementSibling : null;
+  if (!set.size) { if (sum) sum.remove(); }
+  else {
+    if (!sum) { sum = document.createElement('div'); sum.className = 'act-pick-sum'; box.insertAdjacentElement('afterend', sum); }
+    const names = chips.filter(c => set.has(c.dataset.g)).map(c => esc(c.dataset.label || '')).join(' + ');
+    const pct = total > 0 ? ` · ${(picked / total * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% do total` : '';
+    sum.innerHTML = `<span><b>${set.size} selecionado(s)</b>: ${names}</span><span class="mono">${fmtDur(picked)}${pct}</span><button type="button" class="btn sm ghost" data-pickclear>Limpar</button>`;
+  }
+  const root = box.parentElement || box;
+  root.querySelectorAll('[data-g].act-b, .act-b[data-g]').forEach(b => b.classList.toggle('act-dim', set.size > 0 && !set.has(b.dataset.g)));
+}
+document.addEventListener('click', (ev) => {
+  const clr = ev.target.closest && ev.target.closest('[data-pickclear]');
+  if (clr) {
+    ev.preventDefault(); ev.stopImmediatePropagation();
+    const box = clr.closest('.act-pick-sum')?.previousElementSibling; if (box && box.classList.contains('act-chips')) { box.dataset.pick = ''; actPickPaint(box); }
+    return;
+  }
+  if (!ev.shiftKey) return;
+  const chip = ev.target.closest && ev.target.closest('.act-chip[data-g], [data-x="res-prog"][data-g]');
+  if (!chip) return;
+  const box = chip.closest('.act-chips'); if (!box) return;
+  ev.preventDefault(); ev.stopImmediatePropagation();
+  const set = new Set((box.dataset.pick || '').split('|').filter(Boolean));
+  const g = chip.dataset.g; if (set.has(g)) set.delete(g); else set.add(g);
+  box.dataset.pick = [...set].join('|');
+  actPickPaint(box);
+}, true);
+
+/* Painel "Outros": lista os apps dentro da pasta, cada um com o tempo e a opção de separar. */
+function actOthersOf(entryIds, mode) {
+  const recs = entryIds.flatMap(id => actList(id));
+  return actAnalyzeList(recs, mode).groups.filter(g => g.parent === 'outros');
+}
+function openOthersPanel(entryIds, mode, redraw) {
+  const mem = actOthersOf(entryIds, mode);
+  const total = mem.reduce((t, g) => t + g.ms, 0);
+  openLayer({
+    render: () => `<div class="dh"><h2>Outros</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+      <div class="db stack" style="gap:8px">
+        <div class="row between small muted"><span>${mem.length} item(ns)</span><span class="mono">${fmtDur(total)}</span></div>
+        ${mem.map(g => `<div class="row between"><span>${esc(g.label)}</span><span class="row" style="gap:10px"><span class="mono small">${fmtDur(g.ms)}</span><button class="btn sm ghost" data-x="oth-split" data-g="${esc(g.id)}">Separar</button></span></div>`).join('') || '<span class="muted small">Nada aqui.</span>'}
+      </div>`,
+    onMount: (ly) => ly.box.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-x="oth-split"]'); if (!b) return;
+      const g = mem.find(x => x.id === b.dataset.g); if (!g) return;
+      actUngroup(g); toast(`${g.label} separado de Outros`); ly.close(); if (redraw) redraw();
+    }),
+  });
+}
+
+
+/* Destaque de pasta e de pausas agrupadas: ao passar o mouse no chip "Outros" ou "Pausa +N"/"WhatsApp",
+   os trechos do grupo acendem nas próprias cores e o resto da faixa esmaece. Vale para revisão e resumo. */
+function actHlPaint(root, tok, on) {
+  root.querySelectorAll('.seg-b.act-b[data-g], .seg-b.pausa').forEach(el => {
+    const isOth = tok === 'outros' && el.dataset.par === 'outros';
+    const isPk = tok.startsWith('pk:') && el.dataset.pk === tok.slice(3);
+    if (!on) { el.classList.remove('act-dim', 'act-hl'); if (el.dataset.tbc) el.style.setProperty('--tb', '#94A3B8'); return; }
+    if (isOth || isPk) { el.classList.add('act-hl'); el.classList.remove('act-dim'); if (isOth && el.dataset.tbc) el.style.setProperty('--tb', el.dataset.tbc); }
+    else el.classList.add('act-dim');
+  });
+}
+function actHlRoot(chip) {
+  let n = chip;
+  while (n && n.parentElement && !n.querySelector('.seg-b.act-b[data-g], .seg-b.pausa')) n = n.parentElement;
+  return n || chip.parentElement;
+}
+document.addEventListener('mouseover', (e) => {
+  const c = e.target.closest?.('[data-hl]'); if (!c) return;
+  actHlPaint(actHlRoot(c), c.dataset.hl, true);
+});
+document.addEventListener('mouseout', (e) => {
+  const c = e.target.closest?.('[data-hl]'); if (!c || (e.relatedTarget && c.contains(e.relatedTarget))) return;
+  actHlPaint(actHlRoot(c), c.dataset.hl, false);
+});
