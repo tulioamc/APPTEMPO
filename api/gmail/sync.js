@@ -117,7 +117,8 @@ async function syncOne(integ) {
 
 module.exports = async (req, res) => {
   let integrations;
-  const isScheduled = process.env.SYNC_SECRET && req.headers['x-sync-secret'] === process.env.SYNC_SECRET;
+  // agendamento diário da Vercel (CRON_SECRET) ou chamada com o segredo antigo (SYNC_SECRET)
+  const isScheduled = (process.env.CRON_SECRET && req.headers.authorization === 'Bearer ' + process.env.CRON_SECRET) || (process.env.SYNC_SECRET && req.headers['x-sync-secret'] === process.env.SYNC_SECRET);
   if (isScheduled) {
     integrations = await rest('tempo_integrations?provider=eq.gmail&refresh_token=not.is.null&select=*');
   } else {
