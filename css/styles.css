@@ -742,10 +742,13 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .act-chip .faint { color: color-mix(in oklab, var(--tb) 30%, #0b0d12); font-weight: 600; }
 .act-chip-total { font-weight: 600; cursor: default; }
 .act-chip-sub { cursor: default; }
-:root[data-theme="dark"] .act-chip, :root:not([data-theme="light"]) .act-chip { color: color-mix(in oklab, var(--tb) 40%, #fff); }
-:root[data-theme="dark"] .act-chip .faint, :root:not([data-theme="light"]) .act-chip .faint { color: color-mix(in oklab, var(--tb) 30%, #fff); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-chip { color: color-mix(in oklab, var(--tb) 62%, #fff); } }
+:root[data-theme="dark"] .act-chip { color: color-mix(in oklab, var(--tb) 62%, #fff); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-chip .faint { color: color-mix(in oklab, var(--tb) 75%, #fff); } }
+:root[data-theme="dark"] .act-chip .faint { color: color-mix(in oklab, var(--tb) 75%, #fff); }
 .act-strip .seg-b.act-b { background: color-mix(in oklab, var(--tb) 20%, var(--surface)); box-shadow: none; }
-:root[data-theme="dark"] .act-strip .seg-b.act-b, :root:not([data-theme="light"]) .act-strip .seg-b.act-b { background: color-mix(in oklab, var(--tb) 38%, #171A21); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-strip .seg-b.act-b { background: color-mix(in oklab, var(--tb) 34%, var(--surface)); } }
+:root[data-theme="dark"] .act-strip .seg-b.act-b { background: color-mix(in oklab, var(--tb) 34%, var(--surface)); }
 .act-chip i { width: 8px; height: 8px; border-radius: 2px; background: var(--tb); display: inline-block; }
 .act-chip.on { border-color: var(--tb); }
 .act-sec.focus .act-chip:not(.on) { opacity: .75; }
@@ -873,3 +876,4 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .res-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
 .res-row { padding: 4px 0; border-bottom: 1px solid var(--line); }
 .res-sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.act-sep { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--surface); }

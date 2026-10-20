@@ -39,14 +39,15 @@ function corridoProjHTML(p) {
   }).join('');
   const ids = p.list.map(e => e.id).join(',');
   const firstMs = Math.min(...p.list.map(e => new Date(entryStart(e)).getTime()));
-  const lastMs = Math.max(...p.list.map(e => new Date(entryEnd(e)).getTime()));
+  const endOf = (e) => new Date(entryEnd(e) || entryStart(e)).getTime();
+  const lastMs = Math.max(...p.list.map(endOf));
   const dm = (ms) => new Date(ms).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   const when = dm(firstMs) === dm(lastMs) ? dm(firstMs) : `${dm(firstMs)}–${dm(lastMs)}`;
   const tags = [...new Set(p.list.map(e => e.work_type_id || ''))].map(id => wtTag(id || null)).join('');
   return `<details class="grp-det cor-proj">
     <summary class="entry grp-sum">
       <span class="when">${when}</span>
-      <div class="what"><div class="t">${esc(pr.name)} <span class="tag pill small">${p.list.length} sessões</span></div><div class="p">${esc(cl?.name || 'Sem cliente')}${pr.name ? '' : ''}</div></div>
+      <div class="what"><div class="t">${esc(pr.name)} <span class="tag pill small">${p.list.length} ${p.list.length === 1 ? 'sessão' : 'sessões'}</span></div><div class="p">${esc(cl?.name || 'Sem cliente')}${pr.name ? '' : ''}</div></div>
       <div class="row" style="justify-content:flex-end;gap:10px"><span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${tags}</span><button class="btn sm ghost" data-act="ts-resumo" data-title="${esc(pr.name)}" data-ids="${ids}">Resumo</button><span class="dur">${fmtDur(total)}</span><span class="faint grp-caret">▾</span></div>
     </summary>
     <div class="cor-body">${taskHTML}</div>
@@ -114,33 +115,41 @@ function resumoHTML(title, es) {
   const toggles = `<div class="row" style="gap:6px"><button class="btn sm ${mode === 'cron' ? 'primary' : ''}" data-rmode="cron">Cronológico</button><button class="btn sm ${mode === 'agl' ? 'primary' : ''}" data-rmode="agl">Aglomerado</button></div>`;
   const legendRows = an.groups.map(g => `<div class="row between small res-row"><span class="row" style="gap:8px"><span class="res-sw" style="background:${g.color}"></span>${esc(g.label)}</span><span class="mono">${fmtDur(g.ms)}</span></div>`).join('');
   const pauseRows = Object.entries(pauseByWhy).map(([k, ms]) => `<div class="row between small res-row"><span class="row" style="gap:8px"><span class="res-sw" style="background:${RES_PAUSE[k] || '#CBD5E1'}"></span>Pausa · ${esc(pauseLabel(k))}</span><span class="mono">${fmtDur(ms)}</span></div>`).join('');
+  const sess = es.map(e => { const st = new Date(entryStart(e)).getTime(); const en = new Date(entryEnd(e)).getTime(); return { e, st, en, span: Math.max(1, en - st) }; });
+  const totalSpan = sess.reduce((t, x) => t + x.span, 0) || 1;
   let bar = '', note = '';
   if (mode === 'cron') {
-    const fats = es.map((e, i) => {
-      const st = new Date(entryStart(e)).getTime(); const en = new Date(entryEnd(e)).getTime();
-      const span = Math.max(1, en - st);
-      const pos = (a, b) => ({ l: Math.max(0, a - st) / span * 100, w: Math.max(.3, (Math.min(span, b - st) - Math.max(0, a - st)) / span * 100) });
-      const blocks = an.records.filter(r => r._i === i).map(r => { const p = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); return `<span class="res-blk" style="left:${p.l}%;width:${p.w}%;background:${colorOf[r.gid] || 'var(--accent)'}" title="${esc(r.app)}${r.doc ? ' · ' + esc(r.doc) : ''}"></span>`; }).join('');
-      const gaps = entryGaps(e).map(g => { const p = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); return `<span class="res-blk" style="left:${p.l}%;width:${p.w}%;background:${RES_PAUSE[g.why] || '#CBD5E1'}" title="Pausa · ${esc(pauseLabel(g.why))}"></span>`; }).join('');
-      return `<div class="res-fat" style="flex:${span}" title="${fmtTime(entryStart(e))}–${fmtTime(entryEnd(e))}"><div class="res-inner">${blocks}${gaps}</div></div>`;
+    let off = 0, parts = '';
+    sess.forEach((x, i) => {
+      const base = off, wS = x.span / totalSpan * 100;
+      const pos = (a, b) => ({ l: base + Math.max(0, a - x.st) / x.span * wS, w: Math.max(.3, (Math.min(x.span, b - x.st) - Math.max(0, a - x.st)) / x.span * wS) });
+      an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" title="${esc(r.app)}${r.doc ? ' · ' + esc(r.doc) : ''}" style="--tb:${colorOf[r.gid] || 'var(--accent)'};left:${q.l}%;width:${q.w}%"></span>`; });
+      entryGaps(x.e).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" title="Pausa · ${esc(pauseLabel(g.why))}" style="--ph:${RES_PAUSE[g.why] || '#A1A1AA'};left:${q.l}%;width:${q.w}%"></span>`; });
+      if (i > 0) parts += `<span class="act-sep" style="left:${base}%"></span>`;
+      off += wS;
     });
-    bar = `<div class="res-bar">${fats.join('')}</div>`;
+    bar = `<div class="act-strip" style="height:34px">${parts}</div>`;
     note = 'Cada sessão ocupa uma fatia proporcional à sua duração, na ordem em que aconteceram. Os programas e as pausas ficam no lugar em que aconteceram dentro de cada fatia.';
   } else {
-    const segs = an.groups.map(g => ({ w: g.ms, c: g.color, t: g.label }))
-      .concat(Object.entries(pauseByWhy).map(([k, ms]) => ({ w: ms, c: RES_PAUSE[k] || '#CBD5E1', t: 'Pausa · ' + pauseLabel(k) })));
-    const rest = Math.max(0, totalBruto - segs.reduce((s, x) => s + x.w, 0));
-    if (rest > 1000) segs.push({ w: rest, c: 'var(--line)', t: 'Sem registro' });
-    bar = `<div class="res-bar">${segs.filter(s => s.w > 0).map(s => `<div class="res-fat" style="flex:${s.w}" title="${esc(s.t)} · ${fmtDur(s.w)}"><div class="res-inner"><span class="res-blk" style="left:0;width:100%;background:${s.c}"></span></div></div>`).join('')}</div>`;
+    const tot = Math.max(1, totalBruto);
+    let off = 0, parts = '';
+    an.groups.forEach(g => { const w = g.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" title="${esc(g.label)} · ${fmtDur(g.ms)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
+    Object.entries(pauseByWhy).forEach(([k, ms]) => { const w = ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" title="Pausa · ${esc(pauseLabel(k))} · ${fmtDur(ms)}" style="--ph:${RES_PAUSE[k] || '#A1A1AA'};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
+    const restMs = Math.max(0, totalBruto - an.groups.reduce((t, g) => t + g.ms, 0) - totalPausa);
+    if (restMs > 1000 && off < 100) parts += `<span class="act-track" style="left:${off}%;width:${100 - off}%"></span>`;
+    bar = `<div class="act-strip" style="height:34px">${parts}</div>`;
     note = 'Tudo junto: cada programa soma o tempo de todas as sessões, e as pausas ficam por categoria. A barra inteira é o bruto.';
   }
+  const legendChips = an.groups.map(g => `<span class="act-chip" style="--tb:${g.color}"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></span>`).join('');
+  const pauseChips = Object.entries(pauseByWhy).map(([k, ms]) => `<span class="act-chip" style="--tb:${RES_PAUSE[k] || '#94A3B8'}"><i></i>Pausa · ${esc(pauseLabel(k))} <span class="faint">${fmtDur(ms)}</span></span>`).join('');
+  const legendHTML = `<div class="act-sec"><div class="lbl">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || '<span class="muted small">Sem pausas.</span>'}</div></div>`;
   const sessions = es.map(e => `<div class="row between small res-row"><span><span class="mono">${fmtTime(entryStart(e))}–${fmtTime(entryEnd(e))}</span> · ${esc(entryTitle(e))}</span><span class="mono">${fmtDur(entryMs(e))}</span></div>`).join('');
   return `<div class="dh"><div class="grow"><span class="small muted">Resumo</span><h2 style="margin-top:2px">${esc(title)}</h2></div>${toggles}<button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
   <div class="db stack" style="gap:12px">
     <div class="small muted">Bruto ${fmtDur(totalBruto)} · trabalho ${fmtDur(totalTrab)} · pausas ${fmtDur(totalPausa)} · ${es.length} sessão(ões)</div>
     ${bar}
     <div class="small muted">${note}</div>
-    <div class="res-legend"><div><div class="lbl">Programas</div>${legendRows || '<div class="muted small">Sem registros de programa.</div>'}</div><div><div class="lbl">Pausas</div>${pauseRows || '<div class="muted small">Sem pausas.</div>'}</div></div>
+    ${legendHTML}
     <div><div class="lbl">Sessões</div>${sessions}</div>
   </div>`;
 }
