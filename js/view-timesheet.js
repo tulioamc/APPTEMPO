@@ -153,9 +153,11 @@ function switchTo(proj, taskId) {
   const cur = db.all('tempo_time_entries').find(e => e.state === 'running') || null;
   const same = (x) => x.project_id === proj.id && (x.task_id || null) === (taskId || null);
   if (cur && same(cur)) return toast('Já está nesse projeto.');
-  const alvo = openEntries().find(x => x.id !== cur?.id && same(x)) || null;
+  // volta para a sessão que já existe desse projeto (mesma tarefa de preferência); só cria outra se não houver nenhuma
+  const outras = openEntries().filter(x => x.id !== cur?.id && x.project_id === proj.id);
+  const alvo = outras.find(same) || outras[0] || null;
   if (cur) pauseEntry(cur, null, { to: proj.id });
-  if (alvo) resumeEntry(alvo);
+  if (alvo) { if (alvo.state === 'paused') resumeEntry(alvo); }
   else { const c = clientOf(proj); db.insert('tempo_time_entries', { agency_id: c?.agency_id || null, client_id: c?.id || null, project_id: proj.id, task_id: taskId || null, work_type_id: lastWorkType(proj.id), revision_id: null, notes: '', state: 'running', segments: [{ s: nowISO(), e: null }], edits: [] }); }
   db.emit();
   toast(`Agora em ${tkProjectLabel(proj)}`);

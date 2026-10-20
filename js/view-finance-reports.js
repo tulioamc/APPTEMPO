@@ -246,7 +246,7 @@ async function bankAutoTherapy() {
       const row = db.insert('tempo_reimb_rows', { month: ym, name: t.counterpart, note: '', amount: amt, date: null, paid_on: t.posted_on, order: n,
         pay_id: rbStatusId('reimb_pay', 'Pago'), refund_id: rbStatusId('reimb_refund', 'a Pagar'), req_id: rbStatusId('reimb_req', 'a Fazer') });
       rows.push(row); taken.add(row.id);
-      todo.push({ id: t.id, rowId: row.id });
+      todo.push({ id: t.id, rowId: row.id, created: row.id });
       return;
     }
     const best = c.slice().sort((a, b) => Math.abs(Number(a.amount) - amt) - Math.abs(Number(b.amount) - amt))[0];
@@ -261,9 +261,10 @@ async function bankAutoTherapy() {
   });
   if (!todo.length) return false;
   const cl = db.adapter.client;
-  for (const x of todo) {
+  for (let i = 0; i < todo.length; i++) {
+    const x = todo[i];
     const { error } = await cl.from('tempo_bank_txns').update({ reimb_row_id: x.rowId, category: 'Terapia', updated_at: new Date().toISOString() }).eq('id', x.id);
-    if (error) { toast('Erro: ' + error.message); break; }
+    if (error) { toast('Erro: ' + error.message); todo.slice(i).forEach(y => { if (y.created) db.remove('tempo_reimb_rows', y.created, true); }); break; }
   }
   return true;
 }
@@ -368,11 +369,12 @@ async function bankAutoPJ() {
     const pid = learned[t.counterpart]; if (!pid) continue;
     const amt = Math.abs(Number(t.amount));
     let p = db.all('tempo_payments').find(x => x.project_id === pid && !taken.has(x.id) && (x.date == null || x.date === t.posted_on) && x.amount != null && Math.abs(Number(x.amount) - amt) <= Math.max(5, Number(x.amount) * 0.06));
-    if (!p) p = db.insert('tempo_payments', { project_id: pid, amount: amt, date: t.posted_on, note: 'Extrato' });
+    let created = null;
+    if (!p) { p = db.insert('tempo_payments', { project_id: pid, amount: amt, date: t.posted_on, note: 'Extrato' }); created = p.id; }
     else db.update('tempo_payments', p.id, { amount: amt, date: t.posted_on });
     taken.add(p.id);
     const { error } = await cl.from('tempo_bank_txns').update({ payment_id: p.id, updated_at: new Date().toISOString() }).eq('id', t.id);
-    if (error) { toast('Erro: ' + error.message); break; }
+    if (error) { toast('Erro: ' + error.message); if (created) db.remove('tempo_payments', created, true); break; }
     t.payment_id = p.id; did = true;
   }
   return did;
@@ -413,13 +415,16 @@ async function bankAutoFixed() {
       if (expenses.some(x => x.kind === 'out' && x.month === ym && names.has(x.name))) return;
       e = db.insert('tempo_expenses', { month: ym, kind: 'out', name: [...names][0], cat: '', note: '', amount: amt, due_date: null, paid_on: t.posted_on, status: 'Pago', inst_no: null, inst_total: null, order: expenses.filter(x => x.month === ym).length });
       expenses.push(e);
+      taken.add(e.id); todo.push({ t, e, created: true });
+      return;
     }
     taken.add(e.id); todo.push({ t, e });
   });
   if (!todo.length) return false;
-  for (const { t, e } of todo) {
+  for (let i = 0; i < todo.length; i++) {
+    const { t, e } = todo[i];
     const { error } = await db.adapter.client.from('tempo_bank_txns').update({ expense_id: e.id, updated_at: new Date().toISOString() }).eq('id', t.id);
-    if (error) { toast('Erro: ' + error.message); break; }
+    if (error) { toast('Erro: ' + error.message); todo.slice(i).forEach(y => { if (y.created) db.remove('tempo_expenses', y.e.id, true); }); break; }
     db.update('tempo_expenses', e.id, { amount: Math.abs(Number(t.amount)), status: 'Pago', paid_on: t.posted_on });
   }
   return true;
@@ -1366,7 +1371,7 @@ async function linkBankTxn(t, kind, id) {
     if (kind === 'fee') patch.category = 'Fee';
     else {
       const amt = Math.abs(Number(t.amount)); const taken = (BANK.every || []).map(b => b.payment_id).filter(Boolean);
-      let p = db.all('tempo_payments').find(x => x.project_id === id && !taken.includes(x.id) && x.date == null && x.amount != null && Math.abs(Number(x.amount) - amt) <= Math.max(5, Number(x.amount) * 0.06));
+      let p = db.all('tempo_payments').find(x => x.project_id === id && !taken.includes(x.id) && (x.date == null || x.date === t.posted_on) && x.amount != null && Math.abs(Number(x.amount) - amt) <= Math.max(5, Number(x.amount) * 0.06));
       if (p) db.update('tempo_payments', p.id, { amount: amt, date: t.posted_on });
       else p = db.insert('tempo_payments', { project_id: id, amount: amt, date: t.posted_on, note: 'Extrato' });
       patch.payment_id = p.id;
@@ -1416,7 +1421,7 @@ ACTIONS['bank-biz'] = async (el) => {
   await bankLoadTxns(); render();
 };
 // Conectar Gmail abre o login do Google numa janela pequena; o app continua aberto.
-window.addEventListener('message', (e) => { if (e.data === 'gmail-ok') { toast('Gmail conectado'); render(); } });
+window.addEventListener('message', (e) => { if (e.origin !== location.origin) return; if (e.data === 'gmail-ok') { toast('Gmail conectado'); render(); } });
 ACTIONS['bank-connect'] = async () => {
   const w = window.open('about:blank', 'tempo-gmail', 'width=480,height=680');
   try {

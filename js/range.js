@@ -117,7 +117,7 @@ function openZoomOf(ents, a, b) {
   const span = b - a;
   const pct = (t) => (t - a) / span * 100;
   const hhmm = (t) => fmtTime(new Date(t).toISOString());
-  const gaps = ents.flatMap(e => entryGaps(e)).filter(g => new Date(g.e) > new Date(a) && new Date(g.s) < new Date(b))
+  const gaps = pauseGapsOf(ents).filter(g => new Date(g.e) > new Date(a) && new Date(g.s) < new Date(b))
     .map(g => ({ ...g, s: Math.max(new Date(g.s).getTime(), a), e: Math.min(new Date(g.e).getTime(), b) }));
   let pauses = '';
   gaps.forEach(g => {

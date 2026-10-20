@@ -127,7 +127,7 @@ function resumoHTML(title, es) {
   const colorOf = Object.fromEntries(an.groups.map(g => [g.id, g.color]));
   const totalBruto = es.reduce((s, e) => s + entryBrutoMs(e), 0);
   const totalTrab = es.reduce((s, e) => s + entryMs(e), 0);
-  const pausas = es.flatMap(e => entryGaps(e));
+  const pausas = pauseGapsOf(es);
   const pauseByWhy = {};
   pausas.forEach(g => { const k = g.why || 'manual'; pauseByWhy[k] = (pauseByWhy[k] || 0) + (new Date(g.e) - new Date(g.s)); });
   const totalPausa = Object.values(pauseByWhy).reduce((s, x) => s + x, 0);

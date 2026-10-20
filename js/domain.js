@@ -105,6 +105,22 @@ function entryBruIntervals(e, at = Date.now()) {
   if (b > a) out.push([a, b]);
   return out;
 }
+/* Pausas do conjunto de sessões, sobrepostas: um horário só é pausa se nenhuma sessão do conjunto estiver trabalhando nele.
+   Assim, tempo parado numa sessão enquanto outra roda não conta como pausa (e o "fora" de trecho movido fica de fora). */
+function pauseGapsOf(list, at = Date.now()) {
+  const work = list.flatMap(e => entryBruIntervals(e, at)).sort((x, y) => x[0] - y[0]);
+  const merged = [];
+  work.forEach(([a, b]) => { const l = merged[merged.length - 1]; if (l && a <= l[1]) l[1] = Math.max(l[1], b); else merged.push([a, b]); });
+  const out = [];
+  list.forEach(e => entryGaps(e).forEach(g => {
+    const gs = new Date(g.s).getTime(), ge = new Date(g.e).getTime();
+    let s0 = gs; const pieces = [];
+    merged.forEach(([a, b]) => { if (b <= s0 || a >= ge) return; if (a > s0) pieces.push([s0, a]); s0 = Math.max(s0, b); });
+    if (s0 < ge) pieces.push([s0, ge]);
+    pieces.forEach(([p, q]) => { if (q > p) out.push({ s: new Date(p).toISOString(), e: new Date(q).toISOString(), why: g.why }); });
+  }));
+  return out;
+}
 function entryPauseMs(e) { return entryGaps(e).reduce((t, g) => t + (new Date(g.e) - new Date(g.s)), 0); }
 function entryBrutoMs(e, at = Date.now()) { return entryBruIntervals(e, at).reduce((t, [a, b]) => t + (b - a), 0); }
 /* Bruto de vários lançamentos sem contar duas vezes o mesmo horário: une os intervalos (início→fim de cada um) e soma só o coberto. */
