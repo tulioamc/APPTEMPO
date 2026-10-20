@@ -341,6 +341,9 @@ function openEntryModal(id) {
     segs[i][k] = new Date(`${dia}T${hora}`).toISOString(); redraw();
   });
   l.box.addEventListener('click', async (ev) => {
+    // trecho movido: clicar abre o projeto de destino
+    const mv = ev.target.closest('.act-moved[data-pid]');
+    if (mv && mv.dataset.pid) { l.close(); return openProject(mv.dataset.pid); }
     // clicar num trecho da faixa "Por programa": esse trecho / todos / selecionar
     const sg = ev.target.closest('.act-strip[data-mode="program"] .act-b[data-g]');
     if (sg && !ACT_SEL) {

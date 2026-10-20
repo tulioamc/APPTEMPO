@@ -177,17 +177,17 @@ function actMergeIntervals(iv) {
   return out;
 }
 /* Segmentos de sessão (ISO) com os trechos "cortes" (ms) retirados. Trecho aberto (e null) continua aberto. */
-function actSubtract(segs, cuts) {
+function actSubtract(segs, cuts, movedTo = null) {
   const out = [];
   segs.forEach(s => {
-    let pieces = [{ s: new Date(s.s).getTime(), e: s.e ? new Date(s.e).getTime() : null, why: s.why }];
+    let pieces = [{ s: new Date(s.s).getTime(), e: s.e ? new Date(s.e).getTime() : null, why: s.why, movedTo: s.movedTo || null }];
     cuts.forEach(c => {
       pieces = pieces.flatMap(p => {
         const pe = p.e ?? Infinity;
         if (c.b <= p.s || c.a >= pe) return [p];
         const res = [];
-        if (c.a > p.s) res.push({ s: p.s, e: c.a, why: p.why });
-        if (c.b < pe) res.push({ s: c.b, e: p.e, why: p.why });
+        if (c.a > p.s) res.push({ s: p.s, e: c.a, why: c.b < pe ? 'moved' : p.why, movedTo: c.b < pe ? movedTo : p.movedTo });   // o corte vira lacuna "movida", não pausa
+        if (c.b < pe) res.push({ s: c.b, e: p.e, why: p.why, movedTo: p.movedTo });
         return res;
       });
     });
@@ -247,7 +247,7 @@ function actMoveGroup(entryId, g, pick, ranges = null) {
   if (!moved.length) return false;
   const p = db.get('tempo_projects', pick.project_id); if (!p) return false;
   const c = clientOf(p);
-  const rest = actSubtract(e.segments || [], cuts);
+  const rest = actSubtract(e.segments || [], cuts, p.id);
   const label = tkProjectLabel(p);
   // trava: se o mesmo tempo já está lançado nesse projeto, não cria duplicata (só tira da origem)
   if (!segsCoveredIn(moved, p.id, e.id)) {
@@ -308,10 +308,19 @@ function actStripHTML(e, A, mode = '') {
   let pauses = '';
   for (let i = 1; i < segs.length; i++) {
     const a = segs[i - 1].b, b = segs[i].a;
-    if (b <= a) continue;
+    if (b <= a || segs[i - 1].why === 'moved') continue;
     pauses += `<span class="seg-b pausa act-pause" style="--ph:${pauseHatch(segs[i - 1].why)};--pg:${pauseGapOf(pauseHatch(segs[i - 1].why))};left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
   }
   let bars = '';
+  // trechos que saíram desta sessão para outro projeto: lacuna clicável com o destino
+  for (let i = 0; i < segs.length - 1; i++) {
+    const a = e.segments[i].e, b = e.segments[i + 1].s;
+    if (e.segments[i].why !== 'moved' || !a || !b || new Date(b) <= new Date(a)) continue;
+    const x = pct(new Date(a).getTime()), y = pct(new Date(b).getTime());
+    const dst = db.get('tempo_projects', e.segments[i].movedTo);
+    const nome = dst ? tkProjectLabel(dst) : 'outro projeto';
+    bars += `<span class="act-moved" data-pid="${esc(e.segments[i].movedTo || '')}" style="left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc('Movido para ' + nome + ' · clique para abrir')}">${(y - x) > 6 ? 'Movido → ' + esc(nome) : ''}</span>`;
+  }
   A.records.forEach(r => {
     const g = byId[r.gid]; if (!g) return;
     const x = pct(new Date(r.from).getTime()), y = pct(new Date(r.to).getTime());
@@ -452,7 +461,7 @@ function actSelBarHTML(key) {
   if (!ACT_SEL || ACT_SEL.key !== key) return '';
   const tot = ACT_SEL.ranges.length ? progMsOf(ACT_SEL.entryIds, ACT_SEL.gid, ACT_SEL.ranges) : 0;
   return `<div class="res-sel-bar"><span class="small">Arraste sobre a faixa <b>Por programa</b> para marcar trechos de <b>${esc(ACT_SEL.label)}</b>.</span>
-    <span class="mono small muted">${ACT_SEL.ranges.length} trecho(s) · ${esc(ACT_SEL.label)} ${fmtDur(tot)} nesses trechos</span><span class="grow"></span>
+    <span class="mono small muted">${esc(ACT_SEL.label)} ${fmtDur(tot)} nesses trechos</span><span class="grow"></span>
     <button class="btn sm ghost" data-x="act-sel-cancel">Cancelar</button><button class="btn sm ghost" data-x="act-sel-clear">Limpar</button><button class="btn sm primary" data-x="act-sel-done" ${ACT_SEL.ranges.length ? '' : 'disabled'}>Concluir</button></div>`;
 }
 /* Faixa com vários dias/sessões (resumo cronológico) tem data-slices; faixa de uma sessão usa t0 e span. */
@@ -498,7 +507,13 @@ document.addEventListener('mousemove', (ev) => {
 document.addEventListener('mouseup', () => {
   if (!ACT_SEL || !ACT_SEL.dragging) return;
   ACT_SEL.dragging = false; const d = ACT_SEL.drag; ACT_SEL.drag = null;
-  if (d && d.b - d.a >= ACT_MIN_MS) ACT_SEL.ranges = actAddRange(ACT_SEL.ranges, d);
+  if (!d) { ACT_SEL.redraw(); return; }
+  if (d.b - d.a < ACT_MIN_MS) console.log('[tempo-sel] arraste descartado (curto):', d.b - d.a, 'ms');
+  else {
+    const antes = ACT_SEL.ranges.length;
+    ACT_SEL.ranges = actAddRange(ACT_SEL.ranges, d);
+    if (ACT_SEL.ranges.length === antes) console.log('[tempo-sel] trecho unido a outro:', d);
+  }
   ACT_SEL.redraw();
 });
 document.addEventListener('click', (ev) => {
@@ -516,7 +531,7 @@ function openProgChoice(entryIds, gid, label, opts = {}) {
     render: () => `<div class="dh"><h2>${esc(label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
       <div class="db stack" style="gap:8px">
         ${seg ? `<button class="btn" data-x="pc-seg">Esse trecho <span class="mono small muted">${fmtDur(seg.b - seg.a)}</span></button>` : ''}
-        <button class="btn" data-x="pc-all">Todos os trechos de ${esc(label)}</button>
+        <button class="btn" data-x="pc-all">Todos os trechos de ${esc(label)} <span class="mono small muted">${fmtDur(progMsOf(entryIds, gid, null))}</span></button>
         <button class="btn" data-x="pc-sel">Selecionar trechos</button>
         <button class="btn ghost" data-x="pc-color">Mudar cor</button>
       </div>`,
