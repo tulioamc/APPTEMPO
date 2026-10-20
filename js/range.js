@@ -122,7 +122,7 @@ function openZoomOf(ents, a, b) {
   let pauses = '';
   gaps.forEach(g => {
     const x = pct(g.s), y = pct(g.e);
-    pauses += `<span class="seg-b pausa act-pause" style="--ph:${pauseHatch(g.why)};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(`Pausa ${hhmm(g.s)}–${hhmm(g.e)} · ${fmtDur(g.e - g.s)}\n${pauseWhy(g.why)}`)}"></span>`;
+    pauses += `<span class="seg-b pausa act-pause" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(`Pausa ${hhmm(g.s)}–${hhmm(g.e)} · ${fmtDur(g.e - g.s)}\n${pauseWhy(g.why)}`)}"></span>`;
   });
   let bars = '';
   A.records.forEach(r => {

@@ -31,7 +31,7 @@ function reportStrip(entries, day, mode) {
       ];
       lista.forEach(p => {
         const st = clip(p.s), en = clip(p.e); if (en <= st) return;
-        bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(p.why)};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Pausa ${fmtTime(new Date(p.s).toISOString())}–${fmtTime(new Date(p.e).toISOString())} · ${fmtDur(p.e - p.s)}\n${pauseWhy(p.why)}`)}"></span>`;
+        bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(p.why)};--pg:${pauseGapOf(pauseHatch(p.why))};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Pausa ${fmtTime(new Date(p.s).toISOString())}–${fmtTime(new Date(p.e).toISOString())} · ${fmtDur(p.e - p.s)}\n${pauseWhy(p.why)}`)}"></span>`;
       });
     });
   } else {
@@ -68,7 +68,7 @@ function dayAggHTML(d) {
   projItems.forEach(it => { const w = it.ms / total * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" title="${esc(it.label)} · ${fmtDur(it.ms)}" style="--tb:${it.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
   const pauseItems = [...pz.entries()].sort((a, b) => b[1] - a[1]).map(([k, ms]) => ({ label: 'Pausa · ' + pauseLabel(k), ms, color: pauseHatch(k), key: k }));
   const PB = pauseBucketsOf(pauseItems.map(it => ({ key: it.key, label: it.label.replace(/^Pausa · /, ''), ms: it.ms })));
-  PB.forEach(bk => { const w = bk.ms / total * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" title="${esc(bk.label)} · ${fmtDur(bk.ms)}" style="--ph:${bk.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
+  PB.forEach(bk => { const w = bk.ms / total * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" title="${esc(bk.label)} · ${fmtDur(bk.ms)}" style="--ph:${bk.color};--pg:${pauseGapOf(bk.color)};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
   if (rest > 1000 && off < 100) parts += `<span class="act-track" style="left:${off}%;width:${100 - off}%"></span>`;
   const chip = (it) => `<span class="act-chip" style="--tb:${it.color}"><i></i>${esc(it.label)} <span class="faint">${fmtDur(it.ms)}</span></span>`;
   const pauseChips = PB.map(pauseBucketChip).join('');

@@ -87,12 +87,12 @@ function dayStrip(entries, day) {
     db.all('tempo_notices').filter(n => n.kind === 'pause' && n.status === 'accepted' && n.data?.source === 'app' && n.data?.entry_id === e.id).forEach(n => {
       const st = Math.max(0, new Date(n.data.from) - base), en = Math.min(span, new Date(n.data.to) - base);
       if (en <= 0 || st >= span) return;
-      bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(n.data.app || 'app')};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Marcada como pausa${n.data.app ? ' (' + n.data.app + ')' : ''}\n${fmtTime(n.data.from)} – ${fmtTime(n.data.to)} · ${fmtDur(new Date(n.data.to) - new Date(n.data.from))}`)}"></span>`;
+      bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(n.data.app || 'app')};--pg:${pauseGapOf(pauseHatch(n.data.app || 'app'))};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Marcada como pausa${n.data.app ? ' (' + n.data.app + ')' : ''}\n${fmtTime(n.data.from)} – ${fmtTime(n.data.to)} · ${fmtDur(new Date(n.data.to) - new Date(n.data.from))}`)}"></span>`;
     });
     entryGaps(e).forEach(g => {
       const st = Math.max(0, new Date(g.s) - base), en = Math.min(span, new Date(g.e) - base);
       if (en <= 0 || st >= span) return;
-      bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(g.why)};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Pausa${g.why ? ' (' + g.why + ')' : ''}\n${fmtTime(g.s)} – ${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}"></span>`;
+      bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Pausa${g.why ? ' (' + g.why + ')' : ''}\n${fmtTime(g.s)} – ${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}"></span>`;
     });
   });
   return `<div class="day-strip" data-report="1" data-t0="${base.getTime()}" data-span="${span}" data-ents="${entries.map(e => e.id).join(',')}" aria-label="Linha do tempo do dia">${bars}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;

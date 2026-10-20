@@ -250,7 +250,10 @@ const pauseWhy = (why) => PAUSE_WHY[why] || why || 'Intervalo manual';
 const isAppPause = (why) => !!why && (why === 'app' || (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).some(x => String(x).trim().toLowerCase() === String(why).trim().toLowerCase()));
 /* Cor da listra de cada tipo de pausa (igual na linha do tempo principal e nas faixas da sessão):
    ociosidade = azul bem claro · WhatsApp (e apps de mensagem) = verde claro · Telegram = azul escuro · outros = cinza */
-const PAUSE_HATCH = { idle: '#BFDBFE', whatsapp: '#86EFAC', telegram: '#1E40AF', instagram: '#F9A8D4', other: '#A1A1AA' };
+const PAUSE_HATCH = { idle: '#b2deff', whatsapp: '#6cf1ae', telegram: '#1E40AF', instagram: '#F9A8D4', other: '#d1d1d1' };
+/* Cor do espaço entre as listras: par da cor da listra (WhatsApp e demais pausas); os outros usam a própria cor, clareada. */
+const PAUSE_GAP = { '#6cf1ae': '#9ef5c7', '#d1d1d1': '#dfdfdf', '#b2deff': '#cae8ff' };
+const pauseGapOf = (c) => PAUSE_GAP[c] || (c && c.length === 7 ? c + '52' : 'transparent');
 const pauseKind = (why) => {
   const w = String(why || '').trim().toLowerCase();
   if (!w) return 'other';
@@ -277,7 +280,7 @@ function actStripHTML(e, A) {
   for (let i = 1; i < segs.length; i++) {
     const a = segs[i - 1].b, b = segs[i].a;
     if (b <= a) continue;
-    pauses += `<span class="seg-b pausa act-pause" style="--ph:${pauseHatch(segs[i - 1].why)};left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
+    pauses += `<span class="seg-b pausa act-pause" style="--ph:${pauseHatch(segs[i - 1].why)};--pg:${pauseGapOf(pauseHatch(segs[i - 1].why))};left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
   }
   let bars = '';
   A.records.forEach(r => {
