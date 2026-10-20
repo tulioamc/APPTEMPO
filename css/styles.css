@@ -913,3 +913,10 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 /* Modo escuro: o cronômetro usa a cor de destaque (os segundos continuam apagados) */
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .timer-digits { color: var(--accent); } }
 :root[data-theme="dark"] .timer-digits { color: var(--accent); }
+
+/* To-do: arrastar para reordenar */
+.todo[draggable="true"] { cursor: grab; }
+.todo.dragging { opacity: .4; }
+.todo.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+
+@media (pointer: coarse) { .todo[draggable="true"] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } }

@@ -274,27 +274,42 @@ function todoItemHTML(t) {
   const est = t.data?.est;
   const real = t.data?.taskId ? db.where('tempo_time_entries', e => e.task_id === t.data.taskId).reduce((s, e) => s + entryMs(e), 0) : 0;
   const estTxt = est ? `<span class="todo-due">${real ? fmtDur(real) + ' / ' : 'est. '}${fmtDur(est * 60000)}</span>` : '';
-  return `<div class="todo ${t.status === 'done' ? 'done' : ''}"><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-save'](this)">` : `<span class="grow todo-title" data-act="todo-edit" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${estTxt}${t.data?.adiou ? `<span class="todo-due">adiou ${t.data.adiou}x</span>` : ''}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="btn sm icon ghost" data-act="todo-play" data-id="${t.id}" aria-label="Começar registro" title="Começar registro">${icon('play')}</button><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`;
+  return `<div class="todo ${t.status === 'done' ? 'done' : ''}" data-tid="${t.id}" ${t.status === 'done' || todoSortMode() === 'alpha' ? '' : 'draggable="true"'}><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-save'](this)">` : `<span class="grow todo-title" data-act="todo-edit" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${estTxt}${t.data?.adiou ? `<span class="todo-due">adiou ${t.data.adiou}x</span>` : ''}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="btn sm icon ghost" data-act="todo-play" data-id="${t.id}" aria-label="Começar registro" title="Começar registro">${icon('play')}</button><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`;
 }
 /* Abertos primeiro; concluídos agrupados por dia da resolução, mais recentes primeiro.
    recentDays: mostra só os concluídos dos últimos N dias (o painel usa 7). */
 function todoGroupsHTML(todos, recentDays) {
   const cutoff = recentDays ? Date.now() - recentDays * 864e5 : -Infinity;
+  const today = todoToday();
   const open = todos.filter(t => t.status !== 'done');
+  const pastOpen = open.filter(t => { const d = todoDueDay(t); return d && d < today; });
+  const current = todoManualSort(open.filter(t => !pastOpen.includes(t)));
   const done = todos.filter(t => t.status === 'done' && new Date(t.decided_at || t.created_at || 0).getTime() >= cutoff);
-  const byDay = {};
-  done.forEach(t => { const k = ymd(new Date(t.decided_at || t.created_at || Date.now())); (byDay[k] = byDay[k] || []).push(t); });
-  const folded = db.setting('todoFold', []) || [];
-  const groups = Object.keys(byDay).sort().reverse().map(k => {
-    const [y, m, d] = k.split('-');
-    const closed = folded.includes(k);
-    return `<div class="todo-day"><button class="todo-dayh" data-act="todo-fold" data-day="${k}">${d}.${m}.${y} ${icon(closed ? 'chevR' : 'chevD')}</button>${closed ? '' : byDay[k].map(todoItemHTML).join('')}</div>`;
-  }).join('');
-  return (open.map(todoItemHTML).join('') + groups) || '<span class="faint small">Nada por enquanto.</span>';
+  const group = (list, keyOf, set) => {
+    const by = {};
+    list.forEach(t => { const k = keyOf(t); (by[k] = by[k] || []).push(t); });
+    const folded = db.setting(set, []) || [];
+    return Object.keys(by).sort().reverse().map(k => {
+      const [y, m, d] = k.split('-');
+      const closed = folded.includes(k);
+      return `<div class="todo-day"><button class="todo-dayh" data-act="todo-fold" data-set="${set}" data-day="${k}">${d}.${m}.${y} ${icon(closed ? 'chevR' : 'chevD')}</button>${closed ? '' : by[k].map(todoItemHTML).join('')}</div>`;
+    }).join('');
+  };
+  const openPast = group(pastOpen, t => todoDueDay(t), 'todoFoldOpen');
+  const doneGroups = group(done, t => ymd(new Date(t.decided_at || t.created_at || Date.now())), 'todoFold');
+  return (current.map(todoItemHTML).join('') + openPast + doneGroups) || '<span class="faint small">Nada por enquanto.</span>';
+}
+/* Ordem manual das tarefas abertas (setting todoOrder); quem não tem posição vai para o fim, na ordem original. */
+const todoSortMode = () => db.setting('todoSort', 'manual') === 'alpha' ? 'alpha' : 'manual';
+function todoManualSort(list) {
+  if (todoSortMode() === 'alpha') return list.slice().sort((a, b) => (a.title || '').localeCompare(b.title || '', 'pt-BR', { sensitivity: 'base' }));
+  const ord = db.setting('todoOrder', []) || [];
+  const pos = (t) => { const i = ord.indexOf(t.id); return i < 0 ? Infinity : i; };
+  return list.slice().sort((a, b) => pos(a) - pos(b));
 }
 ACTIONS['todo-fold'] = (el) => {
-  const k = el.dataset.day; const cur = db.setting('todoFold', []) || [];
-  db.setSetting('todoFold', cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k]);
+  const k = el.dataset.day, set = el.dataset.set || 'todoFold'; const cur = db.setting(set, []) || [];
+  db.setSetting(set, cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k]);
   render();
 };
 
@@ -372,6 +387,7 @@ VIEWS.todo = () => {
     <div class="row between"><b>To-do</b><span class="faint small">Hoje: ${todayDone} de ${todayTotal.length} feitas</span></div>
     <form class="row gap-s" style="margin-top:10px" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h · fixo: Pagar Rafa !seg,qua" autocomplete="off"><button class="btn sm" data-act="todo-add">Adicionar</button></form>
     <div class="seg" style="margin-top:12px">${TABS.map(([v, l]) => `<button class="${tab === v ? 'on' : ''}" data-act="todo-tab" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="row between" style="margin-top:8px"><span class="faint small">Ordem: ${todoSortMode() === 'manual' ? '<b>minha ordem</b>' : '<button class="btn sm ghost" data-act="todo-sort" data-v="manual">minha ordem</button>'} · ${todoSortMode() === 'alpha' ? '<b>A–Z</b>' : '<button class="btn sm ghost" data-act="todo-sort" data-v="alpha">A–Z</button>'}</span></div>
     <div class="todo-list" style="margin-top:12px">${todoGroupsHTML(all.filter(pick[tab] || pick.open))}</div>
     ${sug.length ? `<div class="lbl" style="margin-top:16px">Sugestões</div>${sug.map(x => `<div class="row between small res-row"><span>${esc(x.title)}${x.deadline ? ` <span class="${x.deadline === todoToday() ? 'late' : 'faint'}">· ${x.deadline === todoToday() ? 'entrega hoje' : 'prazo ' + fmtDate(x.deadline)}</span>` : ''}</span><button class="btn sm" data-act="todo-suggest" data-title="${esc(x.title)}" data-deadline="${x.deadline || ''}" data-task="${x.taskId || ''}">Criar to-do</button></div>`).join('')}` : ''}
     ${tab === 'open' && fixed.length ? `<div class="lbl" style="margin-top:16px">Fixos</div>${fixed.map(f => `<div class="row between small res-row"><span>${esc(f.title)} <span class="faint">· ${f.days.length === 7 ? 'todo dia' : f.days.map(d => TODO_DAY_NAMES[d]).join(', ')}</span></span><button class="icon-btn ghost" data-act="todo-fixed-del" data-id="${f.id}" title="Remover fixo">×</button></div>`).join('')}` : ''}
@@ -385,7 +401,7 @@ function sidePanelHTML() {
   const todos = db.all('tempo_notices').filter(n => n.kind === 'todo').sort((a, b) => (a.status === 'done') - (b.status === 'done') || (a.data?.due || '\uffff').localeCompare(b.data?.due || '\uffff') || (a.created_at || '').localeCompare(b.created_at || ''));
   const pend = db.all('tempo_notices').filter(n => n.status === 'pending' && n.kind !== 'reminder').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 6);
   return `<aside class="side-panel">
-    <div class="card"><div class="row between"><b>To-do</b><span class="faint small">${todos.filter(t => t.status !== 'done').length} abertas</span></div>
+    <div class="card"><div class="row between"><b>To-do</b><span class="row gap-s"><span class="faint small">${todos.filter(t => t.status !== 'done').length} abertas</span><button class="btn sm ghost" data-act="go" data-route="todo">Ver todos</button></span></div>
       <form class="row gap-s" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h" autocomplete="off"><button class="btn sm" data-act="todo-add">Adicionar</button></form>
       <div class="todo-list">${todoGroupsHTML(todos, 7)}</div>
     </div>
@@ -419,3 +435,70 @@ VIEWS.notices = () => {
         <div>${n.status === 'pending' || n.status === 'snoozed' ? noticeButtons(n) : (n.status === 'ignored' || n.status === 'accepted' ? `<button class="btn sm ghost" data-act="notice-reopen" data-id="${n.id}">Reabrir</button>` : '')}</div></div>`).join('')}</div>`).join('') || `<div class="empty">${icon('bell')}<b>Nenhum aviso aqui</b><span>Os avisos de pausa, prazo e cobrança aparecem aqui e ficam registrados.</span></div>`}`;
   return { title: 'Avisos', actions: '', html };
 };
+
+/* ---- To-do: arrastar uma tarefa aberta para cima de outra (ela entra no lugar e as outras descem) ---- */
+let todoDragId = null;
+const todoRowOf = (e) => e.target && e.target.closest ? e.target.closest('.todo[data-tid]') : null;
+document.addEventListener('dragstart', (e) => {
+  const el = todoRowOf(e); if (!el || el.getAttribute('draggable') !== 'true') return;
+  todoDragId = el.dataset.tid; el.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', todoDragId);
+});
+document.addEventListener('dragover', (e) => {
+  const el = todoRowOf(e); if (!todoDragId || !el || el.dataset.tid === todoDragId) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.todo.drop-before').forEach(x => x.classList.remove('drop-before'));
+  el.classList.add('drop-before');
+});
+document.addEventListener('drop', (e) => {
+  const el = todoRowOf(e); if (!todoDragId || !el) return;
+  e.preventDefault();
+  const from = todoDragId, to = el.dataset.tid; todoDragId = null;
+  if (from !== to) todoMoveBefore(el.parentElement, from, to);
+});
+document.addEventListener('dragend', () => {
+  todoDragId = null;
+  document.querySelectorAll('.todo.dragging, .todo.drop-before').forEach(x => x.classList.remove('dragging', 'drop-before'));
+});
+
+function todoMoveBefore(box, from, to) {
+  const ids = [...box.querySelectorAll(':scope > .todo[data-tid][draggable="true"]')].map(x => x.dataset.tid).filter(x => x !== from);
+  const at = ids.indexOf(to); if (at < 0) return;
+  ids.splice(at, 0, from);
+  const rest = (db.setting('todoOrder', []) || []).filter(x => !ids.includes(x));
+  db.setSetting('todoOrder', [...ids, ...rest]);
+  render();
+}
+ACTIONS['todo-sort'] = (el) => { db.setSetting('todoSort', el.dataset.v); render(); };
+
+/* ---- To-do no celular: segurar a tarefa uns instantes, arrastar e soltar sobre outra ---- */
+let tTimer = null, tId = null, tActive = false, tStart = null;
+const clearTouchDrag = () => { clearTimeout(tTimer); tTimer = null; tStart = null; };
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch') return;
+  const el = todoRowOf(e); if (!el || el.getAttribute('draggable') !== 'true') return;
+  tStart = { x: e.clientX, y: e.clientY }; tId = el.dataset.tid;
+  tTimer = setTimeout(() => { tActive = true; el.classList.add('dragging'); if (navigator.vibrate) navigator.vibrate(12); }, 350);
+});
+document.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'touch') return;
+  if (!tActive) { if (tStart && Math.hypot(e.clientX - tStart.x, e.clientY - tStart.y) > 8) clearTouchDrag(); return; }
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  const row = under && under.closest ? under.closest('.todo[data-tid]') : null;
+  document.querySelectorAll('.todo.drop-before').forEach(x => x.classList.remove('drop-before'));
+  if (row && row.dataset.tid !== tId) row.classList.add('drop-before');
+});
+const endTouchDrag = (e) => {
+  if (e.pointerType !== 'touch') return;
+  clearTouchDrag();
+  if (!tActive) return;
+  tActive = false;
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  const row = under && under.closest ? under.closest('.todo[data-tid]') : null;
+  const from = tId, src = document.querySelector(`.todo[data-tid="${from}"]`);
+  document.querySelectorAll('.todo.dragging, .todo.drop-before').forEach(x => x.classList.remove('dragging', 'drop-before'));
+  if (src && row && row.dataset.tid !== from && row.parentElement === src.parentElement) todoMoveBefore(src.parentElement, from, row.dataset.tid);
+};
+document.addEventListener('pointerup', endTouchDrag);
+document.addEventListener('pointercancel', (e) => { if (e.pointerType === 'touch') { clearTouchDrag(); tActive = false; document.querySelectorAll('.todo.dragging, .todo.drop-before').forEach(x => x.classList.remove('dragging', 'drop-before')); } });
+document.addEventListener('touchmove', (e) => { if (tActive) e.preventDefault(); }, { passive: false });
