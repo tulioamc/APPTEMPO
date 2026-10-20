@@ -450,9 +450,9 @@ const ACT_MIN_MS = 60000;
 const actSelKey = (ids) => ids.join(',');
 function actSelBarHTML(key) {
   if (!ACT_SEL || ACT_SEL.key !== key) return '';
-  const tot = actMergeIntervals(ACT_SEL.ranges).reduce((t, r) => t + (r.b - r.a), 0);
+  const tot = ACT_SEL.ranges.length ? progMsOf(ACT_SEL.entryIds, ACT_SEL.gid, ACT_SEL.ranges) : 0;
   return `<div class="res-sel-bar"><span class="small">Arraste sobre a faixa <b>Por programa</b> para marcar trechos de <b>${esc(ACT_SEL.label)}</b>.</span>
-    <span class="mono small muted">${ACT_SEL.ranges.length} trecho(s) · ${fmtDur(tot)}</span><span class="grow"></span>
+    <span class="mono small muted">${ACT_SEL.ranges.length} trecho(s) · ${esc(ACT_SEL.label)} ${fmtDur(tot)} nesses trechos</span><span class="grow"></span>
     <button class="btn sm ghost" data-x="act-sel-cancel">Cancelar</button><button class="btn sm ghost" data-x="act-sel-clear">Limpar</button><button class="btn sm primary" data-x="act-sel-done" ${ACT_SEL.ranges.length ? '' : 'disabled'}>Concluir</button></div>`;
 }
 /* Faixa com vários dias/sessões (resumo cronológico) tem data-slices; faixa de uma sessão usa t0 e span. */
@@ -465,6 +465,14 @@ const actStripTime = (st, x) => {
   if (st.dataset.slices) return resPctToMs(JSON.parse(st.dataset.slices), p * 100);
   return +st.dataset.t0 + p * +st.dataset.span;
 };
+/* Acrescenta um trecho marcado: só une com os vizinhos se houver sobreposição de fato (trechos colados continuam separados). */
+function actAddRange(ranges, d) {
+  const out = ranges.map(r => ({ ...r })).sort((p, q) => p.a - q.a);
+  const hit = out.filter(r => r.a < d.b && d.a < r.b);
+  if (!hit.length) return [...out, { ...d }].sort((p, q) => p.a - q.a);
+  const a = Math.min(d.a, ...hit.map(r => r.a)), b = Math.max(d.b, ...hit.map(r => r.b));
+  return out.filter(r => !hit.includes(r)).concat([{ a, b }]).sort((p, q) => p.a - q.a);
+}
 function actSelOverlays(key, slices) {
   if (!ACT_SEL || ACT_SEL.key !== key) return '';
   let out = '';
@@ -490,7 +498,7 @@ document.addEventListener('mousemove', (ev) => {
 document.addEventListener('mouseup', () => {
   if (!ACT_SEL || !ACT_SEL.dragging) return;
   ACT_SEL.dragging = false; const d = ACT_SEL.drag; ACT_SEL.drag = null;
-  if (d && d.b - d.a >= ACT_MIN_MS) ACT_SEL.ranges = actMergeIntervals(ACT_SEL.ranges.concat([d]));
+  if (d && d.b - d.a >= ACT_MIN_MS) ACT_SEL.ranges = actAddRange(ACT_SEL.ranges, d);
   ACT_SEL.redraw();
 });
 document.addEventListener('click', (ev) => {
