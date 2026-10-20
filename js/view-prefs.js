@@ -1,10 +1,10 @@
 /* =====================================================================
    PREFERÊNCIAS
    ===================================================================== */
-const PREF_TABS = [['appearance', 'Aparência', 'gear'], ['types', 'Tipos de trabalho', 'tag'], ['extypes', 'Tipos de despesa', 'layers'], ['status', 'Status', 'spin'], ['reminders', 'Lembretes', 'bell'], ['timesheet', 'Time Sheet', 'clock'], ['data', 'Dados e backup', 'db'], ['integrations', 'Integrações', 'layers']];
+const PREF_TABS = [['appearance', 'Aparência', 'gear'], ['types', 'Tipos de trabalho', 'tag'], ['extypes', 'Tipos de despesa', 'layers'], ['programs', 'Programas', 'tag'], ['status', 'Status', 'spin'], ['reminders', 'Lembretes', 'bell'], ['timesheet', 'Time Sheet', 'clock'], ['data', 'Dados e backup', 'db'], ['integrations', 'Integrações', 'layers']];
 VIEWS.prefs = () => {
-  const body = { appearance: prefAppearance, types: prefTypes, extypes: prefExTypes, status: prefStatus, reminders: prefReminders, timesheet: prefTimesheet, data: prefData, integrations: prefIntegrations }[S.pref]();
-  return { title: 'Configurações', html: `<div class="row" style="justify-content:flex-end;margin-bottom:8px"><button class="btn sm" data-act="go" data-route="import">Importar do Notion</button></div><div class="pref-layout"><nav class="pref-nav">${PREF_TABS.map(([k, l, i]) => `<button class="nav-btn ${S.pref === k ? 'active' : ''}" data-act="pref-tab" data-v="${k}">${icon(i)}<span>${l}</span></button>`).join('')}</nav><div class="stack" style="min-width:0">${body}${logRetentionPanel()}${programasPanel()}</div></div>` };
+  const body = { appearance: prefAppearance, types: prefTypes, extypes: prefExTypes, programs: programasPanel, status: prefStatus, reminders: prefReminders, timesheet: prefTimesheet, data: prefData, integrations: prefIntegrations }[S.pref]();
+  return { title: 'Configurações', html: `<div class="row" style="justify-content:flex-end;margin-bottom:8px"><button class="btn sm" data-act="go" data-route="import">Importar do Notion</button></div><div class="pref-layout"><nav class="pref-nav">${PREF_TABS.map(([k, l, i]) => `<button class="nav-btn ${S.pref === k ? 'active' : ''}" data-act="pref-tab" data-v="${k}">${icon(i)}<span>${l}</span></button>`).join('')}</nav><div class="stack" style="min-width:0">${body}${logRetentionPanel()}</div></div>` };
 };
 ACTIONS['pref-tab'] = (el) => { S.pref = el.dataset.v; render(); };
 
@@ -373,6 +373,8 @@ CHANGES['font-upload'] = (el) => {
     db.setSetting('customFonts', { ...customFontsOf(), [id]: { label, data: r.result } });
     db.setSetting('font', id); toast(`Fonte "${label}" adicionada`);
   };
+  r.onerror = () => toast('Não consegui ler esse arquivo. Se ele estiver só na nuvem (Dropbox, iCloud), baixe antes: clique com o botão direito e escolha Disponibilizar offline.');
+  toast('Lendo a fonte…');
   r.readAsDataURL(f);
 };
 
