@@ -37,7 +37,7 @@ const noticeButtons = (n) => {
   if (n.kind === 'activity') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Adicionar à nota</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'todo') return '';
   if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
-  return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Mandar para o to-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
+  return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">To-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
 };
 ACTIONS['notice-accept'] = (el) => {
   const n = db.get('tempo_notices', el.dataset.id); if (!n) return;

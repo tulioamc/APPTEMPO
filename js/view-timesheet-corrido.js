@@ -7,7 +7,7 @@
    ===================================================================== */
 
 /* ---------- Corrido ---------- */
-const corridoOn = () => db.setting('tsView', 'dia') === 'corrido';
+const corridoOn = () => db.setting('tsView', 'corrido') === 'corrido';
 ACTIONS['ts-view'] = (el) => { db.setSetting('tsView', el.dataset.v); render(); };
 ACTIONS['ts-cor-more'] = () => { const size = Number(db.setting('tsCorSize', 10)) || 10; db.setSetting('tsCorN', (Number(db.setting('tsCorN', size)) || size) + size); render(); };
 ACTIONS['ts-cor-less'] = () => { const size = Number(db.setting('tsCorSize', 10)) || 10; db.setSetting('tsCorN', Math.max(size, (Number(db.setting('tsCorN', size)) || size) - size)); render(); };
@@ -38,11 +38,19 @@ function corridoProjHTML(p) {
     return `<div class="cor-task"><div class="cor-taskh"><b>${esc(T.name)}</b><span class="mono small">${fmtDur(tTotal)}</span><span class="grow"></span><button class="btn sm ghost" data-act="ts-resumo" data-title="${esc(T.name)}" data-ids="${tids}">Resumo</button></div>${T.direct.map(entryRowHTML).join('')}${subsHTML}</div>`;
   }).join('');
   const ids = p.list.map(e => e.id).join(',');
-  return `<div class="cor-proj">
-    <div class="cor-head"><div class="grow"><div style="font-weight:600">${esc(pr.name)}</div><div class="small muted">${esc(cl?.name || 'Sem cliente')} · ${p.list.length} sessão(ões)</div></div>
-      <span class="mono">${fmtDur(total)}</span><button class="btn sm" data-act="ts-resumo" data-title="${esc(pr.name)}" data-ids="${ids}">Resumo</button></div>
-    <details class="cor-body"><summary class="small muted">Tarefas e sessões</summary>${taskHTML}</details>
-  </div>`;
+  const firstMs = Math.min(...p.list.map(e => new Date(entryStart(e)).getTime()));
+  const lastMs = Math.max(...p.list.map(e => new Date(entryEnd(e)).getTime()));
+  const dm = (ms) => new Date(ms).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  const when = dm(firstMs) === dm(lastMs) ? dm(firstMs) : `${dm(firstMs)}–${dm(lastMs)}`;
+  const tags = [...new Set(p.list.map(e => e.work_type_id || ''))].map(id => wtTag(id || null)).join('');
+  return `<details class="grp-det cor-proj">
+    <summary class="entry grp-sum">
+      <span class="when">${when}</span>
+      <div class="what"><div class="t">${esc(pr.name)} <span class="tag pill small">${p.list.length} sessões</span></div><div class="p">${esc(cl?.name || 'Sem cliente')}${pr.name ? '' : ''}</div></div>
+      <div class="row" style="justify-content:flex-end;gap:10px"><span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${tags}</span><button class="btn sm ghost" data-act="ts-resumo" data-title="${esc(pr.name)}" data-ids="${ids}">Resumo</button><span class="dur">${fmtDur(total)}</span><span class="faint grp-caret">▾</span></div>
+    </summary>
+    <div class="cor-body">${taskHTML}</div>
+  </details>`;
 }
 
 function corridoHTML() {
