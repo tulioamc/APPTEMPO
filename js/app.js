@@ -40,6 +40,7 @@ const NAV = [
   { id: 'quotes', label: 'Orçamentos', icon: 'doc' },
   { id: 'finance', label: 'Financeiro PJ', icon: 'money' },
   { id: 'reports', label: 'Relatórios PJ', icon: 'chart' },
+  { id: 'usage', label: 'Uso de programas', icon: 'chart' },
   { group: 'PF' },
   { id: 'financepf', label: 'Financeiro PF', icon: 'money' },
   { id: 'expenses', label: 'Despesas', icon: 'money', pend: true },

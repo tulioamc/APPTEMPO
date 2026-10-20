@@ -929,3 +929,13 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 /* Trecho movido para outro projeto: lacuna clicável na faixa da sessão */
 .act-strip .act-moved { position: absolute; top: 0; bottom: 0; background: linear-gradient(to bottom, var(--mv, #94A3B8) 0 50%, #CBD5E1 50% 100%); color: #1E293B; font-weight: 600; font-size: 10px; line-height: 26px; padding: 0 4px; white-space: nowrap; overflow: hidden; cursor: pointer; border-radius: 2px; }
 .act-strip .act-moved:hover { outline: 1px solid var(--accent); }
+
+/* Uso de programas */
+.usage-row { display: grid; grid-template-columns: minmax(120px, 1.2fr) minmax(80px, 2fr) 64px 64px; gap: 10px; align-items: center; }
+.usage-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usage-bar { display: block; height: 10px; border-radius: 6px; background: var(--line, #E5E7EB); overflow: hidden; }
+.usage-bar > span { display: block; height: 100%; border-radius: 6px; }
+.usage-val { text-align: right; }
+.usage-ms { text-align: right; }
+.usage-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; max-height: 240px; overflow: auto; }
+@media (max-width: 640px) { .usage-row { grid-template-columns: 1fr 64px; } .usage-bar { grid-column: 1 / -1; grid-row: 2; } }
