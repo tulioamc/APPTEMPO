@@ -37,7 +37,7 @@ const noticeButtons = (n) => {
   if (n.kind === 'activity') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Adicionar à nota</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'todo') return '';
   if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
-  return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
+  return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Mandar para o to-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
 };
 ACTIONS['notice-accept'] = (el) => {
   const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
@@ -60,6 +60,13 @@ ACTIONS['notice-deny'] = (el) => {
   if (e) db.remove('tempo_time_entries', e.id, true);
   decideNotice(n, 'ignored', 'Negada (arquivada, pode resgatar)', { data: { ...n.data, snapshot } });
   db.emit();
+};
+/* Aviso vira item do To-do (lateral do Time Sheet). O aviso sai da lista de pendentes. */
+ACTIONS['notice-todo'] = (el) => {
+  const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
+  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: n.title, body: n.body || '', data: n.data || {}, decision: '', decided_at: null, snooze_until: null }, true);
+  decideNotice(n, 'accepted', 'Mandado para o to-do');
+  db.emit(); toast('Mandado para o to-do');
 };
 ACTIONS['notice-ignore'] = (el) => { decideNotice(db.get('tempo_notices', el.dataset.id), 'ignored', 'Ignorado'); db.emit(); };
 ACTIONS['notice-ack'] = (el) => { decideNotice(db.get('tempo_notices', el.dataset.id), 'accepted', 'Visto'); db.emit(); };

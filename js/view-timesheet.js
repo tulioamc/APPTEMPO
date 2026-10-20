@@ -62,11 +62,11 @@ VIEWS.timesheet = () => {
   <div class="panel">
     <div class="panel-h">
       <div class="date-nav"><button class="btn sm icon" data-act="ts-shift" data-d="-1" aria-label="Dia anterior">${icon('chevL')}</button><input type="date" id="ts-date" class="input sm" style="width:auto" value="${S.tsDay}" data-on="ts-date"><button class="btn sm icon" data-act="ts-shift" data-d="1" aria-label="Próximo dia">${icon('chevR')}</button>${!isToday(day) ? `<button class="btn sm" data-act="ts-day" data-day="${ymd(new Date())}">Hoje</button>` : ''}</div>
-      <span class="grow"></span><span class="muted small">${entries.length} sessão(ões)</span>
+      <span class="grow"></span><div class="row" style="gap:6px"><button class="btn sm ${corridoOn() ? '' : 'primary'}" data-act="ts-view" data-v="dia">Dia</button><button class="btn sm ${corridoOn() ? 'primary' : ''}" data-act="ts-view" data-v="corrido">Corrido</button></div><span class="muted small">${corridoOn() ? 'projetos mais recentes' : entries.length + ' sessão(ões)'}</span>
       <button class="btn sm" data-act="ts-manual">${icon('plus')} Apontamento manual</button>
     </div>
     <div class="panel-b tight">
-      ${entries.length ? groupedRowsHTML(entries) : `<div class="empty">${icon('clock')}<b>Nenhum registro em ${isToday(day) ? 'hoje' : fmtDate(S.tsDay)}</b><span>Inicie o cronômetro ou lance um apontamento manual se esqueceu de registrar.</span></div>`}
+      ${corridoOn() ? corridoHTML() : entries.length ? groupedRowsHTML(entries) : `<div class="empty">${icon('clock')}<b>Nenhum registro em ${isToday(day) ? 'hoje' : fmtDate(S.tsDay)}</b><span>Inicie o cronômetro ou lance um apontamento manual se esqueceu de registrar.</span></div>`}
     </div>
   </div>`;
   return { title: 'Time Sheet', actions: a ? '' : `<button class="btn primary" data-act="ts-start">${icon('play')} Iniciar registro</button>`, html: `<div class="home-grid"><div class="home-main">${html}</div>${sidePanelHTML()}</div>` };
