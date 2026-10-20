@@ -1172,7 +1172,11 @@ function bankRowExtra(t) {
     const tb = rr ? `<button class="btn sm" data-act="bank-tlink" data-id="${t.id}" data-kind="reimb" data-target="${rr.id}">Vincular a terapia ${esc(rr.name)}</button>` : `<button class="btn sm ghost" data-act="bank-rlink" data-id="${t.id}">Vincular a terapia…</button>`;
     return `${tb} <button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">Vincular a gasto…</button>`;
   }
-  if (t.flow === 'in' && bankIsPJ(t)) return `<button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Vincular a projeto…</button>`;
+  if (t.flow === 'in' && bankIsPJ(t)) {
+    const sp = bankOpenMatch(t);
+    if (sp) return `<button class="btn sm" data-act="bank-psug" data-id="${t.id}" data-pid="${sp.id}">Sugestão: ${esc(sp.name)} · marcar como pago</button> <button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Outro…</button>`;
+    return `<button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Vincular a projeto…</button>`;
+  }
   if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">${isReembCat(t.category) ? 'Vincular a gasto…' : 'Vincular a entrada…'}</button>`; }
   const e = bankFixedMatch(t);
   if (e) return `<button class="btn sm" data-act="bank-link" data-id="${t.id}" data-eid="${e.id}">Vincular a ${esc(e.name)}</button>`;
@@ -1494,3 +1498,28 @@ VIEWS.financepf = () => {
   return { title: 'Financeiro PF', actions: '', html: tabs + body };
 };
 ACTIONS['pf-tab'] = (el) => { const v = el.dataset.v; BANK.pfTab = v; BANK.origin = v === 'conta' ? 'conta' : v === 'cartao' ? 'cartao' : 'all'; render(); };
+
+/* Sugestão de Pix: só aparece quando exatamente um projeto em aberto tem saldo igual ao valor recebido (tolerância de R$ 1). */
+function bankOpenMatch(t) {
+  const amt = Math.abs(Number(t.amount));
+  const hits = db.all('tempo_projects').filter(p => { const rem = remainingOf(p); return rem !== null && rem > 0 && Math.abs(rem - amt) <= 1; });
+  return hits.length === 1 ? hits[0] : null;
+}
+/* "Aceitar" a sugestão: lança o pagamento no projeto, liga ao extrato e marca o status como Pago (ou Pago Parcial). */
+ACTIONS['bank-psug'] = async (el) => {
+  const t = (BANK.all.pj || []).find(x => x.id === el.dataset.id);
+  const p = db.get('tempo_projects', el.dataset.pid);
+  if (!t || !p) return;
+  const amt = Math.abs(Number(t.amount));
+  const pay = db.insert('tempo_payments', { project_id: p.id, amount: amt, date: t.posted_on, note: 'Pix', invoice: '' }, true);
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ payment_id: pay.id, updated_at: new Date().toISOString() }).eq('id', t.id);
+  if (error) { db.remove('tempo_payments', pay.id, true); return toast('Erro: ' + error.message); }
+  t.payment_id = pay.id;
+  const pr = db.get('tempo_projects', p.id);
+  const full = remainingOf(pr) === 0;
+  const target = statuses('payment').find(s => s.name === (full ? 'Pago' : 'Pago Parcial'));
+  if (target) setPaymentStatus(pr, target.id);
+  if (full && !pr.paid_at) db.update('tempo_projects', p.id, { paid_at: nowISO() }, true);
+  logEvent('payment', pay.id, 'payment', `Recebido ${fmtMoney(amt)} (Pix)`, null, null, { project_id: p.id });
+  toast(`${p.name}: ${full ? 'marcado como pago' : 'pagamento parcial lançado'}`); render();
+};
