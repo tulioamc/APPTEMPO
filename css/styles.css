@@ -752,9 +752,9 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 :root[data-theme="dark"] .act-chip { color: color-mix(in oklab, var(--tb) 62%, #fff); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-chip .faint { color: color-mix(in oklab, var(--tb) 75%, #fff); } }
 :root[data-theme="dark"] .act-chip .faint { color: color-mix(in oklab, var(--tb) 75%, #fff); }
-.act-strip .seg-b.act-b { background: color-mix(in oklab, var(--tb) 20%, var(--surface)); box-shadow: none; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-strip .seg-b.act-b { background: color-mix(in oklab, var(--tb) 34%, var(--surface)); } }
-:root[data-theme="dark"] .act-strip .seg-b.act-b { background: color-mix(in oklab, var(--tb) 34%, var(--surface)); }
+.act-strip .seg-b.act-b { background: var(--tb); box-shadow: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-strip .seg-b.act-b { background: var(--tb); } }
+:root[data-theme="dark"] .act-strip .seg-b.act-b { background: var(--tb); }
 .act-chip i { width: 8px; height: 8px; border-radius: 2px; background: var(--tb); display: inline-block; }
 .act-chip.on { border-color: var(--tb); }
 .act-sec.focus .act-chip:not(.on) { opacity: .6; }
