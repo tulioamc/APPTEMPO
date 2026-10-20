@@ -43,11 +43,17 @@ async function syncOne(integ) {
   const list = await gmail(token, 'messages?maxResults=100&q=' + encodeURIComponent(q));
 
   // avisos de Pix recebido: entram já, como "novo", e o extrato depois só confirma
-  const qPix = `from:todomundo@nubank.com.br subject:"transferência pelo Pix" after:${Math.floor(since.getTime() / 1000)}`;
+  // cursor próprio dos avisos: só lê o que chegou depois da última leitura (um aviso apagado não volta)
+  const pixSince = integ.last_pix_date ? new Date(integ.last_pix_date) : new Date(Date.now() - 60 * 864e5);
+  const qPix = `from:todomundo@nubank.com.br subject:"transferência pelo Pix" after:${Math.floor(pixSince.getTime() / 1000) - 86400}`;
   const pixList = await gmail(token, 'messages?maxResults=100&q=' + encodeURIComponent(qPix));
   let pixLidos = 0;
+  let newestPix = integ.last_pix_date;
   for (const m of pixList.messages || []) {
     const msg = await gmail(token, 'messages/' + m.id + '?format=full');
+    const when = Number(msg.internalDate);
+    if (when <= pixSince.getTime()) continue;
+    if (!newestPix || when > new Date(newestPix).getTime()) newestPix = new Date(when).toISOString();
     const p = parsePix(msg);
     if (!p) continue;
     // se o extrato já trouxe esse Pix, não cria aviso duplicado
@@ -104,7 +110,7 @@ async function syncOne(integ) {
   await rest(`tempo_integrations?id=eq.${integ.id}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ last_sync_at: new Date().toISOString(), last_message_date: newest }),
+    body: JSON.stringify({ last_sync_at: new Date().toISOString(), last_message_date: newest, last_pix_date: newestPix }),
   });
   return { conta: integ.account_email, mensagens: (list.messages || []).length, pix_lidos: pixLidos, transacoes_lidas: lidas };
 }
