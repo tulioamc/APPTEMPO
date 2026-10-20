@@ -66,12 +66,17 @@ function dayAggHTML(d) {
     return { label: pr?.name || 'Sem projeto', ms, color: col };
   });
   projItems.forEach(it => { const w = it.ms / total * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" title="${esc(it.label)} · ${fmtDur(it.ms)}" style="--tb:${it.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
-  const pauseItems = [...pz.entries()].sort((a, b) => b[1] - a[1]).map(([k, ms]) => ({ label: 'Pausa · ' + pauseLabel(k), ms, color: (typeof RES_PAUSE !== 'undefined' && RES_PAUSE[k]) || '#A1A1AA', key: k }));
+  const pauseItems = [...pz.entries()].sort((a, b) => b[1] - a[1]).map(([k, ms]) => ({ label: 'Pausa · ' + pauseLabel(k), ms, color: pauseHatch(k), key: k }));
   pauseItems.forEach(it => { const w = it.ms / total * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" title="${esc(it.label)} · ${fmtDur(it.ms)}" style="--ph:${it.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
   if (rest > 1000 && off < 100) parts += `<span class="act-track" style="left:${off}%;width:${100 - off}%"></span>`;
   const chip = (it) => `<span class="act-chip" style="--tb:${it.color}"><i></i>${esc(it.label)} <span class="faint">${fmtDur(it.ms)}</span></span>`;
+  // WhatsApp fica à parte (verde); as outras pausas viram um chip só, "Pausa +N", com o detalhe no passar do mouse
+  const isWA = (it) => pauseKind(it.key) === 'whatsapp';
+  const others = pauseItems.filter(it => !isWA(it));
+  const othersMs = others.reduce((t, it) => t + it.ms, 0);
+  const pauseChips = pauseItems.filter(isWA).map(chip).join('') + (others.length ? `<span class="act-chip act-chip-total" style="--tb:#A1A1AA" title="${esc(others.map(o => `${o.label} · ${fmtDur(o.ms)}`).join('\n'))}"><i></i>Pausa <span class="act-more">+${others.length}</span> <span class="faint">${fmtDur(othersMs)}</span></span>` : '');
   return `<div class="act-strip" style="height:30px">${parts}</div>
-    <div class="act-chips">${projItems.map(chip).join('')}${pauseItems.map(chip).join('')}</div>`;
+    <div class="act-chips">${projItems.map(chip).join('')}${pauseChips}</div>`;
 }
 
 /* Caixa "Relatório do Time Sheet". */
