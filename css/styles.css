@@ -909,3 +909,7 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 /* Temas */
 .swatch-mini { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--line-strong); }
 .theme-pick input[type=color] { width: 56px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; }
+
+/* Modo escuro: o cronômetro usa a cor de destaque (os segundos continuam apagados) */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .timer-digits { color: var(--accent); } }
+:root[data-theme="dark"] .timer-digits { color: var(--accent); }

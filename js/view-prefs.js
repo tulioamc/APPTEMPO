@@ -332,7 +332,7 @@ function themePanelHTML() {
     </div>
     <div class="field"><span class="lbl">Fonte própria</span>
       <div class="row" style="gap:8px;flex-wrap:wrap">
-        <label class="btn sm" style="cursor:pointer">Enviar fonte do computador<input type="file" accept=".woff2,.woff,.ttf,.otf" data-on="font-upload" style="display:none"></label>
+        <button class="btn sm" data-act="font-pick">Enviar fonte do computador</button><input id="font-file" type="file" accept=".woff2,.woff,.ttf,.otf" data-on="font-upload" hidden>
         ${Object.entries(fonts).map(([k, f]) => `<span class="row" style="gap:4px"><button class="btn sm ${fo === k ? 'primary' : ''}" data-act="set" data-k="font" data-v="${k}">${esc(f.label)}</button><button class="btn sm ghost" data-act="font-del" data-id="${k}" title="Excluir fonte" aria-label="Excluir fonte ${esc(f.label)}">×</button></span>`).join('')}
       </div>
       <span class="hint">.woff2, .woff, .ttf ou .otf, até 2 MB. Fica salva no app e entra na lista de fontes acima.</span>
@@ -374,3 +374,5 @@ CHANGES['font-upload'] = (el) => {
   };
   r.readAsDataURL(f);
 };
+
+ACTIONS['font-pick'] = () => { const i = document.getElementById('font-file'); if (i) i.click(); };
