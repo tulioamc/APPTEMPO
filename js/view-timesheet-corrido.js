@@ -75,12 +75,12 @@ function corridoHTML() {
   const more = projs.length > shown.length ? `<button class="btn" data-act="ts-cor-more">Mostrar mais (${shown.length} de ${projs.length})</button>` : '';
   const less = n > size ? `<button class="btn ghost" data-act="ts-cor-less">Mostrar menos</button>` : '';
   const ctrl = `<div class="cor-ctrl">
-    <div class="row" style="gap:6px;flex-wrap:wrap"><span class="small muted">Agrupar por</span>
-      <select class="input sm" data-on="ts-cor-by" style="width:auto" aria-label="Agrupar">${[['nenhum', 'Nada'], ['dia', 'Dia'], ['mes', 'Mês'], ['ano', 'Ano']].map(([v, l]) => `<option value="${v}" ${by === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
-      <select class="input sm" data-on="ts-cor-cat" style="width:auto" aria-label="Categoria"><option value="">Todas as categorias</option>${workTypes().map(w => `<option value="${w.id}" ${w.id === cat ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}</select></div>
-    <div class="row" style="gap:6px"><span class="small muted">Mostrar</span>
-      <select class="input sm" data-on="ts-cor-size" style="width:auto" aria-label="Quantos projetos">${[10, 20, 50, 100].map(v => `<option value="${v}" ${v === size ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="small muted">projetos</span></div></div>`;
-  return ctrl + (body || '<div class="empty">Nenhuma sessão ainda.</div>') + `<div class="row" style="justify-content:center;gap:8px;margin-top:12px">${more}${less}</div>`;
+    <div class="cor-ctrl-g"><span class="cor-ctrl-l">Agrupar por</span>
+      <select class="input sm" data-on="ts-cor-by" aria-label="Agrupar">${[['nenhum', 'Nada'], ['dia', 'Dia'], ['mes', 'Mês'], ['ano', 'Ano']].map(([v, l]) => `<option value="${v}" ${by === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <select class="input sm" data-on="ts-cor-cat" aria-label="Categoria"><option value="">Todas as categorias</option>${workTypes().map(w => `<option value="${w.id}" ${w.id === cat ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}</select></div>
+    <div class="cor-ctrl-g"><span class="cor-ctrl-l">Mostrar</span>
+      <select class="input sm" data-on="ts-cor-size" aria-label="Quantos projetos">${[10, 20, 50, 100].map(v => `<option value="${v}" ${v === size ? 'selected' : ''}>${v}</option>`).join('')}</select><span class="cor-ctrl-l">projetos</span></div></div>`;
+  return ctrl + `<div class="cor-list">${body || '<div class="empty">Nenhuma sessão ainda.</div>'}<div class="cor-more">${more}${less}</div></div>`;
 }
 
 /* ---------- Resumo da caixa ---------- */
