@@ -1079,6 +1079,8 @@ async function bankRefresh(force) {
   if (!db.adapter || !db.adapter.client || BANK.busy) return;
   if (!force && Date.now() - BANK.checkedAt < 60000) return;
   BANK.checkedAt = Date.now(); BANK.busy = true;
+  // mostra logo o que já está salvo; a busca no Gmail atualiza em seguida
+  try { await bankLoadTxns(); BANK.busy = true; render(); } catch (e) { /* segue para a busca */ }
   try {
     BANK.status = await bankApi('status');
     if (BANK.status.connected) {
@@ -1161,6 +1163,8 @@ function bankRowExtra(t) {
     return `<span class="small muted">→ ${rs.map(r => esc(r.name)).join(', ')} (${fmtMoney0(tot)})</span> <button class="btn sm ghost" data-act="bank-unlink" data-id="${t.id}">Desvincular</button>`;
   }
   const unl = `<button class="btn sm ghost" data-act="bank-unlink-any" data-id="${t.id}">Desvincular</button>`;
+  const pls = t.flow === 'in' ? (BANK.plinks || []).filter(l => l.txn_id === t.id && l.payment_id) : [];
+  if (pls.length) return `<span class="small muted">→ ${pls.map(l => { const pay = db.get('tempo_payments', l.payment_id); const pr = pay ? db.get('tempo_projects', pay.project_id) : null; return `${esc(pr?.name || 'Projeto')} (${fmtMoney0(l.amount)})`; }).join(' + ')}</span> ${unl}`;
   if (t.payment_id) { const p = db.get('tempo_payments', t.payment_id); const pr = p ? db.get('tempo_projects', p.project_id) : null; return `<span class="small muted">→ ${esc(pr?.name || 'Projeto')} (${fmtMoney0(p?.amount)})</span> ${unl}`; }
   if (t.category === 'Fee' && bankIsPJ(t)) return `<span class="small muted">→ Fee</span> ${unl}`;
   if (t.reimb_row_id) { const r = db.get('tempo_reimb_rows', t.reimb_row_id); return r ? `<span class="small muted">→ Terapia: ${esc(r.name)}</span> ${unl}` : ''; }
@@ -1175,6 +1179,8 @@ function bankRowExtra(t) {
   if (t.flow === 'in' && bankIsPJ(t)) {
     const sp = bankOpenMatch(t);
     if (sp) return `<button class="btn sm" data-act="bank-psug" data-id="${t.id}" data-pid="${sp.id}">Sugestão: ${esc(sp.name)} · marcar como pago</button> <button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Outro…</button>`;
+    const combos = bankComboMatch(t);
+    if (combos.length) return combos.map(c => `<button class="btn sm" data-act="bank-psug-multi" data-id="${t.id}" data-pids="${c.map(p => p.id).join(',')}">${c.map(p => esc(p.name)).join(' + ')} · ${fmtMoney0(c.reduce((a, p) => a + remainingOf(p), 0))}</button>`).join(' ') + ` <button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Outro…</button>`;
     return `<button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Vincular a projeto…</button>`;
   }
   if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">${isReembCat(t.category) ? 'Vincular a gasto…' : 'Vincular a entrada…'}</button>`; }
@@ -1522,4 +1528,52 @@ ACTIONS['bank-psug'] = async (el) => {
   if (full && !pr.paid_at) db.update('tempo_projects', p.id, { paid_at: nowISO() }, true);
   logEvent('payment', pay.id, 'payment', `Recebido ${fmtMoney(amt)} (Pix)`, null, null, { project_id: p.id });
   toast(`${p.name}: ${full ? 'marcado como pago' : 'pagamento parcial lançado'}`); render();
+};
+
+/* Cliente que já pagou esta contraparte (pelos lançamentos já ligados a projetos). */
+function bankClientOf(t) {
+  const pl = BANK.plinks || [];
+  const rows = (BANK.every || []).filter(x => x.flow === 'in' && x.counterpart === t.counterpart && x.id !== t.id);
+  for (const r of rows) {
+    const pids = [r.payment_id, ...pl.filter(l => l.txn_id === r.id).map(l => l.payment_id)].filter(Boolean);
+    for (const pid of pids) {
+      const pay = db.get('tempo_payments', pid); const pr = pay ? db.get('tempo_projects', pay.project_id) : null;
+      const c = pr ? clientOf(pr) : null; if (c) return c.id;
+    }
+  }
+  return null;
+}
+/* Combinações de projetos em aberto cuja soma do saldo bate com o valor recebido (tolerância de R$ 1). */
+function bankComboMatch(t) {
+  const amt = Math.abs(Number(t.amount));
+  // sem precisar de cliente: qualquer projeto em aberto entra na soma
+  const open = db.all('tempo_projects').filter(p => (remainingOf(p) || 0) > 0).sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, 14);
+  const out = [];
+  const rec = (i, chosen, sum) => {
+    if (out.length >= 4) return;
+    if (chosen.length && Math.abs(sum - amt) <= 1) { out.push(chosen.slice()); return; }
+    if (sum > amt + 1) return;
+    for (let k = i; k < open.length && out.length < 4; k++) { chosen.push(open[k]); rec(k + 1, chosen, sum + remainingOf(open[k])); chosen.pop(); }
+  };
+  rec(0, [], 0);
+  return out;
+}
+/* Aceita uma combinação: um pagamento por projeto (saldo total de cada um), todos ligados à mesma entrada. */
+ACTIONS['bank-psug-multi'] = async (el) => {
+  const t = (BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;
+  const projs = el.dataset.pids.split(',').map(id => db.get('tempo_projects', id)).filter(Boolean);
+  const made = projs.map(p => { const amt = remainingOf(p); return { p, amt, pay: db.insert('tempo_payments', { project_id: p.id, amount: amt, date: t.posted_on, note: 'Pix', invoice: '' }, true) }; });
+  const rows = made.map(x => ({ txn_id: t.id, payment_id: x.pay.id, amount: x.amt }));
+  const { error } = await db.adapter.client.from('tempo_bank_payment_links').insert(rows);
+  if (error) { made.forEach(x => db.remove('tempo_payments', x.pay.id, true)); return toast('Erro: ' + error.message); }
+  BANK.plinks = [...(BANK.plinks || []), ...rows];
+  made.forEach(x => {
+    logEvent('payment', x.pay.id, 'payment', `Recebido ${fmtMoney(x.amt)} (Pix)`, null, null, { project_id: x.p.id });
+    const pr = db.get('tempo_projects', x.p.id);
+    const full = remainingOf(pr) === 0;
+    const target = statuses('payment').find(s => s.name === (full ? 'Pago' : 'Pago Parcial'));
+    if (target) setPaymentStatus(pr, target.id);
+    if (full && !pr.paid_at) db.update('tempo_projects', x.p.id, { paid_at: nowISO() }, true);
+  });
+  toast(`Entrada ligada a ${made.length} projetos`); render();
 };
