@@ -62,6 +62,7 @@ create table if not exists tempo_projects (
   status_id uuid references tempo_status_options(id),
   payment_status_id uuid references tempo_status_options(id),
   deadline date, deadline_original date,
+  project_type text,                                                 -- Vídeo 2D / Vídeo 3D / Design / Outro
   budget numeric(14,2), remaining_override numeric(14,2),
   estimated_hours numeric(8,2), revisions_included int,
   approved_at timestamptz, started_at timestamptz, sent_at timestamptz, client_approved_at timestamptz,
@@ -76,6 +77,9 @@ create table if not exists tempo_tasks (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   project_id uuid not null references tempo_projects(id) on delete cascade,
   parent_id uuid references tempo_tasks(id) on delete cascade,      -- preenchido = subtarefa
+  depends_on jsonb not null default '[]'::jsonb,                    -- ids das tarefas que precisam terminar antes
+  owner text,                                                        -- responsável: null/'Eu' = eu (com apontamento); outro nome = terceiro (sem apontamento)
+  pos jsonb,                                                         -- posição do nó no editor de fluxo {x,y}
   name text not null,
   status_id uuid references tempo_status_options(id),
   status_inherited boolean not null default true,                    -- false = exceção manual
@@ -199,6 +203,8 @@ create index if not exists tempo_reimb_rows_month on tempo_reimb_rows (user_id, 
 create table if not exists tempo_expenses (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  project_id uuid references tempo_projects(id) on delete set null,  -- custo de terceiro ligado ao orçamento do projeto
+  task_id uuid references tempo_tasks(id) on delete set null,
   month text not null,
   kind text not null,
   name text, cat text, note text,

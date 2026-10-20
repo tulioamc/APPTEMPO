@@ -60,14 +60,17 @@ function pdTasks(p) {
     ${t.status_inherited !== false ? '<span class="inh" title="Acompanha o status do projeto">herdado</span>' : `<button class="btn sm ghost" data-x="inherit" data-id="${t.id}" title="Voltar a acompanhar o status do projeto">${icon('undo')} herdar</button>`}
     ${!isSub ? comboBtn('wt', t.work_type_id, 'task-wt', t.id, { cls: 'hide-sm' }) : ''}
     <input type="date" class="input sm" style="width:auto" value="${t.deadline || ''}" data-pd="tdl" data-id="${t.id}" aria-label="Prazo">
+    <input class="input sm" style="width:130px" value="${esc(t.owner || '')}" placeholder="Responsável" data-pd="owner" data-id="${t.id}" aria-label="Responsável">
     <span class="mono small faint" style="min-width:52px;text-align:right" title="Líquido">${fmtDur(isSub ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : taskMs(t.id))}</span><span class="mono small faint" style="min-width:52px;text-align:right" title="Bruto (com pausas)">${fmtDur(db.where('tempo_time_entries', e => (isSub ? e.task_id === t.id : (e.task_id === t.id || subtasksOf(t.id).some(x => x.id === e.task_id)))).reduce((s, e) => s + entryBrutoMs(e), 0))}</span>
-    <button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>
+    ${!t.owner || t.owner === 'Eu' ? `<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` : '<span class="faint small" title="Terceiro: sem apontamento de horas">terceiro</span>'}
     ${!isSub ? `<button class="btn sm icon ghost" data-x="add-sub" data-id="${t.id}" aria-label="Adicionar subtarefa">${icon('plus')}</button>` : ''}
+    ${!isSub ? depsHTML(t) : ''}
     ${!isSub && !ADJUST_RE.test(t.name) ? `<button class="btn sm ghost" data-x="add-adjust" data-id="${t.id}" title="Registrar um ajuste desta tarefa (cria [Ajuste NN] para você preencher o prazo)">Ajuste</button>` : ''}
     <button class="btn sm icon ghost" data-x="del-task" data-id="${t.id}" aria-label="Excluir">${icon('trash')}</button>
   </div>`;
   return `<div class="banner info small">${icon('layers')} Mudar o status do projeto atualiza só as tarefas marcadas como <b>herdado</b>. Ao mudar uma tarefa manualmente, ela vira exceção e não afeta o projeto nem as outras tarefas.</div>
-  <div class="panel"><div class="panel-b tight">${tks.length ? tks.map(t => row(t) + subtasksOf(t.id).map(s => row(s, true)).join('')).join('') : '<div class="empty small">Nenhuma tarefa. Adicione a primeira abaixo.</div>'}</div></div>
+  <div class="row" style="justify-content:flex-end;margin:6px 0"><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
+  <div class="panel"><div class="panel-b tight">${tks.length ? tks.map(t => row(t) + subtasksOf(t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}</div></div>
   <form class="row" data-form="add-task"><input class="input grow" name="name" placeholder="Nova tarefa" aria-label="Nova tarefa"><button class="btn primary">${icon('plus')} Adicionar tarefa</button></form>`;
 }
 
@@ -171,6 +174,13 @@ function bindProjectDrawer(ly, id, st) {
       db.emit(); toast('Pagamento registrado');
     }
   });
+  ly.box.addEventListener('click', (e) => {
+    const v = e.target.closest('[data-x="video-flow"]'); if (v) { openVideoFlowDialog(v.dataset.id, () => { render(); }); return; }
+    const of = e.target.closest('[data-x="open-flow"]'); if (of) { openFlowEditor(of.dataset.id); return; }
+    const b = e.target.closest('[data-x="dep-del"]'); if (!b) return;
+    const tt = db.get('tempo_tasks', b.dataset.id); if (!tt) return;
+    db.update('tempo_tasks', tt.id, { depends_on: (tt.depends_on || []).filter(d => d !== b.dataset.dep) }, true); render();
+  });
   ly.box.addEventListener('change', async (e) => {
     const el = e.target.closest('[data-pd]'); if (!el) return;
     const k = el.dataset.pd; const pr = p();
@@ -189,12 +199,38 @@ function bindProjectDrawer(ly, id, st) {
     if (k === 'tname') { if (el.value.trim()) { db.update('tempo_tasks', el.dataset.id, { name: el.value.trim() }, true); render(); } }
     if (k === 'tstatus') setTaskStatus(db.get('tempo_tasks', el.dataset.id), el.value);
     if (k === 'twt') { db.update('tempo_tasks', el.dataset.id, { work_type_id: el.value || null }, true); render(); }
+    if (k === 'owner') { db.update('tempo_tasks', el.dataset.id, { owner: el.value.trim() || null }, true); render(); return; }
+    if (k === 'dep-add') { if (!el.value) return; const tt = db.get('tempo_tasks', el.dataset.id); if (tt) { db.update('tempo_tasks', tt.id, { depends_on: [...(tt.depends_on || []), el.value] }, true); render(); } return; }
     if (k === 'tdl') {
       const t = db.get('tempo_tasks', el.dataset.id); if (!t) return;
       if (!await taskDeadlineFlow(t, el.value || null)) { el.value = t.deadline || ''; return; }
       render();
     }
   });
+}
+/* Janelinha do fluxo de vídeo: pergunta quem faz as etapas de terceiros (opcional). */
+function openVideoFlowDialog(pid, onDone) {
+  const ext = VIDEO_FLOW.filter(s => s.owner !== 'Eu');
+  const l = openLayer({
+    html: `<div class="dh"><h2>Fluxo de vídeo</h2></div><div class="db"><div class="stack" style="gap:10px"><span class="small muted">Quem vai fazer as etapas de terceiros? É opcional, dá para preencher depois.</span>${ext.map(s => `<div class="field"><label for="vf-${s.key}">${s.name}</label><input id="vf-${s.key}" class="input" name="${s.key}" placeholder="${esc(s.owner)}"></div>`).join('')}</div></div>
+    <div class="df"><button class="btn" data-x="no">Cancelar</button><button class="btn primary" data-x="yes" autofocus>Criar fluxo</button></div>`
+  });
+  l.box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-x]'); if (!b) return;
+    if (b.dataset.x === 'yes') {
+      const names = {}; ext.forEach(s => { const v = l.box.querySelector(`[name="${s.key}"]`)?.value.trim(); if (v) names[s.key] = v; });
+      createVideoFlow(pid, names); render(); toast('Fluxo de vídeo criado');
+      l.close(); if (onDone) onDone(); return;
+    }
+    l.close();
+  });
+}
+/* Ligação entre tarefas: "depende de" com chips para remover e um seletor para adicionar. */
+function depsHTML(t) {
+  const deps = Array.isArray(t.depends_on) ? t.depends_on : [];
+  const chips = deps.map(d => { const x = db.get('tempo_tasks', d); return x ? `<button class="btn sm ghost" data-x="dep-del" data-id="${t.id}" data-dep="${d}" title="Remover dependência">${esc(x.name)} ×</button>` : ''; }).join('');
+  const opts = tasksOf(t.project_id).filter(x => !x.parent_id && x.id !== t.id && !deps.includes(x.id)).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  return `<span class="row" style="gap:4px"><span class="small faint">depende de</span>${chips}${opts ? `<select class="input sm" data-pd="dep-add" data-id="${t.id}" aria-label="Adicionar dependência"><option value="">+ tarefa</option>${opts}</select>` : ''}</span>`;
 }
 /* Mudança de prazo de tarefa: pede o motivo e, se já havia prazo, pergunta se é ajuste. Retorna false se cancelou. */
 async function taskDeadlineFlow(t, v) {

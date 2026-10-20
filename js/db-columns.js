@@ -81,6 +81,8 @@ window.DB_COLUMNS = {
   "user_id",
   "project_id",
   "parent_id",
+  "depends_on",
+  "owner",
   "name",
   "status_id",
   "status_inherited",

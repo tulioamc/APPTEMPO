@@ -60,7 +60,9 @@ function actList(entryId) { return db.setting('act:' + entryId, []) || []; }
 function recordActivity(a, seg) {
   const list = actList(a.id);
   if (list.some(x => x.from === seg.from && x.app === seg.app && x.doc === (seg.doc || null))) return;
-  db.setSetting('act:' + a.id, [...list, { from: seg.from, to: seg.to, app: seg.app, doc: seg.doc || null, folder: seg.folder || null }]);
+  // Terminal não grava o nome da janela (que é o usuário): fica só como "Terminal"
+  const doc = /^terminal$/i.test(String(seg.app || '')) ? null : (seg.doc || null);
+  db.setSetting('act:' + a.id, [...list, { from: seg.from, to: seg.to, app: seg.app, doc, folder: seg.folder || null }]);
 }
 
 const actKeyOf = (x) => [x.app || '', x.folder || '', x.doc || ''].join('|');
@@ -83,7 +85,9 @@ function actRoots(keys) {
 /* Analisa a sessão: grupos (ordenados por tempo e com cor) e cada registro bruto com seu grupo.
    mode 'program' agrupa por programa; 'file' agrupa por arquivo (com os ajustes manuais). */
 function actAnalyze(entryId, mode) { return actAnalyzeList(actList(entryId), mode); }
-function actAnalyzeList(list, mode) {
+function actAnalyzeList(list0, mode) {
+  // registros antigos do Terminal podem ter guardado o nome de usuário como arquivo: aqui ele vira só "Terminal"
+  const list = list0.map(x => (/^terminal$/i.test(String(x.app || '')) ? { ...x, doc: null, folder: null } : x));
   if (!list.length) return { groups: [], records: [] };
   const info = {};
   list.forEach(x => { const k = actKeyOf(x); info[k] = info[k] || { key: k, app: x.app, doc: x.doc, folder: x.folder }; });
@@ -100,9 +104,13 @@ function actAnalyzeList(list, mode) {
   });
   const sorted = Object.values(groups).sort((a, b) => b.ms - a.ms).map((g, i) => {
     const items = Object.values(g.items).sort((a, b) => b.ms - a.ms);
-    const names = [...new Set(items.map(it => it.doc || it.app))];
+    // Terminal: a janela não tem nome de arquivo útil (aparece com o nome de usuário), então aparece como "Terminal" e em cinza
+    const termOnly = items.every(it => /^terminal$/i.test(String(it.app || '')));
+    const nameOf = (it) => (/^terminal$/i.test(String(it.app || '')) ? 'Terminal' : (it.doc || it.app));
+    const names = [...new Set(items.map(nameOf))];
     const label = mode === 'program' ? toolAlias(items[0].app) : (names.length <= 2 ? names.join(' · ') : `${names.slice(0, 2).join(' · ')} +${names.length - 2}`);
-    return { id: g.id, items, ms: g.ms, label, color: groupColor(g.id, i) };
+    const color = termOnly ? '#374151' : groupColor(g.id, i);
+    return { id: g.id, items, ms: g.ms, label, color };
   });
   return { groups: sorted, records };
 }
@@ -168,13 +176,16 @@ function actMoveGroup(entryId, g, pick) {
   const c = clientOf(p);
   const rest = actSubtract(e.segments || [], cuts);
   const label = tkProjectLabel(p);
-  // o registro novo leva o tempo do arquivo e os registros brutos dele
-  const nova = db.insert('tempo_time_entries', {
-    project_id: p.id, client_id: c?.id || null, agency_id: c?.agency_id || null, task_id: pick.task_id || null,
-    work_type_id: lastWorkType(p.id), revision_id: null, notes: `Movido de outra sessão: ${g.label}`,
-    state: 'done', segments: moved, edits: [{ at: nowISO(), reason: `Arquivo ${g.label} movido para ${label}`, before: e.segments }],
-  });
-  db.setSetting('act:' + nova.id, mine);
+  // trava: se o mesmo tempo já está lançado nesse projeto, não cria duplicata (só tira da origem)
+  if (!segsCoveredIn(moved, p.id, e.id)) {
+    // o registro novo leva o tempo do arquivo e os registros brutos dele
+    const nova = db.insert('tempo_time_entries', {
+      project_id: p.id, client_id: c?.id || null, agency_id: c?.agency_id || null, task_id: pick.task_id || null,
+      work_type_id: lastWorkType(p.id), revision_id: null, notes: `Movido de outra sessão: ${g.label}`,
+      state: 'done', segments: moved, edits: [{ at: nowISO(), reason: `Arquivo ${g.label} movido para ${label}`, before: e.segments }],
+    });
+    db.setSetting('act:' + nova.id, mine);
+  }
   // a sessão de origem perde esse tempo (e os registros brutos desse arquivo)
   db.setSetting('act:' + entryId, list.filter(x => !keys.has(actKeyOf(x))));
   if (!rest.length && e.state !== 'running') db.remove('tempo_time_entries', e.id);
@@ -195,11 +206,12 @@ const pauseWhy = (why) => PAUSE_WHY[why] || why || 'Intervalo manual';
 const isAppPause = (why) => !!why && (why === 'app' || (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).some(x => String(x).trim().toLowerCase() === String(why).trim().toLowerCase()));
 /* Cor da listra de cada tipo de pausa (igual na linha do tempo principal e nas faixas da sessão):
    ociosidade = azul bem claro · WhatsApp (e apps de mensagem) = verde claro · Telegram = azul escuro · outros = cinza */
-const PAUSE_HATCH = { idle: '#BFDBFE', whatsapp: '#86EFAC', telegram: '#1E40AF', other: '#A1A1AA' };
+const PAUSE_HATCH = { idle: '#BFDBFE', whatsapp: '#86EFAC', telegram: '#1E40AF', instagram: '#F9A8D4', other: '#A1A1AA' };
 const pauseKind = (why) => {
   const w = String(why || '').trim().toLowerCase();
   if (!w) return 'other';
   if (w.includes('telegram')) return 'telegram';
+  if (w.includes('instagram')) return 'instagram';
   if (w === 'app' || w.includes('whatsapp') || isAppPause(why)) return 'whatsapp';
   if (w === 'mac' || w === 'ocioso' || w.includes('ocios')) return 'idle';
   return 'other';
@@ -247,6 +259,7 @@ function pauseChipsHTML(e) {
     if (w === 'mac' || w === 'ocioso' || w.includes('ocios')) add('idle', 'Ócio (mouse e teclado)', ms, PAUSE_HATCH.idle);
     else if (w === 'sono' || w === 'suspenso') add('lock', 'Bloqueada / dormiu', ms, '#9CA3AF');
     else if (pauseKind(g.why) === 'telegram') add('telegram', 'Telegram', ms, PAUSE_HATCH.telegram);
+    else if (pauseKind(g.why) === 'instagram') add('instagram', 'Instagram', ms, PAUSE_HATCH.instagram);
     else if (pauseKind(g.why) === 'whatsapp') { const name = g.why === 'app' ? 'WhatsApp' : String(g.why); add('wa:' + name, name, ms, PAUSE_HATCH.whatsapp); }
     else add('manual', 'Manual', ms, '#A1A1AA');
   });

@@ -215,6 +215,8 @@ function learnFolderRule(folder, projectId, clientId) {
    Sem projeto, vira sessão avulsa para você ligar depois. */
 const DESIGN_APP_RE = /adobe|illustrator|photoshop|indesign|after effects|premiere|lightroom|cinema ?4d|blender|figma|sketch|affinity|procreate|davinci/i;
 const DEFAULT_PAUSE_APPS = ['WhatsApp', 'Telegram', 'Mensagens', 'Messages'];
+const DEFAULT_PAUSE_SITES = ['instagram'];
+const BROWSER_RE = /chrome|safari|edge|firefox|arc|brave/i;
 /* Cronômetro para a barra de menus do Mac: manda o estado a cada 5 s (no navegador não faz nada). */
 setInterval(() => {
   const a = activeEntry();
@@ -252,16 +254,20 @@ async function suggestActivity(seg) {
   if (!(toMs > fromMs) || toMs - fromMs < 10000) return;
   const a = activeEntry();
   const pauseApps = (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
-  const isPauseApp = pauseApps.includes(String(seg.app).toLowerCase());
+  // sites que pausam: navegador em primeiro plano com um desses termos no título da aba (ex.: Instagram no Chrome)
+  const pauseSites = (db.setting('pauseSites', DEFAULT_PAUSE_SITES) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
+  const siteHit = BROWSER_RE.test(String(seg.app)) ? pauseSites.find(s => String(seg.doc || '').toLowerCase().includes(s)) : null;
+  const isPauseApp = pauseApps.includes(String(seg.app).toLowerCase()) || !!siteHit;
   const rule = folderRule(seg.folder);
   const ruleProject = rule ? db.get('tempo_projects', rule.project_id) : null;
   if (!a) { if (!isPauseApp && (ruleProject || DESIGN_APP_RE.test(seg.app))) suggestStart(ruleProject, seg); return; }
   if (a.state === 'running' && !isPauseApp) recordActivity(a, seg);
   // app que pausa: só marca no bruto (o cronômetro segue) e vira aviso para você conferir
   // WhatsApp/Telegram não são atividade: viram pausa (a partir de 1 minuto, como as outras atividades)
-  if (isPauseApp) suggestPause(fromMs, toMs, 'app', seg.app);
+  if (isPauseApp) suggestPause(fromMs, toMs, 'app', siteHit ? siteHit.replace(/^./, c => c.toUpperCase()) : seg.app);
 }
 CHANGES['pause-apps'] = (el) => { db.setSetting('pauseApps', el.value.split(',').map(x => x.trim()).filter(Boolean)); };
+CHANGES['pause-sites'] = (el) => { db.setSetting('pauseSites', el.value.split(',').map(x => x.trim()).filter(Boolean)); };
 
 let idleDetector = null;
 async function startIdleDetection(ask) {

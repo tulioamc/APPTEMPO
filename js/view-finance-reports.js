@@ -80,7 +80,7 @@ const GROUPS = {
 VIEWS.reports = () => {
   const r = S.rep; const d = reportData();
   const tot = d.entries.reduce((s, e) => s + entryMs(e), 0);
-  const brutoRep = d.entries.reduce((s, e) => s + entryBrutoMs(e), 0);
+  const brutoRep = unionBrutoMs(d.entries);
   const received = d.pays.reduce((s, x) => s + Number(x.amount), 0);
   // agrupamento
   const g = {}; d.entries.forEach(e => { const [k, n, c] = GROUPS[r.group][1](e); (g[k] ||= { n, c, ms: 0, s: 0 }); g[k].ms += entryMs(e); g[k].s++; });

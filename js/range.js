@@ -27,13 +27,17 @@ function actMoveRange(entryId, a, b, pick) {
   const rest = actSubtract(e.segments || [], [{ a, b }]);
   const label = tkProjectLabel(p);
   const intervalo = `${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}`;
-  const nova = db.insert('tempo_time_entries', {
-    project_id: p.id, client_id: c?.id || null, agency_id: c?.agency_id || null, task_id: pick.task_id || null,
-    work_type_id: pick.work_type_id || lastWorkType(p.id), revision_id: null, notes: `Movido de outra sessão (${intervalo})`,
-    state: 'done', segments: [{ s: new Date(a).toISOString(), e: new Date(b).toISOString() }],
-    edits: [{ at: nowISO(), reason: `Intervalo ${intervalo} movido para ${label}`, before: e.segments }],
-  });
-  db.setSetting('act:' + nova.id, inRange);
+  const movedSegs = [{ s: new Date(a).toISOString(), e: new Date(b).toISOString() }];
+  // trava: se o intervalo já está lançado nesse projeto, não cria duplicata
+  if (!segsCoveredIn(movedSegs, p.id, e.id)) {
+    const nova = db.insert('tempo_time_entries', {
+      project_id: p.id, client_id: c?.id || null, agency_id: c?.agency_id || null, task_id: pick.task_id || null,
+      work_type_id: pick.work_type_id || lastWorkType(p.id), revision_id: null, notes: `Movido de outra sessão (${intervalo})`,
+      state: 'done', segments: movedSegs,
+      edits: [{ at: nowISO(), reason: `Intervalo ${intervalo} movido para ${label}`, before: e.segments }],
+    });
+    db.setSetting('act:' + nova.id, inRange);
+  }
   db.setSetting('act:' + entryId, keep);
   if (!rest.length && e.state !== 'running') db.remove('tempo_time_entries', e.id);
   else db.update('tempo_time_entries', e.id, { segments: rest.length ? rest : [{ s: nowISO(), e: null }], edits: [...(e.edits || []), { at: nowISO(), reason: `Intervalo ${intervalo} movido para ${label}`, before: e.segments }] }, true);

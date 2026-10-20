@@ -56,7 +56,7 @@ function reportPanelHTML(day) {
   for (let d = new Date(a); d <= b; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) days.push(new Date(d));
   const es = days.flatMap(d => entriesOn(d));
   const net = es.reduce((s, e) => s + entryMs(e), 0);
-  const bruto = es.reduce((s, e) => s + entryBrutoMs(e), 0);
+  const bruto = unionBrutoMs(es);
 
   // barras dos dias: no modo dia, a semana do dia; nos outros, os dias do período
   const ws = new Date(day); ws.setHours(0, 0, 0, 0); ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7));

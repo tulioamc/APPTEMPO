@@ -190,6 +190,8 @@ function clientSelectOptions(selected) {
   return h;
 }
 ACTIONS['proj-new'] = (el) => openProjectForm(null, el?.dataset?.client);
+const PROJECT_TYPES = ['', 'Vídeo 2D', 'Vídeo 3D', 'Design', 'Outro'];
+const isVideoType = (t) => /^Vídeo/.test(t || '');
 function openProjectForm(id, clientId, onCreated) {
   const p = id ? db.get('tempo_projects', id) : null;
   const l = openLayer({
@@ -197,6 +199,7 @@ function openProjectForm(id, clientId, onCreated) {
     <form class="db" id="pf">
       <div class="field"><label for="pf-name">Nome do projeto *</label><input id="pf-name" class="input" name="name" required value="${esc(p?.name || '')}" autofocus></div>
       <div class="field"><label for="pf-client">Cliente *</label><div class="row" style="flex-wrap:nowrap"><select id="pf-client" class="input" name="client_id" required>${clientSelectOptions(p?.client_id || clientId)}</select><button type="button" class="btn" data-x="newclient">${icon('plus')} Cliente</button></div><span class="hint">A agência vem do cadastro do cliente.</span></div>
+      <div class="field"><label for="pf-type">Tipo</label><select id="pf-type" class="input" name="project_type">${PROJECT_TYPES.map(t => `<option value="${t}" ${(p?.project_type || '') === t ? 'selected' : ''}>${t || 'Não definido'}</option>`).join('')}</select></div>
       <div class="grid2">
         <div class="field"><label for="pf-st">Status</label><select id="pf-st" class="input" name="status_id">${options(statuses('work'), p?.status_id || statusByCat('work', 'todo')?.id)}</select></div>
         <div class="field"><label for="pf-pay">Pagamento</label><select id="pf-pay" class="input" name="payment_status_id">${options(statuses('payment'), p?.payment_status_id || statuses('payment')[0]?.id)}</select></div>
@@ -221,7 +224,7 @@ function openProjectForm(id, clientId, onCreated) {
     const f = formData($('#pf', l.box));
     if (!f.name.trim()) return toast('Dê um nome ao projeto.');
     if (!f.client_id) return toast('Escolha o cliente.');
-    const data = { name: f.name.trim(), client_id: f.client_id, budget: numIn(f.budget), estimated_hours: numIn(f.estimated_hours), revisions_included: numIn(f.revisions_included), notes: f.notes, description: f.description };
+    const data = { name: f.name.trim(), client_id: f.client_id, project_type: f.project_type || null, budget: numIn(f.budget), estimated_hours: numIn(f.estimated_hours), revisions_included: numIn(f.revisions_included), notes: f.notes, description: f.description };
     const payId = feePayId(f.payment_status_id, l.box);
     if (p) {
       db.update('tempo_projects', p.id, data, true);
@@ -233,7 +236,9 @@ function openProjectForm(id, clientId, onCreated) {
       const np = db.insert('tempo_projects', { ...data, status_id: f.status_id, payment_status_id: payId, deadline: f.deadline || null, deadline_original: f.deadline || null, remaining_override: null, archived: false }, true);
       logEvent('project', np.id, 'created', 'Projeto criado');
       if (statusCat(f.status_id) === 'active') db.update('tempo_projects', np.id, { started_at: nowISO() }, true);
-      db.emit(); toast('Projeto criado'); l.close(); if (onCreated) return onCreated(np); openProject(np.id); return;
+      db.emit(); toast('Projeto criado'); l.close(); if (onCreated) return onCreated(np);
+      if (isVideoType(np.project_type)) { confirmBox({ title: 'Criar fluxo de vídeo?', body: 'Cria as etapas pré-montadas (Roteiro, Conceito, Storyboard, Locução, Animação, Sonorização) com as ligações entre elas.', ok: 'Criar fluxo' }).then(ok => { if (ok) openVideoFlowDialog(np.id, () => openFlowEditor(np.id)); else openProject(np.id); }); return; }
+      openProject(np.id); return;
     }
     l.close();
   });

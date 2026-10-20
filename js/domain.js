@@ -90,6 +90,19 @@ function entryMs(e, at = Date.now()) {
 function entryGaps(e) { const segs = e.segments || []; const out = []; for (let i = 0; i < segs.length - 1; i++) { const a = segs[i].e, b = segs[i + 1].s; if (a && b && new Date(b) > new Date(a)) out.push({ s: a, e: b, why: segs[i].why || null }); } return out; }
 function entryPauseMs(e) { return entryGaps(e).reduce((t, g) => t + (new Date(g.e) - new Date(g.s)), 0); }
 function entryBrutoMs(e, at = Date.now()) { const segs = e.segments || []; if (!segs.length) return 0; const last = segs[segs.length - 1]; return (last.e ? new Date(last.e) : at) - new Date(segs[0].s); }
+/* Bruto de vários lançamentos sem contar duas vezes o mesmo horário: une os intervalos (início→fim de cada um) e soma só o coberto. */
+function unionBrutoMs(list, at = Date.now()) {
+  const iv = list.map(e => { const segs = e.segments || []; if (!segs.length) return null; const a = new Date(segs[0].s).getTime(); const l = segs[segs.length - 1]; const b = l.e ? new Date(l.e).getTime() : at; return b > a ? [a, b] : null; }).filter(Boolean).sort((x, y) => x[0] - y[0]);
+  let total = 0, cs = null, ce = null;
+  iv.forEach(([a, b]) => { if (cs === null || a > ce) { if (cs !== null) total += ce - cs; cs = a; ce = b; } else if (b > ce) ce = b; });
+  if (cs !== null) total += ce - cs;
+  return total;
+}
+/* Trava anti-duplicata: já existe um lançamento do projeto que cobre inteiro estes segmentos? Nesse caso não se cria outro. */
+function segsCoveredIn(segs, pid, excludeId) {
+  const T = (x) => new Date(x).getTime();
+  return !!segs.length && db.all('tempo_time_entries').some(x => x.project_id === pid && x.id !== excludeId && segs.every(m => (x.segments || []).some(s => s.e && T(s.s) <= T(m.s) + 1000 && T(s.e) >= T(m.e) - 1000)));
+}
 const entryStart = (e) => e.segments?.[0]?.s;
 const entryEnd = (e) => { const l = e.segments?.[e.segments.length - 1]; return l ? l.e : null; };
 const activeEntry = () => db.all('tempo_time_entries').find(e => e.state === 'running' || e.state === 'paused') || null;
@@ -156,7 +169,38 @@ function setTaskStatus(t, statusId) {
   db.update('tempo_tasks', t.id, { status_id: statusId, status_inherited: false }, true);
   logEvent('task', t.id, 'status', `${t.parent_id ? 'Subtarefa' : 'Tarefa'} “${t.name}”: ${statusName(from)} → ${statusName(statusId)}`, from, statusId, { project_id: t.project_id });
   if (statusCat(statusId) === 'active') reopenProjectIfDone(t.project_id);
+  if (statusCat(statusId) === 'done') startDependentTasks(t);
   db.emit();
+}
+/* Fluxo pré-montado de vídeo: cada etapa com seu responsável e as dependências entre elas. */
+const VIDEO_FLOW = [
+  { key: 'roteiro', name: 'Roteiro', owner: 'Roteirista', after: [] },
+  { key: 'conceito', name: 'Conceito (KV)', owner: 'Eu', after: ['roteiro'] },
+  { key: 'storyboard', name: 'Storyboard', owner: 'Eu', after: ['conceito'] },
+  { key: 'locucao', name: 'Locução', owner: 'Locutor', after: ['conceito'] },
+  { key: 'animacao', name: 'Animação', owner: 'Eu', after: ['storyboard', 'locucao'] },
+  { key: 'sonorizacao', name: 'Sonorização', owner: 'Eu', after: ['animacao'] },
+];
+function createVideoFlow(pid, names = {}) {
+  const todo = db.where('tempo_status_options', s => s.kind === 'work' && s.category === 'todo')[0];
+  const ids = {};
+  VIDEO_FLOW.forEach((s, i) => { ids[s.key] = db.insert('tempo_tasks', { project_id: pid, parent_id: null, name: s.name, status_id: todo?.id || null, status_inherited: false, deadline: null, notes: '', order: i, work_type_id: null, owner: names[s.key] || s.owner, depends_on: [] }, true).id; });
+  VIDEO_FLOW.forEach(s => db.update('tempo_tasks', ids[s.key], { depends_on: s.after.map(k => ids[k]) }, true));
+  logEvent('project', pid, 'created', 'Fluxo de vídeo criado (pré-montado)', null, null, { project_id: pid });
+  db.emit();
+}
+/* Ligação entre tarefas: quando todas as dependências de uma tarefa "A fazer" estão concluídas, ela entra em andamento sozinha. */
+function startDependentTasks(done) {
+  const todo = db.where('tempo_status_options', s => s.kind === 'work' && s.category === 'todo')[0];
+  const active = db.where('tempo_status_options', s => s.kind === 'work' && s.category === 'active').sort((a, b) => (a.order ?? 99) - (b.order ?? 99))[0];
+  if (!active) return;
+  db.where('tempo_tasks', x => x.project_id === done.project_id && Array.isArray(x.depends_on) && x.depends_on.includes(done.id)).forEach(x => {
+    const deps = x.depends_on.map(id => db.get('tempo_tasks', id)).filter(Boolean);
+    if (!deps.length || !deps.every(d => statusCat(d.status_id) === 'done')) return;
+    if (todo && x.status_id !== todo.id) return;
+    db.update('tempo_tasks', x.id, { status_id: active.id, status_inherited: false }, true);
+    logEvent('task', x.id, 'status', `Tarefa “${x.name}” começou automaticamente (dependências concluídas)`, todo?.id || null, active.id, { project_id: x.project_id });
+  });
 }
 /* Projeto concluído com tarefa ativa não pode continuar concluído: volta para "em andamento". */
 function reopenProjectIfDone(pid) {
