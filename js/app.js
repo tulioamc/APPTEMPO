@@ -265,9 +265,9 @@ function suggestStart(p, seg) {
   const sel = { project_id: pid, client_id: client?.id || null, agency_id: client?.agency_id || null, task_id: null, work_type_id: null, notes: '', revision_id: null };
   const e = startEntry(sel); if (!e) return;
   db.update('tempo_time_entries', e.id, { segments: [{ s: seg.from, e: null }] }, true);
-  notifyNative(p ? `Contando em ${p.name}` : `Contando em ${seg.app}`, `Confirme no Tempo para entrar no bruto, ou negue para arquivar.`);
+  notifyNative(p ? `Contando em ${p.name}` : `Detectada atividade no ${shortProgram(seg.app)}`, `Confirme para entrar no bruto, negue para arquivar.`);
   const unsaved = !seg.folder ? 'Arquivo ainda não salvo. ' : '';
-  addNotice({ kind: 'start', key: `start:${e.id}`, title: p ? `Contando em ${p.name} desde ${fmtTime(seg.from)}` : `Contando em ${seg.app} sem projeto desde ${fmtTime(seg.from)}`, body: `${unsaved}Detectado em ${seg.app}${seg.folder ? ' · ' + seg.folder : ''}. Confirme para entrar no bruto, ou negue para arquivar.`, entity: 'entry', entity_id: e.id, project_id: pid, data: { project_id: pid, entry_id: e.id, snapshot: null, from: seg.from, app: seg.app, unsaved: !seg.folder } });
+  addNotice({ kind: 'start', key: `start:${e.id}`, title: p ? `Contando em ${p.name}` : `Detectada atividade no ${shortProgram(seg.app)}`, body: `${unsaved}Confirme para entrar no bruto, negue para arquivar.`, entity: 'entry', entity_id: e.id, project_id: pid, data: { project_id: pid, entry_id: e.id, snapshot: null, from: seg.from, app: seg.app, unsaved: !seg.folder } });
 }
 async function suggestActivity(seg) {
   if (!isMacApp() || !seg || !seg.app) return;   // atividade só vem do app de Mac
