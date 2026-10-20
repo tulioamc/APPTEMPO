@@ -732,8 +732,10 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .act-sec.focus .act-b:not(.on) { background: #DADDE3 !important; box-shadow: none !important; opacity: 1; }
 .act-sec.focus .act-b.on { background: color-mix(in oklab, var(--tb) 78%, #000) !important; box-shadow: none !important; opacity: 1; }
 .act-sec.focus .seg-b.pausa:not(.on) { opacity: .35; }
-:root[data-theme="dark"] .act-sec.focus .act-b:not(.on), :root:not([data-theme="light"]) .act-sec.focus .act-b:not(.on) { background: #3A3F4A !important; }
-:root[data-theme="dark"] .act-sec.focus .act-b.on, :root:not([data-theme="light"]) .act-sec.focus .act-b.on { background: color-mix(in oklab, var(--tb) 85%, #fff) !important; }
+:root[data-theme="dark"] .act-sec.focus .act-b:not(.on) { background: #3A3F4A !important; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-sec.focus .act-b:not(.on) { background: #3A3F4A !important; } }
+:root[data-theme="dark"] .act-sec.focus .act-b.on { background: color-mix(in oklab, var(--tb) 85%, #fff) !important; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-sec.focus .act-b.on { background: color-mix(in oklab, var(--tb) 85%, #fff) !important; } }
 .act-foot { margin-top: 18px; padding-top: 10px; border-top: 1px dashed var(--border); opacity: .85; }
 .act-foot .lbl { font-size: .8em; }
 .act-log { font-size: .72em; color: var(--fg-3); line-height: 1.5; margin-bottom: 8px; font-family: var(--mono, monospace); }
