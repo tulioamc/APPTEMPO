@@ -304,7 +304,9 @@ function actMovedSpanHTML(seg, x, w) {
   const nome = dst ? tkProjectLabel(dst) : null;
   const cor = (dst && (clientOf(dst)?.color || dst.color)) || '#94A3B8';
   const texto = recebido ? 'Trabalho em ' + (nome || 'outro projeto') : (nome ? 'Movido → ' + nome : 'Movido');
-  const dica = recebido ? texto + ' · clique para abrir' : (nome ? 'Movido para ' + nome + ' · clique para abrir' : 'Movido');
+  const dica = recebido ? texto + ' · clique para abrir'
+    : (nome ? 'Movido para ' + nome + ' · clique para abrir'
+      : 'Movido para [destino não registrado]\nObs.: este trecho está marcado como movido, mas o projeto de destino não ficou gravado. Abra a sessão para conferir ou refazer a movimentação.');
   return `<span class="act-moved" data-pid="${esc(idOutro)}" style="left:${x}%;width:${w}%;--mv:${esc(cor)}" data-tip="${esc(dica)}"></span>`;   // o texto aparece só no hover (data-tip)
 }
 /* Checkbox "Mostrar trabalho em outros projetos": aparece só se houver espaços "fora" nas sessões. Igual na revisão e no resumo. */
