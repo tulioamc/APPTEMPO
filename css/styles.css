@@ -760,7 +760,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .act-sec.focus .act-chip:not(.on) { opacity: .6; }
 .act-sec.focus .act-chip.on { background: color-mix(in oklab, var(--tb) 34%, var(--surface)); }
 /* pausas: mesma listra na linha do tempo principal e nas faixas da sessão (cor vem de --ph) */
-.day-strip .seg-b.pausa, .act-strip .seg-b.pausa { background: repeating-linear-gradient(45deg, var(--ph, #d1d1d1) 0 2px, var(--pg, color-mix(in oklab, var(--ph, #d1d1d1) 35%, var(--surface))) 2px 4px); box-shadow: none; opacity: .9; }
+.day-strip .seg-b.pausa, .act-strip .seg-b.pausa { background: repeating-linear-gradient(90deg, var(--ph, #d1d1d1) 0 4px, var(--pg, color-mix(in oklab, var(--ph, #d1d1d1) 35%, var(--surface))) 4px 8px); box-shadow: none; opacity: .9; }
 
 .strip-tip { position: fixed; z-index: 450; display: none; pointer-events: none; background: var(--fg); color: var(--bg); padding: 6px 9px; border-radius: 6px; font-size: .8em; line-height: 1.4; white-space: pre-line; box-shadow: var(--shadow); max-width: 280px; }
 
