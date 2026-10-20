@@ -93,6 +93,14 @@ function closeLayer(layer) {
 }
 const topLayer = () => layers[layers.length - 1];
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && layers.length) { topLayer().close(); } });
+/* Ctrl+Z / ⌘Z desfaz a última alteração de dados (fora de campos de texto, onde o desfazer é do próprio campo). */
+document.addEventListener('keydown', (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || (e.key || '').toLowerCase() !== 'z') return;
+  const t = e.target;
+  if (t && (t.isContentEditable || t.closest?.('input, textarea, select, [contenteditable="true"]'))) return;
+  e.preventDefault();
+  if (db.undo()) toast('Alteração desfeita'); else toast('Nada para desfazer');
+});
 
 function confirmBox({ title, body, ok = 'Confirmar', danger = false }) {
   return new Promise(res => {
