@@ -15,23 +15,40 @@ const S = {
   imp: null,
   navOpen: false
 };
+/* Pendências: itens que precisam de ação. O número ao lado do menu abre a lista, e cada item leva para resolver. */
+const PEND_KIND = { pause: 'Pausa para confirmar', activity: 'Atividade para anotar', start: 'Início de sessão para confirmar' };
+function pendingOf(id) {
+  if (id === 'expenses') {
+    const ym = S.exMonth || ymd(new Date()).slice(0, 7);
+    return exRows(ym).filter(r => !['Não teve', 'Pago', 'Recebido'].includes(r.status)).map(r => ({ label: r.name || '(sem nome)', why: `${ym} · ${r.status}${r.due_date ? ' · vence ' + fmtDate(r.due_date) : ''}`, route: 'expenses' }));
+  }
+  if (id === 'reimb') {
+    return db.all('tempo_reimb_rows').filter(r => r.refund_id !== rbStatusId('reimb_refund', 'Feito!')).map(r => ({ label: r.name || '(sem nome)', why: `${r.month} · ${fmtMoney(r.amount) || 'sem valor'} · reembolso ainda não feito`, route: 'reimb' }));
+  }
+  if (id === 'notices') {
+    return db.all('tempo_notices').filter(n => n.status === 'pending' && n.kind !== 'todo').map(n => ({ label: PEND_KIND[n.kind] || n.kind, why: n.created_at ? 'desde ' + fmtDate(n.created_at) : 'aguardando sua decisão', route: 'notices' }));
+  }
+  return [];
+}
 const NAV = [
-  { group: 'Workspace' },
   { id: 'timesheet', label: 'Time Sheet', icon: 'clock' },
-  { id: 'projects', label: 'Projetos', icon: 'folder', count: () => projects().length },
-  { id: 'tasks', label: 'Tarefas', icon: 'check', count: () => db.all('tempo_tasks').length },
-  { id: 'quotes', label: 'Orçamentos', icon: 'doc', count: () => db.all('tempo_quotes').length },
+  { group: 'PJ' },
+  { id: 'registry', label: 'Agências e clientes', icon: 'users' },
+  { id: 'projects', label: 'Projetos', icon: 'folder' },
+  { id: 'tasks', label: 'Tarefas', icon: 'check' },
+  { id: 'quotes', label: 'Orçamentos', icon: 'doc' },
   { id: 'finance', label: 'Financeiro PJ', icon: 'money' },
+  { id: 'reports', label: 'Relatórios PJ', icon: 'chart' },
+  { group: 'PF' },
   { id: 'financepf', label: 'Financeiro PF', icon: 'money' },
-  { id: 'shared', label: 'Despesas do filho', icon: 'users' },
-  { id: 'expenses', label: 'Despesas', icon: 'money', count: () => exRows(S.exMonth || ymd(new Date()).slice(0, 7)).filter(r => r.status !== 'Não teve' && r.status !== 'Pago' && r.status !== 'Recebido').length },
-  { id: 'reimb', label: 'Reembolsos', icon: 'layers', count: () => db.all('tempo_reimb_rows').filter(r => r.refund_id !== rbStatusId('reimb_refund', 'Feito!')).length },
-  { id: 'notices', label: 'Avisos', icon: 'bell', count: () => db.all('tempo_notices').filter(n => n.status === 'pending' && n.kind !== 'todo').length },
-  { id: 'reports', label: 'Relatórios', icon: 'chart' },
-  { group: 'Cadastros' },
-  { id: 'registry', label: 'Agências e clientes', icon: 'users', count: () => agencies().length + clients().length },
-  { id: 'import', label: 'Importar do Notion', icon: 'upload' },
-  { id: 'prefs', label: 'Preferências', icon: 'gear' }
+  { id: 'expenses', label: 'Despesas', icon: 'money', pend: true },
+  { id: 'reimb', label: 'Reembolsos', icon: 'layers', pend: true },
+  { id: 'shared', label: 'Despesas Rafa', icon: 'users' },
+  { id: 'reportspf', label: 'Relatórios PF', icon: 'chart' },
+  { group: 'Geral' },
+  { id: 'notices', label: 'Avisos', icon: 'bell', pend: true },
+  { id: 'lixeira', label: 'Lixeira de log', icon: 'trash' },
+  { id: 'prefs', label: 'Configurações', icon: 'gear' }
 ];
 const VIEWS = {};
 
@@ -41,13 +58,23 @@ function go(route) {
   render(); window.scrollTo(0, 0);
 }
 ACTIONS.go = (el) => go(el.dataset.route);
+/* Lista de pendências: explica cada item e leva para resolver. */
+ACTIONS.pend = (el) => {
+  const id = el.dataset.id; const items = pendingOf(id);
+  const title = NAV.find(n => n.id === id)?.label || 'Pendências';
+  const l = openLayer({ html: `<div class="dh"><h2>Pendências · ${esc(title)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db"><div class="stack" style="gap:8px"><span class="small muted">Cada item precisa da sua ação. Clique para ir resolver.</span>
+    ${items.length ? items.map(it => `<button type="button" class="btn ghost" style="justify-content:flex-start;text-align:left;height:auto;padding:10px" data-pgo="${it.route}"><span><b>${esc(it.label)}</b><br><span class="small muted">${esc(it.why)}</span></span></button>`).join('') : '<div class="empty small">Nada pendente.</div>'}
+    </div></div>` });
+  l.box.addEventListener('click', (e) => { const b = e.target.closest('[data-pgo]'); if (!b) return; l.close(); go(b.dataset.pgo); });
+};
 ACTIONS['toggle-nav'] = () => { S.navOpen = !S.navOpen; $('.app').classList.toggle('nav-open', S.navOpen); };
 
 function sidebarHTML() {
   const a = activeEntry();
   return `<div class="brand"><div class="brand-mark">${icon('clock')}</div><div><div class="brand-name">Tempo</div><div class="brand-sub">time sheet e projetos</div></div></div>
   ${NAV.map(n => n.group ? `<div class="nav-group">${n.group}</div>` :
-    `<button class="nav-btn ${S.route === n.id ? 'active' : ''}" data-act="go" data-route="${n.id}" ${S.route === n.id ? 'aria-current="page"' : ''}>${icon(n.icon)}<span>${n.label}</span>${n.count ? `<span class="count">${n.count()}</span>` : ''}</button>`).join('')}
+    `<button class="nav-btn ${S.route === n.id ? 'active' : ''}" data-act="go" data-route="${n.id}" ${S.route === n.id ? 'aria-current="page"' : ''}>${icon(n.icon)}<span>${n.label}</span>${n.pend && pendingOf(n.id).length ? `<span class="count pend-count" data-act="pend" data-id="${n.id}" role="button" tabindex="0" title="Ver o que está pendente">${pendingOf(n.id).length}</span>` : ''}</button>`).join('')}
   <div class="sidebar-foot">
     ${a ? `<button class="mini-timer" data-act="go" data-route="timesheet"><span class="row small"><span class="dot ${a.state === 'running' ? 'live' : 'paused'}"></span>${a.state === 'running' ? 'Registrando' : 'Pausado'}</span><span class="t" data-tick="${a.id}">${fmtClock(entryMs(a))}</span><span class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(entryTitle(a))}</span>${pausesOf(a.id).length ? `<span class="small" style="color:var(--warn);font-weight:600">${pausesOf(a.id).length} pausa(s) para revisar</span>` : ''}</button>` : ''}
     <div class="data-mode"><span class="dot ${db.adapter.persistent ? 'live' : 'mem'}"></span>${db.syncError ? 'Falha de sincronização' : db.adapter.persistent ? 'Sincronizado' : 'Em memória · some ao recarregar'} · ${APP_VERSION}${` · <a href="#" class="btn sm ghost" data-act="app-update" title="${window.TEMPO_NEW_VERSION ? 'Nova versão ' + esc(window.TEMPO_NEW_VERSION) + ' disponível' : 'Recarregar com a versão mais nova'}" ${window.TEMPO_NEW_VERSION ? 'style="color:var(--accent);font-weight:600"' : ''}>Atualizar</a>`}${db.adapter.persistent ? ` · <a href="#" class="btn sm ghost" data-act="signout">Sair</a>` : ''}</div>
@@ -252,6 +279,8 @@ async function suggestActivity(seg) {
   const fromMs = new Date(seg.from).getTime(), toMs = new Date(seg.to).getTime();
   // troca de app com menos de 10 s é ignorada; a partir disso entra no log e no gráfico
   if (!(toMs > fromMs) || toMs - fromMs < 10000) return;
+  // o log do dia recebe tudo, com ou sem sessão ativa
+  const logged = logAppend(seg);
   const a = activeEntry();
   const pauseApps = (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
   // sites que pausam: navegador em primeiro plano com um desses termos no título da aba (ex.: Instagram no Chrome)
@@ -261,7 +290,7 @@ async function suggestActivity(seg) {
   const rule = folderRule(seg.folder);
   const ruleProject = rule ? db.get('tempo_projects', rule.project_id) : null;
   if (!a) { if (!isPauseApp && (ruleProject || DESIGN_APP_RE.test(seg.app))) suggestStart(ruleProject, seg); return; }
-  if (a.state === 'running' && !isPauseApp) recordActivity(a, seg);
+  if (a.state === 'running' && !isPauseApp) recordActivity(a, { ...seg, rid: logged?.rid || null });
   // app que pausa: só marca no bruto (o cronômetro segue) e vira aviso para você conferir
   // WhatsApp/Telegram não são atividade: viram pausa (a partir de 1 minuto, como as outras atividades)
   if (isPauseApp) suggestPause(fromMs, toMs, 'app', siteHit ? siteHit.replace(/^./, c => c.toUpperCase()) : seg.app);
@@ -364,6 +393,8 @@ function checkReminders() {
   });
 }
 setInterval(() => checkReminders(), 30000);
+setInterval(() => { try { logSweep(); logPurge(); } catch (e) { console.warn('log', e); } }, 3600000);
+setTimeout(() => { try { logSweep(); logPurge(); } catch (e) { console.warn('log', e); } }, 8000);
 setInterval(() => scanAlerts(), 300000);
 setInterval(() => ensureMonthSheets(), 3600000);
 

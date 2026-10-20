@@ -62,7 +62,7 @@ function recordActivity(a, seg) {
   if (list.some(x => x.from === seg.from && x.app === seg.app && x.doc === (seg.doc || null))) return;
   // Terminal não grava o nome da janela (que é o usuário): fica só como "Terminal"
   const doc = /^terminal$/i.test(String(seg.app || '')) ? null : (seg.doc || null);
-  db.setSetting('act:' + a.id, [...list, { from: seg.from, to: seg.to, app: seg.app, doc, folder: seg.folder || null }]);
+  db.setSetting('act:' + a.id, [...list, { from: seg.from, to: seg.to, app: seg.app, doc, folder: seg.folder || null, rid: seg.rid || null }]);
 }
 
 const actKeyOf = (x) => [x.app || '', x.folder || '', x.doc || ''].join('|');
