@@ -33,6 +33,41 @@ function logAppend(seg) {
   return out;
 }
 
+/* Histórico de edições (setting 'logEdits'): cada mudança em um registro gera uma entrada.
+   Tipos: 'apagar' (vale nos dois lados) e 'editar' (campo + antes/depois).
+   Regra: a última edição de cada registro vence. Apagar é final: depois de apagado, o registro some de tudo. */
+const logEditsOf = () => db.setting('logEdits', []) || [];
+function logEdit(rid, kind, campo, antes, depois) {
+  if (!rid) return;
+  db.setSetting('logEdits', [...logEditsOf(), { id: logRidNew(), rid, at: nowISO(), kind, campo: campo || null, antes: antes ?? null, depois: depois ?? null }]);
+}
+/* Apagar um registro (do log, da lixeira ou de uma sessão). Guarda um resumo do que foi apagado. */
+function logTomb(rid, rec) {
+  logEdit(rid, 'apagar', null, rec ? { from: rec.from, to: rec.to, app: rec.app, doc: rec.doc || null } : null, null);
+}
+/* Editar um campo (from, to, app, doc, folder) de um registro: vale nos dois lados. */
+function logEditField(rid, campo, antes, depois) { logEdit(rid, 'editar', campo, antes, depois); }
+
+function logReconcile() {
+  const edits = logEditsOf(); if (!edits.length) return;
+  const deadAt = {}; const field = {};   // rid -> data de apagar; rid|campo -> última edição de campo
+  edits.forEach(e => {
+    if (e.kind === 'apagar') { if (!deadAt[e.rid] || e.at > deadAt[e.rid]) deadAt[e.rid] = e.at; }
+    else if (e.kind === 'editar') { const k = e.rid + '|' + e.campo; if (!field[k] || e.at > field[k].at) field[k] = e; }
+  });
+  const dead = new Set(Object.keys(deadAt));
+  const fieldsOf = {};
+  Object.values(field).forEach(e => { if (dead.has(e.rid)) return; (fieldsOf[e.rid] ||= {})[e.campo] = e.depois; });
+  if (!dead.size && !Object.keys(fieldsOf).length) return;
+  const patch = (x) => { if (dead.has(x.rid)) return null; const f = fieldsOf[x.rid]; return f ? { ...x, ...f } : x; };
+  logSettings().forEach(r => {
+    if (!r.value) return;
+    if (r.key.startsWith('actlog:') && Array.isArray(r.value) && r.value.some(x => x.rid && (dead.has(x.rid) || fieldsOf[x.rid]))) db.setSetting(r.key, r.value.map(patch).filter(Boolean));
+    else if (r.key.startsWith('lixeira:') && Array.isArray(r.value.records) && r.value.records.some(x => x.rid && (dead.has(x.rid) || fieldsOf[x.rid]))) db.setSetting(r.key, { ...r.value, records: r.value.records.map(patch).filter(Boolean) });
+    else if (r.key.startsWith('act:') && Array.isArray(r.value) && r.value.some(x => x.rid && (dead.has(x.rid) || fieldsOf[x.rid]))) db.setSetting(r.key, r.value.map(patch).filter(Boolean));
+  });
+}
+
 /* Hora em hora: dias sem registro há 24 h vão para a lixeira. */
 function logSweep() {
   const now = Date.now();
@@ -46,6 +81,7 @@ function logSweep() {
     db.setSetting(trashKeyOf(day), { savedAt: nowISO(), records: merged });
     db.setSetting(r.key, null);
   });
+  logReconcile();
 }
 
 /* Apaga da lixeira o que passou do prazo de retenção (0 = nunca apaga). */
@@ -55,6 +91,8 @@ function logPurge() {
   const cut = Date.now() - days * 864e5;
   logSettings().filter(r => r.key.startsWith('lixeira:') && r.value && r.value.savedAt && new Date(r.value.savedAt).getTime() < cut)
     .forEach(r => db.setSetting(r.key, null));
+  const edits = logEditsOf(); const kept = edits.filter(e => new Date(e.at).getTime() >= cut);
+  if (kept.length !== edits.length) db.setSetting('logEdits', kept);
 }
 
 function trashDays() {
@@ -103,11 +141,14 @@ function logDayCard(d) {
     </div></div>`;
 }
 VIEWS.lixeira = () => {
+  logReconcile();
   const days = trashDays();
   const keep = Number(db.setting('logRetentionDays', LOG_DEFAULT_DAYS));
   return { title: 'Lixeira de log', actions: '', html: `
     <div class="banner info small">O log sai do dia a dia 24 h depois do último registro e vem para cá. Guardado ${keep ? 'por ' + keep + ' dias' : 'para sempre'} (ajuste em Configurações).</div>
-    <div class="stack" style="gap:12px;margin-top:10px">${days.map(logDayCard).join('') || '<div class="empty">Nenhum dia na lixeira ainda.</div>'}</div>` };
+    <div class="stack" style="gap:12px;margin-top:10px">${days.map(logDayCard).join('') || '<div class="empty">Nenhum dia na lixeira ainda.</div>'}</div>
+    <div class="panel" style="margin-top:14px"><div class="panel-h"><h3>Histórico de edições</h3><span class="grow"></span><span class="small muted">${logEditsOf().length} registro(s)</span></div>
+      <div class="panel-b tight">${logEditsOf().slice(-30).reverse().map(e => `<div class="row between small" style="padding:6px 4px;border-bottom:1px solid var(--line)"><span>${e.kind === 'apagar' ? 'Apagado' : 'Editado · ' + esc(e.campo)}${e.antes && e.antes.app ? ' · ' + esc(e.antes.app) : ''}</span><span class="mono muted">${esc(new Date(e.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</span></div>`).join('') || '<div class="muted small">Nenhuma edição ainda.</div>'}</div></div>` };
 };
 
 /* ---- Seleção por arrastar ---- */
@@ -161,7 +202,7 @@ function openLogMove(day, a0, b0) {
         <div class="stack" style="gap:4px">${recs.map(r => `<div class="row between small"><span>${esc(/^terminal$/i.test(r.app) ? 'Terminal' : r.app)}${r.doc ? ' · ' + esc(r.doc) : ''}</span><span class="mono">${fmtDur(new Date(r.to) - new Date(r.from))}</span></div>`).join('') || '<span class="muted small">Trecho sem registros.</span>'}</div>
         <div class="field"><label for="lg-proj">Copiar para o projeto</label><select id="lg-proj" class="input"><option value="">Escolha um projeto</option>${tkProjectsSorted().map(p => `<option value="${esc(p.id)}">${esc(tkProjectLabel(p))}</option>`).join('')}</select></div>
         <div class="field"><label for="lg-task">Tarefa (opcional)</label><select id="lg-task" class="input" disabled><option value="">Sem tarefa</option></select></div>
-        <div class="row"><button class="btn primary" data-x="lg-copy">Copiar</button><span class="small muted">Cria uma sessão nova com esse trecho. O log da lixeira continua intacto.</span></div>
+        <div class="row"><button class="btn primary" data-x="lg-copy">Copiar</button><button class="btn danger" data-x="lg-del">Apagar do log</button><span class="small muted">Copiar cria uma sessão nova com esse trecho. Apagar tira o trecho daqui e de qualquer sessão que o tenha.</span></div>
       </div>
       <div class="df"><button class="btn" data-act="close-layer">Fechar</button></div>`,
     onMount: (l) => {
@@ -172,6 +213,14 @@ function openLogMove(day, a0, b0) {
         task.disabled = !proj.value;
       });
       l.box.addEventListener('click', async (ev) => {
+        if (ev.target.closest('[data-x="lg-del"]')) {
+          if (!await confirmBox({ title: 'Apagar do log?', body: `${recs.length} registro(s) saem do log e de todas as sessões que os tiverem.`, ok: 'Apagar', danger: true })) return;
+          const t2 = db.setting(trashKeyOf(day), null); if (!t2) return;
+          recs.forEach(r => logTomb(r.rid, r));
+          db.setSetting(trashKeyOf(day), { ...t2, records: t2.records.filter(r => !recs.some(x => x.rid === r.rid && x.rid)) });
+          logReconcile(); db.emit(); toast('Trecho apagado do log'); ly.close(); if (S.route === 'lixeira') render();
+          return;
+        }
         const btn = ev.target.closest('[data-x="lg-copy"]'); if (!btn) return;
         if (!proj.value) return toast('Escolha um projeto.');
         const label = tkProjectLabel(db.get('tempo_projects', proj.value));

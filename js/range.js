@@ -95,7 +95,9 @@ function actDeleteRange(entryId, a, b) {
   const rest = actSubtract(e.segments || [], [{ a, b }]);
   if (!inRange.length && JSON.stringify(rest) === JSON.stringify(e.segments || [])) return false;
   const intervalo = `${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}`;
+  inRange.forEach(r => logTomb(r.rid, r));   // apagar na sessão também apaga no log (o último a mexer vale)
   db.setSetting('act:' + entryId, list.filter(r => !inRange.includes(r)));
+  logReconcile();
   if (!rest.length && e.state !== 'running') db.remove('tempo_time_entries', e.id);
   else db.update('tempo_time_entries', e.id, { segments: rest.length ? rest : [{ s: nowISO(), e: null }], edits: [...(e.edits || []), { at: nowISO(), reason: `Intervalo ${intervalo} excluído`, before: e.segments }] }, true);
   db.emit();
