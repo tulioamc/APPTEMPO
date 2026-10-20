@@ -730,12 +730,12 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .act-strip .act-track { position: absolute; top: 0; bottom: 0; background: #B8BDC6; opacity: .45; }
 .act-strip .seg-b { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
 .act-sec.focus .act-b:not(.on) { background: #DADDE3 !important; box-shadow: none !important; opacity: 1; }
-.act-sec.focus .act-b.on { background: color-mix(in oklab, var(--tb) 78%, #000) !important; box-shadow: none !important; opacity: 1; }
+.act-sec.focus .act-b.on { background: var(--tb) !important; box-shadow: none !important; opacity: 1; }
 .act-sec.focus .seg-b.pausa:not(.on) { opacity: .35; }
 :root[data-theme="dark"] .act-sec.focus .act-b:not(.on) { background: #3A3F4A !important; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-sec.focus .act-b:not(.on) { background: #3A3F4A !important; } }
-:root[data-theme="dark"] .act-sec.focus .act-b.on { background: color-mix(in oklab, var(--tb) 85%, #fff) !important; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-sec.focus .act-b.on { background: color-mix(in oklab, var(--tb) 85%, #fff) !important; } }
+:root[data-theme="dark"] .act-sec.focus .act-b.on { background: var(--tb) !important; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .act-sec.focus .act-b.on { background: var(--tb) !important; } }
 .act-foot { margin-top: 18px; padding-top: 10px; border-top: 1px dashed var(--border); opacity: .85; }
 .act-foot .lbl { font-size: .8em; }
 .act-log { font-size: .72em; color: var(--fg-3); line-height: 1.5; margin-bottom: 8px; font-family: var(--mono, monospace); }
@@ -891,3 +891,5 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .cor-list .cor-group { margin: 6px 0 2px; }
 .cor-more { display: flex; justify-content: center; gap: 8px; margin-top: 4px; }
 .act-more { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: color-mix(in oklab, var(--tb) 30%, var(--surface)); font-size: .85em; font-weight: 700; line-height: 1.5; text-align: center; }
+.ts-agg-box { margin-top: 10px; min-height: 58px; }
+.ts-agg-box .act-chips { margin-top: 8px; }

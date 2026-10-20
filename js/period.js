@@ -47,6 +47,33 @@ function reportStrip(entries, day, mode) {
   return `<div class="day-strip" data-report="1" data-t0="${base.getTime()}" data-span="${span}" data-ents="${entries.map(e => e.id).join(',')}" aria-label="Linha do tempo do dia">${bars}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
 }
 
+/* Faixa agregada de um dia: cada projeto soma o seu tempo (cor do cliente/agência), pausas pela cor da categoria. */
+function dayAggHTML(d) {
+  const ds = entriesOn(d);
+  if (!ds.length) return '<div class="muted small">Sem registro neste dia.</div>';
+  const bruto = unionBrutoMs(ds);
+  const proj = new Map(), pz = new Map();
+  ds.forEach(e => { const k = e.project_id || '_'; proj.set(k, (proj.get(k) || 0) + entryMs(e)); });
+  ds.forEach(e => entryGaps(e).forEach(g => { const k = g.why || 'manual'; pz.set(k, (pz.get(k) || 0) + (new Date(g.e) - new Date(g.s))); }));
+  const sumP = [...proj.values()].reduce((t, x) => t + x, 0), sumZ = [...pz.values()].reduce((t, x) => t + x, 0);
+  const rest = Math.max(0, bruto - sumP - sumZ);
+  const total = Math.max(1, sumP + sumZ + rest);
+  let off = 0, parts = '';
+  const projItems = [...proj.entries()].sort((a, b) => b[1] - a[1]).map(([k, ms]) => {
+    const pr = db.get('tempo_projects', k);
+    const c = pr ? clientOf(pr) : null;
+    const col = hexOf((c && c.color) || (pr && agOfProject(pr)?.color) || 'gray');
+    return { label: pr?.name || 'Sem projeto', ms, color: col };
+  });
+  projItems.forEach(it => { const w = it.ms / total * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" title="${esc(it.label)} · ${fmtDur(it.ms)}" style="--tb:${it.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
+  const pauseItems = [...pz.entries()].sort((a, b) => b[1] - a[1]).map(([k, ms]) => ({ label: 'Pausa · ' + pauseLabel(k), ms, color: (typeof RES_PAUSE !== 'undefined' && RES_PAUSE[k]) || '#A1A1AA', key: k }));
+  pauseItems.forEach(it => { const w = it.ms / total * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" title="${esc(it.label)} · ${fmtDur(it.ms)}" style="--ph:${it.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
+  if (rest > 1000 && off < 100) parts += `<span class="act-track" style="left:${off}%;width:${100 - off}%"></span>`;
+  const chip = (it) => `<span class="act-chip" style="--tb:${it.color}"><i></i>${esc(it.label)} <span class="faint">${fmtDur(it.ms)}</span></span>`;
+  return `<div class="act-strip" style="height:30px">${parts}</div>
+    <div class="act-chips">${projItems.map(chip).join('')}${pauseItems.map(chip).join('')}</div>`;
+}
+
 /* Caixa "Relatório do Time Sheet". */
 function reportPanelHTML(day) {
   const p = db.setting('tsPeriod', 'dia');
@@ -111,8 +138,10 @@ function reportPanelHTML(day) {
   const chartHTML = `<div class="stack" style="gap:6px">
       <div class="row between"><span class="lbl">${p === 'dia' ? 'Semana' : 'Dias do período'}</span><span class="mono small">${fmtDur(chartSum)}</span></div>
       <div style="display:grid;grid-template-columns:repeat(${chart.length},1fr);gap:${chart.length > 8 ? 3 : 6}px;align-items:end;height:70px">
-        ${chart.map(x => `<button data-act="ts-day" data-day="${ymd(x.d)}" title="${fmtDate(ymd(x.d))} · ${fmtDur(x.ms)}" style="border:0;background:none;padding:0;min-width:0;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-end;height:100%;gap:4px"><span style="display:block;height:${Math.max(3, x.ms / maxW * 46)}px;border-radius:3px;background:${ymd(x.d) === S.tsDay ? 'var(--accent)' : 'var(--surface-3)'}"></span><span class="small ${ymd(x.d) === S.tsDay ? '' : 'faint'}" style="text-align:center;font-size:11px">${chart.length <= 7 ? WEEKDAYS[x.d.getDay()] : x.d.getDate()}</span></button>`).join('')}
+        ${chart.map(x => `<button data-act="ts-day" data-day="${ymd(x.d)}" data-agg-day="${ymd(x.d)}" title="${fmtDate(ymd(x.d))} · ${fmtDur(x.ms)}" style="border:0;background:none;padding:0;min-width:0;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-end;height:100%;gap:4px"><span style="display:block;height:${Math.max(3, x.ms / maxW * 46)}px;border-radius:3px;background:${ymd(x.d) === S.tsDay ? 'var(--accent)' : 'var(--surface-3)'}"></span><span class="small ${ymd(x.d) === S.tsDay ? '' : 'faint'}" style="text-align:center;font-size:11px">${chart.length <= 7 ? WEEKDAYS[x.d.getDay()] : x.d.getDate()}</span></button>`).join('')}
       </div>
+      <div class="ts-agg-box" id="ts-agg-box" data-agg-cur="${ymd(day)}">${dayAggHTML(day)}</div>
+      <div hidden id="ts-agg-store-html">${chart.map(x => `<span data-store="${ymd(x.d)}">${dayAggHTML(x.d)}</span>`).join('')}</div>
     </div>`;
 
   return `<div class="panel report-panel">
@@ -137,4 +166,12 @@ document.addEventListener('click', (ev) => {
   if (p) { db.setSetting('tsPeriod', p.dataset.tsp); db.emit(); return; }
   const v = ev.target.closest?.('[data-tsv]');
   if (v) { db.setSetting('tsReportView', v.dataset.tsv); db.emit(); }
+});
+
+/* Passar o mouse (ou tocar) num dia mostra a faixa agregada dele logo abaixo do gráfico. */
+document.addEventListener('mouseover', (e) => {
+  const b = e.target.closest?.('[data-agg-day]'); if (!b) return;
+  const box = document.getElementById('ts-agg-box'); if (!box || box.dataset.aggCur === b.dataset.aggDay) return;
+  const src = document.querySelector(`#ts-agg-store-html [data-store="${b.dataset.aggDay}"]`); if (!src) return;
+  box.innerHTML = src.innerHTML; box.dataset.aggCur = b.dataset.aggDay;
 });
