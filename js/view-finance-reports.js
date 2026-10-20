@@ -1083,7 +1083,7 @@ async function bankRefresh(force) {
     BANK.status = await bankApi('status');
     if (BANK.status.connected) {
       const last = BANK.status.last_sync_at ? new Date(BANK.status.last_sync_at).getTime() : 0;
-      if (force || Date.now() - last > 2 * 3600e3) {
+      if (force || Date.now() - last > 3600e3) {
         const r = await bankApi('sync', { method: 'POST' });
         const lidas = r.results.reduce((s, x) => s + (x.transacoes_lidas || 0), 0);
         BANK.msg = 'Última leitura: ' + lidas + ' movimentações';

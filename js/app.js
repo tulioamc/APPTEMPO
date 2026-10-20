@@ -410,6 +410,8 @@ setInterval(() => { try { logSweep(); logPurge(); } catch (e) { console.warn('lo
 setTimeout(() => { try { logSweep(); logPurge(); } catch (e) { console.warn('log', e); } }, 8000);
 setInterval(() => scanAlerts(), 300000);
 setInterval(() => ensureMonthSheets(), 3600000);
+// busca de extratos e avisos de Pix de hora em hora, enquanto o app estiver aberto
+setInterval(() => { if (db.adapter && db.adapter.persistent) bankRefresh(); }, 3600000);
 
 /* ---------- aparência ---------- */
 function applyAppearance() {
