@@ -35,7 +35,7 @@ function corridoProjHTML(p) {
     const tids = T.list.map(e => e.id).join(',');
     const tTotal = T.list.reduce((s, e) => s + entryMs(e), 0);
     const subsHTML = [...T.subs.values()].map(sb => `<div class="cor-sub"><div class="cor-subh"><span>↳ ${esc(sb.name)}</span><span class="mono small">${fmtDur(sb.list.reduce((s, e) => s + entryMs(e), 0))}</span></div><div class="grp-kids">${sb.list.map(entryRowHTML).join('')}</div></div>`).join('');
-    return `<div class="cor-task"><div class="cor-taskh"><b>${esc(T.name)}</b><span class="mono small">${fmtDur(tTotal)}</span><span class="grow"></span><button class="btn sm ghost" data-act="ts-resumo" data-title="${esc(T.name)}" data-ids="${tids}">Resumo</button></div>${T.direct.map(entryRowHTML).join('')}${subsHTML}</div>`;
+    return `<div class="cor-task"><div class="cor-taskh"><b>${esc(T.name)}</b><span class="mono small">${fmtDur(tTotal)}</span><span class="grow"></span><button class="btn sm" data-act="ts-resumo" data-title="${esc(T.name)}" data-ids="${tids}">Resumo</button></div>${T.direct.map(entryRowHTML).join('')}${subsHTML}</div>`;
   }).join('');
   const ids = p.list.map(e => e.id).join(',');
   const firstMs = Math.min(...p.list.map(e => new Date(entryStart(e)).getTime()));
@@ -48,7 +48,7 @@ function corridoProjHTML(p) {
     <summary class="entry grp-sum">
       <span class="when">${when}</span>
       <div class="what"><div class="t">${esc(pr.name)} <span class="tag pill small">${p.list.length} ${p.list.length === 1 ? 'sessão' : 'sessões'}</span></div><div class="p">${esc(cl?.name || 'Sem cliente')}${pr.name ? '' : ''}</div></div>
-      <div class="row" style="justify-content:flex-end;gap:10px"><span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${tags}</span><button class="btn sm ghost" data-act="ts-resumo" data-title="${esc(pr.name)}" data-ids="${ids}">Resumo</button><span class="dur">${fmtDur(total)}</span><span class="faint grp-caret">▾</span></div>
+      <div class="row" style="justify-content:flex-end;gap:10px"><span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${tags}</span><button class="btn sm" data-act="ts-resumo" data-title="${esc(pr.name)}" data-ids="${ids}">Resumo</button><span class="dur">${fmtDur(total)}</span><span class="faint grp-caret">▾</span></div>
     </summary>
     <div class="cor-body">${taskHTML}</div>
   </details>`;

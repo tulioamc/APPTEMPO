@@ -860,7 +860,7 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .cor-ctrl { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px 20px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .cor-ctrl-g { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cor-ctrl-l { font-size: 13px; color: var(--fg-3); white-space: nowrap; }
-.cor-ctrl select { height: 32px; padding: 0 30px 0 10px; border-radius: 8px; font-size: 13px; width: auto; min-width: 0; }
+.cor-ctrl select { height: auto; min-height: 32px; padding: 6px 30px 6px 10px; line-height: 1.3; font-family: inherit; border-radius: 8px; font-size: 13px; width: auto; min-width: 0; overflow: visible; }
 .cor-group { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-3); margin: 14px 0 6px; }
 .cor-proj { border: 1px solid var(--line); border-radius: var(--radius, 10px); background: var(--surface); margin-bottom: 8px; overflow: hidden; }
 .cor-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
