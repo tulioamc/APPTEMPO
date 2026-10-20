@@ -254,8 +254,8 @@ function learnFolderRule(folder, projectId, clientId) {
    desde o horário em que você estava ali (provisório). Confirmar = entra no bruto. Negar = arquiva (pode resgatar).
    Sem projeto, vira sessão avulsa para você ligar depois. */
 const DESIGN_APP_RE = /adobe|illustrator|photoshop|indesign|after effects|premiere|lightroom|cinema ?4d|blender|figma|sketch|affinity|procreate|davinci/i;
-const DEFAULT_PAUSE_APPS = ['WhatsApp', 'Telegram', 'Mensagens', 'Messages'];
-const DEFAULT_PAUSE_SITES = ['instagram'];
+const DEFAULT_PAUSE_APPS = ['WhatsApp', 'Telegram', 'Mensagens', 'Messages', 'Netflix'];
+const DEFAULT_PAUSE_SITES = ['instagram', 'youtube', 'tiktok', 'netflix', 'prime video', 'disney', 'hbo max', 'globoplay', 'crunchyroll', 'twitch', 'paramount', 'apple tv'];   // streaming e redes: pelo título da aba
 const BROWSER_RE = /chrome|safari|edge|firefox|arc|brave/i;
 /* Cronômetro para a barra de menus do Mac: manda o estado a cada 5 s (no navegador não faz nada). */
 setInterval(() => {
