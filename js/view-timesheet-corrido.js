@@ -87,16 +87,97 @@ function corridoHTML() {
 const RES_PAUSE = { mac: '#CBD5E1', sono: '#94A3B8', suspenso: '#E2E8F0', ocioso: '#E2E8F0', app: '#F9A8D4', manual: '#A8B3C4' };
 ACTIONS['ts-resumo'] = (el) => openResumo(el.dataset.title || '', (el.dataset.ids || '').split(',').filter(Boolean));
 
+/* Seleção de trechos no gráfico do resumo (arrastar sobre a faixa cronológica) para mover só parte do tempo de um programa. */
+let RES_SEL = null;   // { ids, gid, label, ranges: [{a,b}], drag: {a,b} | null, dragging: bool, l: layer }
+const RES_MIN_MS = 60000;
+
+function resPctToMs(slices, pct) {
+  const s = slices.find(x => pct >= x.l && pct <= x.l + x.w) || (pct < slices[0].l ? slices[0] : slices[slices.length - 1]);
+  return s.st + (s.w > 0 ? Math.min(s.w, Math.max(0, pct - s.l)) / s.w : 0) * s.span;
+}
+function resSelOverlays(slices) {
+  if (!RES_SEL) return '';
+  const rs = RES_SEL.ranges.concat(RES_SEL.drag ? [RES_SEL.drag] : []);
+  let out = '';
+  rs.forEach(r => slices.forEach(s => {
+    const a = Math.max(r.a, s.st), b = Math.min(r.b, s.st + s.span); if (b <= a) return;
+    out += `<span class="res-sel-range" style="left:${s.l + (a - s.st) / s.span * s.w}%;width:${Math.max(.3, (b - a) / s.span * s.w)}%"></span>`;
+  }));
+  return out;
+}
+function resSelBarHTML() {
+  if (!RES_SEL) return '';
+  const tot = actMergeIntervals(RES_SEL.ranges).reduce((t, r) => t + (r.b - r.a), 0);
+  return `<div class="res-sel-bar"><span class="small">Arraste sobre a faixa para marcar os trechos de <b>${esc(RES_SEL.label)}</b>.</span>
+    <span class="mono small muted">${RES_SEL.ranges.length} trecho(s) · ${fmtDur(tot)}</span><span class="grow"></span>
+    <button class="btn sm ghost" data-x="res-sel-cancel">Cancelar</button><button class="btn sm ghost" data-x="res-sel-clear">Limpar</button><button class="btn sm primary" data-x="res-sel-done" ${RES_SEL.ranges.length ? '' : 'disabled'}>Concluir</button></div>`;
+}
+
 function openResumo(title, ids) {
   const es = ids.map(id => db.get('tempo_time_entries', id)).filter(Boolean).filter(e => e.state === 'done')
     .sort((a, b) => new Date(entryStart(a)) - new Date(entryStart(b)));
   if (!es.length) return toast('Nada para resumir.');
+  const allIds = es.map(e => e.id);
   openLayer({
     wide: true,
     render: () => resumoHTML(title, es),
+    onClose: () => { RES_SEL = null; },
     onMount: (l) => {
       if (l.box._resBound) return; l.box._resBound = true;
-      l.box.addEventListener('click', (ev) => { const b = ev.target.closest('[data-rmode]'); if (!b) return; db.setSetting('resMode', b.dataset.rmode); l.refresh(); });
+      const reabrir = () => { l.close(); openResumo(title, allIds); };
+      const iniciarSelecao = (gid, label) => {
+        RES_SEL = { ids: allIds, gid, label, ranges: [], drag: null, dragging: false, l };
+        db.setSetting('resMode', 'cron'); l.refresh();
+      };
+      const abrirPrograma = (gid, label) => openProgMove(allIds, gid, label, { onSelect: () => iniciarSelecao(gid, label), onDone: reabrir });
+
+      l.box.addEventListener('click', (ev) => {
+        const modo = ev.target.closest('[data-rmode]');
+        if (modo) { db.setSetting('resMode', modo.dataset.rmode); RES_SEL = null; l.refresh(); return; }
+        const x = ev.target.closest('[data-x]'); const act = x && x.dataset.x;
+        if (act === 'res-prog' && !RES_SEL) return abrirPrograma(x.dataset.g, x.dataset.label);
+        if (act === 'res-sel-cancel') { RES_SEL = null; return l.refresh(); }
+        if (act === 'res-sel-clear') { if (RES_SEL) { RES_SEL.ranges = []; l.refresh(); } return; }
+        if (act === 'res-sel-done' && RES_SEL && RES_SEL.ranges.length) {
+          const sel = RES_SEL; RES_SEL = null;
+          return openProgMove(sel.ids, sel.gid, sel.label, { ranges: sel.ranges, onDone: reabrir });
+        }
+        // clicar num trecho do gráfico (fora da seleção) abre o mesmo menu do programa
+        const seg = ev.target.closest('.res-strip .act-b[data-g]');
+        if (seg && !RES_SEL) {
+          const chip = Array.from(l.box.querySelectorAll('[data-x="res-prog"]')).find(c => c.dataset.g === seg.dataset.g);
+          if (chip) abrirPrograma(chip.dataset.g, chip.dataset.label);
+        }
+      });
+      // arrastar sobre a faixa cronológica marca um trecho (só na seleção)
+      l.box.addEventListener('mousedown', (ev) => {
+        if (!RES_SEL || ev.button !== 0) return;
+        const strip = ev.target.closest('.res-strip'); if (!strip) return;
+        const sl = JSON.parse(strip.dataset.slices || '[]'); if (!sl.length) return;
+        ev.preventDefault();
+        const r = strip.getBoundingClientRect();
+        const t = resPctToMs(sl, Math.min(100, Math.max(0, (ev.clientX - r.left) / r.width * 100)));
+        RES_SEL.dragging = true; RES_SEL.start = t; RES_SEL.drag = { a: t, b: t }; l.refresh();
+      });
+      if (!window._resDragBound) {
+        window._resDragBound = true;
+        window.addEventListener('mousemove', (ev) => {
+          if (!RES_SEL || !RES_SEL.dragging) return;
+          const strip = document.querySelector('.res-strip'); if (!strip) return;
+          const sl = JSON.parse(strip.dataset.slices || '[]'); if (!sl.length) return;
+          const r = strip.getBoundingClientRect();
+          const t = resPctToMs(sl, Math.min(100, Math.max(0, (ev.clientX - r.left) / r.width * 100)));
+          RES_SEL.drag = { a: Math.min(RES_SEL.start, t), b: Math.max(RES_SEL.start, t) };
+          RES_SEL.l.refresh();
+        });
+        window.addEventListener('mouseup', () => {
+          if (!RES_SEL || !RES_SEL.dragging) return;
+          RES_SEL.dragging = false;
+          const d = RES_SEL.drag; RES_SEL.drag = null;
+          if (d && d.b - d.a >= RES_MIN_MS) RES_SEL.ranges = actMergeIntervals(RES_SEL.ranges.concat([d]));
+          RES_SEL.l.refresh();
+        });
+      }
     }
   });
 }
@@ -130,7 +211,7 @@ function resumoHTML(title, es) {
       if (i > 0) parts += `<span class="act-sep" style="left:${base}%"></span>`;
       off += wS;
     });
-    bar = `<div class="act-strip res-strip" data-slices="${esc(JSON.stringify(slices))}" style="height:34px">${parts}</div>`;
+    bar = `<div class="act-strip res-strip" data-slices="${esc(JSON.stringify(slices))}" style="height:34px">${parts}${resSelOverlays(slices)}</div>`;
     note = 'Cada sessão ocupa uma fatia proporcional à sua duração, na ordem em que aconteceram. Os programas e as pausas ficam no lugar em que aconteceram dentro de cada fatia.';
   } else {
     const tot = Math.max(1, totalBruto);
@@ -142,13 +223,14 @@ function resumoHTML(title, es) {
     bar = `<div class="act-strip" style="height:34px">${parts}</div>`;
     note = 'Tudo junto: cada programa soma o tempo de todas as sessões, e as pausas ficam por categoria. A barra inteira é o bruto.';
   }
-  const legendChips = an.groups.map(g => `<span class="act-chip" data-g="${esc(g.id)}" style="--tb:${g.color}"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></span>`).join('');
+  const legendChips = an.groups.map(g => `<button type="button" class="act-chip" data-x="res-prog" data-g="${esc(g.id)}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="Clique para mover este programa para um projeto"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('');
   const pauseChips = pauseBucketChip ? pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).map(pauseBucketChip).join('') : '';
   const legendHTML = `<div class="lbl">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || '<span class="muted small">Sem pausas.</span>'}</div>`;
   const sessions = es.map(e => `<div class="row between small res-row"><span><span class="mono">${fmtTime(entryStart(e))}–${fmtTime(entryEnd(e))}</span> · ${esc(entryTitle(e))}</span><span class="mono">${fmtDur(entryMs(e))}</span></div>`).join('');
   return `<div class="dh"><div class="grow"><span class="small muted">Resumo</span><h2 style="margin-top:2px">${esc(title)}</h2></div>${toggles}<button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
   <div class="db stack" style="gap:12px">
     <div class="small muted">Bruto ${fmtDur(totalBruto)} · trabalho ${fmtDur(totalTrab)} · pausas ${fmtDur(totalPausa)} · ${es.length} sessão(ões)</div>
+    ${resSelBarHTML()}
     <div class="act-sec">${bar}<div class="small muted">${note}</div>${legendHTML}</div>
     <div><div class="lbl">Sessões</div>${sessions}</div>
   </div>`;

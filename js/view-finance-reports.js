@@ -1084,17 +1084,15 @@ async function bankRefresh(force) {
   try {
     BANK.status = await bankApi('status');
     if (BANK.status.connected) {
-      const last = BANK.status.last_sync_at ? new Date(BANK.status.last_sync_at).getTime() : 0;
-      {   // sincroniza sempre que a tela financeira (ou o app) pede; o intervalo de 60 s evita repetir à toa
-        const r = await bankApi('sync', { method: 'POST' });
-        const lidas = r.results.reduce((s, x) => s + (x.transacoes_lidas || 0), 0);
-        BANK.msg = 'Última leitura: ' + lidas + ' movimentações';
-        BANK.status = await bankApi('status');
-      }
+      // sincroniza sempre que a tela financeira (ou o app) pede; o intervalo de 60 s evita repetir à toa
+      const r = await bankApi('sync', { method: 'POST' });
+      const lidas = r.results.reduce((s, x) => s + (x.transacoes_lidas || 0), 0);
+      BANK.msg = 'Última leitura: ' + lidas + ' movimentações';
+      BANK.status = await bankApi('status');
     }
     await bankLoadTxns();
   } catch (e) { BANK.msg = 'Erro: ' + e.message; }
-  finally { BANK.busy = false; render(); }
+  finally { BANK.busy = false; render(); setTimeout(pixAlert, 400); }
 }
 function bankPanel(entity) {
   const st = BANK.status, connected = !!(st && st.connected);
@@ -1178,9 +1176,9 @@ function bankRowExtra(t) {
   }
   if (t.flow === 'in' && bankIsPJ(t)) {
     const sp = bankOpenMatch(t);
-    if (sp) return `<button class="btn sm" data-act="bank-psug" data-id="${t.id}" data-pid="${sp.id}">Sugestão: ${esc(sp.name)} · marcar como pago</button> <button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Outro…</button>`;
+    if (sp) return `<button class="btn sm" data-act="bank-psug" data-id="${t.id}" data-pids="${sp.id}">Sugestão: ${esc(sp.name)} · marcar como pago</button> <button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Outro…</button>`;
     const combos = bankComboMatch(t);
-    if (combos.length) return combos.map(c => `<button class="btn sm" data-act="bank-psug-multi" data-id="${t.id}" data-pids="${c.map(p => p.id).join(',')}">${c.map(p => esc(p.name)).join(' + ')} · ${fmtMoney0(c.reduce((a, p) => a + remainingOf(p), 0))}</button>`).join(' ') + ` <button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Outro…</button>`;
+    if (combos.length) return combos.map(c => `<button class="btn sm" data-act="bank-psug" data-id="${t.id}" data-pids="${c.map(p => p.id).join(',')}">${c.map(p => esc(p.name)).join(' + ')} · ${fmtMoney0(c.reduce((a, p) => a + remainingOf(p), 0))}</button>`).join(' ') + ` <button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Outro…</button>`;
     return `<button class="btn sm ghost" data-act="bank-tpick" data-id="${t.id}">Vincular a projeto…</button>`;
   }
   if (t.flow !== 'out') { const r = bankReimbMatch(t); return r ? `<button class="btn sm" data-act="bank-reimb" data-id="${t.id}" data-month="${r.month}">Lote ${r.month} (${fmtMoney0(r.total)})</button>` : `<button class="btn sm ghost" data-act="bank-rexp" data-id="${t.id}">${isReembCat(t.category) ? 'Vincular a gasto…' : 'Vincular a entrada…'}</button>`; }
@@ -1505,31 +1503,15 @@ VIEWS.financepf = () => {
 };
 ACTIONS['pf-tab'] = (el) => { const v = el.dataset.v; BANK.pfTab = v; BANK.origin = v === 'conta' ? 'conta' : v === 'cartao' ? 'cartao' : 'all'; render(); };
 
-/* Sugestão de Pix: só aparece quando exatamente um projeto em aberto tem saldo igual ao valor recebido (tolerância de R$ 1). */
+/* Sugestão de Pix: um projeto em aberto cujo saldo bate com o valor recebido (tolerância de R$ 1); o cliente já ligado ao pagador tem prioridade. */
 function bankOpenMatch(t) {
   const amt = Math.abs(Number(t.amount));
   const hits = db.all('tempo_projects').filter(p => { const rem = remainingOf(p); return rem !== null && rem > 0 && Math.abs(rem - amt) <= 1; });
-  return hits.length === 1 ? hits[0] : null;
+  const cid = bankClientOf(t);
+  const mine = cid ? hits.filter(p => clientOf(p)?.id === cid) : [];
+  const pick = mine.length ? mine : hits;
+  return pick.length === 1 ? pick[0] : null;
 }
-/* "Aceitar" a sugestão: lança o pagamento no projeto, liga ao extrato e marca o status como Pago (ou Pago Parcial). */
-ACTIONS['bank-psug'] = async (el) => {
-  const t = (BANK.all.pj || []).find(x => x.id === el.dataset.id);
-  const p = db.get('tempo_projects', el.dataset.pid);
-  if (!t || !p) return;
-  const amt = Math.abs(Number(t.amount));
-  const pay = db.insert('tempo_payments', { project_id: p.id, amount: amt, date: t.posted_on, note: 'Pix', invoice: '' }, true);
-  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ payment_id: pay.id, updated_at: new Date().toISOString() }).eq('id', t.id);
-  if (error) { db.remove('tempo_payments', pay.id, true); return toast('Erro: ' + error.message); }
-  t.payment_id = pay.id;
-  const pr = db.get('tempo_projects', p.id);
-  const full = remainingOf(pr) === 0;
-  const target = statuses('payment').find(s => s.name === (full ? 'Pago' : 'Pago Parcial'));
-  if (target) setPaymentStatus(pr, target.id);
-  if (full && !pr.paid_at) db.update('tempo_projects', p.id, { paid_at: nowISO() }, true);
-  logEvent('payment', pay.id, 'payment', `Recebido ${fmtMoney(amt)} (Pix)`, null, null, { project_id: p.id });
-  toast(`${p.name}: ${full ? 'marcado como pago' : 'pagamento parcial lançado'}`); render();
-};
-
 /* Cliente que já pagou esta contraparte (pelos lançamentos já ligados a projetos). */
 function bankClientOf(t) {
   const pl = BANK.plinks || [];
@@ -1546,9 +1528,15 @@ function bankClientOf(t) {
 /* Combinações de projetos em aberto cuja soma do saldo bate com o valor recebido (tolerância de R$ 1). */
 function bankComboMatch(t) {
   const amt = Math.abs(Number(t.amount));
-  // sem precisar de cliente: qualquer projeto em aberto entra na soma
-  const open = db.all('tempo_projects').filter(p => (remainingOf(p) || 0) > 0).sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(0, 14);
-  const out = [];
+  const cid = bankClientOf(t);
+  const all = db.all('tempo_projects').filter(p => (remainingOf(p) || 0) > 0).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  // cliente já ligado a esse pagador tem prioridade; se não houver combinação dele, vale qualquer projeto em aberto
+  const mine = cid ? all.filter(p => clientOf(p)?.id === cid) : [];
+  const search = (open) => { const out = []; bankSumCombos(open, amt, out); return out; };
+  const own = search(mine.slice(0, 14));
+  return own.length ? own : search(all.slice(0, 14));
+}
+function bankSumCombos(open, amt, out) {
   const rec = (i, chosen, sum) => {
     if (out.length >= 4) return;
     if (chosen.length && Math.abs(sum - amt) <= 1) { out.push(chosen.slice()); return; }
@@ -1556,16 +1544,21 @@ function bankComboMatch(t) {
     for (let k = i; k < open.length && out.length < 4; k++) { chosen.push(open[k]); rec(k + 1, chosen, sum + remainingOf(open[k])); chosen.pop(); }
   };
   rec(0, [], 0);
-  return out;
 }
-/* Aceita uma combinação: um pagamento por projeto (saldo total de cada um), todos ligados à mesma entrada. */
-ACTIONS['bank-psug-multi'] = async (el) => {
+/* Aceita a sugestão (um ou vários projetos): um pagamento por projeto (saldo total de cada um), todos ligados à entrada. */
+ACTIONS['bank-psug'] = async (el) => {
   const t = (BANK.all.pj || []).find(x => x.id === el.dataset.id); if (!t) return;
   const projs = el.dataset.pids.split(',').map(id => db.get('tempo_projects', id)).filter(Boolean);
+  if (!projs.length) return;
   const made = projs.map(p => { const amt = remainingOf(p); return { p, amt, pay: db.insert('tempo_payments', { project_id: p.id, amount: amt, date: t.posted_on, note: 'Pix', invoice: '' }, true) }; });
   const rows = made.map(x => ({ txn_id: t.id, payment_id: x.pay.id, amount: x.amt }));
   const { error } = await db.adapter.client.from('tempo_bank_payment_links').insert(rows);
   if (error) { made.forEach(x => db.remove('tempo_payments', x.pay.id, true)); return toast('Erro: ' + error.message); }
+  // com um projeto só, o vínculo também fica no lançamento (usado pela leitura e pelo desfazer)
+  if (made.length === 1) {
+    const { error: e2 } = await db.adapter.client.from('tempo_bank_txns').update({ payment_id: made[0].pay.id, updated_at: new Date().toISOString() }).eq('id', t.id);
+    if (!e2) t.payment_id = made[0].pay.id;
+  }
   BANK.plinks = [...(BANK.plinks || []), ...rows];
   made.forEach(x => {
     logEvent('payment', x.pay.id, 'payment', `Recebido ${fmtMoney(x.amt)} (Pix)`, null, null, { project_id: x.p.id });
@@ -1575,5 +1568,56 @@ ACTIONS['bank-psug-multi'] = async (el) => {
     if (target) setPaymentStatus(pr, target.id);
     if (full && !pr.paid_at) db.update('tempo_projects', x.p.id, { paid_at: nowISO() }, true);
   });
-  toast(`Entrada ligada a ${made.length} projetos`); render();
+  toast(made.length === 1 ? `${made[0].p.name}: ${remainingOf(made[0].p) === 0 ? 'marcado como pago' : 'pagamento parcial lançado'}` : `Entrada ligada a ${made.length} projetos`);
+  render();
+};
+
+/* Pix recebido (PJ, últimos 30 dias) ainda sem vínculo e com alguma sugestão de projeto. */
+function pixPending() {
+  const ign = new Set(db.setting('pixIgnored', []));
+  const cut = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+  const linked = new Set((BANK.plinks || []).map(l => l.txn_id));
+  return (BANK.all.pj || [])
+    .filter(t => t.flow === 'in' && !t.payment_id && !linked.has(t.id) && (t.posted_on || '') >= cut && !ign.has(t.id))
+    .map(t => { const one = bankOpenMatch(t); return { t, one, combos: one ? [] : bankComboMatch(t) }; })
+    .filter(x => x.one || x.combos.length);
+}
+/* Cartão no início (Time Sheet) com os Pix que esperam confirmação. */
+function pixSideHTML() {
+  const list = pixPending();
+  if (!list.length) return '';
+  const linha = (x) => x.one
+    ? `bate com <b>${esc(x.one.name)}</b>`
+    : `combina com ${x.combos.slice(0, 2).map(c => c.map(p => esc(p.name)).join(' + ')).join(' ou ')}`;
+  return `<div class="card pix-alert"><div class="row between"><b>Pix recebido · confirmar</b><button class="btn sm ghost" data-act="go" data-route="finance">Ver</button></div>
+    ${list.slice(0, 4).map(x => `<div class="small" style="margin-top:6px"><b>${fmtMoney(Math.abs(Number(x.t.amount)))}</b> de ${esc(x.t.counterpart || 'pagador')} · ${linha(x)}</div>`).join('')}</div>`;
+}
+/* Popup de uma vez por Pix: aparece quando chega um recebimento novo com sugestão. */
+let PIX_LAYER = null;
+function pixAlert() {
+  if (PIX_LAYER || !db.adapter || !db.adapter.persistent) return;
+  const seen = new Set(db.setting('pixSeen', []));
+  const next = pixPending().find(x => !seen.has(x.t.id));
+  if (!next) return;
+  db.setSetting('pixSeen', [...seen, next.t.id]);
+  const t = next.t, amt = Math.abs(Number(t.amount));
+  const opcoes = next.one ? [[next.one]] : next.combos.slice(0, 3);
+  const botoes = opcoes.map(c => `<button class="btn primary" data-act="pix-do" data-id="${t.id}" data-pids="${c.map(p => p.id).join(',')}">${c.map(p => esc(p.name)).join(' + ')} · ${fmtMoney0(c.reduce((a, p) => a + remainingOf(p), 0))}</button>`).join('');
+  PIX_LAYER = openLayer({
+    html: `<div class="dh"><h2>Você recebeu um pagamento</h2><span class="grow"></span><button class="btn icon ghost" data-act="pix-later" aria-label="Fechar">${icon('x')}</button></div>
+      <div class="db" style="padding:16px">
+        <div><b>${fmtMoney(amt)}</b> de ${esc(t.counterpart || 'pagador')} em ${esc(t.posted_on || '')}</div>
+        <p class="small muted" style="margin:10px 0">Temos sugestão${opcoes.length > 1 ? 'ões' : ''} de projeto${next.one ? '' : ' (combinação de saldos em aberto)'}. Confirme para marcar como pago, ou deixe para depois.</p>
+        <div class="row gap-s" style="flex-wrap:wrap">${botoes}</div>
+        <div class="row gap-s" style="margin-top:14px"><button class="btn sm ghost" data-act="pix-open">Ver no financeiro</button><span class="grow"></span><button class="btn sm ghost" data-act="pix-ignore" data-id="${t.id}">Ignorar este Pix</button></div>
+      </div>`,
+    onClose: () => { PIX_LAYER = null; }
+  });
+}
+ACTIONS['pix-do'] = async (el) => { await ACTIONS['bank-psug'](el); PIX_LAYER && PIX_LAYER.close(); };
+ACTIONS['pix-later'] = () => { PIX_LAYER && PIX_LAYER.close(); };
+ACTIONS['pix-open'] = () => { PIX_LAYER && PIX_LAYER.close(); go('finance'); };
+ACTIONS['pix-ignore'] = (el) => {
+  db.setSetting('pixIgnored', [...new Set([...db.setting('pixIgnored', []), el.dataset.id])]);
+  PIX_LAYER && PIX_LAYER.close(); render(); toast('Pix ignorado');
 };

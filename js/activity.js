@@ -207,11 +207,40 @@ function actIntersect(segs, cuts, now) {
   return out.sort((p, q) => new Date(p.s) - new Date(q.s));
 }
 
-function actMoveGroup(entryId, g, pick) {
+/* Separa registros entre os trechos marcados (ranges em ms) e o resto; quem cruza a borda é cortado. Sem trechos, tudo é "dentro". */
+function actClipRecs(recs, ranges) {
+  const inside = [], outside = [];
+  recs.forEach(x => {
+    const a = new Date(x.from).getTime(), b = new Date(x.to).getTime();
+    if (!(b > a)) return;
+    if (!ranges) { inside.push(x); return; }
+    ranges.forEach(r => { const s0 = Math.max(a, r.a), e0 = Math.min(b, r.b); if (e0 > s0) inside.push({ ...x, from: new Date(s0).toISOString(), to: new Date(e0).toISOString() }); });
+    let pieces = [{ a, b }];
+    ranges.forEach(r => { pieces = pieces.flatMap(p => { if (r.b <= p.a || r.a >= p.b) return [p]; const out = []; if (r.a > p.a) out.push({ a: p.a, b: r.a }); if (r.b < p.b) out.push({ a: r.b, b: p.b }); return out; }); });
+    pieces.filter(p => p.b > p.a).forEach(p => outside.push({ ...x, from: new Date(p.a).toISOString(), to: new Date(p.b).toISOString() }));
+  });
+  return { inside, outside };
+}
+/* Registros de um programa (grupo) dentro de uma sessão. */
+function progRecsOf(entryId, g) {
+  const keys = new Set(g.items.map(i => i.key));
+  return actList(entryId).filter(x => keys.has(actKeyOf(x)));
+}
+/* Tempo de um programa nas sessões dadas (todo o tempo, ou só dentro dos trechos marcados). */
+function progMsOf(ids, gid, ranges) {
+  return ids.reduce((sum, id) => {
+    const g = actAnalyze(id, 'program').groups.find(x => x.id === gid); if (!g) return sum;
+    if (!ranges) return sum + g.ms;
+    return sum + actClipRecs(progRecsOf(id, g), ranges).inside.reduce((t, x) => t + (new Date(x.to) - new Date(x.from)), 0);
+  }, 0);
+}
+
+function actMoveGroup(entryId, g, pick, ranges = null) {
   const e = db.get('tempo_time_entries', entryId); if (!e) return false;
   const keys = new Set(g.items.map(i => i.key));
   const list = actList(entryId);
-  const mine = list.filter(x => keys.has(actKeyOf(x)));
+  const parts = actClipRecs(progRecsOf(entryId, g), ranges ? actMergeIntervals(ranges) : null);
+  const mine = parts.inside, leftover = parts.outside;
   const cuts = actMergeIntervals(mine.map(x => ({ a: new Date(x.from).getTime(), b: new Date(x.to).getTime() })).filter(c => c.b > c.a));
   const now = Date.now();
   const moved = actIntersect(e.segments || [], cuts, now);
@@ -231,7 +260,7 @@ function actMoveGroup(entryId, g, pick) {
     db.setSetting('act:' + nova.id, mine);
   }
   // a sessão de origem perde esse tempo (e os registros brutos desse arquivo)
-  db.setSetting('act:' + entryId, list.filter(x => !keys.has(actKeyOf(x))));
+  db.setSetting('act:' + entryId, [...list.filter(x => !keys.has(actKeyOf(x))), ...leftover]);
   if (!rest.length && e.state !== 'running') db.remove('tempo_time_entries', e.id);
   else db.update('tempo_time_entries', e.id, { segments: rest.length ? rest : [{ s: nowISO(), e: null }], edits: [...(e.edits || []), { at: nowISO(), reason: `${g.label} movido para ${label}`, before: e.segments }] }, true);
   db.emit();
@@ -369,6 +398,55 @@ function openActGroup(entryId, gid, onDone) {
         }
         else return;
         ly.close(); onDone && onDone();
+      });
+    },
+  });
+}
+
+/* Move o tempo de um programa (de todas as sessões dadas) para um projeto/tarefa.
+   opts.onSelect: oferece "só alguns trechos" e leva ao modo de marcar no gráfico; opts.ranges: trechos já marcados. */
+function openProgMove(ids, gid, label, opts = {}) {
+  const ranges = opts.ranges && opts.ranges.length ? opts.ranges : null;
+  const N = progMsOf(ids, gid, ranges);
+  openLayer({
+    render: () => `<div class="dh"><h2>${esc(label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+      <div class="db stack" style="gap:10px">
+        ${!ranges && opts.onSelect ? `<div class="stack" style="gap:6px" id="pm-modes">
+          <label class="row" style="gap:8px;cursor:pointer"><input type="radio" name="pm-mode" value="todas" checked> Todos os trechos deste resumo <span class="mono small muted">${fmtDur(N)}</span></label>
+          <label class="row" style="gap:8px;cursor:pointer"><input type="radio" name="pm-mode" value="trechos"> Só alguns trechos (marcar no gráfico)</label>
+        </div>` : ''}
+        <div class="row between"><span class="lbl">${ranges ? 'Trechos marcados' : 'Tempo deste programa'}</span><span class="mono small">${fmtDur(N)}</span></div>
+        <div class="field"><label for="pm-proj">Mover para o projeto</label><select id="pm-proj" class="input"><option value="">Escolha um projeto</option>${tkProjectsSorted().map(p => `<option value="${esc(p.id)}">${esc(tkProjectLabel(p))}</option>`).join('')}</select></div>
+        <div class="field"><label for="pm-task">Tarefa (opcional)</label><select id="pm-task" class="input" disabled><option value="">Sem tarefa</option></select></div>
+        <div class="row" style="gap:8px"><button class="btn" data-x="pm-move" id="pm-move">Mover</button>${opts.onSelect && !ranges ? `<button class="btn" data-x="pm-mark" id="pm-mark" style="display:none">Marcar trechos no gráfico</button>` : ''}<span class="small muted">${ranges ? 'Só os trechos marcados saem desta(s) sessão(ões).' : 'Só o que aparece neste resumo, agora. Não se repete em outros trechos ou no futuro.'}</span></div>
+      </div>
+      <div class="df"><button class="btn" data-act="close-layer">Fechar</button></div>`,
+    onMount: (ly) => {
+      const proj = ly.box.querySelector('#pm-proj'), task = ly.box.querySelector('#pm-task');
+      const mv = ly.box.querySelector('#pm-move'), mk = ly.box.querySelector('#pm-mark');
+      ly.box.querySelectorAll('input[name="pm-mode"]').forEach(r => r.addEventListener('change', () => {
+        const trechos = ly.box.querySelector('input[name="pm-mode"]:checked')?.value === 'trechos';
+        mv.style.display = trechos ? 'none' : ''; if (mk) mk.style.display = trechos ? '' : 'none';
+      }));
+      proj.addEventListener('change', () => {
+        const tasks = proj.value ? db.where('tempo_tasks', t => t.project_id === proj.value) : [];
+        task.innerHTML = `<option value="">Sem tarefa</option>${tasks.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}`;
+        task.disabled = !proj.value;
+      });
+      ly.box.addEventListener('click', async (ev) => {
+        const m = ev.target.closest('[data-x="pm-mark"]');
+        if (m) { ly.close(); opts.onSelect && opts.onSelect(); return; }
+        const b = ev.target.closest('[data-x="pm-move"]'); if (!b) return;
+        if (!proj.value) return toast('Escolha um projeto.');
+        if (!N) return toast('Nada para mover.');
+        const dest = tkProjectLabel(db.get('tempo_projects', proj.value));
+        const quem = ranges ? `Os trechos marcados de ${label}` : `Todo o tempo de ${label} neste resumo`;
+        if (!await confirmBox({ title: 'Mover programa?', body: `${quem} vai para ${dest}.`, ok: 'Mover' })) return;
+        let moved = 0;
+        ids.forEach(id => { const g = actAnalyze(id, 'program').groups.find(x => x.id === gid); if (g && actMoveGroup(id, g, { project_id: proj.value, task_id: task.value || null }, ranges)) moved++; });
+        if (!moved) return toast('Nada para mover.');
+        toast('Tempo movido');
+        ly.close(); opts.onDone && opts.onDone();
       });
     },
   });

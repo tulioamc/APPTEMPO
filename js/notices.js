@@ -401,6 +401,7 @@ function sidePanelHTML() {
   const todos = db.all('tempo_notices').filter(n => n.kind === 'todo').sort((a, b) => (a.status === 'done') - (b.status === 'done') || (a.data?.due || '\uffff').localeCompare(b.data?.due || '\uffff') || (a.created_at || '').localeCompare(b.created_at || ''));
   const pend = db.all('tempo_notices').filter(n => n.status === 'pending' && n.kind !== 'reminder').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 6);
   return `<aside class="side-panel">
+    ${pixSideHTML()}
     <div class="card"><div class="row between"><b>To-do</b><span class="row gap-s"><span class="faint small">${todos.filter(t => t.status !== 'done').length} abertas</span><button class="btn sm ghost" data-act="go" data-route="todo">Ver todos</button></span></div>
       <form class="row gap-s" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h" autocomplete="off"><button class="btn sm" data-act="todo-add">Adicionar</button></form>
       <div class="todo-list">${todoGroupsHTML(todos, 7)}</div>
