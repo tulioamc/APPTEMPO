@@ -85,6 +85,16 @@ function actRoots(keys) {
 /* Analisa a sessão: grupos (ordenados por tempo e com cor) e cada registro bruto com seu grupo.
    mode 'program' agrupa por programa; 'file' agrupa por arquivo (com os ajustes manuais). */
 function actAnalyze(entryId, mode) { return actAnalyzeList(actList(entryId), mode); }
+/* Nomes longos: "magnific__upscale-...-94894.png" vira "magnific__" (prefixo antes de "__") e ellipsis no meio. */
+/* Arquivos do mesmo programa Adobe/Maxon (ex.: todos os do Photoshop) ficam num grupo só na aba de arquivos; o [+] abre a lista para separar. */
+const appFamily = (app) => {
+  const a = String(app || '');
+  if (/^adobe\b/i.test(a) || /\b(photoshop|illustrator|after effects|premiere|indesign|animate|audition|lightroom)\b/i.test(a)) return 'Adobe';
+  if (/cinema ?4d|maxon|redshift|zbrush/i.test(a)) return 'Maxon';
+  return null;
+};
+const docPre = (doc) => { const m = String(doc || '').match(/^(.+?__)/); return m ? m[1] : null; };
+const shortName = (s, max = 30) => { s = String(s || ''); return s.length > max ? s.slice(0, max - 9) + '…' + s.slice(-8) : s; };
 function actAnalyzeList(list0, mode) {
   // registros antigos do Terminal podem ter guardado o nome de usuário como arquivo: aqui ele vira só "Terminal"
   const list = list0.map(x => (/^terminal$/i.test(String(x.app || '')) ? { ...x, doc: null, folder: null } : x));
@@ -93,7 +103,15 @@ function actAnalyzeList(list0, mode) {
   list.forEach(x => { const k = actKeyOf(x); info[k] = info[k] || { key: k, app: x.app, doc: x.doc, folder: x.folder }; });
   const find = actRoots(Object.values(info));
   const links = db.setting('actLinks', {}) || {};
-  const gidOf = (x) => mode === 'program' ? 'p:' + toolAlias(x.app) : (links[actKeyOf(x)] || 'a:' + find(actKeyOf(x)));
+  const gidOf = (x) => {
+    if (mode === 'program') return 'p:' + toolAlias(x.app);
+    const k = actKeyOf(x);
+    if (links[k]) return links[k];
+    const fam = appFamily(x.app);
+    if (fam) return 'app:' + String(x.app || '').toLowerCase();
+    const pre = docPre(x.doc);
+    return pre ? 'pre:' + (x.folder || '') + '|' + pre.toLowerCase() : 'a:' + find(k);
+  };
   const groups = {};
   const records = list.map(x => {
     const id = gidOf(x), ms = new Date(x.to) - new Date(x.from), k = actKeyOf(x);
@@ -108,7 +126,13 @@ function actAnalyzeList(list0, mode) {
     const termOnly = items.every(it => /^terminal$/i.test(String(it.app || '')));
     const nameOf = (it) => (/^terminal$/i.test(String(it.app || '')) ? 'Terminal' : (it.doc || it.app));
     const names = [...new Set(items.map(nameOf))];
-    const label = mode === 'program' ? toolAlias(items[0].app) : (names.length <= 2 ? names.join(' · ') : `${names.slice(0, 2).join(' · ')} +${names.length - 2}`);
+    let label;
+    if (mode === 'program') label = toolAlias(items[0].app);
+    else if (String(g.id).startsWith('app:')) label = toolAlias(items[0].app);
+    else if (String(g.id).startsWith('pre:')) {
+      const exts = [...new Set(items.map(it => (String(it.doc || '').match(/\.[^.]+$/) || [''])[0]))];
+      label = docPre(items[0].doc) + (exts.length === 1 ? exts[0] : '');
+    } else label = names.length <= 2 ? names.map(n => shortName(n)).join(' · ') : `${names.slice(0, 2).map(n => shortName(n)).join(' · ')} +${names.length - 2}`;
     const color = termOnly ? '#374151' : groupColor(g.id, i);
     return { id: g.id, items, ms: g.ms, label, color };
   });
@@ -118,6 +142,12 @@ function actAnalyzeList(list0, mode) {
 function actUngroup(g) {
   const links = { ...(db.setting('actLinks', {}) || {}) };
   g.items.forEach(i => { links[i.key] = 'solo:' + i.key; });
+  db.setSetting('actLinks', links); db.emit();
+}
+/* Separa só os arquivos marcados: cada um vira um grupo próprio. */
+function actSplit(keys) {
+  const links = { ...(db.setting('actLinks', {}) || {}) };
+  keys.forEach(k => { links[k] = 'solo:' + k; });
   db.setSetting('actLinks', links); db.emit();
 }
 function actMerge(g, targetId) {
@@ -246,7 +276,7 @@ function actStripHTML(e, A) {
 }
 
 function actChipsHTML(A, mode) {
-  return `<div class="act-chips">${A.groups.map(g => `<button type="button" class="act-chip" data-x="act-chip" data-g="${esc(g.id)}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
+  return `<div class="act-chips">${A.groups.map(g => `<button type="button" class="act-chip" data-x="act-chip" data-g="${esc(g.id)}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)}${mode === 'file' && g.items.length > 1 ? ` <span class="act-more" title="Ver os ${g.items.length} arquivos">+${g.items.length}</span>` : ''} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
 }
 
 /* Pausas da sessão em caixinhas: o total, e dentro dele ócio, bloqueada, WhatsApp, Telegram e manual, com o tempo de cada um. */
@@ -301,9 +331,9 @@ function openActGroup(entryId, gid, onDone) {
     render: () => `<div class="dh"><h2>${esc(g.label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
       <div class="db stack" style="gap:8px">
         <span class="lbl">Tempo por versão</span>
-        ${g.items.map(i => `<div class="row between"><span>${esc(i.doc || i.app)}</span><span class="mono small">${fmtDur(i.ms)}</span></div>`).join('')}
+        ${g.items.map(i => `<label class="row between" style="cursor:pointer"><span class="row" style="gap:8px">${g.items.length > 1 ? `<input type="checkbox" data-sel="${esc(i.key)}">` : ''}<span>${esc(i.doc || i.app)}</span></span><span class="mono small">${fmtDur(i.ms)}</span></label>`).join('')}
         <div class="row between"><span class="lbl">Total</span><span class="mono small">${fmtDur(g.ms)}</span></div>
-        ${g.items.length > 1 ? `<div class="row"><button class="btn" data-x="act-ungroup">Desfazer agrupamento</button></div>` : ''}
+        ${g.items.length > 1 ? `<div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" data-x="act-split">Separar selecionados</button><button class="btn ghost" data-x="act-ungroup">Desfazer agrupamento</button></div>` : ''}
         ${others.length ? `<div class="field"><label for="act-target">Agrupar com outro</label><select id="act-target" class="input">${others.map(o => `<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('')}</select></div><div class="row"><button class="btn" data-x="act-merge">Agrupar</button></div>` : ''}
         <div class="field"><label for="act-proj">Mover este tempo para o projeto</label><select id="act-proj" class="input"><option value="">Escolha um projeto</option>${tkProjectsSorted().map(p => `<option value="${esc(p.id)}">${esc(tkProjectLabel(p))}</option>`).join('')}</select></div>
         <div class="field"><label for="act-task">Tarefa (opcional)</label><select id="act-task" class="input" disabled><option value="">Sem tarefa</option></select></div>
@@ -323,6 +353,7 @@ function openActGroup(entryId, gid, onDone) {
         const x = b.dataset.x;
         if (x === 'act-color') { actSetColor(g.id, b.dataset.c); ly.close(); onDone && onDone(); return; }
         if (x === 'act-ungroup') { actUngroup(g); }
+        else if (x === 'act-split') { const keys = [...ly.box.querySelectorAll('[data-sel]:checked')].map(c => c.dataset.sel); if (!keys.length) return toast('Marque os arquivos que quer separar.'); actSplit(keys); }
         else if (x === 'act-merge') { actMerge(g, ly.box.querySelector('#act-target').value); }
         else if (x === 'act-move') {
           if (!proj.value) return toast('Escolha um projeto.');

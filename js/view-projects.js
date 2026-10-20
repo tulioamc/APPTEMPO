@@ -100,7 +100,7 @@ ACTIONS['flt-clear'] = (el) => { const f = fltState(el.dataset.ns); ['q', 'agenc
 const SITU_OPTS = [['all', 'Todos'], ['active', 'Ativos'], ['done', 'Concluídos'], ['falta', 'Falta pagamento']];
 VIEWS.projects = () => {
   const f = S.proj;
-  if (f.situ === undefined) f.situ = db.setting('projSitu', 'all') || 'all';
+  if (f.situ === undefined) f.situ = db.setting('projSitu', 'active') || 'active';
   const list = filterProjects(f);
   const views = [['table', 'Tabela', 'table'], ['board', 'Quadro', 'board'], ['list', 'Lista', 'list'], ['cal', 'Calendário', 'cal']];
   let body = '';

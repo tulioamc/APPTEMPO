@@ -25,7 +25,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
-SRC="$ROOT/icons/icon-512.png"
+SRC="$ROOT/icons/icon-mac-512.png"
 TMP="$(mktemp -d)"
 ICONSET="$TMP/AppIcon.iconset"
 mkdir -p "$ICONSET"
