@@ -25,7 +25,7 @@ function reportStrip(entries, day, mode) {
   if (mode === 'pausas') {
     entries.forEach(e => {
       const lista = [
-        ...entryGaps(e).map(g => ({ s: new Date(g.s).getTime(), e: new Date(g.e).getTime(), why: g.why })),
+        ...pauseGapsOf([e]).map(g => ({ s: new Date(g.s).getTime(), e: new Date(g.e).getTime(), why: g.why })),
         ...db.all('tempo_notices').filter(n => n.kind === 'pause' && n.status === 'accepted' && n.data?.source === 'app' && n.data?.entry_id === e.id)
           .map(n => ({ s: new Date(n.data.from).getTime(), e: new Date(n.data.to).getTime(), why: n.data.app || 'app' })),
       ];
@@ -54,7 +54,7 @@ function dayAggHTML(d) {
   const bruto = unionBrutoMs(ds);
   const proj = new Map(), pz = new Map();
   ds.forEach(e => { const k = e.project_id || '_'; proj.set(k, (proj.get(k) || 0) + entryMs(e)); });
-  ds.forEach(e => entryGaps(e).forEach(g => { const k = g.why || 'manual'; pz.set(k, (pz.get(k) || 0) + (new Date(g.e) - new Date(g.s))); }));
+  ds.forEach(e => pauseGapsOf([e]).forEach(g => { const k = g.why || 'manual'; pz.set(k, (pz.get(k) || 0) + (new Date(g.e) - new Date(g.s))); }));
   const sumP = [...proj.values()].reduce((t, x) => t + x, 0), sumZ = [...pz.values()].reduce((t, x) => t + x, 0);
   const rest = Math.max(0, bruto - sumP - sumZ);
   const total = Math.max(1, sumP + sumZ + rest);
@@ -108,7 +108,7 @@ function reportPanelHTML(day) {
 
   const pauses = new Map(), progs = new Map(), files = new Map(), types = new Map();
   es.forEach(e => {
-    entryGaps(e).forEach(g => { const k = g.why || 'manual'; pauses.set(k, (pauses.get(k) || 0) + (new Date(g.e) - new Date(g.s))); });
+    pauseGapsOf([e]).forEach(g => { const k = g.why || 'manual'; pauses.set(k, (pauses.get(k) || 0) + (new Date(g.e) - new Date(g.s))); });
     const tk = e.work_type_id || '_'; types.set(tk, (types.get(tk) || 0) + entryMs(e));
     actList(e.id).forEach(r => {
       const ms = new Date(r.to) - new Date(r.from); if (!(ms > 0)) return;

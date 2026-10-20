@@ -5,7 +5,7 @@
 function expandRange(entryId, a, b) {
   const e = db.get('tempo_time_entries', entryId); if (!e) return [a, b];
   const recs = actList(entryId).map(r => [new Date(r.from).getTime(), new Date(r.to).getTime()]);
-  const gaps = entryGaps(e).map(g => [new Date(g.s).getTime(), new Date(g.e).getTime()]);
+  const gaps = pauseGapsOf([e]).map(g => [new Date(g.s).getTime(), new Date(g.e).getTime()]);
   let changed = true;
   while (changed) {
     changed = false;
@@ -50,7 +50,7 @@ function openRangeModal(entryId, a0, b0) {
   const [a, b] = expandRange(entryId, a0, b0);
   const e = db.get('tempo_time_entries', entryId); if (!e) return;
   const recs = actList(entryId).filter(r => new Date(r.to) > new Date(a) && new Date(r.from) < new Date(b));
-  const pausas = entryGaps(e).filter(g => new Date(g.e) > new Date(a) && new Date(g.s) < new Date(b));
+  const pausas = pauseGapsOf([e]).filter(g => new Date(g.e) > new Date(a) && new Date(g.s) < new Date(b));
   const workMs = recs.reduce((s, r) => s + (new Date(r.to) - new Date(r.from)), 0);
   openLayer({
     render: () => `<div class="dh"><h2>Mover intervalo</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>

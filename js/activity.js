@@ -359,7 +359,7 @@ function actChipsHTML(A, mode) {
 
 /* Pausas da sessão em caixinhas: o total, e dentro dele ócio, bloqueada, WhatsApp, Telegram e manual, com o tempo de cada um. */
 function pauseChipsHTML(e) {
-  const items = entryGaps(e).map(g => ({ key: g.why || 'manual', label: pauseLabel(g.why || 'manual'), ms: new Date(g.e) - new Date(g.s) })).filter(x => x.ms > 0);
+  const items = pauseGapsOf([e]).map(g => ({ key: g.why || 'manual', label: pauseLabel(g.why || 'manual'), ms: new Date(g.e) - new Date(g.s) })).filter(x => x.ms > 0);
   if (!items.length) return '';
   const total = items.reduce((t, x) => t + x.ms, 0);
   return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#64748B">Pausas <span class="faint">${fmtDur(total)}</span></span>${pauseBucketsOf(items).map(pauseBucketChip).join('')}</div>`;

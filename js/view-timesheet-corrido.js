@@ -125,7 +125,7 @@ function resumoHTML(title, es) {
   const tagged = es.flatMap((e, i) => actList(e.id).map(r => ({ ...r, _i: i })));
   const an = actAnalyzeList(tagged, 'program');
   const colorOf = Object.fromEntries(an.groups.map(g => [g.id, g.color]));
-  const totalBruto = es.reduce((s, e) => s + entryBrutoMs(e), 0);
+  const totalBruto = unionBrutoMs(es);
   const totalTrab = es.reduce((s, e) => s + entryMs(e), 0);
   const pausas = pauseGapsOf(es);
   const pauseByWhy = {};
@@ -149,7 +149,7 @@ function resumoHTML(title, es) {
         if (sg.why !== 'moved' || k >= arr.length - 1 || !sg.e || !arr[k + 1].s) return;
         const q = pos(new Date(sg.e).getTime(), new Date(arr[k + 1].s).getTime()); if (q.w > 0) parts += actMovedSpanHTML(sg, q.l, q.w);
       });
-      entryGaps(x.e).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" title="Pausa · ${esc(pauseLabel(g.why))}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
+      pauseGapsOf([x.e]).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" title="Pausa · ${esc(pauseLabel(g.why))}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
       if (i > 0) parts += `<span class="act-sep" style="left:${base}%"></span>`;
       off += wS;
     });

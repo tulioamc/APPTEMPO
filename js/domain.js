@@ -92,7 +92,6 @@ function entryMs(e, at = Date.now()) {
 const isForaWhy = (w) => w === 'moved' || w === 'fora';
 function entryGaps(e) { const segs = e.segments || []; const out = []; for (let i = 0; i < segs.length - 1; i++) { const a = segs[i].e, b = segs[i + 1].s; if (a && b && new Date(b) > new Date(a) && !isForaWhy(segs[i].why)) out.push({ s: a, e: b, why: segs[i].why || null }); } return out; }
 /* Lacunas de trecho movido: saem do bruto da sessão de origem (o tempo já está no projeto de destino). */
-function entryMovedMs(e) { const segs = e.segments || []; let t = 0; for (let i = 0; i < segs.length - 1; i++) { const a = segs[i].e, b = segs[i + 1].s; if (isForaWhy(segs[i].why) && a && b && new Date(b) > new Date(a)) t += new Date(b) - new Date(a); } return t; }
 /* Intervalos do bruto de uma sessão (início→fim, sem as lacunas movidas). */
 function entryBruIntervals(e, at = Date.now()) {
   const segs = e.segments || []; if (!segs.length) return [];
@@ -108,7 +107,8 @@ function entryBruIntervals(e, at = Date.now()) {
 /* Pausas do conjunto de sessões, sobrepostas: um horário só é pausa se nenhuma sessão do conjunto estiver trabalhando nele.
    Assim, tempo parado numa sessão enquanto outra roda não conta como pausa (e o "fora" de trecho movido fica de fora). */
 function pauseGapsOf(list, at = Date.now()) {
-  const work = list.flatMap(e => entryBruIntervals(e, at)).sort((x, y) => x[0] - y[0]);
+  // trabalho de TODAS as sessões (não só da lista): tempo parado aqui enquanto você trabalhava em outro projeto não é pausa
+  const work = db.all('tempo_time_entries').flatMap(e => (e.segments || []).filter(x => x.s).map(x => [new Date(x.s).getTime(), x.e ? new Date(x.e).getTime() : at])).sort((x, y) => x[0] - y[0]);
   const merged = [];
   work.forEach(([a, b]) => { const l = merged[merged.length - 1]; if (l && a <= l[1]) l[1] = Math.max(l[1], b); else merged.push([a, b]); });
   const out = [];
@@ -121,7 +121,6 @@ function pauseGapsOf(list, at = Date.now()) {
   }));
   return out;
 }
-function entryPauseMs(e) { return entryGaps(e).reduce((t, g) => t + (new Date(g.e) - new Date(g.s)), 0); }
 function entryBrutoMs(e, at = Date.now()) { return entryBruIntervals(e, at).reduce((t, [a, b]) => t + (b - a), 0); }
 /* Bruto de vários lançamentos sem contar duas vezes o mesmo horário: une os intervalos (início→fim de cada um) e soma só o coberto. */
 function unionBrutoMs(list, at = Date.now()) {
