@@ -194,7 +194,7 @@ function actSubtract(segs, cuts, movedTo = null) {
     out.push(...pieces);
   });
   return out.filter(p => p.e === null || p.e > p.s)
-    .map(p => ({ s: new Date(p.s).toISOString(), e: p.e === null ? null : new Date(p.e).toISOString(), ...(p.why ? { why: p.why } : {}) }))
+    .map(p => ({ s: new Date(p.s).toISOString(), e: p.e === null ? null : new Date(p.e).toISOString(), ...(p.why ? { why: p.why } : {}), ...(p.movedTo ? { movedTo: p.movedTo } : {}) }))
     .sort((p, q) => new Date(p.s) - new Date(q.s));
 }
 /* Partes dos segmentos que caem dentro dos cortes: é o tempo que vai para o novo registro. */

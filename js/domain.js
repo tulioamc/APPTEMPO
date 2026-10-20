@@ -372,10 +372,31 @@ function migrateForaGaps() {
   db.setSetting('migFora1', true);
   return n;
 }
+/* Migração (uma vez): lacuna "movida" sem destino gravado ganha o projeto que recebeu esse tempo (o lançamento de destino com movedFrom = este projeto). */
+function migrateMovedTo() {
+  if (db.setting('migMovedTo1', false)) return 0;
+  const T = (x) => new Date(x).getTime();
+  const all = db.all('tempo_time_entries');
+  let n = 0;
+  all.forEach(o => {
+    const segs = o.segments || []; const out = segs.map(x => ({ ...x })); let changed = false;
+    for (let i = 0; i < segs.length - 1; i++) {
+      const a = segs[i].e, b = segs[i + 1].s;
+      if (!isForaWhy(segs[i].why) || segs[i].movedTo || !a || !b || T(b) <= T(a)) continue;
+      const A = T(a), B = T(b);
+      const hit = all.find(d => d.id !== o.id && (d.segments || []).some(x => x.movedFrom === o.project_id && x.e && T(x.s) < B + 1000 && T(x.e) > A - 1000));
+      if (hit && hit.project_id) { out[i] = { ...out[i], movedTo: hit.project_id }; changed = true; n++; }
+    }
+    if (changed) db.update('tempo_time_entries', o.id, { segments: out }, true);
+  });
+  db.setSetting('migMovedTo1', true);
+  return n;
+}
 /* Conferência dos registros (ao abrir o app): sessão encerrada não pode ter trecho aberto, porque ele contaria até agora.
    Remove o trecho aberto e deixa rastro no histórico de correções. */
 function checkEntries() {
   migrateForaGaps();
+  migrateMovedTo();
   const movidos = migrateMovedGaps();
   if (movidos) toast(`${movidos} lacuna(s) de trecho movido marcada(s) com o destino.`);
   let fixed = 0;
