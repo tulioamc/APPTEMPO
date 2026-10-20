@@ -15,17 +15,30 @@ const actColorMap = () => db.setting('actColors', {}) || {};
 const CHROME_SITE_NAMES = ['Behance', 'Pinterest', 'Magnific', 'Reunião', 'Claude', 'ChatGPT', 'Docs', 'Sheets', 'Slides', 'Gmail', 'Drive'];
 /* o app do ChatGPT e o site contam como a mesma ferramenta */
 const toolAlias = (app) => (/chatgpt/i.test(String(app || '')) ? 'ChatGPT' : app);
+/* Cadastro único de programas (Configurações → Programas): nome que aparece, palavra que identifica o app e cor.
+   Tudo que mostra programa (faixas, caixinhas, Resumo, relatórios) lê daqui. */
+const PROG_DEFAULTS = [
+  { match: 'illustrator', name: 'Illustrator', color: '#F97316' }, { match: 'photoshop', name: 'Photoshop', color: '#1D6FE0' },
+  { match: 'after effects', name: 'After Effects', color: '#7C3AED' }, { match: 'premiere', name: 'Premiere', color: '#6D28D9' },
+  { match: 'cinema 4d', name: 'Cinema 4D', color: '#0891B2' }, { match: 'audition', name: 'Audition', color: '#00A58C' },
+  { match: 'acrobat', name: 'Acrobat', color: '#B91C1C' }, { match: 'claude', name: 'Claude', color: '#C8A02A' },
+  { match: 'chatgpt', name: 'ChatGPT', color: '#10A37F' }, { match: 'gpt', name: 'ChatGPT', color: '#10A37F' },
+  { match: 'magnific', name: 'Magnific', color: '#111827' }, { match: 'whatsapp', name: 'WhatsApp', color: '#25D366' },
+  { match: 'telegram', name: 'Telegram', color: '#229ED9' }, { match: 'tempo', name: 'Tempo', color: '#2563EB' },
+  { match: 'ajustes', name: 'Ajustes do Sistema', color: '#64748B' }, { match: 'figma', name: 'Figma', color: '#A259FF' },
+  { match: 'chrome', name: 'Google Chrome', color: '#EA4335' }, { match: 'docs', name: 'Google Docs', color: '#4285F4' },
+  { match: 'sheets', name: 'Google Sheets', color: '#0F9D58' }, { match: 'slides', name: 'Google Slides', color: '#F4B400' },
+  { match: 'gmail', name: 'Gmail', color: '#D93025' }, { match: 'drive', name: 'Google Drive', color: '#1FA463' },
+];
+const programas = () => { const v = db.setting('programas', null); return Array.isArray(v) ? v : PROG_DEFAULTS; };
+const programFor = (app) => { const a = String(app || '').toLowerCase(); return programas().find(p => p.match && a.includes(String(p.match).toLowerCase())) || null; };
+const shortProgram = (app) => { const p = programFor(app); return p ? p.name : toolAlias(app); };
 const isChromeSite = (app, doc) => !!doc && /chrome/i.test(String(app || '')) && CHROME_SITE_NAMES.includes(doc);
 const toolName = (r) => (isChromeSite(r.app, r.doc) ? r.doc : toolAlias(r.app));
 /* cor padrão estável por nome (o mesmo nome sempre tem a mesma cor padrão, em qualquer sessão) */
 /* cor padrão de cada programa/site (a mesma em todos os gráficos); o que não estiver aqui ganha uma cor pelo nome */
-const TOOL_DEFAULTS = [['illustrator', '#F97316'], ['photoshop', '#1D6FE0'], ['after effects', '#7C3AED'], ['premiere', '#6D28D9'],
-  ['claude', '#C8A02A'], ['chatgpt', '#10A37F'], ['gpt', '#10A37F'], ['magnific', '#111827'], ['whatsapp', '#25D366'],
-  ['telegram', '#229ED9'], ['tempo', '#2563EB'], ['ajustes', '#64748B'], ['figma', '#A259FF'], ['chrome', '#EA4335'],
-  ['docs', '#4285F4'], ['sheets', '#0F9D58'], ['slides', '#F4B400'], ['gmail', '#D93025'], ['drive', '#1FA463']];
 const actDefaultColor = (name) => {
   const n = String(name).toLowerCase();
-  const hit = TOOL_DEFAULTS.find(([k]) => n.includes(k)); if (hit) return hit[1];
   let h = 0; for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ACT_COLORS[h % ACT_COLORS.length];
 };
 const colorKeyOf = (gid) => {
@@ -36,7 +49,7 @@ const colorKeyOf = (gid) => {
   }
   return gid;
 };
-const toolColor = (name) => actColorMap()['n:' + name] || actDefaultColor(name);
+const toolColor = (name) => actColorMap()['n:' + name] || programFor(name)?.color || actDefaultColor(name);
 /* Cor de um grupo na faixa:
    - programa e site do Chrome: a cor da ferramenta (global, 'n:<nome>');
    - arquivo de um programa: herda a cor do programa (a não ser que a cor do próprio arquivo tenha sido escolhida);
@@ -45,6 +58,7 @@ function groupColor(gid, i) {
   const ck = colorKeyOf(gid);
   if (ck.startsWith('n:')) return toolColor(ck.slice(2));
   if (gid.startsWith('a:')) return actColorMap()[gid] || toolColor(gid.slice(2).split('|')[0]);
+  if (gid.startsWith('app:')) return actColorMap()[gid] || toolColor(gid.slice(4));
   return actColorMap()[gid] || ACT_COLORS[i % ACT_COLORS.length];
 }
 function actSetColor(gid, color) {
@@ -127,8 +141,8 @@ function actAnalyzeList(list0, mode) {
     const nameOf = (it) => (/^terminal$/i.test(String(it.app || '')) ? 'Terminal' : (it.doc || it.app));
     const names = [...new Set(items.map(nameOf))];
     let label;
-    if (mode === 'program') label = toolAlias(items[0].app);
-    else if (String(g.id).startsWith('app:')) label = toolAlias(items[0].app);
+    if (mode === 'program') label = shortProgram(items[0].app);
+    else if (String(g.id).startsWith('app:')) label = shortProgram(items[0].app);
     else if (String(g.id).startsWith('pre:')) {
       const exts = [...new Set(items.map(it => (String(it.doc || '').match(/\.[^.]+$/) || [''])[0]))];
       label = docPre(items[0].doc) + (exts.length === 1 ? exts[0] : '');
@@ -281,22 +295,10 @@ function actChipsHTML(A, mode) {
 
 /* Pausas da sessão em caixinhas: o total, e dentro dele ócio, bloqueada, WhatsApp, Telegram e manual, com o tempo de cada um. */
 function pauseChipsHTML(e) {
-  const tot = {};
-  const add = (key, label, ms, color) => { const t = tot[key] || (tot[key] = { label, ms: 0, color }); t.ms += ms; };
-  entryGaps(e).forEach(g => {
-    const ms = new Date(g.e) - new Date(g.s); if (!(ms > 0)) return;
-    const w = String(g.why || '').trim().toLowerCase();
-    if (w === 'mac' || w === 'ocioso' || w.includes('ocios')) add('idle', 'Ócio (mouse e teclado)', ms, PAUSE_HATCH.idle);
-    else if (w === 'sono' || w === 'suspenso') add('lock', 'Bloqueada / dormiu', ms, '#9CA3AF');
-    else if (pauseKind(g.why) === 'telegram') add('telegram', 'Telegram', ms, PAUSE_HATCH.telegram);
-    else if (pauseKind(g.why) === 'instagram') add('instagram', 'Instagram', ms, PAUSE_HATCH.instagram);
-    else if (pauseKind(g.why) === 'whatsapp') { const name = g.why === 'app' ? 'WhatsApp' : String(g.why); add('wa:' + name, name, ms, PAUSE_HATCH.whatsapp); }
-    else add('manual', 'Manual', ms, '#A1A1AA');
-  });
-  const items = Object.values(tot).sort((x, y) => y.ms - x.ms);
+  const items = entryGaps(e).map(g => ({ key: g.why || 'manual', label: pauseLabel(g.why || 'manual'), ms: new Date(g.e) - new Date(g.s) })).filter(x => x.ms > 0);
   if (!items.length) return '';
-  const total = items.reduce((sum, i) => sum + i.ms, 0);
-  return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#64748B">Pausas <span class="faint">${fmtDur(total)}</span></span>${items.map(i => `<span class="act-chip act-chip-sub" style="--tb:${i.color}"><i></i>${esc(i.label)} <span class="faint">${fmtDur(i.ms)}</span></span>`).join('')}</div>`;
+  const total = items.reduce((t, x) => t + x.ms, 0);
+  return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#64748B">Pausas <span class="faint">${fmtDur(total)}</span></span>${pauseBucketsOf(items).map(pauseBucketChip).join('')}</div>`;
 }
 
 /* Bloco da tela "Revisar sessão": uma faixa por programa e uma por arquivo. */

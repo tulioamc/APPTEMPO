@@ -148,7 +148,7 @@ VIEWS.lixeira = () => {
     <div class="banner info small">O log sai do dia a dia 24 h depois do último registro e vem para cá. Guardado ${keep ? 'por ' + keep + ' dias' : 'para sempre'} (ajuste em Configurações).</div>
     <div class="stack" style="gap:12px;margin-top:10px">${days.map(logDayCard).join('') || '<div class="empty">Nenhum dia na lixeira ainda.</div>'}</div>
     <div class="panel" style="margin-top:14px"><div class="panel-h"><h3>Histórico de edições</h3><span class="grow"></span><span class="small muted">${logEditsOf().length} registro(s)</span></div>
-      <div class="panel-b tight">${logEditsOf().slice(-30).reverse().map(e => `<div class="row between small" style="padding:6px 4px;border-bottom:1px solid var(--line)"><span>${e.kind === 'apagar' ? 'Apagado' : 'Editado · ' + esc(e.campo)}${e.antes && e.antes.app ? ' · ' + esc(e.antes.app) : ''}</span><span class="mono muted">${esc(new Date(e.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</span></div>`).join('') || '<div class="muted small">Nenhuma edição ainda.</div>'}</div></div>` };
+      <div class="panel-b" style="padding:0 16px 8px">${logEditsOf().slice(-30).reverse().map(e => `<div class="row between small" style="padding:6px 4px;border-bottom:1px solid var(--line)"><span>${e.kind === 'apagar' ? 'Apagado' : 'Editado · ' + esc(e.campo)}${e.antes && e.antes.app ? ' · ' + esc(e.antes.app) : ''}</span><span class="mono muted">${esc(new Date(e.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</span></div>`).join('') || '<div class="muted small">Nenhuma edição ainda.</div>'}</div></div>` };
 };
 
 /* ---- Seleção por arrastar ---- */

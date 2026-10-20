@@ -190,7 +190,13 @@ function clientSelectOptions(selected) {
   return h;
 }
 ACTIONS['proj-new'] = (el) => openProjectForm(null, el?.dataset?.client);
-const PROJECT_TYPES = ['', 'Vídeo 2D', 'Vídeo 3D', 'Design', 'Outro'];
+/* Tipo do projeto = as mesmas tags de trabalho (App, Ilustração…), mais os tipos de vídeo que disparam o fluxo. */
+const projectTypeOpts = (current) => {
+  const names = workTypes().map(w => w.name);
+  const extra = ['Vídeo 2D', 'Vídeo 3D'].filter(x => !names.includes(x));
+  const cur = current && ![...names, ...extra].includes(current) ? [current] : [];
+  return ['', ...names, ...extra, ...cur];
+};
 const isVideoType = (t) => /^Vídeo/.test(t || '');
 function openProjectForm(id, clientId, onCreated) {
   const p = id ? db.get('tempo_projects', id) : null;
@@ -199,7 +205,7 @@ function openProjectForm(id, clientId, onCreated) {
     <form class="db" id="pf">
       <div class="field"><label for="pf-name">Nome do projeto *</label><input id="pf-name" class="input" name="name" required value="${esc(p?.name || '')}" autofocus></div>
       <div class="field"><label for="pf-client">Cliente *</label><div class="row" style="flex-wrap:nowrap"><select id="pf-client" class="input" name="client_id" required>${clientSelectOptions(p?.client_id || clientId)}</select><button type="button" class="btn" data-x="newclient">${icon('plus')} Cliente</button></div><span class="hint">A agência vem do cadastro do cliente.</span></div>
-      <div class="field"><label for="pf-type">Tipo</label><select id="pf-type" class="input" name="project_type">${PROJECT_TYPES.map(t => `<option value="${t}" ${(p?.project_type || '') === t ? 'selected' : ''}>${t || 'Não definido'}</option>`).join('')}</select></div>
+      <div class="field"><label for="pf-type">Tipo</label><select id="pf-type" class="input" name="project_type">${projectTypeOpts(p?.project_type).map(t => `<option value="${t}" ${(p?.project_type || '') === t ? 'selected' : ''}>${t || 'Não definido'}</option>`).join('')}</select></div>
       <div class="grid2">
         <div class="field"><label for="pf-st">Status</label><select id="pf-st" class="input" name="status_id">${options(statuses('work'), p?.status_id || statusByCat('work', 'todo')?.id)}</select></div>
         <div class="field"><label for="pf-pay">Pagamento</label><select id="pf-pay" class="input" name="payment_status_id">${options(statuses('payment'), p?.payment_status_id || statuses('payment')[0]?.id)}</select></div>

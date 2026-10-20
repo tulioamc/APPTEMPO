@@ -134,18 +134,20 @@ function pickerHTML(sel, q = '') {
   const col = (title, items, key, cur, extra = '') => `<div class="pcol"><div class="pcol-h">${title}</div><div class="pcol-b">${extra}${items.length ? items.map(x => `<button type="button" class="popt ${cur === x.id ? 'on' : ''}" data-act="pk" data-k="${key}" data-v="${x.id}">${x.color ? `<span class="cdot fill" style="--tb:${hexOf(x.color)}"></span>` : ''}<span class="n">${esc(x.name)}</span></button>`).join('') : `<span class="faint small" style="padding:6px 8px">${x_empty(key, sel)}</span>`}</div></div>`;
   const ags = agencies();
   const cls = sel.agency_id ? clients(sel.agency_id) : clients();
-  const prs = projects().filter(p => sel.client_id ? p.client_id === sel.client_id : sel.agency_id ? cls.some(c => c.id === p.client_id) : true).filter(p => statusCat(p.status_id) !== 'cancelled').sort((a, b) => a.name.localeCompare(b.name));
+  const situ = db.setting('pkSitu', 'active') === 'all' ? 'all' : 'active';
+  const okSitu = (p) => situ === 'all' ? statusCat(p.status_id) !== 'cancelled' : !['done', 'cancelled'].includes(statusCat(p.status_id));
+  const prs = projects().filter(p => sel.client_id ? p.client_id === sel.client_id : sel.agency_id ? cls.some(c => c.id === p.client_id) : true).filter(okSitu).sort((a, b) => a.name.localeCompare(b.name));
   const tks = sel.project_id ? tasksOf(sel.project_id) : [];
   const sbs = sel.task_id ? subtasksOf(sel.task_id) : [];
   let results = '';
   if (q.trim().length > 1) {
     const qq = q.toLowerCase(); const hits = [];
-    projects().forEach(p => { if (p.name.toLowerCase().includes(qq) || clientOf(p)?.name.toLowerCase().includes(qq)) hits.push({ k: 'project_id', id: p.id, label: p.name, sub: clientOf(p)?.name }); });
+    projects().filter(okSitu).forEach(p => { if (p.name.toLowerCase().includes(qq) || clientOf(p)?.name.toLowerCase().includes(qq)) hits.push({ k: 'project_id', id: p.id, label: p.name, sub: clientOf(p)?.name }); });
     db.all('tempo_tasks').forEach(t => { if (t.name.toLowerCase().includes(qq)) { const p = db.get('tempo_projects', t.project_id); hits.push({ k: t.parent_id ? 'sub_id' : 'task_id', id: t.id, label: t.name, sub: p?.name }); } });
     results = `<div class="panel" style="max-height:200px;overflow:auto">${hits.length ? hits.slice(0, 12).map(h => `<button type="button" class="popt" style="width:100%" data-act="pk" data-k="${h.k}" data-v="${h.id}"><span class="n"><b>${esc(h.label)}</b> <span class="faint">· ${esc(h.sub || '')}</span></span></button>`).join('') : '<div class="faint small" style="padding:10px">Nada encontrado.</div>'}</div>`;
   }
   return `<div class="stack" style="gap:8px">
-    <div class="row"><div class="grow" style="position:relative"><input id="pk-q" class="input" placeholder="Buscar projeto ou tarefa…" value="${esc(q)}" data-input="pk-q" autocomplete="off"></div>${Object.values(sel).some(Boolean) ? '<button type="button" class="btn sm ghost" data-act="pk-clear">Limpar seleção</button>' : ''}</div>
+    <div class="row" style="gap:8px"><div class="grow" style="position:relative"><input id="pk-q" class="input" placeholder="Buscar projeto ou tarefa…" value="${esc(q)}" data-input="pk-q" autocomplete="off"></div><div class="seg" style="display:flex;gap:4px"><button type="button" class="btn sm ${situ === 'active' ? 'primary' : ''}" data-act="pk-situ" data-v="active">Ativos</button><button type="button" class="btn sm ${situ === 'all' ? 'primary' : ''}" data-act="pk-situ" data-v="all">Todos</button></div>${Object.values(sel).some(Boolean) ? '<button type="button" class="btn sm ghost" data-act="pk-clear">Limpar seleção</button>' : ''}</div>
     ${results}
     <div class="picker">
       ${col('Agência', ags, 'agency_id', sel.agency_id, `<button type="button" class="popt none ${sel.agency_id === '__none' ? 'on' : ''}" data-act="pk" data-k="agency_id" data-v="__none"><span class="n">Sem agência (direto)</span></button>`)}
@@ -177,6 +179,7 @@ function bindPicker(layer, sel, rerender) {
   const draw = () => { host.innerHTML = pickerHTML(sel, q); rerender && rerender(); };
   host.addEventListener('click', (e) => {
     const b = e.target.closest('[data-act="pk"]'); const c = e.target.closest('[data-act="pk-clear"]');
+    const si = e.target.closest('[data-act="pk-situ"]'); if (si) { e.stopPropagation(); db.setSetting('pkSitu', si.dataset.v); draw(); return; }
     if (c) { e.stopPropagation(); Object.keys(sel).forEach(k => sel[k] = ''); q = ''; draw(); return; }
     const np = e.target.closest('[data-act="pk-newproj"]');
     if (np) { e.stopPropagation(); openProjectForm(null, sel.client_id, (p) => { pickApply(sel, 'project_id', p.id); draw(); }); return; }

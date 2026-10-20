@@ -893,3 +893,7 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .act-more { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: color-mix(in oklab, var(--tb) 30%, var(--surface)); font-size: .85em; font-weight: 700; line-height: 1.5; text-align: center; }
 .ts-agg-box { margin-top: 10px; min-height: 58px; }
 .ts-agg-box .act-chips { margin-top: 8px; }
+/* Saídas por mês: a linha de saldo tem altura fixa, para todas as barras ficarem na mesma base */
+.pf-col > div:last-child { height: 2.7em; line-height: 1.35; text-align: center; }
+.pf-help { margin: 0 0 10px; line-height: 1.45; }
+.pf-scope { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--surface-3, var(--surface-2)); color: var(--fg-2); }

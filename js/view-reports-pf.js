@@ -13,7 +13,12 @@ function pfMonths(n, shift = 0) {
   return out;
 }
 const pfMonthLabel = (ym) => { const [y, m] = ym.split('-'); return ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][Number(m) - 1] + '/' + y.slice(2); };
-const pfTop = (cat) => (cat || 'Sem categoria').split('/')[0];
+/* cat no banco = "ESCOPO/Categoria" (ex.: "PESSOAL/Saúde", "EMPRESA/Impostos"). Escopo = Pessoal ou Empresa; categoria = Saúde, Impostos… */
+const pfParts = (cat) => String(cat || '').split('/').map(x => x.trim()).filter(Boolean);
+const pfCat = (cat) => { const p = pfParts(cat); return p.length > 1 ? p.slice(1).join(' / ') : (p[0] || 'Sem categoria'); };
+const pfScope = (cat) => { const p = pfParts(cat); return p.length > 1 ? p[0].charAt(0).toUpperCase() + p[0].slice(1).toLowerCase() : '—'; };
+const pfHelp = (t) => `<div class="pf-help small muted">${t}</div>`;
+const pfDiffTxt = (v) => (!v ? '—' : `${v > 0 ? '+' : '−'}${pfR(Math.abs(v))}`);
 const pfR = (v) => fmtMoney(v) || 'R$ 0';
 const pfPct = (a, b) => (b ? ((a - b) / b) * 100 : null);
 const pfPctTxt = (p) => p === null ? '—' : `${p > 0 ? '+' : ''}${p.toFixed(0)}%`;
@@ -23,18 +28,19 @@ const pfChip = (p) => `<span class="pf-chip ${p === null ? '' : p > 0 ? 'up' : p
 function pfData(months) {
   const rows = db.all('tempo_expenses').filter(r => months.includes(r.month) && r.status !== 'Não teve');
   const byMonth = Object.fromEntries(months.map(m => [m, { out: 0, in: 0 }]));
-  const byCat = {};
+  const byCat = {}, scopeOf = {};
   rows.forEach(r => {
     const amt = Math.abs(Number(r.amount) || 0);
     if (r.kind === 'in') byMonth[r.month].in += amt;
     else if (r.kind === 'out') {
       byMonth[r.month].out += amt;
-      const k = pfTop(r.cat);
+      const k = pfCat(r.cat), sc = pfScope(r.cat);
+      scopeOf[k] = scopeOf[k] && scopeOf[k] !== sc ? 'Pessoal e Empresa' : (scopeOf[k] || sc);
       byCat[k] = byCat[k] || {};
       byCat[k][r.month] = (byCat[k][r.month] || 0) + amt;
     }
   });
-  return { byMonth, byCat };
+  return { byMonth, byCat, scopeOf };
 }
 function pfOutSum(months) {
   return db.all('tempo_expenses').filter(r => r.kind === 'out' && months.includes(r.month) && r.status !== 'Não teve').reduce((s, r) => s + Math.abs(Number(r.amount) || 0), 0);
@@ -74,7 +80,7 @@ function pfInsights(months, byMonth, cats, totOut, totIn) {
 VIEWS.reportspf = () => {
   const n = Number(db.setting('pfRange', 6)) || 6;
   const months = pfMonths(n);
-  const { byMonth, byCat } = pfData(months);
+  const { byMonth, byCat, scopeOf } = pfData(months);
   const last = months[months.length - 1], prev = months[months.length - 2];
   const max = Math.max(1, ...months.map(m => byMonth[m].out));
   const totOut = months.reduce((s, m) => s + byMonth[m].out, 0);
@@ -89,7 +95,7 @@ VIEWS.reportspf = () => {
     const total = vals.reduce((s, x) => s + x, 0);
     const earlier = vals.slice(0, -1); const avgEarly = earlier.reduce((s, x) => s + x, 0) / Math.max(1, earlier.length);
     const lastV = vals[vals.length - 1];
-    return { k, vals, total, last: lastV, avgEarly, diff: lastV - avgEarly, delta: pfPct(lastV, avgEarly) };
+    return { k, scope: scopeOf[k] || '—', vals, total, last: lastV, avgEarly, diff: lastV - avgEarly, delta: pfPct(lastV, avgEarly) };
   }).sort((a, b) => b.total - a.total);
   const top = cats.slice(0, 6);
   const rest = cats.slice(6).reduce((s, c) => s + c.total, 0);
@@ -101,15 +107,16 @@ VIEWS.reportspf = () => {
 
   const monthBars = months.map(m => {
     const o = byMonth[m].out, i = byMonth[m].in, s = i - o;
-    return `<div class="pf-col"><div class="pf-col-v mono small">${pfR(o)}</div><div class="pf-bar-wrap"><div class="pf-bar ${m === last ? 'now' : ''}" style="height:${Math.max(3, Math.round((o / max) * 100))}%" title="Saídas ${pfR(o)}"></div></div>
+    return `<div class="pf-col" title="${pfMonthLabel(m)}\nSaídas: ${pfR(o)}\nEntradas: ${pfR(i)}\nSaldo: ${pfR(s)}"><div class="pf-col-v mono small">${pfR(o)}</div><div class="pf-bar-wrap"><div class="pf-bar ${m === last ? 'now' : ''}" style="height:${Math.max(3, Math.round((o / max) * 100))}%" title="Saídas ${pfR(o)}"></div></div>
       <div class="pf-col-l small muted">${pfMonthLabel(m)}</div>
       <div class="small ${i && s < 0 ? 'pf-neg' : 'muted'}">${i ? 'saldo ' + pfR(s) : ''}</div></div>`;
   }).join('');
 
-  const head = `<th>Categoria</th>${months.map(m => `<th class="num">${pfMonthLabel(m)}</th>`).join('')}<th class="num">Total</th><th class="num">Média/mês</th><th class="num">${pfMonthLabel(last)} vs média</th>`;
-  const body = cats.map(c => `<tr><td>${esc(c.k)}</td>${c.vals.map(v => `<td class="num mono">${v ? pfR(v) : '<span class="faint">—</span>'}</td>`).join('')}
-    <td class="num mono"><b>${pfR(c.total)}</b></td><td class="num mono">${pfR(c.total / n)}</td><td class="num">${pfChip(c.delta)}</td></tr>`).join('');
-  const totRow = `<tr class="tot"><td><b>Total de saídas</b></td>${months.map(m => `<td class="num mono"><b>${pfR(byMonth[m].out)}</b></td>`).join('')}<td class="num mono"><b>${pfR(totOut)}</b></td><td class="num mono"><b>${pfR(avgOut)}</b></td><td class="num">${pfChip(pfPct(byMonth[last].out, avgOut))}</td></tr>`;
+  const head = `<th>Categoria</th>${months.map(m => `<th class="num">${pfMonthLabel(m)}</th>`).join('')}<th class="num">Total</th><th class="num">Média/mês</th><th class="num" title="Quanto o último mês ficou acima (vermelho) ou abaixo (verde) da média dos meses anteriores">${pfMonthLabel(last)} vs média</th>`;
+  const cmpCell = (delta, diff) => `<td class="num">${pfChip(delta)} <span class="small muted mono">${pfDiffTxt(diff)}</span></td>`;
+  const body = cats.map(c => `<tr><td>${esc(c.k)} <span class="pf-scope">${esc(c.scope)}</span></td>${c.vals.map(v => `<td class="num mono">${v ? pfR(v) : '<span class="faint">—</span>'}</td>`).join('')}
+    <td class="num mono"><b>${pfR(c.total)}</b></td><td class="num mono">${pfR(c.total / n)}</td>${cmpCell(c.delta, c.diff)}</tr>`).join('');
+  const totRow = `<tr class="tot"><td><b>Total de saídas</b></td>${months.map(m => `<td class="num mono"><b>${pfR(byMonth[m].out)}</b></td>`).join('')}<td class="num mono"><b>${pfR(totOut)}</b></td><td class="num mono"><b>${pfR(avgOut)}</b></td><td class="num">${pfChip(pfPct(byMonth[last].out, avgOut))} <span class="small muted mono">${pfDiffTxt(byMonth[last].out - avgOut)}</span></td></tr>`;
 
   const insights = pfInsights(months, byMonth, cats, totOut, totIn);
 
@@ -124,11 +131,11 @@ VIEWS.reportspf = () => {
     </div>
     <div class="panel"><div class="panel-h"><h3>Leitura do período</h3></div><div class="panel-b"><div class="pf-insights">${insights.map(t => `<div class="pf-insight">${t}</div>`).join('') || '<div class="muted">Ainda não há dados suficientes.</div>'}</div></div></div>
     <div class="grid2">
-      <div class="panel"><div class="panel-h"><h3>Saídas por mês</h3></div><div class="panel-b"><div class="pf-chart">${monthBars}</div></div></div>
-      <div class="panel"><div class="panel-h"><h3>Onde o dinheiro foi</h3></div><div class="panel-b">${pfDonut(donutItems, totOut)}</div></div>
+      <div class="panel"><div class="panel-h"><h3>Saídas por mês</h3></div><div class="panel-b">${pfHelp('Cada coluna é um mês: a altura é o total de saídas. Embaixo, o saldo do mês (entradas − saídas). Passe o mouse para ver entradas, saídas e saldo.')}<div class="pf-chart">${monthBars}</div></div></div>
+      <div class="panel"><div class="panel-h"><h3>Onde o dinheiro foi</h3></div><div class="panel-b">${pfHelp('Quanto cada categoria pesou no total de saídas do período. Passe o mouse sobre um pedaço para ver o valor.')}${pfDonut(donutItems, totOut)}</div></div>
     </div>
-    <div class="panel"><div class="panel-h"><h3>Categorias mês a mês</h3><span class="grow"></span><span class="small muted">“vs média” = último mês contra a média dos anteriores</span></div>
-      <div class="panel-b tight"><div class="table-scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody>${body || '<tr><td colspan="99" class="empty">Sem saídas no período.</td></tr>'}${totRow}</tbody></table></div></div></div>
+    <div class="panel"><div class="panel-h"><h3>Saídas por categoria, mês a mês</h3></div>
+      <div class="panel-b tight">${pfHelp('Cada linha é uma categoria (ex.: Saúde); o escopo (Pessoal ou Empresa) aparece ao lado. Em “vs média”, o último mês é comparado com a média dos meses anteriores: <b>verde</b> = gastou menos (bom), <b>vermelho</b> = gastou mais.')}<div class="table-scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody>${body || '<tr><td colspan="99" class="empty">Sem saídas no período.</td></tr>'}${totRow}</tbody></table></div></div></div>
   </div>` };
 };
 
@@ -136,11 +143,11 @@ VIEWS.reportspf = () => {
 ACTIONS['pf-csv'] = () => {
   const n = Number(db.setting('pfRange', 6)) || 6;
   const months = pfMonths(n);
-  const { byCat } = pfData(months);
+  const { byCat, scopeOf } = pfData(months);
   const esc2 = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = [['Categoria', ...months, 'Total'].map(esc2).join(';')];
+  const lines = [['Categoria', 'Escopo', ...months, 'Total'].map(esc2).join(';')];
   Object.entries(byCat).sort((a, b) => Object.values(b[1]).reduce((s, x) => s + x, 0) - Object.values(a[1]).reduce((s, x) => s + x, 0))
-    .forEach(([k, v]) => { const vals = months.map(m => Math.round((v[m] || 0) * 100) / 100); lines.push([k, ...vals, Math.round(vals.reduce((s, x) => s + x, 0) * 100) / 100].map(esc2).join(';')); });
+    .forEach(([k, v]) => { const vals = months.map(m => Math.round((v[m] || 0) * 100) / 100); lines.push([k, scopeOf[k] || '', ...vals, Math.round(vals.reduce((s, x) => s + x, 0) * 100) / 100].map(esc2).join(';')); });
   const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `relatorio-pf-${months[0]}_${months[months.length - 1]}.csv`;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);

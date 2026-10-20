@@ -67,17 +67,26 @@ function dayAggHTML(d) {
   });
   projItems.forEach(it => { const w = it.ms / total * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" title="${esc(it.label)} · ${fmtDur(it.ms)}" style="--tb:${it.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
   const pauseItems = [...pz.entries()].sort((a, b) => b[1] - a[1]).map(([k, ms]) => ({ label: 'Pausa · ' + pauseLabel(k), ms, color: pauseHatch(k), key: k }));
-  pauseItems.forEach(it => { const w = it.ms / total * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" title="${esc(it.label)} · ${fmtDur(it.ms)}" style="--ph:${it.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
+  const PB = pauseBucketsOf(pauseItems.map(it => ({ key: it.key, label: it.label.replace(/^Pausa · /, ''), ms: it.ms })));
+  PB.forEach(bk => { const w = bk.ms / total * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" title="${esc(bk.label)} · ${fmtDur(bk.ms)}" style="--ph:${bk.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
   if (rest > 1000 && off < 100) parts += `<span class="act-track" style="left:${off}%;width:${100 - off}%"></span>`;
   const chip = (it) => `<span class="act-chip" style="--tb:${it.color}"><i></i>${esc(it.label)} <span class="faint">${fmtDur(it.ms)}</span></span>`;
-  // WhatsApp fica à parte (verde); as outras pausas viram um chip só, "Pausa +N", com o detalhe no passar do mouse
-  const isWA = (it) => pauseKind(it.key) === 'whatsapp';
-  const others = pauseItems.filter(it => !isWA(it));
-  const othersMs = others.reduce((t, it) => t + it.ms, 0);
-  const pauseChips = pauseItems.filter(isWA).map(chip).join('') + (others.length ? `<span class="act-chip act-chip-total" style="--tb:#A1A1AA" title="${esc(others.map(o => `${o.label} · ${fmtDur(o.ms)}`).join('\n'))}"><i></i>Pausa <span class="act-more">+${others.length}</span> <span class="faint">${fmtDur(othersMs)}</span></span>` : '');
+  const pauseChips = PB.map(pauseBucketChip).join('');
   return `<div class="act-strip" style="height:30px">${parts}</div>
     <div class="act-chips">${projItems.map(chip).join('')}${pauseChips}</div>`;
 }
+
+/* Pausas agrupadas: WhatsApp (verde), Instagram (rosa) e todas as outras num chip cinza "Pausa +N". */
+function pauseBucketsOf(items) {
+  const B = { whatsapp: { label: 'WhatsApp', color: PAUSE_HATCH.whatsapp, ms: 0 }, instagram: { label: 'Instagram', color: PAUSE_HATCH.instagram, ms: 0 }, other: { label: 'Pausa', color: '#A1A1AA', ms: 0, n: 0, detail: [] } };
+  items.forEach(it => {
+    const k = pauseKind(it.key); const b = (k === 'whatsapp' || k === 'instagram') ? B[k] : B.other;
+    b.ms += it.ms;
+    if (b === B.other) { b.n++; b.detail.push(`${it.label} · ${fmtDur(it.ms)}`); }
+  });
+  return ['whatsapp', 'instagram', 'other'].map(k => ({ kind: k, ...B[k] })).filter(b => b.ms > 0);
+}
+const pauseBucketChip = (b) => `<span class="act-chip act-chip-total" style="--tb:${b.color}" title="${esc((b.detail || []).join('\n'))}"><i></i>${b.kind === 'other' ? `Pausa <span class="act-more">+${b.n}</span>` : esc(b.label)} <span class="faint">${fmtDur(b.ms)}</span></span>`;
 
 /* Caixa "Relatório do Time Sheet". */
 function reportPanelHTML(day) {
@@ -105,7 +114,7 @@ function reportPanelHTML(day) {
       const ms = new Date(r.to) - new Date(r.from); if (!(ms > 0)) return;
       const tn = toolName(r); progs.set(tn, (progs.get(tn) || 0) + ms);
       const fk = `${r.app}|${r.doc || ''}`;
-      const f = files.get(fk) || { label: r.doc ? `${r.doc} · ${r.app}` : r.app, app: r.app, doc: r.doc || null, ms: 0 };
+      const f = files.get(fk) || { label: r.doc ? `${r.doc} · ${shortProgram(r.app)}` : shortProgram(r.app), app: r.app, doc: r.doc || null, ms: 0 };
       f.ms += ms; files.set(fk, f);
     });
   });
@@ -113,7 +122,7 @@ function reportPanelHTML(day) {
   const items = (m, labelOf, colorOf) => [...m.entries()].map(([k, ms]) => ({ label: labelOf(k), ms, color: colorOf(k) })).sort((x, y) => y.ms - x.ms);
   const typeItems = items(types, k => { const w = db.get('tempo_work_types', k); return w?.name || 'Sem tipo'; }, k => hexOf(db.get('tempo_work_types', k)?.color || 'gray'));
   const pauseItems = items(pauses, pauseLabel, k => pauseHatch(k));
-  const progItems = items(progs, k => k, k => toolColor(k));
+  const progItems = items(progs, k => shortProgram(k), k => toolColor(k));
   // arquivos sem nome próprio (só o programa), nomes iguais ao do programa e sites do Chrome já aparecem em "Programas e sites"
   const fileItems = [...files.values()].filter(f => f.doc && !f.app.toLowerCase().includes(f.doc.toLowerCase()) && !isChromeSite(f.app, f.doc))
     .sort((x, y) => y.ms - x.ms).map(f => ({ label: f.label, ms: f.ms, color: toolColor(f.app) }));

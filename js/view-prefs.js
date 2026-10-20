@@ -1,10 +1,10 @@
 /* =====================================================================
    PREFERÊNCIAS
    ===================================================================== */
-const PREF_TABS = [['appearance', 'Aparência', 'gear'], ['types', 'Tipos de trabalho', 'tag'], ['status', 'Status', 'spin'], ['reminders', 'Lembretes', 'bell'], ['timesheet', 'Time Sheet', 'clock'], ['data', 'Dados e backup', 'db'], ['integrations', 'Integrações', 'layers']];
+const PREF_TABS = [['appearance', 'Aparência', 'gear'], ['types', 'Tipos de trabalho', 'tag'], ['extypes', 'Tipos de despesa', 'layers'], ['status', 'Status', 'spin'], ['reminders', 'Lembretes', 'bell'], ['timesheet', 'Time Sheet', 'clock'], ['data', 'Dados e backup', 'db'], ['integrations', 'Integrações', 'layers']];
 VIEWS.prefs = () => {
-  const body = { appearance: prefAppearance, types: prefTypes, status: prefStatus, reminders: prefReminders, timesheet: prefTimesheet, data: prefData, integrations: prefIntegrations }[S.pref]();
-  return { title: 'Configurações', html: `<div class="row" style="justify-content:flex-end;margin-bottom:8px"><button class="btn sm" data-act="go" data-route="import">Importar do Notion</button></div><div class="pref-layout"><nav class="pref-nav">${PREF_TABS.map(([k, l, i]) => `<button class="nav-btn ${S.pref === k ? 'active' : ''}" data-act="pref-tab" data-v="${k}">${icon(i)}<span>${l}</span></button>`).join('')}</nav><div class="stack" style="min-width:0">${body}${logRetentionPanel()}</div></div>` };
+  const body = { appearance: prefAppearance, types: prefTypes, extypes: prefExTypes, status: prefStatus, reminders: prefReminders, timesheet: prefTimesheet, data: prefData, integrations: prefIntegrations }[S.pref]();
+  return { title: 'Configurações', html: `<div class="row" style="justify-content:flex-end;margin-bottom:8px"><button class="btn sm" data-act="go" data-route="import">Importar do Notion</button></div><div class="pref-layout"><nav class="pref-nav">${PREF_TABS.map(([k, l, i]) => `<button class="nav-btn ${S.pref === k ? 'active' : ''}" data-act="pref-tab" data-v="${k}">${icon(i)}<span>${l}</span></button>`).join('')}</nav><div class="stack" style="min-width:0">${body}${logRetentionPanel()}${programasPanel()}</div></div>` };
 };
 ACTIONS['pref-tab'] = (el) => { S.pref = el.dataset.v; render(); };
 
@@ -60,7 +60,7 @@ function prefTypes() {
     <button class="btn sm danger" data-act="wt-delete" data-id="${o.id}">Apagar</button>
     <button class="btn sm" data-act="wt-arch" data-id="${o.id}">Desarquivar</button>
   </div>`).join('')}</div></div>` : '';
-  return exTypesPanel() + `<div class="panel"><div class="panel-h"><h3>Tipos de trabalho</h3><span class="small muted">usados nas sessões, tarefas e relatórios</span></div><div class="panel-b">${wtRows(workTypes())}
+  return `<div class="panel"><div class="panel-h"><h3>Tipos de trabalho</h3><span class="small muted">usados nas sessões, tarefas e relatórios</span></div><div class="panel-b">${wtRows(workTypes())}
     <form class="row" style="margin:12px 0 0 244px" data-form="add-opt" data-kind="wt"><input class="input" style="max-width:300px" name="name" placeholder="Novo tipo de trabalho" aria-label="Novo tipo"><button class="btn primary">${icon('plus')} Adicionar</button></form></div></div>` + archPanel;
 }
 function prefStatus() {
@@ -232,9 +232,44 @@ ACTIONS['demo-load'] = async () => {
   seedDemo(); db.emit(); toast('Dados fictícios carregados');
 };
 
-function prefIntegrations() {
+function prefIntegrationsBase() {
   return `<div class="panel"><div class="panel-h"><h3>Gmail</h3><span class="tag c-gray">etapa futura</span></div><div class="panel-b stack small">
     <div>Vai ler e-mails recebidos e enviados (com sua autorização) e sugerir atualizações em cards com <b>Aprovar</b>, <b>Editar</b> ou <b>Ignorar</b>: pedido de orçamento, pedido de ajuste, entrega enviada, mudança de prazo, aprovação e pagamento.</div>
     <div class="muted">Nunca envia e-mails e nunca altera dados sem aprovação. Depende do banco online e da autorização do Google.</div></div></div>
   <div class="panel"><div class="panel-h"><h3>ChatGPT / assistente</h3><span class="tag c-gray">etapa futura</span></div><div class="panel-b small">Consultar tarefas do dia, prazos, atrasos e rentabilidade, e registrar atualizações com confirmação. Depende do banco online.</div></div><div class="panel"><div class="panel-h"><h3>Time Sheet automático</h3></div><div class="panel-b stack small"><label for="pause-apps">Apps que pausam a sessão (separados por vírgula)</label><input id="pause-apps" class="input" data-on="pause-apps" value="${esc((db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).join(', '))}" placeholder="WhatsApp, Telegram"><div class="muted">Se um desses apps ficar em primeiro plano por mais de 1 minuto com uma sessão rodando, o Tempo sugere pausar. Você decide.</div><label for="pause-sites">Sites que pausam (no navegador, pelo título da aba)</label><input id="pause-sites" class="input" data-on="pause-sites" value="${esc((db.setting('pauseSites', DEFAULT_PAUSE_SITES) || []).join(', '))}" placeholder="instagram, youtube"><div class="muted">Navegador (Chrome, Safari, Edge…) com a aba desses termos em primeiro plano vira pausa sugerida, igual aos apps acima.</div></div></div>`;
+}
+
+/* Configurações → Programas: nome, palavra que identifica o app e cor. Mudou aqui, muda em todas as telas. */
+function programasPanel() {
+  const list = programas();
+  const rows = list.map((p, i) => `<div class="row" style="gap:8px;flex-wrap:wrap">
+      <input class="input sm" value="${esc(p.name)}" data-on="prog-edit" data-i="${i}" data-f="name" style="width:180px" aria-label="Nome">
+      <input class="input sm" value="${esc(p.match)}" data-on="prog-edit" data-i="${i}" data-f="match" style="width:180px" placeholder="palavra no nome do app" aria-label="Identificador">
+      <input type="color" value="${esc(p.color)}" data-on="prog-edit" data-i="${i}" data-f="color" aria-label="Cor" style="width:40px;height:32px;padding:2px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface)">
+      <button class="btn sm ghost icon" data-act="prog-del" data-i="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('');
+  return `<div class="panel"><div class="panel-h"><h3>Programas</h3></div><div class="panel-b stack" style="gap:10px">
+    <span class="small muted">Nome que aparece nas telas, a palavra que identifica o programa no nome do app e a cor. Quem tiver a mesma palavra usa este cadastro.</span>
+    ${rows || '<span class="muted small">Nenhum programa cadastrado.</span>'}
+    <div class="row" style="gap:8px"><button class="btn sm" data-act="prog-add">${icon('plus')} Adicionar programa</button><button class="btn sm ghost" data-act="prog-reset">Restaurar padrões</button></div>
+  </div></div>`;
+}
+ACTIONS['prog-add'] = () => { db.setSetting('programas', [...programas(), { match: '', name: 'Novo programa', color: '#64748B' }]); render(); };
+ACTIONS['prog-del'] = (el) => { const l = programas().slice(); l.splice(Number(el.dataset.i), 1); db.setSetting('programas', l); render(); };
+ACTIONS['prog-reset'] = async () => { if (!await confirmBox({ title: 'Restaurar padrões?', body: 'Os programas voltam à lista original. As cores que você escolheu em grupos específicos continuam.', ok: 'Restaurar' })) return; db.setSetting('programas', null); render(); };
+CHANGES['prog-edit'] = (el) => { const l = programas().map(x => ({ ...x })); const i = Number(el.dataset.i); l[i][el.dataset.f] = el.value.trim() || (el.dataset.f === 'color' ? l[i].color : ''); db.setSetting('programas', l); render(); };
+
+/* Configurações → Tipos de despesa (separado dos tipos de trabalho). */
+function prefExTypes() { return exTypesPanel(); }
+
+/* Integrações e próximos passos: o que já está combinado e ainda não foi feito. */
+const PLANNED = [
+  ['Mac: confirmar se ainda está trabalhando', 'Perguntar a cada 1 h, 2 h ou 3 h se você ainda está trabalhando e registrar a pausa quando você confirmar. Nada muda sem a sua resposta.'],
+  ['Mac: início retroativo de sessão', 'Começar a sessão no horário em que o trabalho realmente começou, mesmo que você tenha apertado play depois.'],
+  ['Time Sheet: período em cada gráfico', 'Seletor Dia / Semana / 15 dias / Mês em cada gráfico de barras (semana, tipos de trabalho, pausas e programas), não só no relatório.'],
+  ['Versão para celular', 'Usar o Tempo no celular pelo navegador, com a mesma tela e os mesmos dados.'],
+  ['Notificações no celular', 'Avisos de sessão, pausa e prazo também no celular.'],
+];
+function prefIntegrations() {
+  const cards = PLANNED.map(([t, d]) => `<div class="panel"><div class="panel-h"><h3>${esc(t)}</h3><span class="tag c-gray">etapa futura</span></div><div class="panel-b small">${esc(d)}</div></div>`).join('');
+  return prefIntegrationsBase() + cards;
 }
