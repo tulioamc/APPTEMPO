@@ -288,7 +288,8 @@ function actMoveGroup(entryId, g, pick, ranges = null) {
 }
 
 /* Dica do bloco: cada grupo com o tempo de cada versão/arquivo. */
-const actTip = (g) => `${g.label}\n${g.items.map(i => `${i.doc || i.app}: ${fmtDur(i.ms)}`).join('\n')}${g.items.length > 1 ? `\nTotal ${fmtDur(g.ms)}` : ''}`;
+// 1ª linha = nome do grupo + tempo total (vira o título da dica); depois, um arquivo por linha
+const actTip = (g) => `${g.label} ${fmtDur(g.ms)}\n${g.items.map(i => `${i.doc || i.app}: ${fmtDur(i.ms)}`).join('\n')}`;
 
 /* Uma faixa só, com 100% da largura = todo o tempo da sessão. Cada trecho ocupa a parte proporcional ao seu tempo;
    o que não tem registro fica cinza. Os pausas saem da conta (a faixa mostra só o tempo trabalhado). */
@@ -373,7 +374,16 @@ function actStripHTML(e, A, mode = '') {
 
 const ACT_FV_MODES = ["file", "site", "both"];
 const ACT_FV_LBL = { file: "Arquivo", site: "Site", both: "Arquivo / site" };
-ACTIONS["act-fview"] = (el) => { db.setSetting("actFileView", el.dataset.v); db.emit(); };
+/* Arquivo e Site são dois botões liga/desliga; os dois ligados = "both" (padrão).
+   Não deixa desligar os dois: clicar no único ligado não faz nada. */
+const actFileView = () => { const v = db.setting('actFileView2', 'both'); return ACT_FV_MODES.includes(v) ? v : 'both'; };
+ACTIONS["act-fview"] = (el) => {
+  const on = { file: true, site: true }; const cur = actFileView();
+  if (cur !== 'both') { on.file = cur === 'file'; on.site = cur === 'site'; }
+  on[el.dataset.v] = !on[el.dataset.v];
+  if (!on.file && !on.site) return;
+  db.setSetting("actFileView2", on.file && on.site ? 'both' : on.file ? 'file' : 'site'); db.emit();
+};
 /* Itens que estão dentro do chip "Outros" (para o balãozinho do hover). */
 function actOthMembersAttr(A) {
   const m = A.groups.filter(x => x.parent === 'outros').map(x => ({ l: x.label, ms: x.ms, c: x.color }));
@@ -396,9 +406,9 @@ function actSectionHTML(e) {
   if (!actList(e.id).length) return '';
   const prog = actAnalyze(e.id, 'program');
   const sec = (title, mode, A) => `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div>${actStripHTML(e, A, mode)}${actChipsHTML(A, mode)}</div>`;
-  const fv = ACT_FV_MODES.includes(db.setting('actFileView', 'both')) ? db.setting('actFileView', 'both') : 'both';
+  const fv = actFileView();
   const file = actAnalyze(e.id, fv);
-  const fvBtns = ACT_FV_MODES.map(v => `<button class="btn sm ${v === fv ? 'primary' : ''}" data-act="act-fview" data-v="${v}">${ACT_FV_LBL[v]}</button>`).join('');
+  const fvBtns = ['file', 'site'].map(v => `<button class="btn sm ${fv === v || fv === 'both' ? 'primary' : ''}" data-act="act-fview" data-v="${v}" aria-pressed="${fv === v || fv === 'both'}">${ACT_FV_LBL[v]}</button>`).join('');
   const fileSec = `<div class="act-sec"><div class="row between"><span class="lbl">${ACT_FV_LBL[fv]}</span><span class="row" style="gap:4px">${fvBtns}</span></div>${actStripHTML(e, file, fv)}${actChipsHTML(file, fv)}</div>`;
   const toggle = actForaToggleHTML([e]);
   return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${sec('Por programa', 'program', prog)}${fileSec}<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div><span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;

@@ -527,7 +527,13 @@ let stripTip = null;
 document.addEventListener('mouseover', (e) => {
   const b = e.target.closest?.('.seg-b[data-tip]'); if (!b) return;
   if (!stripTip) { stripTip = document.createElement('div'); stripTip.className = 'strip-tip'; document.body.appendChild(stripTip); }
-  stripTip.textContent = b.dataset.tip; stripTip.style.display = 'block';
+  if (b.classList.contains('act-b')) {
+    // dica de atividade: título (app + total) maior e em negrito; nas linhas, o tempo em negrito
+    const [tit, ...linhas] = b.dataset.tip.split('\n');
+    const tempo = (l) => { const m = l.match(/^(.*): (\S[^:]*)$/); return m ? `${esc(m[1])}: <b>${esc(m[2])}</b>` : esc(l); };
+    stripTip.innerHTML = `<div class="tip-h">${esc(tit)}</div>${linhas.map(l => `<div>${tempo(l)}</div>`).join('')}`;
+  } else stripTip.textContent = b.dataset.tip;
+  stripTip.style.display = 'block';
 });
 document.addEventListener('mousemove', (e) => {
   if (!stripTip || stripTip.style.display !== 'block') return;
