@@ -707,10 +707,11 @@ function openOthersPanel(entryIds, mode, redraw) {
    os trechos do grupo acendem nas próprias cores e o resto da faixa esmaece. Vale para revisão e resumo. */
 function actHlPaint(root, tok, on) {
   root.querySelectorAll('.usage-sub').forEach(el => { el.style.background = on && el.dataset.par === tok ? el.dataset.tbc : ''; });
-  root.querySelectorAll('.seg-b.act-b[data-g], .seg-b.pausa, .usage-seg[data-g], .prod-seg[data-g]').forEach(el => {
+  root.querySelectorAll('.usage-subarc').forEach(el => el.setAttribute('stroke', on && el.dataset.par === tok ? el.dataset.tbc : '#CBD5E1'));
+  root.querySelectorAll('.seg-b.act-b[data-g], .seg-b.pausa, .usage-seg[data-g], .prod-seg[data-g], .usage-arc[data-g]').forEach(el => {
     const isOth = tok === 'outros' && el.dataset.par === 'outros';
     const isPk = tok.startsWith('pk:') && el.dataset.pk === tok.slice(3);
-    const isG = (el.classList.contains('usage-seg') || el.classList.contains('prod-seg')) && el.dataset.g === tok;
+    const isG = (el.classList.contains('usage-seg') || el.classList.contains('prod-seg') || el.classList.contains('usage-arc')) && el.dataset.g === tok;
     if (!on) { el.classList.remove('act-dim', 'act-hl'); if (el.dataset.tbc) el.style.setProperty('--tb', '#94A3B8'); return; }
     if (isOth || isPk || isG) { el.classList.add('act-hl'); el.classList.remove('act-dim'); if (isOth && el.dataset.tbc) el.style.setProperty('--tb', el.dataset.tbc); }
     else el.classList.add('act-dim');
@@ -718,7 +719,7 @@ function actHlPaint(root, tok, on) {
 }
 function actHlRoot(chip) {
   let n = chip;
-  while (n && n.parentElement && !n.querySelector('.seg-b.act-b[data-g], .seg-b.pausa, .usage-seg[data-g], .prod-seg[data-g]')) n = n.parentElement;
+  while (n && n.parentElement && !n.querySelector('.seg-b.act-b[data-g], .seg-b.pausa, .usage-seg[data-g], .prod-seg[data-g], .usage-arc[data-g]')) n = n.parentElement;
   return n || chip.parentElement;
 }
 document.addEventListener('mouseover', (e) => {
@@ -728,4 +729,52 @@ document.addEventListener('mouseover', (e) => {
 document.addEventListener('mouseout', (e) => {
   const c = e.target.closest?.('[data-hl]'); if (!c || (e.relatedTarget && c.contains(e.relatedTarget))) return;
   actHlPaint(actHlRoot(c), c.dataset.hl, false);
+});
+
+/* Padrão de gráficos: itens e chips com data-hk dentro de um [data-hkroot]. Passar o mouse acende o item de mesma
+   chave (no gráfico e na legenda) e esmaece o resto. Shift + clique seleciona mais de um (como na timesheet): os
+   escolhidos acendem, o resto esmaece e aparece a soma deles. Clique simples sem Shift limpa a seleção. */
+const HK_PICKS = new WeakMap();
+const HK_FMT = { dur: (v) => fmtDur(v), h: (v) => fmtH(v), money: (v) => fmtMoney0(v) };
+const hkPicksOf = (root) => HK_PICKS.get(root) || new Set();
+/* "Demais" (subs) e as fatias de rosca do Demais ganham a cor do programa agrupado quando a chave ativa é o Demais. */
+function hkColorSubs(root, keys) {
+  root.querySelectorAll('.usage-sub').forEach(el => { el.style.background = keys.has(el.dataset.par) ? el.dataset.tbc : ''; });
+  root.querySelectorAll('.usage-subarc').forEach(el => el.setAttribute('stroke', keys.has(el.dataset.par) ? el.dataset.tbc : '#CBD5E1'));
+}
+function hkPaint(root, key, on) {
+  if (hkPicksOf(root).size) return; /* com seleção, o hover não mexe */
+  root.querySelectorAll('[data-hk]').forEach(el => { el.classList.toggle('hk-dim', on && el.dataset.hk !== key); el.classList.toggle('hk-hl', on && el.dataset.hk === key); });
+  hkColorSubs(root, new Set(on ? [key] : []));
+}
+function hkRender(root) {
+  const picks = hkPicksOf(root);
+  root.querySelectorAll('[data-hk]').forEach(el => {
+    const sel = picks.has(el.dataset.hk);
+    el.classList.toggle('hk-pick', picks.size > 0 && sel);
+    el.classList.toggle('hk-dim', picks.size > 0 && !sel);
+    el.classList.remove('hk-hl');
+  });
+  hkColorSubs(root, picks);
+  root.querySelectorAll(':scope > .hk-sum').forEach(x => x.remove());
+  if (!picks.size) return;
+  const seen = new Set(); let sum = 0, n = 0;
+  root.querySelectorAll('[data-hkv][data-hk]').forEach(el => { if (picks.has(el.dataset.hk) && !seen.has(el.dataset.hk)) { seen.add(el.dataset.hk); sum += Number(el.dataset.hkv) || 0; n++; } });
+  const tot = Number(root.dataset.hktot) || 0; const fmt = HK_FMT[root.dataset.hkfmt];
+  const pct = (tot > 0 ? sum / tot * 100 : 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
+  const div = document.createElement('div'); div.className = 'hk-sum small';
+  div.textContent = `${n} selecionado(s) · ${pct}${fmt ? ' · ' + fmt(sum) : ''}`;
+  root.appendChild(div);
+}
+document.addEventListener('mouseover', (e) => { const c = e.target.closest?.('[data-hk]'); const root = c?.closest('[data-hkroot]'); if (c && root) hkPaint(root, c.dataset.hk, true); });
+document.addEventListener('mouseout', (e) => { const c = e.target.closest?.('[data-hk]'); const root = c?.closest('[data-hkroot]'); if (c && root && !(e.relatedTarget && c.contains(e.relatedTarget))) hkPaint(root, c.dataset.hk, false); });
+/* Só o Shift mexe na seleção. O clique simples segue a função que cada gráfico já tem. */
+document.addEventListener('click', (e) => {
+  if (!e.shiftKey) return;
+  const c = e.target.closest?.('[data-hk]'); const root = c?.closest('[data-hkroot]');
+  if (!c || !root) return;
+  e.preventDefault();
+  const set = new Set(hkPicksOf(root));
+  if (set.has(c.dataset.hk)) set.delete(c.dataset.hk); else set.add(c.dataset.hk);
+  HK_PICKS.set(root, set); hkRender(root);
 });

@@ -132,9 +132,10 @@ function reportPanelHTML(day) {
     let body = '<div class="muted small">Nada neste período.</div>';
     if (list.length) {
       const max = Math.max(1, ...list.map(i => i.ms));
-      const rowOf = (i) => `<div class="bar-row"><span class="lab">${esc(i.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${(i.ms / max * 100).toFixed(1)}%;background:${i.color || 'var(--accent)'}"></div></div><span class="val">${fmtDur(i.ms)}</span></div>`;
-      const head = list.slice(0, 8).map(rowOf).join(''), more = list.slice(8).map(rowOf).join('');
-      body = `<div class="bars">${head}</div>${more ? `<details class="rep-more"><summary class="small muted" style="cursor:pointer;padding:4px 0">+${list.length - 8} outros (clique para ver todos)</summary><div class="bars" style="margin-top:6px">${more}</div></details>` : ''}`;
+      const toItem = (i) => ({ key: i.label, label: i.label, v: i.ms, color: i.color });
+      const head = stdBarsHTML(list.slice(0, 8).map(toItem), fmtDur, total);
+      const more = list.length > 8 ? stdBarsHTML(list.slice(8).map(toItem), fmtDur, total) : '';
+      body = `${head}${more ? `<details class="rep-more"><summary class="small muted" style="cursor:pointer;padding:4px 0">+${list.length - 8} outros (clique para ver todos)</summary><div style="margin-top:6px">${more}</div></details>` : ''}`;
     }
     return `<details class="rep-det" style="border-top:1px solid var(--line);padding-top:8px">
       <summary style="cursor:pointer;font-weight:600"><span class="lbl" style="display:inline">${title}</span> <span class="mono small muted">${list.length ? fmtDur(total) : ''}</span></summary>

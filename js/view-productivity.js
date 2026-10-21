@@ -108,12 +108,34 @@ function prodStats(C) {
   };
 }
 /* Colunas empilhadas: cada item tem partes [{cls, ms}]; a altura é proporcional ao maior total. */
+/* Tempo curto (ex.: 1h05, 40m) para escrever dentro das colunas. */
+function prodShort(ms) {
+  const m = Math.round(ms / 6e4);
+  if (m <= 0) return '0m';
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60), r = m % 60;
+  return h + 'h' + (r ? String(r).padStart(2, '0') : '');
+}
+/* Rótulo da coluna: produtivo em tempo e % do tempo no computador (produtivo + distração + ocioso). */
+function prodVal(prod, dist, ocio) {
+  const b = prod + dist + ocio;
+  return `${prodShort(prod)}<br>${Math.round(b > 0 ? prod / b * 100 : 0)}%`;
+}
 function prodColsHTML(items) {
   const max = Math.max(1, ...items.map(i => i.parts.reduce((s, p) => s + p.ms, 0)));
-  return `<div class="prod-cols">${items.map(i => `<div class="prod-col" title="${esc(i.tip)}"><div class="prod-stack">${i.parts.filter(p => p.ms > 0).map(p => `<span class="prod-seg ${PROD_CLS[p.cls]}" data-g="${p.cls}" style="height:${(p.ms / max * 100).toFixed(2)}%"></span>`).join('')}</div><span class="prod-lbl">${esc(i.label)}</span></div>`).join('')}</div>`;
+  /* Empilhamento de baixo para cima: produtivo, ocioso, distração, descanso (a ordem do DOM vai de cima para baixo). */
+  const ORDER = ['descanso', 'ocio', 'dist', 'prod'];
+  return `<div class="prod-cols">${items.map(i => {
+    const by = Object.fromEntries(i.parts.map(p => [p.cls, p.ms]));
+    const tot = PROD_KEYS.reduce((s, k) => s + (by[k] || 0), 0);
+    const segs = ORDER.filter(k => (by[k] || 0) > 0).map(k => `<span class="prod-seg ${PROD_CLS[k]}" data-hk="${k}" style="height:${((by[k] || 0) / max * 100).toFixed(2)}%"></span>`).join('');
+    const rows = PROD_KEYS.map(k => `<div class="prod-tip-row"><i style="background:${PROD_COLOR[k]}"></i>${PROD_NAME[k]}<b class="mono">${usePctTxt(tot > 0 ? (by[k] || 0) / tot * 100 : 0)}</b><span class="mono muted">${fmtDur(by[k] || 0)}</span></div>`).join('');
+    return `<div class="prod-col">${i.val ? `<span class="prod-val">${i.val}</span>` : ''}<div class="prod-stack">${segs}</div><span class="prod-lbl">${esc(i.label)}</span><div class="prod-tip"><div class="prod-tip-h">${esc(i.head || i.label || '')}</div>${rows}</div></div>`;
+  }).join('')}</div>`;
 }
 /* Legenda em chips (como na timesheet): passar o mouse acende os segmentos dessa cor e esmaece o resto.
    Com "items", cada chip mostra a % do período e o total; "pctOnly" mostra só a % (médias por dia). */
+function prodTotal(items) { return items.reduce((s, i) => s + i.parts.reduce((t, p) => t + p.ms, 0), 0); }
 function prodLegendHTML(keys, items = null, pctOnly = false) {
   const sum = {};
   if (items) items.forEach(i => i.parts.forEach(p => { sum[p.cls] = (sum[p.cls] || 0) + p.ms; }));
@@ -123,7 +145,7 @@ function prodLegendHTML(keys, items = null, pctOnly = false) {
     const pct = all > 0 ? (sum[k] || 0) / all * 100 : 0;
     return ` <span class="faint">${usePctTxt(pct)}${pctOnly ? '' : ` · ${fmtDur(sum[k] || 0)}`}</span>`;
   };
-  return `<div class="act-chips prod-legend">${keys.map(k => `<span class="act-chip" data-hl="${k}" style="--tb:${PROD_COLOR[k]}"><i></i>${PROD_NAME[k]}${tag(k)}</span>`).join('')}</div>`;
+  return `<div class="act-chips prod-legend">${keys.map(k => `<span class="act-chip" data-hk="${k}" data-hkv="${items ? (sum[k] || 0) : 0}" style="--tb:${PROD_COLOR[k]}"><i></i>${PROD_NAME[k]}${tag(k)}</span>`).join('')}</div>`;
 }
 function prodWeeks(C) {
   const weekKey = (t) => { const d = new Date(t); const off = (d.getDay() + 6) % 7; return new Date(d.getFullYear(), d.getMonth(), d.getDate() - off).getTime(); };
@@ -153,17 +175,21 @@ VIEWS.productivity = () => {
   const C = prodCollect();
   const S = prodStats(C);
   const hasData = C.union.length > 0 || C.pauses.length > 0;
+  /* Nas horas, escreve o rótulo só nas 6 com mais produtivo, para não embolar. */
+  const topHours = new Set(S.hours.map((h, i) => [h.prod, i]).filter(x => x[0] > 0).sort((a, b) => b[0] - a[0]).slice(0, 6).map(x => x[1]));
   const hourItems = S.hours.map((h, i) => ({
     label: i % 3 === 0 ? String(i).padStart(2, '0') : '',
+    val: topHours.has(i) ? prodVal(h.prod, h.dist, h.ocio) : '',
     parts: PROD_KEYS.map(k => ({ cls: k, ms: h[k] })),
-    tip: `${String(i).padStart(2, '0')}h · produtivo ${fmtDur(h.prod)} · distração ${fmtDur(h.dist)} · ocioso ${fmtDur(h.ocio)} · descanso ${fmtDur(h.descanso)}`,
+    head: `${String(i).padStart(2, '0')}h`,
   }));
   const dowItems = PROD_DOW.map(di => {
     const r = S.dows[di]; const n = Math.max(1, S.dowDays[di]);
     return {
       label: PROD_DOW_LBL[di],
+      val: prodVal(r.prod / n, r.dist / n, r.ocio / n),
       parts: PROD_KEYS.map(k => ({ cls: k, ms: r[k] / n })),
-      tip: `${PROD_DOW_LBL[di]} · média por dia: produtivo ${fmtDur(r.prod / n)} · distração ${fmtDur(r.dist / n)} · ocioso ${fmtDur(r.ocio / n)} · descanso ${fmtDur(r.descanso / n)} (${S.dowDays[di]} dia(s) no período)`,
+      head: `${PROD_DOW_LBL[di]} · média por dia`,
     };
   });
   const weeks = prodWeeks(C);
@@ -172,8 +198,9 @@ VIEWS.productivity = () => {
     const d = new Date(k);
     return {
       label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      val: weeks.length <= 12 ? prodVal(r.prod, r.dist, r.ocio) : '',
       parts: PROD_KEYS.map(kk => ({ cls: kk, ms: r[kk] })),
-      tip: `Semana de ${d.toLocaleDateString('pt-BR')} · produtivo ${fmtDur(r.prod)} · ${usePctTxt(weekPct(r))} do tempo no computador`,
+      head: `Semana de ${d.toLocaleDateString('pt-BR')}`,
     };
   });
   const weekRows = weeks.slice(-8).reverse().map(([k, r]) =>
@@ -192,12 +219,12 @@ VIEWS.productivity = () => {
       </div>
 
       <section class="card stack" style="gap:10px;margin-top:14px"><h3>Por hora do dia</h3>
-        ${prodColsHTML(hourItems)}${prodLegendHTML(PROD_KEYS, hourItems)}
+        <div data-hkroot data-hktot="${prodTotal(hourItems)}" data-hkfmt="dur">${prodColsHTML(hourItems)}${prodLegendHTML(PROD_KEYS, hourItems)}</div>
         <div class="small muted">Soma de todo o período em cada hora.</div>
       </section>
 
       <section class="card stack" style="gap:10px;margin-top:14px"><h3>Por dia da semana</h3>
-        ${prodColsHTML(dowItems)}${prodLegendHTML(PROD_KEYS, dowItems, true)}
+        <div data-hkroot data-hktot="${prodTotal(dowItems)}" data-hkfmt="dur">${prodColsHTML(dowItems)}${prodLegendHTML(PROD_KEYS, dowItems, true)}</div>
         <div class="small muted">Média por dia: o total de cada dia da semana dividido pelos dias que ele aparece no período.</div>
       </section>
 
@@ -213,7 +240,7 @@ VIEWS.productivity = () => {
       </section>
 
       <section class="card stack" style="gap:10px;margin-top:14px"><h3>Tendência semanal</h3>
-        ${weekItems.length ? `${prodColsHTML(weekItems)}${prodLegendHTML(PROD_KEYS, weekItems)}
+        ${weekItems.length ? `<div data-hkroot data-hktot="${prodTotal(weekItems)}" data-hkfmt="dur">${prodColsHTML(weekItems)}${prodLegendHTML(PROD_KEYS, weekItems)}</div>
         <div class="usage-table-wrap"><table class="usage-table">
           <thead><tr><th>Semana (segunda)</th><th>Produtivo</th><th>Distração</th><th>Ocioso</th><th>Descanso</th><th>% produtivo</th></tr></thead>
           <tbody>${weekRows}</tbody></table></div>` : '<div class="muted small">Sem semanas no período.</div>'}

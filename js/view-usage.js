@@ -1,7 +1,8 @@
 /* Uso de programas, arquivos e sites: % do tempo de trabalho em cada um, por geral, projeto, tarefa ou agência.
-   Tudo numa barra só (ou em rosca), com os menores agrupados em "Demais". Abas: programas, arquivos, sites,
-   meses (comparação mês a mês, com a variação em pontos percentuais) e clientes por programa (base para assinatura). */
-const USE = { scope: 'geral', scopeId: '', period: '30d', months: 6, pauses: false, tab: 'programas', chart: 'barra', prog: '', showAll: {}, cmp: { programas: [], arquivos: [], sites: [] }, cmpOpen: {} };
+   Tudo numa barra só (ou em rosca), com os menores agrupados em "Demais" (que abre em cores ao passar o mouse).
+   Chips da legenda acendem o trecho correspondente no gráfico. Abas: programas, arquivos, sites, meses
+   (comparação mês a mês, programas ou sites, com a variação em pontos percentuais) e clientes por programa. */
+const USE = { scope: 'geral', scopeId: '', period: '30d', months: 6, monthKind: 'programas', pauses: false, tab: 'programas', chart: 'barra', prog: '', showAll: {}, cmp: { programas: [], arquivos: [], sites: [] }, cmpOpen: {} };
 const USE_TOP = { programas: 10, arquivos: 20, sites: 20 };
 const USE_BROWSER = /chrome|safari|firefox|edge|brave|arc|opera|vivaldi/i;
 
@@ -27,11 +28,6 @@ function usageMonth(k) {
 }
 const usePct = (ms, base) => (base > 0 ? (ms / base * 100) : 0);
 const usePctTxt = (p) => p.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
-/* Domínio do endereço gravado na aba do navegador (ex.: drive.google.com). */
-function usageDomain(doc) {
-  const m = String(doc || '').match(/(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?=[\/:?#\s]|$)/i);
-  return m ? m[1].toLowerCase().replace(/^www\./, '') : null;
-}
 
 /* Registros das sessões do escopo, cortados no intervalo, e os totais (programa, arquivo, site, pausa e base). */
 function usageDataRange(a, b, ents) {
@@ -64,39 +60,59 @@ function usageDataRange(a, b, ents) {
 }
 function usageData() { const { a, b } = usagePeriod(); return usageDataRange(a, b, usageEntries()); }
 
-/* Fatias: os maiores (até "top") e o resto agrupado em "Demais". */
+/* Fatias: os maiores (até "top") e o resto agrupado em "Demais" (com as partes guardadas em "subs"). */
 function usageSegs(groups, top) {
   const shown = groups.slice(0, top); const rest = groups.slice(top);
   const segs = shown.map(g => ({ id: g.id, label: g.label || g.id, ms: g.ms, color: g.color || palColor(g.label || g.id) }));
   const restMs = rest.reduce((s, g) => s + g.ms, 0);
-  if (restMs > 0) segs.push({ id: '_rest', label: `Demais (${rest.length})`, ms: restMs, color: '#CBD5E1', tip: rest.map(g => `${g.label || g.id} · ${fmtDur(g.ms)}`).join('\n'), subs: rest.map(g => ({ id: g.id, label: g.label || g.id, ms: g.ms, color: g.color || palColor(g.label || g.id) })) });
+  if (restMs > 0) segs.push({
+    id: '_rest', label: `Demais (${rest.length})`, ms: restMs, color: '#CBD5E1',
+    tip: rest.map(g => `${g.label || g.id} · ${fmtDur(g.ms)}`).join('\n'),
+    subs: rest.map(g => ({ id: g.id, label: g.label || g.id, ms: g.ms, color: g.color || palColor(g.label || g.id) })),
+  });
   return segs;
 }
-/* Barra única: cada fatia tem a sua largura em %. O que sobra da base (pausas, se contadas) fica listrado. */
+/* Barra única: cada fatia tem a sua largura em %, com o nome e a % (e o tempo, nas maiores).
+   "Demais" é cinza e, ao passar o mouse, cada programa agrupado aparece na sua cor. */
 function usageBarHTML(segs, base, h = 34) {
   const tot = segs.reduce((s, x) => s + x.ms, 0);
   const scale = base > 0 ? base : Math.max(tot, 1);
   const parts = segs.map(s => {
     const p = usePct(s.ms, scale);
-    /* "Demais" funciona como "Outros": cinza, e ao passar o mouse cada programa agrupado aparece na sua cor. */
-    if (s.subs) return `<span class="usage-seg usage-rest" data-g="${esc(s.id)}" style="width:${p.toFixed(2)}%" title="${esc(s.tip || '')}">${s.subs.map(x => `<i class="usage-sub" data-par="${esc(s.id)}" data-tbc="${esc(x.color)}" style="flex:${x.ms} 1 0" title="${esc(`${x.label} · ${fmtDur(x.ms)}`)}"></i>`).join('')}</span>`;
-    if (s.id === '_pausas') return `<span class="usage-seg usage-pausa" data-g="_pausas" style="width:${p.toFixed(2)}%" title="${esc(`Pausas · ${usePctTxt(p)} · ${fmtDur(s.ms)}`)}">${p >= 9 ? `<b>Pausas</b>${usePctTxt(p)}` : ''}</span>`;
-    return `<span class="usage-seg" data-g="${esc(s.id)}" style="width:${p.toFixed(2)}%;background:${esc(s.color)}" title="${esc(s.tip || `${s.label} · ${usePctTxt(p)} · ${fmtDur(s.ms)}`)}">${p >= 9 ? `<b>${esc(s.label)}</b>${usePctTxt(p)}` : ''}</span>`;
+    const tip = esc(s.tip || `${s.label} · ${usePctTxt(p)} · ${fmtDur(s.ms)}`);
+    const lbl = p >= 9 ? `<b>${esc(s.label)}</b>${usePctTxt(p)}${p >= 22 ? ` · ${fmtDur(s.ms)}` : ''}` : '';
+    if (s.subs) return `<span class="usage-seg usage-rest" data-hk="${esc(s.id)}" style="width:${p.toFixed(2)}%" title="${tip}">${s.subs.map(x => `<i class="usage-sub" data-par="${esc(s.id)}" data-tbc="${esc(x.color)}" style="flex:${x.ms} 1 0" title="${esc(`${x.label} · ${fmtDur(x.ms)}`)}"></i>`).join('')}</span>`;
+    if (s.id === '_pausas') return `<span class="usage-seg usage-pausa" data-hk="_pausas" style="width:${p.toFixed(2)}%" title="${tip}">${lbl}</span>`;
+    return `<span class="usage-seg" data-hk="${esc(s.id)}" style="width:${p.toFixed(2)}%;background:${esc(s.color)}" title="${tip}">${lbl}</span>`;
   }).join('');
   const rem = scale - tot;
-  return `<div class="usage-stack" style="height:${h}px">${parts}${rem > 0 ? `<span class="usage-seg usage-rem" style="width:${usePct(rem, scale).toFixed(2)}%" title="Pausas (fora do trabalho)"></span>` : ''}</div>`;
+  return `<div class="usage-stack" style="height:${h}px">${parts}${rem > 0 ? `<span class="usage-seg usage-rem" style="width:${usePct(rem, scale).toFixed(2)}%" title="Fora da base"></span>` : ''}</div>`;
 }
-/* Rosca: mesmas fatias, em formato de rosca com o total da base no centro. */
+/* Rosca em SVG: cada fatia é um arco com data-g, para o hover dos chips funcionar igual à barra. */
 function usageDonutHTML(segs, base) {
-  const scale = Math.max(base, 1); let acc = 0; const stops = [];
-  segs.forEach(s => { const a0 = acc, a1 = acc + usePct(s.ms, scale); stops.push(`${s.color} ${a0.toFixed(2)}% ${a1.toFixed(2)}%`); acc = a1; });
-  if (acc < 100) stops.push(`#E5E7EB ${acc.toFixed(2)}% 100%`);
-  return `<div class="usage-donut" style="background:conic-gradient(${stops.join(',') || '#E5E7EB 0% 100%'})"><div class="usage-donut-hole"><span class="mono small">${fmtDur(base)}</span><span class="small muted">base</span></div></div>`;
+  const scale = Math.max(base, 1); let acc = 0; const arcs = [];
+  const arc = (p, color, extra, title = '') => `<circle class="usage-arc${extra.includes('data-sub') ? ' usage-subarc' : ''}" ${extra}cx="21" cy="21" r="15.9155" fill="none" stroke="${esc(color)}" stroke-width="6" stroke-dasharray="${p.toFixed(3)} ${(100 - p).toFixed(3)}" stroke-dashoffset="${(25 - acc).toFixed(3)}">${title ? `<title>${esc(title)}</title>` : ''}</circle>`;
+  segs.forEach(s => {
+    if (s.subs) {
+      s.subs.forEach(x => {
+        const p = usePct(x.ms, scale); if (p <= 0) return;
+        arcs.push(arc(p, '#CBD5E1', `data-hk="_rest" data-par="_rest" data-tbc="${esc(x.color)}" data-sub="1"`, `${x.label} · ${usePctTxt(p)} · ${fmtDur(x.ms)}`));
+        acc += p;
+      });
+      return;
+    }
+    const p = usePct(s.ms, scale); if (p <= 0) return;
+    arcs.push(arc(p, s.color, `data-hk="${esc(s.id)}"`, `${s.label} · ${usePctTxt(p)} · ${fmtDur(s.ms)}`));
+    acc += p;
+  });
+  const restP = Math.max(0, 100 - acc);
+  if (restP > 0.01) arcs.push(`<circle cx="21" cy="21" r="15.9155" fill="none" stroke="#E5E7EB" stroke-width="6" stroke-dasharray="${restP.toFixed(3)} ${(100 - restP).toFixed(3)}" stroke-dashoffset="${(25 - acc).toFixed(3)}"></circle>`);
+  return `<div class="usage-donut"><svg viewBox="0 0 42 42" class="usage-donut-svg" aria-hidden="true">${arcs.join('')}</svg><div class="usage-donut-hole"><span class="mono small">${fmtDur(base)}</span><span class="small muted">base</span></div></div>`;
 }
+/* Legenda em chips (como na timesheet): passar o mouse acende o trecho correspondente no gráfico. */
 function usageLegendHTML(segs, base) {
   const scale = Math.max(base, 1);
-  /* Chips da timesheet: ao passar o mouse, o trecho correspondente acende na barra e o resto esmaece. */
-  return `<div class="act-chips usage-legend">${segs.map(s => `<span class="act-chip" data-hl="${esc(s.id)}" style="--tb:${esc(s.color)}" title="${esc(s.tip || s.label)}"><i></i>${esc(s.label)} <span class="faint">${usePctTxt(usePct(s.ms, scale))} · ${fmtDur(s.ms)}</span></span>`).join('')}</div>`;
+  return `<div class="act-chips usage-legend">${segs.map(s => `<span class="act-chip" data-hk="${esc(s.id)}" data-hkv="${s.ms}" style="--tb:${esc(s.color)}" title="${esc(s.tip || s.label)}"><i></i>${esc(s.label)} <span class="faint">${usePctTxt(usePct(s.ms, scale))} · ${fmtDur(s.ms)}</span></span>`).join('')}</div>`;
 }
 function usageChartHTML(kind, groups, base, pauseMs = 0) {
   const top = USE.showAll[kind] ? groups.length : USE_TOP[kind];
@@ -108,7 +124,7 @@ function usageChartHTML(kind, groups, base, pauseMs = 0) {
   const chart = USE.chart === 'rosca'
     ? `<div class="usage-donut-row">${usageDonutHTML(segs, base)}${usageLegendHTML(segs, base)}</div>`
     : `${usageBarHTML(segs, base)}${usageLegendHTML(segs, base)}`;
-  return `${toggle}<div style="margin-top:10px">${chart}</div>`;
+  return `${toggle}<div data-hkroot data-hktot="${base}" data-hkfmt="dur" style="margin-top:10px">${chart}</div>`;
 }
 /* Comparar: marque os que quer e eles viram uma barra só, com a mesma base de %. */
 function usageCompareHTML(kind, groups, base) {
@@ -117,7 +133,7 @@ function usageCompareHTML(kind, groups, base) {
   const checks = groups.map(g => `<label class="row small usage-check"><input type="checkbox" data-on="usage-cmp" data-t="${kind}" data-id="${esc(g.id)}" ${USE.cmp[kind].includes(g.id) ? 'checked' : ''}> ${esc(g.label || g.id)} <span class="mono muted">${usePctTxt(usePct(g.ms, base))}</span></label>`).join('');
   const segs = usageSegs(sel, sel.length);
   return `<div class="row" style="gap:8px;margin-top:12px"><button class="btn sm ghost" data-act="usage-cmp-open" data-t="${kind}">${cmpOpen ? 'Fechar comparação' : 'Comparar…'}</button></div>
-    ${cmpOpen ? `<div class="usage-cmp stack" style="gap:8px;margin-top:10px">
+    ${cmpOpen ? `<div class="usage-cmp stack" data-hkroot data-hktot="${base}" data-hkfmt="dur" style="gap:8px;margin-top:10px">
       <span class="small muted">Marque os que quer comparar. Abaixo, só os marcados, com a mesma base de %.</span>
       <div class="usage-checks">${checks}</div>
       ${sel.length ? `${usageBarHTML(segs, base)}${usageLegendHTML(segs, base)}` : ''}
@@ -141,33 +157,59 @@ function usageClientsHTML(d) {
   return `<div class="row" style="gap:8px;flex-wrap:wrap"><span class="small muted">Programa</span>
       <select class="input sm" data-on="usage-prog" aria-label="Programa">${opts}</select></div>
     <div class="small muted" style="margin-top:8px">${esc(g.label || g.id)} · ${fmtDur(g.ms)} no período · ${usePctTxt(usePct(g.ms, d.base))} da base</div>
-    <div style="margin-top:10px">${usageBarHTML(segs, g.ms, 28)}${usageLegendHTML(segs, g.ms)}</div>
+    <div data-hkroot data-hktot="${g.ms}" data-hkfmt="dur" style="margin-top:10px">${usageBarHTML(segs, g.ms, 28)}${usageLegendHTML(segs, g.ms)}</div>
     <div class="small muted" style="margin-top:8px">% dentro do programa escolhido. Para a assinatura, use esta aba com o período que você pagou.</div>`;
 }
 
-/* Meses: a parte de cada programa em cada mês e quanto mudou no último mês contra o anterior (pontos percentuais). */
+/* Meses: programas ou sites em cada mês, com as mesmas cores e chips em todos os meses,
+   e a variação do último mês contra o anterior (pontos percentuais). */
 function usageMonthsHTML() {
   const n = USE.months || 6;
   const months = [];
   for (let k = n - 1; k >= 0; k--) { const m = usageMonth(k); months.push({ ...m, data: usageDataRange(m.a, m.b, usageEntries()) }); }
+  const groupsOf = (m) => (USE.monthKind === 'sites' ? m.data.sites : m.data.prog.groups);
   const tot = new Map();
-  months.forEach(m => m.data.prog.groups.forEach(g => tot.set(g.id, { id: g.id, label: g.label || g.id, ms: (tot.get(g.id)?.ms || 0) + g.ms })));
-  const top = [...tot.values()].sort((x, y) => y.ms - x.ms).slice(0, 8);
-  const bars = months.map(m => `<div class="usage-month"><span class="small muted usage-month-lbl">${esc(m.label)}</span>${m.data.base > 0 ? usageBarHTML(usageSegs(m.data.prog.groups, 5), m.data.base, 22) : '<span class="small muted">sem registro</span>'}</div>`).join('');
-  const rows = top.map(t => {
-    const pcts = months.map(m => { const g = m.data.prog.groups.find(x => x.id === t.id); return g ? usePct(g.ms, m.data.base) : 0; });
+  months.forEach(m => groupsOf(m).forEach(g => {
+    const c = tot.get(g.id) || { id: g.id, label: g.label || g.id, ms: 0, color: g.color || palColor(g.label || g.id) };
+    c.ms += g.ms; tot.set(g.id, c);
+  }));
+  const ranked = [...tot.values()].sort((x, y) => y.ms - x.ms);
+  const topN = ranked.slice(0, 8);
+  const topIds = new Set(topN.map(t => t.id));
+  const restAll = ranked.filter(t => !topIds.has(t.id));
+  const pausaTot = USE.pauses ? months.reduce((s, m) => s + m.data.pauseMs, 0) : 0;
+  const base = months.reduce((s, m) => s + m.data.base, 0);
+  const segsFor = (m) => {
+    const map = new Map(groupsOf(m).map(g => [g.id, g]));
+    const segs = topN.map(t => ({ id: t.id, label: t.label, ms: map.get(t.id)?.ms || 0, color: t.color })).filter(s => s.ms > 0);
+    const rest = groupsOf(m).filter(g => !topIds.has(g.id)).map(g => ({ id: g.id, label: g.label || g.id, ms: g.ms, color: g.color || palColor(g.label || g.id) }));
+    const restMs = rest.reduce((s, g) => s + g.ms, 0);
+    if (restMs > 0) segs.push({ id: '_rest', label: `Demais (${rest.length})`, ms: restMs, color: '#CBD5E1', subs: rest });
+    if (USE.pauses && m.data.pauseMs > 0) segs.push({ id: '_pausas', label: 'Pausas', ms: m.data.pauseMs, color: '#94A3B8' });
+    return segs;
+  };
+  const legendSegs = topN.map(t => ({ id: t.id, label: t.label, ms: t.ms, color: t.color }));
+  if (restAll.length) legendSegs.push({ id: '_rest', label: `Demais (${restAll.length})`, ms: restAll.reduce((s, t) => s + t.ms, 0), color: '#CBD5E1', tip: restAll.map(t => `${t.label} · ${fmtDur(t.ms)}`).join('\n') });
+  if (pausaTot > 0) legendSegs.push({ id: '_pausas', label: 'Pausas', ms: pausaTot, color: '#94A3B8' });
+
+  const bars = months.map(m => `<div class="usage-month"><span class="small muted usage-month-lbl">${esc(m.label)}</span>${m.data.base > 0 ? usageBarHTML(segsFor(m), m.data.base, 22) : '<span class="small muted">sem registro</span>'}</div>`).join('');
+  const rows = topN.map(t => {
+    const pcts = months.map(m => { const g = groupsOf(m).find(x => x.id === t.id); return g ? usePct(g.ms, m.data.base) : 0; });
     const delta = pcts[pcts.length - 1] - (pcts.length > 1 ? pcts[pcts.length - 2] : 0);
     const cls = delta > 0.05 ? 'usage-up' : delta < -0.05 ? 'usage-down' : '';
     return `<tr><td>${esc(t.label)}</td>${pcts.map(p => `<td class="mono small">${usePctTxt(p)}</td>`).join('')}<td class="mono small ${cls}">${delta > 0 ? '+' : ''}${delta.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pp</td></tr>`;
   }).join('');
+  const itemLbl = USE.monthKind === 'sites' ? 'Site' : 'Programa';
   return `<div class="row" style="gap:8px;flex-wrap:wrap"><span class="small muted">Meses</span>
-      <select class="input sm" data-on="usage-months" aria-label="Meses">${[3, 6, 12].map(x => `<option value="${x}" ${x === n ? 'selected' : ''}>${x} meses</option>`).join('')}</select></div>
-    <div class="stack" style="gap:6px;margin-top:10px">${bars}</div>
+      <select class="input sm" data-on="usage-months" aria-label="Meses">${[3, 6, 12].map(x => `<option value="${x}" ${x === n ? 'selected' : ''}>${x} meses</option>`).join('')}</select>
+      <select class="input sm" data-on="usage-mkind" aria-label="Comparar">${[['programas', 'Programas'], ['sites', 'Sites']].map(([k, l]) => `<option value="${k}" ${USE.monthKind === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div data-hkroot data-hktot="${base}" data-hkfmt="dur"><div class="stack" style="gap:6px;margin-top:10px">${bars}</div>
+    <div style="margin-top:10px">${legendSegs.length ? usageLegendHTML(legendSegs, base) : '<span class="muted small">Sem registro nos meses escolhidos.</span>'}</div></div>
     <div class="usage-table-wrap" style="margin-top:14px"><table class="usage-table">
-      <thead><tr><th>Programa</th>${months.map(m => `<th>${esc(m.label)}</th>`).join('')}<th>Último vs anterior</th></tr></thead>
+      <thead><tr><th>${itemLbl}</th>${months.map(m => `<th>${esc(m.label)}</th>`).join('')}<th>Último vs anterior</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="' + (n + 2) + '" class="muted small">Sem registro nos meses escolhidos.</td></tr>'}</tbody>
     </table></div>
-    <div class="small muted" style="margin-top:8px">Cada célula é a parte do programa no mês. A última coluna mostra quanto ele cresceu ou diminuiu em pontos percentuais.</div>`;
+    <div class="small muted" style="margin-top:8px">Cada célula é a parte do item no mês. A última coluna mostra quanto ele cresceu ou diminuiu em pontos percentuais.</div>`;
 }
 
 function usageScopeOptions() {
@@ -224,6 +266,7 @@ CHANGES['usage-period'] = (el) => { USE.period = el.value; render(); };
 CHANGES['usage-pauses'] = (el) => { USE.pauses = el.checked; render(); };
 CHANGES['usage-prog'] = (el) => { USE.prog = el.value; render(); };
 CHANGES['usage-months'] = (el) => { USE.months = Number(el.value) || 6; render(); };
+CHANGES['usage-mkind'] = (el) => { USE.monthKind = el.value; render(); };
 CHANGES['usage-cmp'] = (el) => {
   const t = el.dataset.t; const set = new Set(USE.cmp[t] || []);
   if (el.checked) set.add(el.dataset.id); else set.delete(el.dataset.id);

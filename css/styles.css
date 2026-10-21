@@ -1012,3 +1012,41 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .prod-d { background: #F87171; }
 .prod-y { background: #FACC15; }
 .prod-z { background: #CBD5E1; }
+
+/* Uso de programas: rosca em SVG com hover, Demais abrindo em cores */
+.usage-donut-svg { width: 100%; height: 100%; display: block; }
+.usage-arc { transition: stroke-width .12s, opacity .12s; cursor: default; }
+.usage-arc.act-dim { opacity: .25; }
+.usage-arc.act-hl { stroke-width: 8; }
+
+/* Relatório Produtividade: horas e % escritas nas colunas */
+.prod-val { font-family: var(--font-mono); font-size: .66em; line-height: 1.15; text-align: center; color: var(--fg-2); white-space: nowrap; min-height: 26px; display: block; }
+.prod-col { overflow: visible; }
+
+/* Relatório Produtividade: horas e % escritas nas colunas */
+.prod-val { font-family: var(--font-mono); font-size: .66em; line-height: 1.15; text-align: center; color: var(--fg-2); white-space: nowrap; min-height: 26px; display: block; }
+.prod-col { overflow: visible; }
+
+/* Relatório Produtividade: colunas como cartões com segmentos arredondados, destaque e quadro de % no hover */
+.prod-stack { border: 1px solid #94A3B8; border-radius: 16px; background: #F1F5F9; padding: 4px; gap: 3px; height: 150px; box-sizing: border-box; }
+.prod-seg { border-radius: 12px; }
+.prod-col { position: relative; transition: opacity .12s; }
+.prod-cols:hover .prod-col:not(:hover) { opacity: .55; }
+.prod-col:hover .prod-stack { box-shadow: 0 0 0 2px #1E293B; }
+.prod-tip { display: none; position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 5; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; box-shadow: 0 4px 14px rgba(0,0,0,.14); min-width: 190px; white-space: nowrap; font-size: .8em; }
+.prod-col:hover .prod-tip { display: block; }
+.prod-tip-h { font-weight: 600; margin-bottom: 6px; }
+.prod-tip-row { display: grid; grid-template-columns: 10px minmax(0,1fr) auto auto; align-items: center; gap: 8px; padding: 2px 0; }
+.prod-tip-row i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* Padrão de gráficos: item sob o mouse (e o chip da mesma chave) acende; o resto esmaece */
+.hk-dim { opacity: .25; transition: opacity .12s; }
+.hk-hl { box-shadow: inset 0 0 0 2px #1E293B; border-radius: 6px; }
+.bar-row.hk-hl { background: var(--surface-2); }
+
+/* Padrão de gráficos: seleção com Shift (itens escolhidos acendem, o resto esmaece) e soma */
+.hk-pick { box-shadow: inset 0 0 0 2px #1E293B; border-radius: 6px; }
+.hk-sum { margin-top: 8px; color: var(--fg-2); font-family: var(--font-mono); }
+
+/* Padrão único de gráficos: uso e produtividade usam as mesmas classes de hover e seleção */
+.usage-arc.hk-hl { stroke-width: 8; }

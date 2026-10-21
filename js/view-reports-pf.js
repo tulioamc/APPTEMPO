@@ -52,11 +52,11 @@ function pfDonut(items, total) {
   const R = 70, C = 2 * Math.PI * R; let acc = 0;
   const arcs = items.map((it, i) => {
     const frac = it.total / total; const len = frac * C;
-    const seg = `<circle r="${R}" cx="90" cy="90" fill="none" style="stroke:${PF_PALETTE[i % PF_PALETTE.length]}" stroke-width="28" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-acc}" transform="rotate(-90 90 90)"><title>${esc(it.k)}: ${pfR(it.total)}</title></circle>`;
+    const seg = `<circle data-hk="${esc(it.k)}" r="${R}" cx="90" cy="90" fill="none" style="stroke:${PF_PALETTE[i % PF_PALETTE.length]}" stroke-width="28" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-acc}" transform="rotate(-90 90 90)"><title>${esc(it.k)}: ${pfR(it.total)}</title></circle>`;
     acc += len; return seg;
   }).join('');
-  const legend = items.map((it, i) => `<li><span class="pf-sw" style="background:${PF_PALETTE[i % PF_PALETTE.length]}"></span><span>${esc(it.k)}</span><span class="grow"></span><span class="mono small">${((it.total / total) * 100).toFixed(0)}%</span></li>`).join('');
-  return `<div class="pf-donut"><svg viewBox="0 0 180 180" width="180" height="180" role="img" aria-label="Distribuição das saídas por categoria">${arcs}<text x="90" y="86" text-anchor="middle" class="small" fill="currentColor">Total</text><text x="90" y="104" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">${esc(pfR(total))}</text></svg><ul class="pf-legend">${legend}</ul></div>`;
+  const legend = items.map((it, i) => `<span class="act-chip" data-hk="${esc(it.k)}" data-hkv="${it.total}" style="--tb:${PF_PALETTE[i % PF_PALETTE.length]}"><i></i>${esc(it.k)} <span class="faint">${((it.total / total) * 100).toFixed(0)}% · ${esc(pfR(it.total))}</span></span>`).join('');
+  return `<div class="pf-donut" data-hkroot data-hktot="${total}"><svg viewBox="0 0 180 180" width="180" height="180" role="img" aria-label="Distribuição das saídas por categoria">${arcs}<text x="90" y="86" text-anchor="middle" class="small" fill="currentColor">Total</text><text x="90" y="104" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">${esc(pfR(total))}</text></svg><div class="act-chips">${legend}</div></div>`;
 }
 
 /* Leitura automática: frases curtas com o que mais mexeu. */
