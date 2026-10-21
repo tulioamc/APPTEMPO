@@ -1050,3 +1050,6 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 
 /* Padrão único de gráficos: uso e produtividade usam as mesmas classes de hover e seleção */
 .usage-arc.hk-hl { stroke-width: 8; }
+
+/* Análise da semana (Relatório Produtividade) */
+.prod-ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: .92em; }

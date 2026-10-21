@@ -5,7 +5,7 @@
    - Ocioso (amarelo): as demais pausas no computador (sem motivo, página parada, intervalo manual).
    - Descanso (cinza): fora do computador (computador fechado/dormiu, ou ocioso de mouse e teclado). */
 const PROD = { period: '30d' };
-const PROD_GAP = 3 * 60e3; /* blocos de foco: pausas de até 3 min não quebram o foco */
+const PROD_GAP = 60e3; /* blocos de foco: pausas de até 1 min não quebram o foco; acima disso, a pausa corta o bloco */
 const PROD_DOW = [1, 2, 3, 4, 5, 6, 0]; /* segunda primeiro */
 const PROD_DOW_LBL = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const PROD_NAME = { prod: 'Produtivo', dist: 'Distração', ocio: 'Ocioso', descanso: 'Descanso (fora do computador)' };
@@ -171,6 +171,29 @@ function prodPausesHTML(C) {
   </table></div>`;
 }
 
+/* Análise da semana: gerada toda segunda (7h13) por tarefa agendada e gravada em tempo_settings (prodSemanal:AAAA-MM-DD). */
+function prodWeeklyLatest() {
+  const rows = db.all('tempo_settings').filter(r => String(r.key || '').startsWith('prodSemanal:'));
+  if (!rows.length) return null;
+  rows.sort((a, b) => String(b.key).localeCompare(String(a.key)));
+  let v = rows[0].value;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { return null; } }
+  return v && typeof v === 'object' ? v : null;
+}
+function prodWeeklyHTML(w) {
+  if (!w) return '<section class="card stack" style="gap:8px"><h3>Análise da semana</h3><div class="muted small">A análise da semana aparece aqui depois da primeira geração, toda segunda às 7h13.</div></section>';
+  const n = w.numeros || {};
+  const lista = (xs) => (Array.isArray(xs) && xs.length ? `<ul class="prod-ul">${xs.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '');
+  const pct = n.pct_produtivo !== undefined ? `<div class="small"><b>% produtivo:</b> ${usePctTxt(Number(n.pct_produtivo))}${n.pct_produtivo_semana_anterior !== undefined ? ` (semana anterior: ${usePctTxt(Number(n.pct_produtivo_semana_anterior))})` : ''}</div>` : '';
+  const meta = w.meta?.texto ? `<div class="small"><b>Meta sugerida:</b> ${esc(w.meta.texto)}</div>` : '';
+  return `<section class="card stack" style="gap:8px"><h3>Análise da semana</h3>
+    <div class="small muted">Semana de ${esc(w.semana_inicio || '')} a ${esc(w.semana_fim || '')} · gerada em ${esc(String(w.gerado_em || '').slice(0, 16).replace('T', ' '))}</div>
+    ${pct}${lista(w.analises)}
+    ${lista(w.sugestoes) ? `<div class="small muted" style="margin-top:4px">Sugestões</div>${lista(w.sugestoes)}` : ''}
+    ${meta}
+  </section>`;
+}
+
 VIEWS.productivity = () => {
   const C = prodCollect();
   const S = prodStats(C);
@@ -213,7 +236,7 @@ VIEWS.productivity = () => {
     : `<div class="kpi-row">
         <div class="kpi"><span class="k">Produtivo</span><span class="v mono">${fmtDur(S.tot.prod)}</span><span class="s">trabalho sem contar duplicado</span></div>
         <div class="kpi"><span class="k">% produtivo</span><span class="v mono">${usePctTxt(S.pctProd)}</span><span class="s">produtivo ÷ (produtivo + distração + ocioso), sem descanso</span></div>
-        <div class="kpi"><span class="k">Maior bloco de foco</span><span class="v mono">${fmtDur(S.longest)}</span><span class="s">pausas de até 3 min não quebram</span></div>
+        <div class="kpi"><span class="k">Maior bloco de foco</span><span class="v mono">${fmtDur(S.longest)}</span><span class="s">pausas de até 1 min não quebram</span></div>
         <div class="kpi"><span class="k">Blocos por dia</span><span class="v mono">${S.blocksPerDay.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</span><span class="s">${S.blocks.length} bloco(s) em ${S.days.length} dia(s)</span></div>
         <div class="kpi"><span class="k">Descanso</span><span class="v mono">${fmtDur(S.tot.descanso)}</span><span class="s">fora do computador</span></div>
       </div>
@@ -232,7 +255,7 @@ VIEWS.productivity = () => {
         ${S.dayTable.length ? `<div class="usage-table-wrap"><table class="usage-table">
           <thead><tr><th>Dia</th><th>Produtivo</th><th>Distração</th><th>Ocioso</th><th>Descanso</th><th>Blocos de foco</th><th>Maior bloco</th></tr></thead>
           <tbody>${dayRows}</tbody></table></div>
-          <div class="small muted">Mostra os 10 dias mais recentes. Blocos de foco: pausas de até 3 min não quebram.</div>` : '<div class="muted small">Sem tempo no período.</div>'}
+          <div class="small muted">Mostra os 10 dias mais recentes. Blocos de foco: pausas de até 1 min não quebram.</div>` : '<div class="muted small">Sem tempo no período.</div>'}
       </section>
 
       <section class="card stack" style="gap:10px;margin-top:14px"><h3>Pausas que mais custam</h3>
@@ -249,7 +272,7 @@ VIEWS.productivity = () => {
   return {
     title: 'Relatório Produtividade',
     actions: `<select class="input sm" data-on="prod-period" aria-label="Período">${periods.map(([k, l]) => `<option value="${k}" ${PROD.period === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`,
-    html: `<div class="stack" style="gap:6px">${body}</div>`,
+    html: `<div class="stack" style="gap:14px">${prodWeeklyHTML(prodWeeklyLatest())}${body}</div>`,
   };
 };
 
