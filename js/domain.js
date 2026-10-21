@@ -326,19 +326,36 @@ function startEntry(sel) {
 function pauseEntry(e, at, troca) { const segs = clone(e.segments); const last = segs[segs.length - 1]; last.e = at || nowISO(); if (troca) { last.why = 'moved'; last.troca = true; last.movedTo = troca.to; } db.update('tempo_time_entries', e.id, { state: 'paused', segments: segs }); }
 function resumeEntry(e) { const segs = clone(e.segments); segs.push({ s: nowISO(), e: null }); db.update('tempo_time_entries', e.id, { state: 'running', segments: segs }); }
 /* Fim da sessão (1.2): se o último trecho é só ociosidade (nenhum registro de atividade nos últimos 2 min), corta no último sinal de atividade. */
-const STOP_TAIL_MS = 2 * 60e3;
-function stopCutAt(e, end, last) {
-  const lastAct = actList(e.id).reduce((t, r) => Math.max(t, new Date(r.to).getTime()), 0);
-  const startMs = new Date(last.s).getTime(), endMs = new Date(end).getTime();
-  if (!lastAct || lastAct >= endMs - STOP_TAIL_MS || lastAct <= startMs) return end;
-  return new Date(lastAct).toISOString();
+const STOP_IDLE_MS = 15 * 60e3;   // parada longa: mais de 15 min sem atividade
+const STOP_SHORT_MS = 5 * 60e3;  // "pouca atividade" depois da parada: menos de 5 min
+/* Trechos de atividade do registro, mesclados (lacunas de até 1 min são unidas). */
+function actBursts(e) {
+  const iv = actList(e.id).map(r => [new Date(r.from).getTime(), new Date(r.to).getTime()]).filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0]);
+  const out = [];
+  iv.forEach(([a, b]) => { const l = out[out.length - 1]; if (l && a <= l[1] + 60e3) l[1] = Math.max(l[1], b); else out.push([a, b]); });
+  return out;
 }
-/* Início da sessão (1.3): se o primeiro sinal de atividade só vem mais de 2 min depois do início, o início é puxado para ele. */
+/* Corte do fim: procura, de trás para frente, a última parada longa (>15 min) que tem menos de 5 min de atividade depois dela
+   (inclui a parada até o fim). A sessão termina onde essa parada começou. Ex.: trabalho até 18h, ocioso até 19h, mexo 2 min e paro → 18h. */
+function stopCutAt(e, end, last) {
+  const startMs = new Date(last.s).getTime(), endMs = new Date(end).getTime();
+  const bs = actBursts(e).filter(([a, b]) => b > startMs && a < endMs).map(([a, b]) => [Math.max(a, startMs), Math.min(b, endMs)]);
+  if (!bs.length) return end;
+  let depois = 0;
+  for (let k = bs.length - 1; k >= 0; k--) {
+    const gapFim = k === bs.length - 1 ? endMs : bs[k + 1][0];
+    const gap = gapFim - bs[k][1];
+    if (gap > STOP_IDLE_MS && depois < STOP_SHORT_MS) return new Date(bs[k][1]).toISOString();
+    depois += bs[k][1] - bs[k][0];
+  }
+  return end;
+}
+/* Corte do início: se a primeira atividade vem depois de mais de 15 min do play, a sessão começa nela. Ex.: play 8h30, primeiro sinal 9h05 → 9h05. */
 function stopTrimStart(e, segs) {
-  const acts = actList(e.id); if (!acts.length || !segs[0]?.s) return;
-  const firstAct = Math.min(...acts.map(r => new Date(r.from).getTime()));
+  const bs = actBursts(e); if (!bs.length || !segs[0]?.s) return;
   const s0 = new Date(segs[0].s).getTime(), lim = segs[0].e ? new Date(segs[0].e).getTime() : Infinity;
-  if (firstAct - s0 > STOP_TAIL_MS && firstAct < lim) segs[0].s = new Date(firstAct).toISOString();
+  const firstAct = bs[0][0];
+  if (firstAct - s0 > STOP_IDLE_MS && firstAct < lim) segs[0].s = new Date(firstAct).toISOString();
 }
 function stopEntry(e, at) {
   const segs = clone(e.segments); stopTrimStart(e, segs); const last = segs[segs.length - 1];
