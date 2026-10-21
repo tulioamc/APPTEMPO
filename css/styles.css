@@ -1071,3 +1071,5 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .meta-bar > span { display: block; width: 100%; background: #4ADE80; }
 
 @media print { body * { visibility: hidden; } .rel-print, .rel-print * { visibility: visible; } .rel-print { position: absolute; left: 0; top: 0; width: 100%; } }
+.act-oth-pop { position: fixed; z-index: 1000; display: none; flex-wrap: wrap; gap: 6px; max-width: 320px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.14); pointer-events: none; }
+

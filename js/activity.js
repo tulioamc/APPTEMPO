@@ -373,8 +373,13 @@ function actStripHTML(e, A, mode = '') {
 const ACT_FV_MODES = ["file", "site", "both"];
 const ACT_FV_LBL = { file: "Arquivo", site: "Site", both: "Arquivo / site" };
 ACTIONS["act-fview"] = (el) => { db.setSetting("actFileView", el.dataset.v); db.emit(); };
+/* Itens que estão dentro do chip "Outros" (para o balãozinho do hover). */
+function actOthMembersAttr(A) {
+  const m = A.groups.filter(x => x.parent === 'outros').map(x => ({ l: x.label, ms: x.ms, c: x.color }));
+  return m.length ? ` data-members="${esc(JSON.stringify(m))}"` : '';
+}
 function actChipsHTML(A, mode) {
-  return `<div class="act-chips">${A.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="act-chip"${g.id === 'outros' ? ' data-hl="outros"' : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)}${mode !== "site" && g.items.length > 1 ? ` <span class="act-more" title="Ver os ${g.items.length} arquivos">+${g.items.length}</span>` : ''} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
+  return `<div class="act-chips">${A.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="act-chip"${g.id === 'outros' ? ' data-hl="outros"' + actOthMembersAttr(A) : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)}${mode !== "site" && g.items.length > 1 ? ` <span class="act-more" title="Ver os ${g.items.length} arquivos">+${g.items.length}</span>` : ''} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
 }
 
 /* Pausas da sessão em caixinhas: o total, e dentro dele ócio, bloqueada, WhatsApp, Telegram e manual, com o tempo de cada um. */
@@ -615,6 +620,25 @@ document.addEventListener('change', (ev) => {
   toast('Cor aplicada');
   const ctx = ACT_COLOR_CTX; ACT_COLOR_CTX = null;
   if (ctx) { if (ctx.layer && ctx.layer.close) ctx.layer.close(); ctx.onDone && ctx.onDone(); }
+});
+
+/* Balãozinho do chip "Outros": ao passar o mouse, lista os itens de dentro (cada um com a cor original). */
+let actOthPop = null;
+document.addEventListener('mouseover', (e) => {
+  const c = e.target.closest?.('[data-members]'); if (!c) return;
+  let arr = []; try { arr = JSON.parse(c.dataset.members) || []; } catch (x) { arr = []; }
+  if (!arr.length) return;
+  if (!actOthPop) { actOthPop = document.createElement('div'); actOthPop.className = 'act-oth-pop'; document.body.appendChild(actOthPop); }
+  actOthPop.innerHTML = arr.map(m => `<span class="act-chip" style="--tb:${esc(m.c)}"><i></i>${esc(m.l)} <span class="faint">${fmtDur(m.ms)}</span></span>`).join('');
+  const r = c.getBoundingClientRect();
+  actOthPop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 340)) + 'px';
+  actOthPop.style.top = (r.bottom + 6) + 'px';
+  actOthPop.style.display = 'flex';
+});
+document.addEventListener('mouseout', (e) => {
+  if (!actOthPop) return; const c = e.target.closest?.('[data-members]'); if (!c) return;
+  if (e.relatedTarget?.closest?.('[data-members]') === c) return;
+  actOthPop.style.display = 'none';
 });
 
 /* Destaque: ao passar o mouse sobre um trecho ou chip, os outros grupos da mesma faixa esmaecem. */
