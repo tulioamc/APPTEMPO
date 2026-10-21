@@ -237,14 +237,14 @@ ACTIONS['ts-edit'] = (el) => openEntryModal(el.dataset.id);
 function apStats(p) {
   const hojeIni = new Date(); hojeIni.setHours(0, 0, 0, 0);
   const semIni = prodPeriodRange('semana').a;
-  let hoje = 0, semana = 0, last = 0;
+  let hoje = 0, semana = 0, last = 0, total = 0;
   db.where('tempo_time_entries', e => e.project_id === p.id).forEach(e => {
     const st = new Date(entryStart(e)).getTime(); const ms = entryMs(e);
-    last = Math.max(last, st);
+    last = Math.max(last, st); total += ms;
     if (st >= hojeIni.getTime()) hoje += ms;
     if (st >= semIni) semana += ms;
   });
-  return { hoje, semana, last };
+  return { hoje, semana, last, total };
 }
 function activeProjectsHTML(cur) {
   const fixados = db.setting('apFixados', []) || [];
@@ -258,7 +258,7 @@ function activeProjectsHTML(cur) {
     else if (cur) acao = `<button class="btn sm" data-act="ts-switch-proj" data-id="${esc(p.id)}">${icon('play')} Trocar para este</button>`;
     else acao = `<button class="btn sm primary" data-act="ts-start-proj" data-id="${esc(p.id)}">${icon('play')} Iniciar</button>`;
     return `<div class="ap-card ${fixo ? 'ap-fixo' : ''}"><div class="row between" style="align-items:flex-start;gap:6px"><div class="stack" style="gap:2px;min-width:0"><b>${esc(p.name)}</b><span class="small muted">${esc(c?.name || 'Sem cliente')}</span></div><button class="btn sm ghost" data-act="ap-pin" data-id="${esc(p.id)}" title="${fixo ? 'Desafixar' : 'Fixar no topo'}">${fixo ? 'Desafixar' : 'Fixar'}</button></div>
-      <span class="small muted mono">hoje ${fmtDur(st.hoje)} · semana ${fmtDur(st.semana)}</span><div>${acao}</div></div>`;
+      <span class="small muted mono">hoje ${fmtDur(st.hoje)} · semana ${fmtDur(st.semana)}</span>${Number(p.estimated_hours) > 0 ? `<div class="ap-bar" title="${fmtDur(st.total)} de ${Number(p.estimated_hours)} h estimadas"><i style="width:${Math.min(100, st.total / (Number(p.estimated_hours) * 3600e3) * 100).toFixed(1)}%"></i></div><span class="small muted mono">${fmtDur(st.total)} de ${Number(p.estimated_hours)} h</span>` : ''}<div>${acao}</div></div>`;
   }).join('');
   return `<div class="panel"><div class="panel-h"><h3>Projetos ativos</h3><span class="small muted">${base.length}</span></div><div class="panel-b"><div class="ap-grid">${cards}</div></div></div>`;
 }

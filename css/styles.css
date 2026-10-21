@@ -1094,3 +1094,7 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 
 
 .cor-taskh[data-act] { cursor: pointer; }
+
+/* barrinha de horas: total registrado vs horas estimadas do projeto */
+.ap-bar { height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.ap-bar i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }

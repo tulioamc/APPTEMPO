@@ -264,6 +264,12 @@ function scanAlerts() {
     const d = daysBetween(today, q.valid_until); if (d === null || d < 0 || d > 3) return;
     addNotice({ kind: 'orcamento', key: `orc:${q.id}:${q.valid_until}`, title: `Orçamento vence em ${d === 0 ? 'hoje' : d + ' dia(s)'}: ${q.name}`, body: 'Faça o follow-up com o cliente.', entity: 'quote', entity_id: q.id, data: {} }, true);
   });
+  /* orçamento enviado sem resposta: cobrar aos 7 e aos 15 dias corridos (vira to-do, uma vez por marco) */
+  db.all('tempo_quotes').filter(q => q.sent_at && !['Aprovado', 'Recusado', 'Vencido'].includes(statusName(q.status_id))).forEach(q => {
+    const dias = daysBetween(ymd(new Date(q.sent_at)), today);
+    if (dias !== 7 && dias !== 15) return;
+    todoOnce(`Cobrar resposta do orçamento: ${q.name} · ${dias} dias`);
+  });
   /* despesas com vencimento passado e ainda não pagas/recebidas */
   db.all('tempo_expenses').filter(r => r.month === today.slice(0, 7) && r.due_date && r.due_date < today && !['Pago', 'Recebido', 'Não teve'].includes(r.status)).forEach(r => {
     const inc = r.kind === 'in';
