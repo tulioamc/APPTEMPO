@@ -59,7 +59,7 @@ VIEWS.timesheet = () => {
         ${a.state === 'running' ? `<button class="btn" data-act="ts-pause">${icon('pause')} Pausar</button>` : `<button class="btn primary" data-act="ts-resume">${icon('play')} Retomar</button>`}
         <button class="btn" data-act="ts-switch">Trocar de projeto</button>
         <button class="btn danger" data-act="ts-stop">${icon('stop')} Encerrar</button>
-        <button class="btn ghost" data-act="ts-edit" data-id="${a.id}">${icon('edit')} Revisar sessão</button>
+        <button class="btn" data-act="ts-edit" data-id="${a.id}">${icon('edit')} Abrir sessão atual</button>
       </div>
       ${sessionSumHTML(a)}
       ${pauseSuggestionsHTML(a)}
@@ -144,7 +144,60 @@ ACTIONS['ts-quick'] = (el) => {
   startEntry({ ...selToEntry(r.sel), work_type_id: r.wt, notes: '', revision_id: null }); toast('Registro iniciado');
 };
 ACTIONS['ts-pause'] = () => { const a = activeEntry(); if (a?.state === 'running') { pauseEntry(a); toast('Sessão pausada'); } };
-ACTIONS['ts-resume'] = () => { const a = activeEntry(); if (a?.state === 'paused') { resumeEntry(a); toast('Sessão retomada'); } };
+/* Tempo pausado: o registro de atividade continua gravando sozinho. Ao retomar, separa o que foi WhatsApp (ou
+   app de pausa), ocioso (sem nenhum registro) e outras atividades. Só pergunta se "outras" passar de 15 min
+   ou de 10,1% do tempo pausado; caso contrário, ignora. Nunca computa sozinho. */
+const PAUSA_MAX_OUTRAS_MS = 15 * 60e3, PAUSA_MAX_OUTRAS_PCT = 0.101;
+function pausaRec(r) {
+  const app = String(r.app || '').trim().toLowerCase();
+  const apps = (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
+  if (apps.includes(app)) return true;
+  if (BROWSER_RE.test(String(r.app || ''))) {
+    const sites = (db.setting('pauseSites', DEFAULT_PAUSE_SITES) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
+    return sites.some(x => String(r.doc || '').toLowerCase().includes(x));
+  }
+  return false;
+}
+function unionMs(arr) {
+  const srt = arr.slice().sort((x, y) => x[0] - y[0]); let tot = 0, cur = null;
+  srt.forEach(([a, b]) => { if (!cur) cur = [a, b]; else if (a <= cur[1]) cur[1] = Math.max(cur[1], b); else { tot += cur[1] - cur[0]; cur = [a, b]; } });
+  if (cur) tot += cur[1] - cur[0];
+  return tot;
+}
+function analisePausa(s, e) {
+  const total = e - s;
+  if (total <= 0) return { total: 0, pergunta: false };
+  const days = [...new Set([ymd(new Date(s)), ymd(new Date(e))])];
+  const recs = days.flatMap(d => db.setting(logKeyOf(d), null) || []);
+  const pausa = [], outras = [], porApp = {};
+  recs.forEach(r => {
+    const a = Math.max(s, new Date(r.from).getTime()), b = Math.min(e, new Date(r.to).getTime());
+    if (b <= a) return;
+    if (pausaRec(r)) pausa.push([a, b]);
+    else { outras.push([a, b]); const k = shortProgram(r.app) || r.app; porApp[k] = (porApp[k] || 0) + (b - a); }
+  });
+  const other = unionMs(outras), whats = unionMs(pausa);
+  const idle = Math.max(0, total - unionMs([...pausa, ...outras]));
+  const pergunta = other > PAUSA_MAX_OUTRAS_MS || other / total > PAUSA_MAX_OUTRAS_PCT;
+  const resumo = Object.entries(porApp).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k]) => k).join(', ');
+  return { total, whats, idle, other, pergunta, resumo };
+}
+ACTIONS['ts-resume'] = async () => {
+  const a = activeEntry(); if (a?.state !== 'paused') return;
+  const last = a.segments?.[a.segments.length - 1];
+  const pIni = last?.e ? new Date(last.e).getTime() : null;
+  resumeEntry(a); toast('Sessão retomada');
+  if (!pIni) return;
+  const an = analisePausa(pIni, Date.now());
+  if (!an.pergunta) return;
+  const ok = await confirmBox({
+    title: 'Computar o tempo pausado?',
+    body: `Enquanto a sessão estava pausada (${fmtDur(an.total)}), ${fmtDur(an.other)} foram em outras atividades${an.resumo ? ` (${esc(an.resumo)})` : ''}. WhatsApp (${fmtDur(an.whats)}) e ociosidade (${fmtDur(an.idle)}) foram ignorados.`,
+    ok: 'Escolher projeto ou tarefa', no: 'Não computar' });
+  if (!ok) return;
+  const e = db.insert('tempo_time_entries', { project_id: null, client_id: null, agency_id: null, task_id: null, work_type_id: null, notes: 'Tempo pausado', revision_id: null, state: 'done', segments: [{ s: new Date(pIni).toISOString(), e: new Date(Date.now()).toISOString() }], edits: [] });
+  openEntryModal(e.id);
+};
 ACTIONS['ts-stop'] = async () => { let a = activeEntry(); if (!a) return; const todas = openEntries();
   const ps = pausesOf(a.id);
   if (ps.length) { const n = ps.length; const ok = await confirmBox({ title: `${n} pausa(s) sugerida(s)`, body: `Antes de encerrar: inserir ${n === 1 ? 'a pausa sugerida' : 'as ' + n + ' pausas sugeridas'} na sessão? <br><span class="small muted">Se não, as sugestões ficam registradas como ignoradas na aba Avisos.</span>`, ok: 'Inserir e encerrar' }); if (ok) ps.forEach(n => applyPause(db.get('tempo_time_entries', a.id), n)); else ps.forEach(n => decideNotice(n, 'ignored', 'Ignorada ao encerrar a sessão')); a = db.get('tempo_time_entries', a.id); }
@@ -372,7 +425,7 @@ function openEntryModal(id) {
     const p = db.get('tempo_projects', sel.project_id);
     const revs = p ? db.where('tempo_revisions', r => r.project_id === p.id) : [];
     const total = segs.reduce((s, x) => s + ((x.e ? new Date(x.e) : Date.now()) - new Date(x.s)), 0);
-    return `<div class="dh">${icon(e ? 'edit' : 'plus')}<h2>${e ? (e.state === 'done' ? 'Editar sessão' : 'Revisar sessão em andamento') : 'Apontamento manual'}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    return `<div class="dh">${icon(e ? 'edit' : 'plus')}<h2>${e ? (e.state === 'done' ? 'Editar sessão' : 'Sessão atual') : 'Apontamento manual'}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db">
       ${showPicker ? '<div data-picker></div>' : `<div class="row subtle-box"><div class="timer-path grow">${pathHTML(selPath(sel))}</div><button class="btn sm" data-x="pick">Alterar</button></div>`}
       <div class="grid2">

@@ -50,9 +50,16 @@ const noticeBtnsBase = (n) => {
   if (n.kind === 'activity') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Adicionar à nota</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'todo') return '';
   if (n.kind === 'sessao') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Manter aberta</button></div>`;
-  if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
+  if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm" data-act="notice-pick" data-id="${n.id}">Escolher projeto, tarefa ou subtarefa</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
   return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Virar to-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
 };
+/* Escolher na hora: abre a sessão provisória para pôr projeto, tarefa ou subtarefa antes de confirmar. */
+ACTIONS['notice-pick'] = (el) => { const n = db.get('tempo_notices', el.dataset.id); if (n?.data?.entry_id) openEntryModal(n.data.entry_id); };
+/* Cria um to-do só se nunca tiver existido outro com o mesmo texto (feito ou aberto): a varredura não recria o que você já resolveu. */
+function todoOnce(raw) {
+  if (db.all('tempo_notices').some(n => n.kind === 'todo' && String(n.title || '').trim() === raw.trim())) return;
+  todoAddRaw(raw);
+}
 ACTIONS['notice-accept'] = (el) => {
   const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
   if (n.kind === 'pause' && n.data?.source === 'app') { decideNotice(n, 'accepted', 'Marcada no bruto (cronômetro seguiu)'); }
@@ -249,6 +256,9 @@ function scanAlerts() {
   db.all('tempo_projects').filter(p => !p.archived && remainingOf(p) > 0).forEach(p => {
     const pay = statusName(p.payment_status_id);
     if (pay === 'Atrasado' || (pay === 'Não Pago' && p.deadline && daysBetween(p.deadline, today) > 0)) addNotice({ kind: 'cobranca', key: `cob:${p.id}:${today.slice(0, 7)}`, title: `Cobrança: ${p.name}`, body: `Restam ${fmtMoney(remainingOf(p))} a receber.`, entity: 'project', entity_id: p.id, project_id: p.id, data: {} }, true);
+    if (pay === 'Atrasado' || (pay === 'Não Pago' && p.deadline && daysBetween(p.deadline, today) > 0)) { const cl = clientOf(p); todoOnce('Cobrar ' + (cl?.name || p.name)); }
+    /* projeto pago sem nota fiscal: vira to-do para emitir */
+    if (pay === 'Pago' && !p.invoice_at) todoOnce('Emitir nota ' + p.name);
   });
   db.all('tempo_quotes').filter(q => q.valid_until && !['Aprovado', 'Recusado', 'Vencido'].includes(statusName(q.status_id))).forEach(q => {
     const d = daysBetween(today, q.valid_until); if (d === null || d < 0 || d > 3) return;
