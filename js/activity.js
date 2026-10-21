@@ -142,12 +142,12 @@ function actAnalyzeList(list0, mode) {
   // Também vão para "Outros" os que somam pouco (menos de 5 min), fora os 4 maiores de cada lista.
   let arr = Object.values(groups);
   const topIds = new Set([...arr].sort((a, b) => b.ms - a.ms).slice(0, 4).map(g => g.id));
-  const isOther = (g) => g.items.length > 0 && (g.items.every(it => OTHERS_RE.test(String(it.app || '').trim())) || (!topIds.has(g.id) && g.ms < 5 * 60e3));
+  const isOther = (g) => { const its = Object.values(g.items); return its.length > 0 && (its.every(it => OTHERS_RE.test(String(it.app || '').trim())) || (!topIds.has(g.id) && g.ms < 5 * 60e3)); };
   const oth = arr.filter(isOther);
   if (oth.length) {
     const ids = new Set(oth.map(g => g.id));
     arr = arr.map(g => (ids.has(g.id) ? { ...g, parent: 'outros', hidden: true } : g));
-    arr.push({ id: 'outros', items: oth.flatMap(g => g.items), ms: oth.reduce((t, g) => t + g.ms, 0) });
+    arr.push({ id: 'outros', items: oth.flatMap(g => Object.values(g.items)), ms: oth.reduce((t, g) => t + g.ms, 0) });
   }
   const sorted = arr.sort((a, b) => b.ms - a.ms).map((g, i) => {
     const items = Object.values(g.items).sort((a, b) => b.ms - a.ms);
