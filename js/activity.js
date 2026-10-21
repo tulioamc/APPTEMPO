@@ -167,7 +167,8 @@ function actAnalyzeList(list0, mode) {
     const color = termOnly ? '#374151' : groupColor(g.id, i);
     return { id: g.id, items, ms: g.ms, label, color };
   });
-  return { groups: sorted, records };
+  // "Outros" fica sempre por último, em todas as listas e barras
+  return { groups: [...sorted.filter(g => g.id !== 'outros'), ...sorted.filter(g => g.id === 'outros')], records };
 }
 
 function actUngroup(g) {

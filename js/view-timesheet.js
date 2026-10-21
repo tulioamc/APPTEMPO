@@ -85,11 +85,11 @@ VIEWS.timesheet = () => {
   <div class="panel">
     <div class="panel-h">
       <div class="date-nav"><button class="btn sm icon" data-act="ts-shift" data-d="-1" aria-label="Dia anterior">${icon('chevL')}</button><input type="date" id="ts-date" class="input sm" style="width:auto" value="${S.tsDay}" data-on="ts-date"><button class="btn sm icon" data-act="ts-shift" data-d="1" aria-label="Próximo dia">${icon('chevR')}</button>${!isToday(day) ? `<button class="btn sm" data-act="ts-day" data-day="${ymd(new Date())}">Hoje</button>` : ''}</div>
-      <span class="grow"></span><div class="row" style="gap:6px"><button class="btn sm ${corridoOn() ? '' : 'primary'}" data-act="ts-view" data-v="dia">Dia</button><button class="btn sm ${corridoOn() ? 'primary' : ''}" data-act="ts-view" data-v="corrido">Corrido</button></div><span class="muted small">${corridoOn() ? 'projetos mais recentes' : entries.length + ' sessão(ões)'}</span>
+      <span class="grow"></span><div class="row" style="gap:6px"><button class="btn sm ${corridoOn() ? '' : 'primary'}" data-act="ts-view" data-v="dia">Dia</button><button class="btn sm ${corridoOn() ? 'primary' : ''}" data-act="ts-view" data-v="corrido">Recentes</button></div><span class="muted small">${corridoOn() ? 'projetos mais recentes' : entries.length + ' sessão(ões)'}</span>
       <button class="btn sm" data-act="ts-manual">${icon('plus')} Apontamento manual</button>
     </div>
     <div class="panel-b tight">
-      ${corridoOn() ? corridoHTML() : entries.length ? groupedRowsHTML(entries) : `<div class="empty">${icon('clock')}<b>Nenhum registro em ${isToday(day) ? 'hoje' : fmtDate(S.tsDay)}</b><span>Inicie o cronômetro ou lance um apontamento manual se esqueceu de registrar.</span></div>`}
+      ${corridoOn() ? corridoHTML() : entries.length ? entryHeadHTML() + groupedRowsHTML(entries) : `<div class="empty">${icon('clock')}<b>Nenhum registro em ${isToday(day) ? 'hoje' : fmtDate(S.tsDay)}</b><span>Inicie o cronômetro ou lance um apontamento manual se esqueceu de registrar.</span></div>`}
     </div>
   </div>`;
   return { title: 'Time Sheet', actions: a ? '' : `<button class="btn primary" data-act="ts-start">${icon('play')} Iniciar registro</button>`, html: `<div class="home-grid"><div class="home-main">${html}</div>${sidePanelHTML()}</div>` };
@@ -507,6 +507,10 @@ function entryRowHTML(e) {
           <span class="ent-tag">${wtTag(e.work_type_id)}</span><span class="dur" ${e.state !== 'done' ? `data-tick="${e.id}"` : ''}>${e.state !== 'done' ? fmtClock(entryMs(e)) : fmtDur(entryMs(e))}</span><span class="ent-caret" aria-hidden="true"></span>
         </div>`;
 }
+/* Cabeçalho das colunas da lista do dia (mesma grade das linhas). */
+function entryHeadHTML() {
+  return `<div class="entry-head"><span>Horário</span><span>Tarefa</span><span>Categoria</span><span class="r">Tempo</span><span></span></div>`;
+}
 function groupedRowsHTML(entries) {
   const groups = new Map();
   entries.forEach(e => {
@@ -521,7 +525,7 @@ function groupedRowsHTML(entries) {
     const tags = [...new Set(list.map(e => e.work_type_id || ''))].map(id => wtTag(id || null)).join('');
     const total = list.reduce((s, e) => s + entryMs(e), 0);
     return `<details class="grp-det">
-      <summary class="entry grp-sum" data-act="grp-open" data-ids="${list.map(e => e.id).join(',')}">
+      <summary class="entry grp-sum" data-act="ts-resumo" data-title="${esc(entryTitle(list[0]))}" data-ids="${list.map(e => e.id).join(',')}">
         <span class="when">${fmtTime(first)}–${fmtTime(last)}</span>
         <div class="what"><div class="t">${esc(entryTitle(list[0]))} <span class="tag pill small">${list.length} sessões</span></div><div class="p">${entryPathHTML(list[0])}</div></div>
         <span class="ent-tag">${tags}</span><span class="dur">${fmtDur(total)}</span><button type="button" class="grp-caret" data-act="grp-caret" aria-label="Ver sessões" title="Ver sessões">▾</button>
@@ -530,22 +534,6 @@ function groupedRowsHTML(entries) {
     </details>`;
   }).join('');
 }
-
-/* Clicar na linha do grupo abre a janelinha com o tempo corrido da tarefa; a seta abre as sessões. */
-ACTIONS['grp-open'] = (el) => {
-  const list = (el.dataset.ids || '').split(',').filter(Boolean).map(id => db.get('tempo_time_entries', id)).filter(Boolean);
-  if (!list.length) return;
-  const first = list.reduce((m, e) => (new Date(entryStart(e)) < new Date(m) ? entryStart(e) : m), entryStart(list[0]));
-  const last = list.reduce((m, e) => (new Date(entryEnd(e)) > new Date(m) ? entryEnd(e) : m), entryEnd(list[0]));
-  const liquido = list.reduce((s, e) => s + entryMs(e), 0);
-  openLayer({ html: `<div class="dh">${icon('clock')}<h2>${esc(entryTitle(list[0]))}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
-    <div class="db"><div class="small muted">${entryPathHTML(list[0])}</div>
-    <div class="grp-stats">
-      <div><span class="small muted">Tempo corrido</span><b class="mono">${fmtDur(new Date(last) - new Date(first))}</b><span class="small muted">${fmtTime(first)}–${fmtTime(last)}</span></div>
-      <div><span class="small muted">Tempo líquido</span><b class="mono">${fmtDur(liquido)}</b><span class="small muted">${list.length} sessões</span></div>
-    </div></div>` });
-};
-ACTIONS['grp-caret'] = (el) => { const d = el.closest('details'); if (d) d.open = !d.open; };
 
 /* Resumo discreto da sessão: projetos que participaram, pausa, bruto e líquido. */
 function sessionSumHTML(a) {

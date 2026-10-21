@@ -15,6 +15,14 @@ CHANGES['ts-cor-size'] = (el) => { db.setSetting('tsCorSize', Number(el.value) |
 CHANGES['ts-cor-by'] = (el) => { db.setSetting('tsCorBy', el.value); render(); };
 CHANGES['ts-cor-cat'] = (el) => { db.setSetting('tsCorCat', el.value); db.setSetting('tsCorN', Number(db.setting('tsCorSize', 10)) || 10); render(); };
 
+/* Projetos abertos no Recentes: a tela é redesenhada ao trocar Cronológico/Aglomerado, então lembramos quais estão abertos. */
+const COR_OPEN = new Set();
+document.addEventListener('toggle', (e) => {
+  const d = e.target; if (!d || !d.classList || !d.classList.contains('cor-proj')) return;
+  if (d.open) COR_OPEN.add(d.dataset.pid); else COR_OPEN.delete(d.dataset.pid);
+}, true);
+ACTIONS['ts-cor-mode'] = (el) => { db.setSetting('resMode', el.dataset.m); render(); };
+
 function corridoProjHTML(p) {
   const pr = db.get('tempo_projects', p.pid) || { name: 'Sem projeto' };
   const cl = pr.client_id ? clientOf(pr) : null;
@@ -31,12 +39,15 @@ function corridoProjHTML(p) {
     if (sub) { if (!T.subs.has(sub.id)) T.subs.set(sub.id, { name: sub.name, list: [] }); T.subs.get(sub.id).list.push(e); }
     else T.direct.push(e);
   });
+  const aglo = db.setting('resMode', 'cron') === 'agl';
   const taskHTML = [...tasks.values()].map(T => {
     const tids = T.list.map(e => e.id).join(',');
     const tTotal = T.list.reduce((s, e) => s + entryMs(e), 0);
     const subsHTML = [...T.subs.values()].map(sb => `<div class="cor-sub"><div class="cor-subh"><span>↳ ${esc(sb.name)}</span><span class="mono small">${fmtDur(sb.list.reduce((s, e) => s + entryMs(e), 0))}</span></div><div class="grp-kids">${sb.list.map(entryRowHTML).join('')}</div></div>`).join('');
-    return `<div class="cor-task"><div class="cor-taskh"><b>${esc(T.name)}</b><span class="mono small">${fmtDur(tTotal)}</span><span class="grow"></span><button class="btn sm" data-act="ts-resumo" data-title="${esc(T.name)}" data-ids="${tids}">Resumo</button></div>${T.direct.map(entryRowHTML).join('')}${subsHTML}</div>`;
+    const body = aglo ? groupedRowsHTML(T.list) : T.direct.map(entryRowHTML).join('') + subsHTML;
+    return `<div class="cor-task"><div class="cor-taskh" data-act="ts-resumo" data-title="${esc(T.name)}" data-ids="${tids}"><b>${esc(T.name)}</b><span class="mono small">${fmtDur(tTotal)}</span></div>${body}</div>`;
   }).join('');
+  const modeBtns = `<div class="row cor-mode" style="gap:6px;padding:8px 0 4px"><button class="btn sm ${aglo ? '' : 'primary'}" data-act="ts-cor-mode" data-m="cron">Cronológico</button><button class="btn sm ${aglo ? 'primary' : ''}" data-act="ts-cor-mode" data-m="agl">Aglomerado</button></div>`;
   const ids = p.list.map(e => e.id).join(',');
   const firstMs = Math.min(...p.list.map(e => new Date(entryStart(e)).getTime()));
   const endOf = (e) => new Date(entryEnd(e) || entryStart(e)).getTime();
@@ -44,13 +55,13 @@ function corridoProjHTML(p) {
   const dm = (ms) => new Date(ms).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   const when = dm(firstMs) === dm(lastMs) ? dm(firstMs) : `${dm(firstMs)}–${dm(lastMs)}`;
   const tags = [...new Set(p.list.map(e => e.work_type_id || ''))].map(id => wtTag(id || null)).join('');
-  return `<details class="grp-det cor-proj">
-    <summary class="entry grp-sum">
+  return `<details class="grp-det cor-proj" data-pid="${p.pid}" ${COR_OPEN.has(p.pid) ? 'open' : ''}>
+    <summary class="entry grp-sum" data-act="ts-resumo" data-title="${esc(pr.name)}" data-ids="${ids}">
       <span class="when">${when}</span>
       <div class="what"><div class="t">${esc(pr.name)} <span class="tag pill small">${p.list.length} ${p.list.length === 1 ? 'sessão' : 'sessões'}</span></div><div class="p">${esc(cl?.name || 'Sem cliente')}${pr.name ? '' : ''}</div></div>
-      <div class="row" style="justify-content:flex-end;gap:10px"><span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${tags}</span><button class="btn sm" data-act="ts-resumo" data-title="${esc(pr.name)}" data-ids="${ids}">Resumo</button><span class="dur">${fmtDur(total)}</span><span class="faint grp-caret">▾</span></div>
+      <span class="ent-tag">${tags}</span><span class="dur">${fmtDur(total)}</span><button type="button" class="grp-caret" data-act="grp-caret" aria-label="Ver tarefas" title="Ver tarefas">▾</button>
     </summary>
-    <div class="cor-body">${taskHTML}</div>
+    <div class="cor-body">${modeBtns}${taskHTML}</div>
   </details>`;
 }
 
@@ -119,12 +130,27 @@ function openResumo(title, ids) {
   });
 }
 
+/* Lista de sessões do Resumo: Cronológico (uma a uma) ou Aglomerado (por tarefa, com total e quantidade). */
+function resumoSessionsHTML(es, mode) {
+  const row = (t, dur) => `<div class="row between small res-row">${t}<span class="mono">${dur}</span></div>`;
+  if (mode !== 'agl') return es.map(e => row(`<span><span class="mono">${fmtTime(entryStart(e))}–${fmtTime(entryEnd(e))}</span> · ${esc(entryTitle(e))}</span>`, fmtDur(entryMs(e)))).join('');
+  const m = new Map();
+  es.forEach(e => { const k = `${entryTitle(e)}|${entrySub(e)}`; if (!m.has(k)) m.set(k, []); m.get(k).push(e); });
+  return [...m.values()].map(list => {
+    const first = list.reduce((a, e) => (new Date(entryStart(e)) < new Date(a) ? entryStart(e) : a), entryStart(list[0]));
+    const last = list.reduce((a, e) => (new Date(entryEnd(e)) > new Date(a) ? entryEnd(e) : a), entryEnd(list[0]));
+    const total = list.reduce((s, e) => s + entryMs(e), 0);
+    return row(`<span><span class="mono">${fmtTime(first)}–${fmtTime(last)}</span> · ${esc(entryTitle(list[0]))} <span class="faint">${list.length} ${list.length === 1 ? 'sessão' : 'sessões'}</span></span>`, fmtDur(total));
+  }).join('');
+}
+
 function resumoHTML(title, es) {
   const key = actSelKey(es.map(e => e.id));
   const mode = db.setting('resMode', 'cron');
   const tagged = es.flatMap((e, i) => actList(e.id).map(r => ({ ...r, _i: i })));
   const an = actAnalyzeList(tagged, 'program');
   const colorOf = Object.fromEntries(an.groups.map(g => [g.id, g.color]));
+  const othAttr = actOthMembersAttr(an);
   const parentOf = Object.fromEntries(an.groups.map(g => [g.id, g.parent || null]));
   const totalBruto = unionBrutoMs(es);
   const totalTrab = es.reduce((s, e) => s + entryMs(e), 0);
@@ -145,7 +171,7 @@ function resumoHTML(title, es) {
       const base = off, wS = x.span / totalSpan * 100;
       slices.push({ e: x.e.id, l: base, w: wS, st: x.st, span: x.span });
       const pos = (a, b) => ({ l: base + Math.max(0, a - x.st) / x.span * wS, w: Math.max(.3, (Math.min(x.span, b - x.st) - Math.max(0, a - x.st)) / x.span * wS) });
-      an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}"${parentOf[r.gid] ? ` data-par="${esc(parentOf[r.gid])}" data-tbc="${esc(colorOf[r.gid])}"` : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" title="${esc(r.app)}${r.doc ? ' · ' + esc(r.doc) : ''}" style="--tb:${parentOf[r.gid] ? '#94A3B8' : (colorOf[r.gid] || 'var(--accent)')};left:${q.l}%;width:${q.w}%"></span>`; });
+      an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}"${parentOf[r.gid] ? ` data-par="${esc(parentOf[r.gid])}" data-tbc="${esc(colorOf[r.gid])}"` : ''}${parentOf[r.gid] === 'outros' ? othAttr : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" title="${esc(r.app)}${r.doc ? ' · ' + esc(r.doc) : ''}" style="--tb:${parentOf[r.gid] ? '#94A3B8' : (colorOf[r.gid] || 'var(--accent)')};left:${q.l}%;width:${q.w}%"></span>`; });
       if (db.setting('actShowFora', true)) (x.e.segments || []).forEach((sg, k, arr) => {
         if (sg.why !== 'moved' || k >= arr.length - 1 || !sg.e || !arr[k + 1].s) return;
         const q = pos(new Date(sg.e).getTime(), new Date(arr[k + 1].s).getTime()); if (q.w > 0) parts += actMovedSpanHTML(sg, q.l, q.w);
@@ -155,11 +181,11 @@ function resumoHTML(title, es) {
       off += wS;
     });
     bar = `<div class="act-strip res-strip" data-slices="${esc(JSON.stringify(slices))}" data-mode="program" data-ent="${esc(key)}" style="height:34px">${parts}${actSelOverlays(key, slices)}</div>`;
-    note = 'Cada sessão ocupa uma fatia proporcional à sua duração, na ordem em que aconteceram. Os programas e as pausas ficam no lugar em que aconteceram dentro de cada fatia.';
+    note = 'Cada sessão ocupa uma fatia proporcional à sua duração, na ordem em que aconteceram.<br>Os programas e as pausas ficam no lugar em que aconteceram dentro de cada fatia.';
   } else {
     const tot = Math.max(1, totalBruto);
     let off = 0, parts = '';
-    an.groups.filter(g => !g.hidden).forEach(g => { const w = g.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" data-g="${esc(g.id)}"${g.id === 'outros' ? ' data-par="outros" data-tbc="' + esc(g.color) + '"' : ''} title="${esc(g.label)} · ${fmtDur(g.ms)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
+    an.groups.filter(g => !g.hidden).forEach(g => { const w = g.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" data-g="${esc(g.id)}"${g.id === 'outros' ? ' data-par="outros" data-tbc="' + esc(g.color) + '"' + othAttr : ''} title="${esc(g.label)} · ${fmtDur(g.ms)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
     pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).forEach(bk => { const w = bk.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" data-pk="${bk.kind}" title="${esc(bk.label)} · ${fmtDur(bk.ms)}" style="--ph:${bk.color};--pg:${pauseGapOf(bk.color)};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
     const restMs = Math.max(0, totalBruto - an.groups.reduce((t, g) => t + g.ms, 0) - totalPausa);
     if (restMs > 1000 && off < 100) parts += `<span class="act-track" style="left:${off}%;width:${100 - off}%"></span>`;
@@ -169,15 +195,20 @@ function resumoHTML(title, es) {
   const legendChips = an.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="res-prog"${g.id === 'outros' ? ' data-hl="outros"' + actOthMembersAttr(an) : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="Clique para ver as opções deste programa"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('');
   const pauseChips = pauseBucketChip ? pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).map(pauseBucketChip).join('') : '';
   const fileAn = actAnalyzeList(tagged, "both");
-  const fileChips = fileAn.groups.filter(g => !g.hidden).map(g => `<span class="act-chip" style="--tb:${g.color}" title="${esc(g.label)} · ${fmtDur(g.ms)}"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></span>`).join('');
-  const legendHTML = `<div class="lbl">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Arquivo / site</div><div class="act-chips">${fileChips || '<span class="muted small">Sem arquivos ou sites registrados.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || '<span class="muted small">Sem pausas.</span>'}</div>`;
-  const sessions = es.map(e => `<div class="row between small res-row"><span><span class="mono">${fmtTime(entryStart(e))}–${fmtTime(entryEnd(e))}</span> · ${esc(entryTitle(e))}</span><span class="mono">${fmtDur(entryMs(e))}</span></div>`).join('');
+  const fileMembers = (g) => {
+    const arr = g.id === 'outros' ? fileAn.groups.filter(x => x.parent === 'outros').map(x => ({ l: x.label, ms: x.ms, c: x.color }))
+      : (g.items || []).slice(0, 15).map(it => ({ l: it.doc || it.app, ms: it.ms, c: g.color }));
+    return arr.length ? ` data-members="${esc(JSON.stringify(arr))}"` : '';
+  };
+  const fileChips = fileAn.groups.filter(g => !g.hidden).map(g => `<span class="act-chip" style="--tb:${g.color}"${fileMembers(g)}><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></span>`).join('');
+  const legendHTML = `<div class="lbl" style="margin-top:14px">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Arquivo / site</div><div class="act-chips">${fileChips || '<span class="muted small">Sem arquivos ou sites registrados.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || '<span class="muted small">Sem pausas.</span>'}</div>`;
+  const sessions = resumoSessionsHTML(es, mode);
   return `<div class="dh"><div class="grow"><span class="small muted">Resumo</span><h2 style="margin-top:2px">${esc(title)}</h2></div>${toggles}<button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
   <div class="db stack" style="gap:12px">
     <div class="small muted">Bruto ${fmtDur(totalBruto)} · trabalho ${fmtDur(totalTrab)} · pausas ${fmtDur(totalPausa)} · ${es.length} sessão(ões)</div>
     ${actForaToggleHTML(es)}
     ${actSelBarHTML(key)}
-    <div class="act-sec">${bar}<div class="small muted">${note}</div>${legendHTML}</div>
+    <div class="act-sec">${bar}<div class="muted" style="font-size:.78em;line-height:1.5;margin-top:6px">${note}</div>${legendHTML}</div>
     <div><div class="lbl">Sessões</div>${sessions}</div>
   </div>`;
 }
