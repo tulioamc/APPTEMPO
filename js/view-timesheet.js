@@ -61,7 +61,7 @@ VIEWS.timesheet = () => {
         <button class="btn danger" data-act="ts-stop">${icon('stop')} Encerrar</button>
         <button class="btn ghost" data-act="ts-edit" data-id="${a.id}">${icon('edit')} Revisar sessão</button>
       </div>
-      ${a.segments.length > 1 ? `<div class="small muted">${a.segments.length - 1} pausa(s) · tempo pausado não conta</div>` : ''}
+      ${sessionSumHTML(a)}
       ${pauseSuggestionsHTML(a)}
     </div>`;
   } else {
@@ -477,4 +477,18 @@ function groupedRowsHTML(entries) {
       <div class="grp-kids">${list.map(entryRowHTML).join('')}</div>
     </details>`;
   }).join('');
+}
+
+/* Resumo discreto da sessão: projetos que participaram, pausa, bruto e líquido. */
+function sessionSumHTML(a) {
+  const ids = [a.project_id, ...(a.segments || []).map(x => x.movedTo)].filter(Boolean);
+  const nomes = [...new Set(ids)].map(id => db.get('tempo_projects', id)).filter(Boolean).map(p => p.name);
+  const pausa = pauseGapsOf([a]).reduce((t, g) => t + (new Date(g.e) - new Date(g.s)), 0);
+  const bruto = unionBrutoMs([a]);
+  const liq = entryMs(a);
+  return `<div class="small muted" style="display:flex;gap:6px 12px;flex-wrap:wrap">
+    <span>Projetos: ${nomes.map(esc).join(', ') || '—'}</span>
+    <span class="mono">pausa ${fmtDur(pausa)}</span>
+    <span class="mono">bruto ${fmtDur(bruto)}</span>
+    <span class="mono">líquido ${fmtDur(liq)}</span></div>`;
 }
