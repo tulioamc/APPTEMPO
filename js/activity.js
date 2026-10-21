@@ -139,8 +139,10 @@ function actAnalyzeList(list0, mode) {
   // Apps de sistema e de pouca utilidade (ajustes, fotos, extensões, Spotify, teclado...) viram a pasta "Outros".
   // Cada um continua com o próprio endereço, tempo e organização: só fica oculto nos chips e aparece ao abrir "Outros".
   const OTHERS_RE = /ajustes do sistema|system settings|system preferences|^fotos$|^photos$|itens de in[ií]cio|extens[õo]es|^notas$|^notes$|spotify|^teclado$|^keyboard$|armazenamento|^storage$|^rel[óo]gio$|^clock$|configura[çc][õo]es/i;
-  const isOther = (g) => g.items.length > 0 && g.items.every(it => OTHERS_RE.test(String(it.app || '').trim()));
+  // Também vão para "Outros" os que somam pouco (menos de 5 min), fora os 4 maiores de cada lista.
   let arr = Object.values(groups);
+  const topIds = new Set([...arr].sort((a, b) => b.ms - a.ms).slice(0, 4).map(g => g.id));
+  const isOther = (g) => g.items.length > 0 && (g.items.every(it => OTHERS_RE.test(String(it.app || '').trim())) || (!topIds.has(g.id) && g.ms < 5 * 60e3));
   const oth = arr.filter(isOther);
   if (oth.length) {
     const ids = new Set(oth.map(g => g.id));

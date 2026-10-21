@@ -60,6 +60,7 @@ const undoStack = [];
 let undoing = false;
 const undoPush = (op) => { if (undoing || UNDO_SKIP.has(op.t)) return; undoStack.push(op); if (undoStack.length > UNDO_MAX) undoStack.shift(); };
 
+const CACHE_KEY = 'tempo-cache-v1';
 const db = {
   adapter: new MemoryAdapter(),
   data: {},
@@ -70,8 +71,24 @@ const db = {
   async init(adapter) {
     if (adapter) this.adapter = adapter;
     this.data = this.empty();
-    try { const snap = await this.adapter.loadAll(); if (snap) TABLES.forEach(t => this.data[t] = snap[t] || []); }
-    catch (e) { this.syncError = e.message; }
+    // mostra já o último retrato salvo neste aparelho; o servidor atualiza logo depois
+    const cached = this.loadCache();
+    if (cached && this.onCache) { try { this.onCache(); } catch (e) { /* segue: a tela completa vem depois */ } }
+    try {
+      const snap = await this.adapter.loadAll();
+      if (snap) { TABLES.forEach(t => this.data[t] = snap[t] || []); this.saveCache(); }
+    } catch (e) { if (!cached) this.syncError = e.message; }
+  },
+  loadCache() {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY); if (!raw) return false;
+      const snap = JSON.parse(raw); TABLES.forEach(t => this.data[t] = Array.isArray(snap[t]) ? snap[t] : []);
+      return true;
+    } catch (e) { return false; }
+  },
+  saveCache() {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(this.data)); }
+    catch (e) { try { localStorage.removeItem(CACHE_KEY); } catch (e2) { /* sem armazenamento: segue sem cache */ } }
   },
   /* Busca do servidor de novo (sessões iniciadas em outro lugar, ex.: Chrome). Espera as gravações pendentes. */
   async refresh() {
@@ -82,7 +99,7 @@ const db = {
       const snap = await this.adapter.loadAll(); if (!snap) return;
       // se alguém gravou durante a busca, o retrato do servidor pode ser antigo: descarta e deixa para a próxima
       if ((this.writes || 0) !== seq || this.pending > 0) return;
-      TABLES.forEach(t => this.data[t] = snap[t] || []); this.emit();
+      TABLES.forEach(t => this.data[t] = snap[t] || []); this.saveCache(); this.emit();
     } catch (e) { /* sem rede: tenta de novo na próxima vez */ }
   },
   subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },

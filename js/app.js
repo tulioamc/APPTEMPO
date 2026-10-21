@@ -438,6 +438,7 @@ function applyAppearance() {
 /* ---------- inicialização ---------- */
 ACTIONS.signout = async () => {
   try { await window.tempoClient?.auth.signOut(); } catch (e) { /* segue mesmo assim */ }
+  try { localStorage.removeItem('tempo-cache-v1'); } catch (e) { /* sem armazenamento */ }
   location.reload();
 };
 
@@ -468,7 +469,9 @@ async function boot() {
     await authGate(client);
     adapter = new SupabaseAdapter(client);
   }
+  db.onCache = () => { try { render(); } catch (e) { /* tela completa vem depois */ } };
   await db.init(adapter);
+  db.onCache = null;
   if (db.syncError) {
     // não semeia nem mostra nada por cima: evita duplicar dados se a leitura falhou
     document.querySelector('.content').innerHTML = `<div class="banner warn">${icon('alert', 'ico')}<span class="grow"><b>Não consegui ler seus dados.</b> ${esc(db.syncError)}</span><button class="btn sm" onclick="location.reload()">Tentar de novo</button></div>`;

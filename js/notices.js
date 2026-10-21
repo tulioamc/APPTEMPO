@@ -187,11 +187,11 @@ ACTIONS['todo-add'] = () => {
   if (todoAddRaw(raw, alarm) && inp) inp.value = '';
 };
 /* Mostra o checkbox "Alarme" só quando o texto tem horário. */
-function todoAlarmPeek(inp) {
-  const w = document.getElementById('todo-alarm-wrap'); if (!w) return;
+function todoAlarmPeek(inp, wrapId = 'todo-alarm-wrap', boxId = 'todo-alarm') {
+  const w = document.getElementById(wrapId); if (!w) return;
   const p = parseTodoText(String(inp.value || '').replace(TODO_ALARM_RE, '').trim());
   w.style.display = p.due ? 'inline-flex' : 'none';
-  if (!p.due) { const c = document.getElementById('todo-alarm'); if (c) c.checked = false; }
+  if (!p.due) { const c = document.getElementById(boxId); if (c) c.checked = false; }
 }
 const TODO_ALARM_RE = /\s!alarme\s*$/i;
 /* Cria um to-do a partir do texto: "!seg,qua" = fixo; "[1h]" ou "[30min]" = tempo estimado. */
@@ -307,14 +307,15 @@ ACTIONS['notice-cut'] = (el) => {
 };
 
 /* To-do editável: clique no texto, reescreva (data e hora em linguagem natural) e confirme com Enter ou ao sair do campo. */
-function todoEditRaw(n) { const d = n.data || {}; const base = d.due ? `${n.title} ${todoDueLabel(d)}` : n.title; return d.alarm && d.due ? `${base} !alarme` : base; }
+function todoEditRaw(n) { const d = n.data || {}; return d.due ? `${n.title} ${todoDueLabel(d)}` : n.title; }
 ACTIONS['todo-edit'] = (el) => { S.todoEdit = el.dataset.id; render(); setTimeout(() => { const i = $('#todo-edit'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 0); };
-ACTIONS['todo-key'] = (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } else if (e.key === 'Escape') { S.todoEdit = null; render(); } };
+ACTIONS['todo-key'] = (e) => { if (e.key === 'Enter') { e.preventDefault(); ACTIONS['todo-save'](e.target); } else if (e.key === 'Escape') { e.preventDefault(); S.todoEdit = null; render(); } };
+ACTIONS['todo-cancel'] = () => { if (!S.todoEdit) return; S.todoEdit = null; render(); };
 ACTIONS['todo-save'] = (el) => {
   const id = el.dataset.id; if (S.todoEdit !== id) return; S.todoEdit = null;
   const raw0 = el.value.trim(); if (!raw0 || !db.get('tempo_notices', id)) { render(); return; }
   const cur = db.get('tempo_notices', id);
-  const alarm = TODO_ALARM_RE.test(raw0); const raw = raw0.replace(TODO_ALARM_RE, '').trim();
+  const alarm = !!document.getElementById('todo-edit-alarm')?.checked || TODO_ALARM_RE.test(raw0); const raw = raw0.replace(TODO_ALARM_RE, '').trim();
   const p = parseTodoText(raw);
   const old = cur.data || {};
   const keep = p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {};
@@ -331,7 +332,7 @@ function todoItemHTML(t) {
   const est = t.data?.est;
   const real = t.data?.taskId ? db.where('tempo_time_entries', e => e.task_id === t.data.taskId).reduce((s, e) => s + entryMs(e), 0) : 0;
   const estTxt = est ? `<span class="todo-due">${real ? fmtDur(real) + ' / ' : 'est. '}${fmtDur(est * 60000)}</span>` : '';
-  return `<div class="todo ${t.status === 'done' ? 'done' : ''}" data-tid="${t.id}" ${t.status === 'done' || todoSortMode() === 'alpha' ? '' : 'draggable="true"'}><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-save'](this)">` : `<span class="grow todo-title" data-act="todo-edit" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${estTxt}${t.data?.adiou ? `<span class="todo-due">adiou ${t.data.adiou}x</span>` : ''}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="btn sm icon ghost" data-act="todo-play" data-id="${t.id}" aria-label="Começar registro" title="Começar registro">${icon('play')}</button><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`;
+  return `<div class="todo ${t.status === 'done' ? 'done' : ''}" data-tid="${t.id}" ${t.status === 'done' || todoSortMode() === 'alpha' ? '' : 'draggable="true"'}><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" oninput="todoAlarmPeek(this,'todo-edit-alarm-wrap','todo-edit-alarm')" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-cancel']()"><label id="todo-edit-alarm-wrap" class="row gap-s small" onmousedown="event.preventDefault()" style="display:${parseTodoText(todoEditRaw(t)).due ? 'inline-flex' : 'none'};align-items:center;white-space:nowrap"><input type="checkbox" id="todo-edit-alarm" ${t.data?.alarm ? 'checked' : ''}> Alarme</label>` : `<span class="grow todo-title" data-act="todo-edit" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${estTxt}${t.data?.adiou ? `<span class="todo-due">adiou ${t.data.adiou}x</span>` : ''}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="btn sm icon ghost" data-act="todo-play" data-id="${t.id}" aria-label="Começar registro" title="Começar registro">${icon('play')}</button><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`;
 }
 /* Abertos primeiro; concluídos agrupados por dia da resolução, mais recentes primeiro.
    recentDays: mostra só os concluídos dos últimos N dias (o painel usa 7). */
