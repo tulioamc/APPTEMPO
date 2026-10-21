@@ -161,6 +161,7 @@ function openQuote(id, preset = {}) {
         <div class="field"><label for="qf-s">Status</label><select id="qf-s" class="input" name="status_id">${options(statuses('quote'), v.status_id || statuses('quote')[0]?.id)}</select></div>
         <div class="field"><label for="qf-v">Valor</label><input id="qf-v" class="input mono" name="value" ${moneyAttrs(v.value)}></div>
         <div class="field"><label for="qf-h">Horas estimadas</label><input id="qf-h" type="number" step="0.5" class="input" name="est_hours" value="${v.est_hours ?? ''}"></div>
+        <div class="field span2">${sugHorasHTML(v.name)}</div>
         <div class="field"><label for="qf-wt">Tipo de trabalho</label><select id="qf-wt" class="input" name="work_type_id">${options(workTypes(), v.work_type_id, { empty: true, emptyLabel: 'Sem tipo' })}</select></div>
         <div class="field"><label for="qf-ri">Rodadas incluídas</label><input id="qf-ri" type="number" min="0" class="input" name="revisions_included" value="${v.revisions_included ?? 2}"></div>
         <div class="field"><label for="qf-sa">Enviado em</label><input id="qf-sa" type="date" class="input" name="sent_at" value="${v.sent_at || ''}"></div>
@@ -183,6 +184,8 @@ function openQuote(id, preset = {}) {
   l.box.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-x]'); if (!b) return; const k = b.dataset.x;
     if (k === 'newclient') return openPartyForm('client', null, (c) => { $('#qf-c', l.box).innerHTML = clientSelectOptions(c.id); });
+    if (k === 'calc') return openCalculator();
+    if (k === 'use-hint') { $('#qf-h', l.box).value = b.dataset.h; return; }
     if (k === 'fu') { const n = $('#fu-n', l.box).value.trim(); if (!n) return toast('Escreva o que foi conversado.'); db.update('tempo_quotes', x.id, { followups: [...(x.followups || []), { date: $('#fu-d', l.box).value, note: n }] }); l.close(); openQuote(x.id); toast('Contato registrado'); return; }
     if (k === 'del') { if (!await confirmBox({ title: 'Excluir proposta?', body: esc(x.name), ok: 'Excluir', danger: true })) return; db.remove('tempo_quotes', x.id); l.close(); return; }
     if (k === 'open-proj') { l.close(); openProject(linkedProject(x).id); return; }
@@ -222,13 +225,24 @@ function openQuote(id, preset = {}) {
   });
 }
 
+/* Sugestão de horas (7.2): média líquida dos projetos com as mesmas palavras no nome (ex.: "ID VISUAL"). */
+const sugWords = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
+function sugHorasHTML(name) {
+  const toks = sugWords(name).filter(w => w.length >= 2);
+  let hint = '';
+  if (toks.length) {
+    const hits = projects().filter(p => { const ws = new Set(sugWords(p.name)); return statusCat(p.status_id) === 'done' && projectMs(p.id) > 0 && toks.every(t => ws.has(t)); });
+    if (hits.length) { const avg = hits.reduce((s, p) => s + hours(projectMs(p.id)), 0) / hits.length; hint = `<b>${esc(String(name).trim())}</b> costuma demorar <b>${avg.toFixed(1).replace('.', ',')} h</b> líquidas (média de ${hits.length} projeto(s) parecido(s)). <button type="button" class="btn sm ghost" data-x="use-hint" data-h="${Math.round(avg * 2) / 2}">Usar</button>`; }
+  }
+  return `<div class="row between small" style="flex-wrap:wrap;gap:8px"><span class="muted">${hint || 'Sem projetos concluídos parecidos para sugerir horas.'}</span><button type="button" class="btn sm" data-x="calc">Calculadora de horas</button></div>`;
+}
 /* Cálculo da proposta:
    A = horas × valor-hora + contingência + margem
    B = custos extras (terceirizados)
    C = BV (comissão) sobre A + B
    D = imposto da nota sobre A + B + C (por fora; ou por dentro, se marcado)  */
 function calcQuote(st, rates) {
-  const r = Number(rates[st.profile]) || 0; const h = st.lines.reduce((s, x) => s + (Number(x.h) || 0), 0);
+  const r = st.profile === "outro" ? (Number(st.customRate) || 0) : (Number(rates[st.profile]) || 0); const h = st.lines.reduce((s, x) => s + (Number(x.h) || 0), 0);
   const base = h * r; const cont = base * (Number(st.contingency) || 0) / 100; const marg = (base + cont) * (Number(st.margin) || 0) / 100;
   const A = base + cont + marg;
   const B = st.ext.on ? st.ext.items.reduce((s, x) => s + (Number(x.value) || 0), 0) : 0;
@@ -242,11 +256,11 @@ function calcSummaryHTML(c, st) {
   const line = (lab, rate, v, sub) => `<span class="${sub ? 'muted small sub' : ''}">${lab}</span><span class="v muted small">${rate}</span><span class="v">${fmtMoney0(v)}</span><span class="v faint small">${sub ? '' : pct(v)}</span>`;
   return `<div class="calc-sum4">
     <span class="lbl">Item</span><span class="lbl v">Taxa</span><span class="lbl v">Valor</span><span class="lbl v">% do total</span>
-    ${line('<b>A</b> Subtotal do trabalho', fmtH(c.h * 3600000) + ' × ' + (fmtMoney(c.r) || 'R$ —'), c.A)}
+    ${line('<b>Subtotal</b> do trabalho', fmtH(c.h * 3600000) + ' × ' + (fmtMoney(c.r) || 'R$ —'), c.A)}
     ${line('↳ horas × valor-hora', '', c.base, 1)}${c.cont ? line('↳ contingência', (st.contingency || 0) + '%', c.cont, 1) : ''}${c.marg ? line('↳ margem', (st.margin || 0) + '%', c.marg, 1) : ''}
-    ${line('<b>B</b> Custos extras', st.ext.on ? st.ext.items.filter(x => x.value).length + ' item(ns)' : 'desligado', c.B)}
-    ${line('<b>C</b> BV (comissão)', st.bv.on ? (st.bv.pct || 0) + '% de A+B' : 'desligado', c.C)}
-    ${line('<b>D</b> Imposto (nota fiscal)', st.nf.on ? (st.nf.pct || 0) + '% ' + (st.nf.inside ? 'por dentro' : 'de A+B+C') : 'sem nota', c.D)}
+    ${line('<b>Terceirizado</b> (custos extras)', st.ext.on ? st.ext.items.filter(x => x.value).length + ' item(ns)' : 'desligado', c.B)}
+    ${line('<b>Comissão</b> (BV)', st.bv.on ? (st.bv.pct || 0) + '% de A+B' : 'desligado', c.C)}
+    ${line('<b>Impostos</b> (nota fiscal)', st.nf.on ? (st.nf.pct || 0) + '% ' + (st.nf.inside ? 'por dentro' : 'de A+B+C') : 'sem nota', c.D)}
     <span class="tot">Total da proposta</span><span class="v tot"></span><span class="v tot">${fmtMoney0(c.total)}</span><span class="v tot">100%</span>
   </div>`;
 }
@@ -263,7 +277,7 @@ function openCalculator() {
       <div class="panel"><div class="panel-h"><h3>Valor-hora por perfil de cliente</h3><span class="small muted">fica salvo nas preferências</span></div><div class="panel-b grid3">
         ${[['grande', 'Grande'], ['medio', 'Médio'], ['pequeno', 'Pequeno']].map(([k, lab]) => `<div class="field"><label for="rt-${k}">${lab} (por hora)</label><input id="rt-${k}" class="input mono" data-rate="${k}" ${moneyAttrs(rates[k])} placeholder="Defina"></div>`).join('')}
       </div></div>
-      <div class="row"><span class="lbl">Perfil deste cliente</span><div class="seg">${[['grande', 'Grande'], ['medio', 'Médio'], ['pequeno', 'Pequeno']].map(([k, lab]) => `<button class="${st.profile === k ? 'on' : ''}" data-prof="${k}">${lab}</button>`).join('')}</div>${!rates[st.profile] ? '<span class="small" style="color:var(--warn)">Defina o valor-hora deste perfil.</span>' : ''}</div>
+      <div class="row"><span class="lbl">Perfil deste cliente</span><div class="seg">${[['grande', 'Grande'], ['medio', 'Médio'], ['pequeno', 'Pequeno'], ['outro', 'Outro valor']].map(([k, lab]) => `<button class="${st.profile === k ? 'on' : ''}" data-prof="${k}">${lab}</button>`).join('')}</div>${st.profile === 'outro' ? `<div class="field" style="max-width:200px"><label for="cc-cr">Valor-hora deste orçamento</label><input id="cc-cr" class="input mono" data-st="customRate" ${moneyAttrs(st.customRate)}></div>` : ''}${st.profile !== 'outro' && !rates[st.profile] ? '<span class="small" style="color:var(--warn)">Defina o valor-hora deste perfil.</span>' : ''}</div>
       <div class="stack" style="gap:8px"><span class="lbl">Etapas e horas estimadas</span>
         ${st.lines.map((x, i) => `<div class="calc-line"><input class="input sm" data-line="${i}" data-k="name" value="${esc(x.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), x.wt, { empty: true, emptyLabel: 'Tipo' })}</select><input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${x.h}" placeholder="Horas" aria-label="Horas"><button class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
         <div><button class="btn sm" data-add>${icon('plus')} Adicionar etapa</button></div>

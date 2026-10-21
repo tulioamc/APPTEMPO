@@ -5,11 +5,12 @@
    são registradas para sempre e aparecem na aba Avisos, ordenadas por data.
    ===================================================================== */
 
-const NOTICE_KINDS = { conta: ['Conta a pagar', 'money'], pause: ['Pausa', 'alert'], prazo: ['Prazo', 'clock'], cobranca: ['Cobrança', 'money'], orcamento: ['Orçamento', 'doc'], reminder: ['Lembrete', 'bell'], todo: ['To-do', 'check'] };
+const NOTICE_KINDS = { sessao: ['Sessão aberta', 'clock'], conta: ['Conta a pagar', 'money'], pause: ['Pausa', 'alert'], prazo: ['Prazo', 'clock'], cobranca: ['Cobrança', 'money'], orcamento: ['Orçamento', 'doc'], reminder: ['Lembrete', 'bell'], todo: ['To-do', 'check'] };
 const noticeKind = (k) => NOTICE_KINDS[k] || [k, 'bell'];
 
 /* Cria um aviso pendente. A chave evita duplicar o mesmo aviso (ex.: mesmo prazo no mesmo dia). */
 function addNotice(o, silent) {
+  if (FERIAS_HOJE && ['prazo', 'cobranca', 'orcamento', 'conta'].includes(o.kind)) return null;
   if (o.key && SCAN_SEEN) SCAN_SEEN.add(o.key);
   const old = o.key ? db.all('tempo_notices').find(n => n.key === o.key) : null;
   if (old && !['prazo', 'cobranca', 'orcamento', 'conta'].includes(o.kind)) return null;
@@ -48,6 +49,7 @@ const noticeBtnsBase = (n) => {
   if (n.kind === 'pause') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Aceitar</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'activity') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Adicionar à nota</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'todo') return '';
+  if (n.kind === 'sessao') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Manter aberta</button></div>`;
   if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
   return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Virar to-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
 };
@@ -221,8 +223,12 @@ ACTIONS['todo-del'] = (el) => { db.remove('tempo_notices', el.dataset.id, true);
 /* Varredura automática: prazos, cobranças e orçamentos com validade próxima. */
 let SCAN_SEEN = null; // chaves geradas nesta varredura
 let SCAN_CHANGED = false; // a varredura criou ou resolveu algum aviso
+/* Férias (6): dias marcados em Ajustes (ou no banco, chave ferias) não geram prazo, cobrança, orçamento nem conta. */
+let FERIAS_HOJE = false;
+function emFerias(day) { return (db.setting('ferias', []) || []).some(f => f && f.inicio && f.fim && day >= f.inicio && day <= f.fim); }
 function scanAlerts() {
   const today = ymd(new Date());
+  FERIAS_HOJE = emFerias(today);
   SCAN_SEEN = new Set(); SCAN_CHANGED = false;
   db.all('tempo_projects').filter(p => !p.archived && p.deadline && !['Concluído', 'Cancelado'].includes(statusName(p.status_id))).forEach(p => {
     const d = daysBetween(today, p.deadline); // positivo = faltam dias
@@ -247,15 +253,48 @@ function scanAlerts() {
      se a varredura não gerou mais a chave do aviso, a condição acabou (paga, entregue, data trocada, apagada...). */
   const AUTO_KINDS = ['prazo', 'cobranca', 'orcamento', 'conta'];
   const SRC_TABLE = { expense: 'tempo_expenses', project: 'tempo_projects', quote: 'tempo_quotes' };
-  db.all('tempo_notices').filter(n => AUTO_KINDS.includes(n.kind) && ['pending', 'snoozed'].includes(n.status) && n.key && !SCAN_SEEN.has(n.key)).forEach(n => {
+  db.all('tempo_notices').filter(n => !FERIAS_HOJE && AUTO_KINDS.includes(n.kind) && ['pending', 'snoozed'].includes(n.status) && n.key && !SCAN_SEEN.has(n.key)).forEach(n => {
     const src = SRC_TABLE[n.entity];
     if (src && !db.all(src).length) return; // dados ainda não carregados: não resolve nada
     decideNotice(n, 'accepted', 'Resolvido: a situação mudou'); SCAN_CHANGED = true;
   });
+  scanSessoesAbertas(today);
   SCAN_SEEN = null;
   db.all('tempo_notices').filter(n => n.status === 'snoozed' && n.snooze_until && n.snooze_until <= today).forEach(n => db.update('tempo_notices', n.id, { status: 'pending', snooze_until: null }, true));
   if (SCAN_CHANGED) db.emit(); // só avisa a tela se algo mudou (evita laço)
 }
+
+/* Sessão esquecida aberta (1.4): cronômetro rodando desde um dia anterior e sem nenhum sinal de atividade há 2h ou mais.
+   Propõe cortar a sessão no último sinal de atividade (registro de atividade ou fim do último segmento). */
+const SESSAO_QUIETO_MS = 2 * 36e5;
+function sessaoCutAt(e) {
+  const segs = e.segments || []; const last = segs[segs.length - 1] || {};
+  let t = last.s ? new Date(last.s).getTime() : 0;
+  if (last.e && new Date(last.e).getTime() > t) t = new Date(last.e).getTime();
+  actList(e.id).forEach(r => { const x = new Date(r.to).getTime(); if (x > t) t = x; });
+  return new Date(t).toISOString();
+}
+function scanSessoesAbertas(today) {
+  const open = openEntries();
+  db.all('tempo_notices').filter(n => n.kind === 'sessao' && n.status === 'pending' && !open.some(e => e.id === n.data?.entry_id)).forEach(n => decideNotice(n, 'accepted', 'Resolvido: a sessão foi encerrada'));
+  open.forEach(e => {
+    const st = entryStart(e); if (!st) return;
+    const startDay = ymd(new Date(st)); if (startDay >= today) return;
+    const cut = sessaoCutAt(e); if (Date.now() - new Date(cut).getTime() < SESSAO_QUIETO_MS) return;
+    addNotice({ kind: 'sessao', key: `sessao:${e.id}`, title: `Sessão de ${fmtDate(startDay)} ficou aberta`, body: `Cortar às ${fmtTime(cut)}, último sinal de atividade?`, entity: 'entry', entity_id: e.id, data: { entry_id: e.id, cut } }, true);
+  });
+}
+ACTIONS['notice-cut'] = (el) => {
+  const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
+  const e = db.get('tempo_time_entries', n.data?.entry_id);
+  if (!e || !openEntries().some(x => x.id === e.id)) { decideNotice(n, 'ignored', 'Sessão já encerrada'); db.emit(); return; }
+  const segs = clone(e.segments); const last = segs[segs.length - 1];
+  const cut = n.data.cut;
+  if (!last.e) last.e = (cut && new Date(cut) > new Date(last.s)) ? cut : last.s;
+  db.update('tempo_time_entries', e.id, { state: 'done', segments: segs });
+  decideNotice(n, 'accepted', `Cortada às ${fmtTime(last.e)}`);
+  db.emit();
+};
 
 /* To-do editável: clique no texto, reescreva (data e hora em linguagem natural) e confirme com Enter ou ao sair do campo. */
 function todoEditRaw(n) { const d = n.data || {}; return d.due ? `${n.title} ${todoDueLabel(d)}` : n.title; }

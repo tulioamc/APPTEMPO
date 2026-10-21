@@ -34,6 +34,7 @@ const NAV = [
   { id: 'timesheet', label: 'Time Sheet', icon: 'clock' },
   { id: 'todo', label: 'To-do', icon: 'check' },
   { id: 'productivity', label: 'Relatório Produtividade', icon: 'chart' },
+  { id: 'metas', label: 'Metas', icon: 'check' },
   { id: 'usage', label: 'Uso de programas', icon: 'chart' },
   { group: 'PJ' },
   { id: 'registry', label: 'Agências e clientes', icon: 'users' },

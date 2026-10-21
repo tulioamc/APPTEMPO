@@ -114,7 +114,7 @@ function logRetentionPanel() {
 const LOG_DAY_MS = 86400000;
 function logBlocksOf(day, recs) {
   const dayStart = new Date(day + 'T00:00:00').getTime();
-  const an = actAnalyzeList(recs, 'program');
+  const an = actAnalyzeList(recs, "both");
   const colorOf = Object.fromEntries(an.groups.map(g => [g.id, g.color]));
   const blocks = an.records.map(r => {
     const a = Math.max(new Date(r.from).getTime(), dayStart), b = Math.min(new Date(r.to).getTime(), dayStart + LOG_DAY_MS);

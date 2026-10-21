@@ -109,16 +109,18 @@ const appFamily = (app) => {
 };
 const docPre = (doc) => { const m = String(doc || '').match(/^(.+?__)/); return m ? m[1] : null; };
 const shortName = (s, max = 30) => { s = String(s || ''); return s.length > max ? s.slice(0, max - 9) + '…' + s.slice(-8) : s; };
+const ACT_BROWSER_RE = /chrome|safari|edge|firefox|arc|brave|opera|vivaldi/i; /* registros de navegador são sites, não programas */
 function actAnalyzeList(list0, mode) {
   // Terminal e Finder não têm arquivo nem pasta na análise (registros antigos podem ter guardado nome de usuário ou pasta): viram só o app
-  const list = list0.map(x => (/^(terminal|finder)$/i.test(String(x.app || '')) ? { ...x, doc: null, folder: null } : x));
+  const list = list0.filter(x => mode === "site" ? ACT_BROWSER_RE.test(String(x.app || "")) : (mode === "program" || mode === "file") ? !ACT_BROWSER_RE.test(String(x.app || "")) : true).map(x => (/^(terminal|finder)$/i.test(String(x.app || '')) ? { ...x, doc: null, folder: null } : x));
   if (!list.length) return { groups: [], records: [] };
   const info = {};
   list.forEach(x => { const k = actKeyOf(x); info[k] = info[k] || { key: k, app: x.app, doc: x.doc, folder: x.folder }; });
   const find = actRoots(Object.values(info));
   const links = db.setting('actLinks', {}) || {};
   const gidOf = (x) => {
-    if (mode === 'program') return 'p:' + toolAlias(x.app);
+    if (mode === "site") return "site:" + (String(x.doc || "").trim() || "(sem título)");
+    if (mode === "program") return "p:" + toolAlias(x.app);
     const k = actKeyOf(x);
     if (links[k]) return links[k];
     const fam = appFamily(x.app);
@@ -242,7 +244,7 @@ function progRecsOf(entryId, g) {
 /* Tempo de um programa nas sessões dadas (todo o tempo, ou só dentro dos trechos marcados). */
 function progMsOf(ids, gid, ranges) {
   return ids.reduce((sum, id) => {
-    const g = actAnalyze(id, 'program').groups.find(x => x.id === gid); if (!g) return sum;
+    const g = [...actAnalyze(id, "program").groups, ...actAnalyze(id, "both").groups, ...actAnalyze(id, "site").groups].find(x => x.id === gid); if (!g) return sum;
     if (!ranges) return sum + g.ms;
     return sum + actClipRecs(progRecsOf(id, g), ranges).inside.reduce((t, x) => t + (new Date(x.to) - new Date(x.from)), 0);
   }, 0);
@@ -366,8 +368,11 @@ function actStripHTML(e, A, mode = '') {
   return `<div class="act-strip" data-ent="${esc(e.id)}" data-mode="${mode}" data-t0="${t0}" data-span="${span}" style="position:relative">${pauses}${bars}</div>`;
 }
 
+const ACT_FV_MODES = ["file", "site", "both"];
+const ACT_FV_LBL = { file: "Arquivo", site: "Site", both: "Arquivo / site" };
+ACTIONS["act-fview"] = (el) => { db.setSetting("actFileView", el.dataset.v); db.emit(); };
 function actChipsHTML(A, mode) {
-  return `<div class="act-chips">${A.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="act-chip"${g.id === 'outros' ? ' data-hl="outros"' : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)}${mode === 'file' && g.items.length > 1 ? ` <span class="act-more" title="Ver os ${g.items.length} arquivos">+${g.items.length}</span>` : ''} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
+  return `<div class="act-chips">${A.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="act-chip"${g.id === 'outros' ? ' data-hl="outros"' : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)}${mode !== "site" && g.items.length > 1 ? ` <span class="act-more" title="Ver os ${g.items.length} arquivos">+${g.items.length}</span>` : ''} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
 }
 
 /* Pausas da sessão em caixinhas: o total, e dentro dele ócio, bloqueada, WhatsApp, Telegram e manual, com o tempo de cada um. */
@@ -381,10 +386,14 @@ function pauseChipsHTML(e) {
 /* Bloco da tela "Revisar sessão": uma faixa por programa e uma por arquivo. */
 function actSectionHTML(e) {
   if (!actList(e.id).length) return '';
-  const prog = actAnalyze(e.id, 'program'), file = actAnalyze(e.id, 'file');
+  const prog = actAnalyze(e.id, 'program');
   const sec = (title, mode, A) => `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div>${actStripHTML(e, A, mode)}${actChipsHTML(A, mode)}</div>`;
+  const fv = ACT_FV_MODES.includes(db.setting('actFileView', 'both')) ? db.setting('actFileView', 'both') : 'both';
+  const file = actAnalyze(e.id, fv);
+  const fvBtns = ACT_FV_MODES.map(v => `<button class="btn sm ${v === fv ? 'primary' : ''}" data-act="act-fview" data-v="${v}">${ACT_FV_LBL[v]}</button>`).join('');
+  const fileSec = `<div class="act-sec"><div class="row between"><span class="lbl">${ACT_FV_LBL[fv]}</span><span class="row" style="gap:4px">${fvBtns}</span></div>${actStripHTML(e, file, fv)}${actChipsHTML(file, fv)}</div>`;
   const toggle = actForaToggleHTML([e]);
-  return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${sec('Por programa', 'program', prog)}${sec('Por arquivo / página', 'file', file)}<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div><span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
+  return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${sec('Por programa', 'program', prog)}${fileSec}<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div><span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
 }
 
 /* Log discreto no fim do formulário da sessão: cada registro de atividade (programa e arquivo) e cada pausa, por horário.
@@ -404,8 +413,8 @@ function actLogFootHTML(e, legacyLines) {
 
 /* Janela de um grupo de arquivos: desfazer, juntar com outro grupo ou mover o tempo para outro projeto/tarefa. */
 function openActGroup(entryId, gid, onDone) {
-  if (gid === 'outros') return openOthersPanel([entryId], 'file', onDone);
-  const A = actAnalyze(entryId, 'file');
+  if (gid === 'outros') return openOthersPanel([entryId], 'both', onDone);
+  const A = ["both", "site", "file"].map(m => actAnalyze(entryId, m)).find(x => x.groups.some(g => g.id === gid)) || actAnalyze(entryId, "both");
   const g = A.groups.find(x => x.id === gid); if (!g) return;
   const others = A.groups.filter(x => x.id !== gid);
   openLayer({
@@ -478,7 +487,7 @@ function openProgMove(entryIds, gid, label, opts = {}) {
         const quem = ranges ? `Os trechos marcados de ${label}` : `Todo o tempo de ${label} nesta(s) sessão(ões)`;
         if (!await confirmBox({ title: 'Mover programa?', body: `${quem} vai para ${dest}.`, ok: 'Mover' })) return;
         let moved = 0;
-        entryIds.forEach(id => { const g = actAnalyze(id, 'program').groups.find(x => x.id === gid); if (g && actMoveGroup(id, g, { project_id: proj.value, task_id: task.value || null }, ranges)) moved++; });
+        entryIds.forEach(id => { const g = [...actAnalyze(id, "program").groups, ...actAnalyze(id, "both").groups, ...actAnalyze(id, "site").groups].find(x => x.id === gid); if (g && actMoveGroup(id, g, { project_id: proj.value, task_id: task.value || null }, ranges)) moved++; });
         if (!moved) return toast('Nada para mover.');
         toast('Tempo movido');
         ly.close(); opts.onDone && opts.onDone();
@@ -639,7 +648,7 @@ function actProjectHTML(entries) {
     });
     return `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div><div class="act-strip">${bars}</div><div class="act-chips">${A.groups.map(g => `<span class="act-chip" data-g="${esc(g.id)}" style="--tb:${g.color}"><i></i>${esc(g.label)} <span class="faint">${fmtH(g.ms)}</span></span>`).join('')}</div></div>`;
   };
-  return `<div class="stack" style="gap:10px;margin-bottom:14px">${sec('Por programa', 'program')}${sec('Por arquivo / página', 'file')}</div>`;
+  return `<div class="stack" style="gap:10px;margin-bottom:14px">${sec('Por programa', 'program')}${sec('Por arquivo / página', 'both')}</div>`;
 }
 
 

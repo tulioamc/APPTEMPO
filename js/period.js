@@ -36,7 +36,7 @@ function reportStrip(entries, day, mode) {
     });
   } else {
     entries.forEach(e => {
-      const A = actAnalyze(e.id, mode === 'programas' ? 'program' : 'file');
+      const A = actAnalyze(e.id, mode === "programas" ? "program" : "both");
       A.records.forEach(r => {
         const g = A.groups.find(x => x.id === r.gid); if (!g) return;
         const st = clip(new Date(r.from).getTime()), en = clip(new Date(r.to).getTime()); if (en <= st) return;

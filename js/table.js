@@ -28,7 +28,7 @@ document.addEventListener('input', (e) => {
   try { el.setSelectionRange(el.value.length, el.value.length); } catch (err) {}
 });
 
-function gridTable({ id, cols, rows, rowAttrs = () => '', defHidden = [], defSort = null, sortable = true, footer = true, rowById, cls = '', group = null }) {
+function gridTable({ id, cols, rows, rowAttrs = () => '', defHidden = [], defSort = null, sortable = true, footer = true, rowById, cls = '', group = null, widthRows = null }) {
   const t = tableState(id, cols, defHidden, defSort);
   // group: tabelas irmãs (ex.: Entradas e Saídas) dividem as larguras, para as colunas ficarem alinhadas
   const gid = group || id; const wt = group ? tableState(group, cols, defHidden, defSort) : t;
@@ -39,13 +39,14 @@ function gridTable({ id, cols, rows, rowAttrs = () => '', defHidden = [], defSor
   // largura padrão = conteúdo mais largo da coluna (sem espaço sobrando); notas/observações ficam com largura fixa
   const isLong = (k) => /note|obs|anota/i.test(k) || cols[k].long;
   const stripTxt = (h) => String(h ?? '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
-  const fitW = (k) => {
+  const fitW = (k, src = list) => {
     const c = cols[k]; if (isLong(k)) return c.w || 240;
     let max = stripTxt(c.label).length * 8 + 40;
-    for (const r of list) { try { const n = stripTxt(c.cell(r)).length * 7.4 + 26; if (n > max) max = n; } catch (e) {} }
+    for (const r of src) { try { const n = stripTxt(c.cell(r)).length * 7.4 + 26; if (n > max) max = n; } catch (e) {} }
     return Math.round(Math.max(60, Math.min(max, 360)));
   };
-  const W = (k) => wt.widths[k] || (cols[k].w && isLong(k) ? cols[k].w : fitW(k));
+  // tabelas irmãs: a largura sai do conteúdo de todas as linhas do grupo (widthRows), não só desta tabela
+  const W = (k) => wt.widths[k] || (cols[k].w && isLong(k) ? cols[k].w : fitW(k, widthRows && group ? widthRows : list));
   const total = vis.reduce((s, k) => s + W(k), 0);
   const head = vis.map(k => { const c = cols[k]; const s = t.sort?.key === k;
     return `<th draggable="true" data-col="${k}" data-table="${id}" class="${sortable && c.sort ? 'sortable' : ''} ${c.money ? 'money' : ''}" ${sortable && c.sort ? `data-act="tsort"` : ''} aria-sort="${s ? (t.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><span class="th-in">${c.ico ? `<span class="ico">${icon(c.ico)}</span>` : ''}<span class="th-l">${c.label}</span>${s ? (t.sort.dir > 0 ? ' ↑' : ' ↓') : ''}</span><span class="rz" data-rz="${k}" aria-hidden="true"></span></th>`; }).join('');

@@ -113,7 +113,7 @@ function openRangeZoom(entryId, a, b) {
 function openZoomOf(ents, a, b) {
   const recs = ents.flatMap(e => actList(e.id)).filter(r => new Date(r.to) > new Date(a) && new Date(r.from) < new Date(b))
     .map(r => ({ ...r, from: new Date(Math.max(new Date(r.from).getTime(), a)).toISOString(), to: new Date(Math.min(new Date(r.to).getTime(), b)).toISOString() }));
-  const A = actAnalyzeList(recs, 'file');
+  const A = actAnalyzeList(recs, "both");
   const span = b - a;
   const pct = (t) => (t - a) / span * 100;
   const hhmm = (t) => fmtTime(new Date(t).toISOString());
@@ -160,7 +160,7 @@ function openZoomOf(ents, a, b) {
       <div class="act-sec" style="width:100%"><div class="act-strip" style="position:relative;height:44px;width:100%;border-radius:0;margin-top:0">${pauses}${bars}</div></div>
       <div class="db stack" style="gap:12px">
         <div class="day-axis"><span>${hhmm(a)}</span><span>${fmtDur(span)}</span><span>${hhmm(b)}</span></div>
-        <div class="act-sec">${actChipsHTML(A, 'file')}</div>
+        <div class="act-sec">${actChipsHTML(A, "both")}</div>
         <div class="stack" style="gap:4px">${rows.length ? rows.join('') : '<span class="muted small">Trecho sem registros.</span>'}</div>
       </div>
       <div class="df"><button class="btn" data-act="close-layer">Fechar</button></div>`,

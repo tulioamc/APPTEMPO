@@ -216,6 +216,7 @@ async function bankLoadRaw() {
   BANK.learned = bankBuildLearned(every);
   BANK.links = await bankFetchAll(() => cl.from('tempo_bank_reimb_links').select('*').order('reimb_row_id'));
   BANK.plinks = await bankFetchAll(() => cl.from('tempo_bank_payment_links').select('*').order('txn_id'));
+  bankSyncIncomeRows();
 }
 // Pagamentos às terapeutas e à dentista ligam sozinhos à linha da tabela de terapias do mesmo mês (pelo nome).
 const bankFamily = (name) => {
@@ -1626,3 +1627,29 @@ ACTIONS['pix-ignore'] = (el) => {
   db.setSetting('pixIgnored', [...new Set([...db.setting('pixIgnored', []), el.dataset.id])]);
   PIX_LAYER && PIX_LAYER.close(); render(); toast('Pix ignorado');
 };
+
+/* Entradas da tabela de despesas (linhas "Não recebido" de freelas) acompanham os pagamentos de projeto nos dois sentidos:
+   - extrato ligado a um pagamento de projeto (vínculo do banco) → a linha do mesmo nome e mês vira "Recebido" na data do extrato;
+   - pagamento lançado no projeto (sem extrato) → a linha do mesmo nome e mês vira "Recebido" na data do pagamento. */
+const incNorm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const incMatch = (rowName, projName) => { const a = incNorm(rowName), b = incNorm(projName); return !!a && !!b && (a === b || (Math.min(a.length, b.length) >= 4 && (a.includes(b) || b.includes(a)))); };
+function bankSyncIncomeRows() {
+  const every = BANK.every || [];
+  const marks = []; // { month, projectId, date }
+  every.forEach(t => {
+    if (t.flow !== 'in' || !t.posted_on) return;
+    const pids = new Set([t.payment_id, ...((BANK.plinks || []).filter(l => l.txn_id === t.id && l.payment_id).map(l => l.payment_id))].filter(Boolean));
+    pids.forEach(pid => { const pay = db.get('tempo_payments', pid); if (pay) marks.push({ month: String(t.posted_on).slice(0, 7), projectId: pay.project_id, date: t.posted_on }); });
+  });
+  db.all('tempo_payments').forEach(pay => { if (pay.date) marks.push({ month: String(pay.date).slice(0, 7), projectId: pay.project_id, date: pay.date }); });
+  let changed = false;
+  const incomeRows = db.all('tempo_expenses').filter(e => e.kind === 'in' && e.status === 'Não recebido');
+  marks.forEach(m => {
+    const pr = db.get('tempo_projects', m.projectId); if (!pr) return;
+    const row = incomeRows.find(e => e.month === m.month && incMatch(e.name, pr.name));
+    if (!row) return;
+    db.update('tempo_expenses', row.id, { status: 'Recebido', paid_on: m.date }, true);
+    row.status = 'Recebido'; changed = true;
+  });
+  if (changed) db.emit();
+}

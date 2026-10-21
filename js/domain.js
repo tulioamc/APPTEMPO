@@ -325,9 +325,24 @@ function startEntry(sel) {
 // troca: o tempo de agora até a volta vai para o projeto "to" (fica como "Trabalho em …", sem pausa)
 function pauseEntry(e, at, troca) { const segs = clone(e.segments); const last = segs[segs.length - 1]; last.e = at || nowISO(); if (troca) { last.why = 'moved'; last.troca = true; last.movedTo = troca.to; } db.update('tempo_time_entries', e.id, { state: 'paused', segments: segs }); }
 function resumeEntry(e) { const segs = clone(e.segments); segs.push({ s: nowISO(), e: null }); db.update('tempo_time_entries', e.id, { state: 'running', segments: segs }); }
+/* Fim da sessão (1.2): se o último trecho é só ociosidade (nenhum registro de atividade nos últimos 2 min), corta no último sinal de atividade. */
+const STOP_TAIL_MS = 2 * 60e3;
+function stopCutAt(e, end, last) {
+  const lastAct = actList(e.id).reduce((t, r) => Math.max(t, new Date(r.to).getTime()), 0);
+  const startMs = new Date(last.s).getTime(), endMs = new Date(end).getTime();
+  if (!lastAct || lastAct >= endMs - STOP_TAIL_MS || lastAct <= startMs) return end;
+  return new Date(lastAct).toISOString();
+}
+/* Início da sessão (1.3): se o primeiro sinal de atividade só vem mais de 2 min depois do início, o início é puxado para ele. */
+function stopTrimStart(e, segs) {
+  const acts = actList(e.id); if (!acts.length || !segs[0]?.s) return;
+  const firstAct = Math.min(...acts.map(r => new Date(r.from).getTime()));
+  const s0 = new Date(segs[0].s).getTime(), lim = segs[0].e ? new Date(segs[0].e).getTime() : Infinity;
+  if (firstAct - s0 > STOP_TAIL_MS && firstAct < lim) segs[0].s = new Date(firstAct).toISOString();
+}
 function stopEntry(e, at) {
-  const segs = clone(e.segments); const last = segs[segs.length - 1];
-  if (!last.e) last.e = at || nowISO();
+  const segs = clone(e.segments); stopTrimStart(e, segs); const last = segs[segs.length - 1];
+  if (!last.e) last.e = stopCutAt(e, at || nowISO(), last);
   db.update('tempo_time_entries', e.id, { state: 'done', segments: segs });
 }
 /* Migração (uma vez): lacunas que já eram trechos movidos para outro projeto viram "movido", com o destino.

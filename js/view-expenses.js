@@ -219,7 +219,7 @@ function exSectionHTML(ym, kind) {
   const title = kind === 'in' ? 'Entradas' : 'Saídas';
   return `<div class="ex-sec">
     <div class="ex-sec-h"><b>${title}</b><span class="grow"></span><span class="mono ${kind === 'in' ? 'ex-plus' : 'ex-minus'}">${kind === 'in' ? '+' : '−'} ${fmtMoney(total)}</span></div>
-    <div class="panel-b tight">${rows.length ? gridTable({ id: kind === 'in' ? 'ex-in' : 'ex-out', group: 'ex', cols: EX_COLS, rows, rowById: (rid) => db.get('tempo_expenses', rid) }) : `<div class="faint small" style="padding:10px">${kind === 'in' ? 'Nenhuma entrada' : 'Nenhuma saída'} neste mês.</div>`}</div>
+    <div class="panel-b tight">${rows.length ? gridTable({ id: kind === 'in' ? 'ex-in' : 'ex-out', group: 'ex', widthRows: db.all('tempo_expenses'), cols: EX_COLS, rows, rowById: (rid) => db.get('tempo_expenses', rid) }) : `<div class="faint small" style="padding:10px">${kind === 'in' ? 'Nenhuma entrada' : 'Nenhuma saída'} neste mês.</div>`}</div>
     <div class="row" style="padding:8px 2px"><button class="btn sm ghost" data-act="ex-add" data-kind="${kind}" data-m="${ym}">${icon('plus')} ${kind === 'in' ? 'Entrada' : 'Saída'}</button></div>
   </div>`;
 }
