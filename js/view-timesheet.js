@@ -29,7 +29,7 @@ function dayReviewHTML(day, entries) {
     <div class="small muted" style="margin-top:4px">Bruto ${fmtDur(bruto)} · trabalho ${fmtDur(trab)} · pausas ${fmtDur(Math.max(0, bruto - trab))}</div>
     <div style="height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin:8px 0"><span style="display:block;height:100%;width:${pct}%;background:var(--accent)"></span></div>
     <div class="small">${pct >= 100 ? 'Meta batida' : `Faltam ${fmtDur(Math.max(0, metaMs - trab))} para a meta`}</div>
-    ${gaps.length ? `<div class="lbl" style="margin-top:10px">Lacunas</div>${gaps.map(([a, b]) => `<div class="row between small"><span class="mono">${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}</span><span class="row" style="gap:8px"><span class="mono">${fmtDur(b - a)}</span><button class="btn sm ghost" data-act="ts-manual">Lançar</button></span></div>`).join('')}` : ''}
+    ${gaps.length ? `<div class="lbl" style="margin-top:10px">Lacunas</div>${gaps.map(([a, b]) => `<div class="row between small"><span class="mono">${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}</span><span class="row" style="gap:8px"><span class="mono">${fmtDur(b - a)}</span><button class="btn sm" data-act="ts-manual">Lançar</button></span></div>`).join('')}` : ''}
   </div>`;
 }
 CHANGES['meta-dia'] = (el) => { db.setSetting('metaDia', Number(el.value) || 6); render(); };
@@ -81,6 +81,7 @@ VIEWS.timesheet = () => {
     ${reportPanelHTML(day)}
   </div>
   ${dayReviewHTML(day, entries)}
+  ${activeProjectsHTML(a)}
   <div class="panel">
     <div class="panel-h">
       <div class="date-nav"><button class="btn sm icon" data-act="ts-shift" data-d="-1" aria-label="Dia anterior">${icon('chevL')}</button><input type="date" id="ts-date" class="input sm" style="width:auto" value="${S.tsDay}" data-on="ts-date"><button class="btn sm icon" data-act="ts-shift" data-d="1" aria-label="Próximo dia">${icon('chevR')}</button>${!isToday(day) ? `<button class="btn sm" data-act="ts-day" data-day="${ymd(new Date())}">Hoje</button>` : ''}</div>
@@ -178,6 +179,49 @@ ACTIONS['ts-switch'] = () => {
   });
 };
 ACTIONS['ts-edit'] = (el) => openEntryModal(el.dataset.id);
+/* Projetos ativos: um card por projeto com status "ativo". Mostra o tempo de hoje e da semana, fixa projetos
+   (ficam no topo) e ordena pelos usados por último. Iniciar, ou trocar o cronômetro para ele se já estiver rodando. */
+function apStats(p) {
+  const hojeIni = new Date(); hojeIni.setHours(0, 0, 0, 0);
+  const semIni = prodPeriodRange('semana').a;
+  let hoje = 0, semana = 0, last = 0;
+  db.where('tempo_time_entries', e => e.project_id === p.id).forEach(e => {
+    const st = new Date(entryStart(e)).getTime(); const ms = entryMs(e);
+    last = Math.max(last, st);
+    if (st >= hojeIni.getTime()) hoje += ms;
+    if (st >= semIni) semana += ms;
+  });
+  return { hoje, semana, last };
+}
+function activeProjectsHTML(cur) {
+  const fixados = db.setting('apFixados', []) || [];
+  const base = db.where('tempo_projects', p => !p.archived && statusCat(p.status_id) === 'active').map(p => ({ p, st: apStats(p), fixo: fixados.includes(p.id) }));
+  if (!base.length) return '';
+  base.sort((x, y) => (y.fixo - x.fixo) || (y.st.last - x.st.last) || String(x.p.name).localeCompare(String(y.p.name), 'pt-BR'));
+  const cards = base.map(({ p, st, fixo }) => {
+    const c = clientOf(p);
+    let acao;
+    if (cur && cur.project_id === p.id) acao = '<span class="pm-badge">● Em andamento</span>';
+    else if (cur) acao = `<button class="btn sm" data-act="ts-switch-proj" data-id="${esc(p.id)}">${icon('play')} Trocar para este</button>`;
+    else acao = `<button class="btn sm primary" data-act="ts-start-proj" data-id="${esc(p.id)}">${icon('play')} Iniciar</button>`;
+    return `<div class="ap-card ${fixo ? 'ap-fixo' : ''}"><div class="row between" style="align-items:flex-start;gap:6px"><div class="stack" style="gap:2px;min-width:0"><b>${esc(p.name)}</b><span class="small muted">${esc(c?.name || 'Sem cliente')}</span></div><button class="btn sm ghost" data-act="ap-pin" data-id="${esc(p.id)}" title="${fixo ? 'Desafixar' : 'Fixar no topo'}">${fixo ? 'Desafixar' : 'Fixar'}</button></div>
+      <span class="small muted mono">hoje ${fmtDur(st.hoje)} · semana ${fmtDur(st.semana)}</span><div>${acao}</div></div>`;
+  }).join('');
+  return `<div class="panel"><div class="panel-h"><h3>Projetos ativos</h3><span class="small muted">${base.length}</span></div><div class="panel-b"><div class="ap-grid">${cards}</div></div></div>`;
+}
+ACTIONS['ap-pin'] = (el) => {
+  const id = el.dataset.id; const list = [...(db.setting('apFixados', []) || [])];
+  const k = list.indexOf(id); if (k >= 0) list.splice(k, 1); else list.push(id);
+  db.setSetting('apFixados', list);
+};
+ACTIONS['ts-start-proj'] = (el) => {
+  if (activeEntry()) return toast('Já existe uma sessão ativa. Use "Trocar para este".');
+  const p = db.get('tempo_projects', el.dataset.id); if (!p) return;
+  const sel = { project_id: p.id };
+  startEntry({ ...selToEntry(sel), work_type_id: defaultWorkType(sel) || null, notes: '', revision_id: null });
+  toast(`Registro iniciado em ${p.name}`);
+};
+ACTIONS['ts-switch-proj'] = (el) => { const p = db.get('tempo_projects', el.dataset.id); if (p) switchTo(p, null); };
 ACTIONS['ts-manual'] = () => openEntryModal(null);
 
 /* ---------- seletor hierárquico ---------- */

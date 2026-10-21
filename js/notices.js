@@ -240,7 +240,7 @@ function scanAlerts() {
   const today = ymd(new Date());
   FERIAS_HOJE = emFerias(today);
   SCAN_SEEN = new Set(); SCAN_CHANGED = false;
-  db.all('tempo_projects').filter(p => !p.archived && p.deadline && !['Concluído', 'Cancelado'].includes(statusName(p.status_id))).forEach(p => {
+  db.all('tempo_projects').filter(p => !p.archived && p.deadline && !['Concluído', 'Cancelado', 'Enviado'].includes(statusName(p.status_id)) && !['done', 'cancelled'].includes(statusCat(p.status_id))).forEach(p => {
     const d = daysBetween(today, p.deadline); // positivo = faltam dias
     if (d === null || d > 2) return;
     const late = d < 0;

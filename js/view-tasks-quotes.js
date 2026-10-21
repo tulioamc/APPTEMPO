@@ -80,8 +80,9 @@ function tkProjectLabel(p) {
   const a = agOfProject(p); const c = clientOf(p);
   return [a ? (agencyAbbr(a) || a.name) : 'Direto', c?.name || '', p.name].filter(Boolean).join(' › ');
 }
-ACTIONS['tk-new'] = () => {
+ACTIONS['tk-new'] = (el) => {
   if (!projects().length) return toast('Crie um projeto antes de adicionar tarefas.');
+  if (el?.dataset?.project) S.task = { ...(S.task || {}), project: el.dataset.project };
   const l = openLayer({
     html: `<div class="dh"><h2>Nova tarefa</h2></div><form class="db" id="tkf">
       <div class="field"><label for="tkf-p">Projeto *</label><select id="tkf-p" class="input" name="project_id">${options(tkProjectsSorted(), S.task.project, { empty: true, emptyLabel: 'Selecione…', label: p => tkProjectLabel(p) })}</select></div>

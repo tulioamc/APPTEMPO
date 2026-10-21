@@ -69,7 +69,7 @@ function pdTasks(p) {
     <button class="btn sm icon ghost" data-x="del-task" data-id="${t.id}" aria-label="Excluir">${icon('trash')}</button>
   </div>`;
   return `<div class="banner info small">${icon('layers')} Mudar o status do projeto atualiza só as tarefas marcadas como <b>herdado</b>. Ao mudar uma tarefa manualmente, ela vira exceção e não afeta o projeto nem as outras tarefas.</div>
-  <div class="row" style="justify-content:flex-end;margin:6px 0"><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
+  <div class="row" style="justify-content:flex-end;margin:6px 0;gap:8px"><button class="btn sm" data-act="tk-new" data-project="${p.id}">${icon('plus')} Criar tarefa</button><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
   <div class="panel"><div class="panel-b tight">${tks.length ? tks.map(t => row(t) + subtasksOf(t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}</div></div>
   <form class="row" data-form="add-task"><input class="input grow" name="name" placeholder="Nova tarefa" aria-label="Nova tarefa"><button class="btn primary">${icon('plus')} Adicionar tarefa</button></form>`;
 }
@@ -247,12 +247,13 @@ function askReason(from, to) {
     const res = (v) => { askingReason = false; res0(v); };
     let done = false;
     const l = openLayer({
-      html: `<div class="dh"><h2>Alterar prazo</h2></div><div class="db"><p style="margin:0">De <b>${fmtDate(from)}</b> para <b>${to ? fmtDate(to) : 'sem prazo'}</b>. O prazo original fica guardado.</p><div class="field"><label for="rs-in">Motivo (opcional)</label><input id="rs-in" class="input" placeholder="Ex.: cliente atrasou o envio do conteúdo" autofocus></div></div>
+      html: `<div class="dh"><h2>Alterar prazo</h2></div><div class="db"><p style="margin:0">De <b>${fmtDate(from)}</b> para <b>${to ? fmtDate(to) : 'sem prazo'}</b>. O prazo original fica guardado.</p><div class="field"><label for="rs-in">Motivo (opcional)</label><input id="rs-in" class="input" placeholder="Ex.: cliente atrasou o envio do conteúdo" autofocus></div>
+        <div class="row" style="gap:6px;flex-wrap:wrap"><span class="small muted">Atalhos:</span><button class="btn sm" data-x="reason" data-r="Atraso">Atraso</button><button class="btn sm" data-x="reason" data-r="Data estava errada">Data estava errada</button></div></div>
       <div class="df"><button class="btn" data-x="no">Cancelar</button><button class="btn primary" data-x="yes">Salvar prazo</button></div>`,
       onClose: () => { if (!done) res(null); }
     });
     const ok = () => { done = true; res($('#rs-in', l.box).value); l.close(); };
     l.box.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); });
-    l.box.addEventListener('click', (e) => { const b = e.target.closest('[data-x]'); if (!b) return; if (b.dataset.x === 'yes') ok(); else { done = true; res(null); l.close(); } });
+    l.box.addEventListener('click', (e) => { const b = e.target.closest('[data-x]'); if (!b) return; if (b.dataset.x === 'yes') ok(); else if (b.dataset.x === 'reason') { const inp = $('#rs-in', l.box); if (inp) inp.value = b.dataset.r; ok(); } else { done = true; res(null); l.close(); } });
   });
 }
