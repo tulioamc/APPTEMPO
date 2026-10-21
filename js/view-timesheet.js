@@ -504,7 +504,7 @@ function entryRowHTML(e) {
           <span class="when">${fmtTime(entryStart(e))}–${e.state === 'done' ? fmtTime(entryEnd(e)) : '…'}</span>
           <div class="what"><div class="t">${esc(entryTitle(e))} ${e.state !== 'done' ? `<span class="tag pill c-blue small">${e.state === 'running' ? 'em andamento' : 'pausada'}</span>` : ''}${e.edits?.length ? ' <span class="inh" title="Editada">editada</span>' : ''}${e.revision_id ? ' <span class="inh">revisão</span>' : ''}</div>
           <div class="p">${entryPathHTML(e)}${e.notes && x.project ? ' · ' + esc(e.notes.split('\n')[0]) : ''}</div></div>
-          <div class="row" style="justify-content:flex-end;gap:10px"><span class="hide-sm">${wtTag(e.work_type_id)}</span><span class="dur" ${e.state !== 'done' ? `data-tick="${e.id}"` : ''}>${e.state !== 'done' ? fmtClock(entryMs(e)) : fmtDur(entryMs(e))}</span></div>
+          <span class="ent-tag">${wtTag(e.work_type_id)}</span><span class="dur" ${e.state !== 'done' ? `data-tick="${e.id}"` : ''}>${e.state !== 'done' ? fmtClock(entryMs(e)) : fmtDur(entryMs(e))}</span><span class="ent-caret" aria-hidden="true"></span>
         </div>`;
 }
 function groupedRowsHTML(entries) {
@@ -521,15 +521,31 @@ function groupedRowsHTML(entries) {
     const tags = [...new Set(list.map(e => e.work_type_id || ''))].map(id => wtTag(id || null)).join('');
     const total = list.reduce((s, e) => s + entryMs(e), 0);
     return `<details class="grp-det">
-      <summary class="entry grp-sum">
+      <summary class="entry grp-sum" data-act="grp-open" data-ids="${list.map(e => e.id).join(',')}">
         <span class="when">${fmtTime(first)}–${fmtTime(last)}</span>
         <div class="what"><div class="t">${esc(entryTitle(list[0]))} <span class="tag pill small">${list.length} sessões</span></div><div class="p">${entryPathHTML(list[0])}</div></div>
-        <div class="row" style="justify-content:flex-end;gap:10px"><span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${tags}</span><span class="dur">${fmtDur(total)}</span><span class="faint grp-caret">▾</span></div>
+        <span class="ent-tag">${tags}</span><span class="dur">${fmtDur(total)}</span><button type="button" class="grp-caret" data-act="grp-caret" aria-label="Ver sessões" title="Ver sessões">▾</button>
       </summary>
       <div class="grp-kids">${list.map(entryRowHTML).join('')}</div>
     </details>`;
   }).join('');
 }
+
+/* Clicar na linha do grupo abre a janelinha com o tempo corrido da tarefa; a seta abre as sessões. */
+ACTIONS['grp-open'] = (el) => {
+  const list = (el.dataset.ids || '').split(',').filter(Boolean).map(id => db.get('tempo_time_entries', id)).filter(Boolean);
+  if (!list.length) return;
+  const first = list.reduce((m, e) => (new Date(entryStart(e)) < new Date(m) ? entryStart(e) : m), entryStart(list[0]));
+  const last = list.reduce((m, e) => (new Date(entryEnd(e)) > new Date(m) ? entryEnd(e) : m), entryEnd(list[0]));
+  const liquido = list.reduce((s, e) => s + entryMs(e), 0);
+  openLayer({ html: `<div class="dh">${icon('clock')}<h2>${esc(entryTitle(list[0]))}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db"><div class="small muted">${entryPathHTML(list[0])}</div>
+    <div class="grp-stats">
+      <div><span class="small muted">Tempo corrido</span><b class="mono">${fmtDur(new Date(last) - new Date(first))}</b><span class="small muted">${fmtTime(first)}–${fmtTime(last)}</span></div>
+      <div><span class="small muted">Tempo líquido</span><b class="mono">${fmtDur(liquido)}</b><span class="small muted">${list.length} sessões</span></div>
+    </div></div>` });
+};
+ACTIONS['grp-caret'] = (el) => { const d = el.closest('details'); if (d) d.open = !d.open; };
 
 /* Resumo discreto da sessão: projetos que participaram, pausa, bruto e líquido. */
 function sessionSumHTML(a) {
