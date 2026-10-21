@@ -706,17 +706,19 @@ function openOthersPanel(entryIds, mode, redraw) {
 /* Destaque de pasta e de pausas agrupadas: ao passar o mouse no chip "Outros" ou "Pausa +N"/"WhatsApp",
    os trechos do grupo acendem nas próprias cores e o resto da faixa esmaece. Vale para revisão e resumo. */
 function actHlPaint(root, tok, on) {
-  root.querySelectorAll('.seg-b.act-b[data-g], .seg-b.pausa').forEach(el => {
+  root.querySelectorAll('.usage-sub').forEach(el => { el.style.background = on && el.dataset.par === tok ? el.dataset.tbc : ''; });
+  root.querySelectorAll('.seg-b.act-b[data-g], .seg-b.pausa, .usage-seg[data-g], .prod-seg[data-g]').forEach(el => {
     const isOth = tok === 'outros' && el.dataset.par === 'outros';
     const isPk = tok.startsWith('pk:') && el.dataset.pk === tok.slice(3);
+    const isG = (el.classList.contains('usage-seg') || el.classList.contains('prod-seg')) && el.dataset.g === tok;
     if (!on) { el.classList.remove('act-dim', 'act-hl'); if (el.dataset.tbc) el.style.setProperty('--tb', '#94A3B8'); return; }
-    if (isOth || isPk) { el.classList.add('act-hl'); el.classList.remove('act-dim'); if (isOth && el.dataset.tbc) el.style.setProperty('--tb', el.dataset.tbc); }
+    if (isOth || isPk || isG) { el.classList.add('act-hl'); el.classList.remove('act-dim'); if (isOth && el.dataset.tbc) el.style.setProperty('--tb', el.dataset.tbc); }
     else el.classList.add('act-dim');
   });
 }
 function actHlRoot(chip) {
   let n = chip;
-  while (n && n.parentElement && !n.querySelector('.seg-b.act-b[data-g], .seg-b.pausa')) n = n.parentElement;
+  while (n && n.parentElement && !n.querySelector('.seg-b.act-b[data-g], .seg-b.pausa, .usage-seg[data-g], .prod-seg[data-g]')) n = n.parentElement;
   return n || chip.parentElement;
 }
 document.addEventListener('mouseover', (e) => {

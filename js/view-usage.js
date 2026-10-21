@@ -49,7 +49,8 @@ function usageDataRange(a, b, ents) {
   const siteMs = {};
   recs.forEach(r => {
     if (!USE_BROWSER.test(String(r.app || ''))) return;
-    const d = usageDomain(r.doc); if (!d) return;
+    /* O registro guarda só o título da aba (não o endereço), então o site é o título. */
+    const d = String(r.doc || '').trim() || '(sem título)';
     siteMs[d] = (siteMs[d] || 0) + (T(r.to) - T(r.from));
   });
   const sites = Object.entries(siteMs).sort((x, y) => y[1] - x[1]).map(([d, ms]) => ({ id: 'site:' + d, label: d, ms, color: palColor(d) }));
@@ -68,7 +69,7 @@ function usageSegs(groups, top) {
   const shown = groups.slice(0, top); const rest = groups.slice(top);
   const segs = shown.map(g => ({ id: g.id, label: g.label || g.id, ms: g.ms, color: g.color || palColor(g.label || g.id) }));
   const restMs = rest.reduce((s, g) => s + g.ms, 0);
-  if (restMs > 0) segs.push({ id: '_rest', label: `Demais (${rest.length})`, ms: restMs, color: '#CBD5E1', tip: rest.map(g => `${g.label || g.id} · ${fmtDur(g.ms)}`).join('\n') });
+  if (restMs > 0) segs.push({ id: '_rest', label: `Demais (${rest.length})`, ms: restMs, color: '#CBD5E1', tip: rest.map(g => `${g.label || g.id} · ${fmtDur(g.ms)}`).join('\n'), subs: rest.map(g => ({ id: g.id, label: g.label || g.id, ms: g.ms, color: g.color || palColor(g.label || g.id) })) });
   return segs;
 }
 /* Barra única: cada fatia tem a sua largura em %. O que sobra da base (pausas, se contadas) fica listrado. */
@@ -77,7 +78,10 @@ function usageBarHTML(segs, base, h = 34) {
   const scale = base > 0 ? base : Math.max(tot, 1);
   const parts = segs.map(s => {
     const p = usePct(s.ms, scale);
-    return `<span class="usage-seg" style="width:${p.toFixed(2)}%;background:${esc(s.color)}" title="${esc(s.tip || `${s.label} · ${usePctTxt(p)} · ${fmtDur(s.ms)}`)}">${p >= 9 ? `<b>${esc(s.label)}</b>${usePctTxt(p)}` : ''}</span>`;
+    /* "Demais" funciona como "Outros": cinza, e ao passar o mouse cada programa agrupado aparece na sua cor. */
+    if (s.subs) return `<span class="usage-seg usage-rest" data-g="${esc(s.id)}" style="width:${p.toFixed(2)}%" title="${esc(s.tip || '')}">${s.subs.map(x => `<i class="usage-sub" data-par="${esc(s.id)}" data-tbc="${esc(x.color)}" style="flex:${x.ms} 1 0" title="${esc(`${x.label} · ${fmtDur(x.ms)}`)}"></i>`).join('')}</span>`;
+    if (s.id === '_pausas') return `<span class="usage-seg usage-pausa" data-g="_pausas" style="width:${p.toFixed(2)}%" title="${esc(`Pausas · ${usePctTxt(p)} · ${fmtDur(s.ms)}`)}">${p >= 9 ? `<b>Pausas</b>${usePctTxt(p)}` : ''}</span>`;
+    return `<span class="usage-seg" data-g="${esc(s.id)}" style="width:${p.toFixed(2)}%;background:${esc(s.color)}" title="${esc(s.tip || `${s.label} · ${usePctTxt(p)} · ${fmtDur(s.ms)}`)}">${p >= 9 ? `<b>${esc(s.label)}</b>${usePctTxt(p)}` : ''}</span>`;
   }).join('');
   const rem = scale - tot;
   return `<div class="usage-stack" style="height:${h}px">${parts}${rem > 0 ? `<span class="usage-seg usage-rem" style="width:${usePct(rem, scale).toFixed(2)}%" title="Pausas (fora do trabalho)"></span>` : ''}</div>`;
@@ -91,11 +95,14 @@ function usageDonutHTML(segs, base) {
 }
 function usageLegendHTML(segs, base) {
   const scale = Math.max(base, 1);
-  return `<div class="usage-legend">${segs.map(s => `<div class="usage-leg" title="${esc(s.tip || '')}"><span class="usage-sw" style="background:${esc(s.color)}"></span><span class="usage-name">${esc(s.label)}</span><span class="mono small">${usePctTxt(usePct(s.ms, scale))}</span><span class="mono small muted">${fmtDur(s.ms)}</span></div>`).join('')}</div>`;
+  /* Chips da timesheet: ao passar o mouse, o trecho correspondente acende na barra e o resto esmaece. */
+  return `<div class="act-chips usage-legend">${segs.map(s => `<span class="act-chip" data-hl="${esc(s.id)}" style="--tb:${esc(s.color)}" title="${esc(s.tip || s.label)}"><i></i>${esc(s.label)} <span class="faint">${usePctTxt(usePct(s.ms, scale))} · ${fmtDur(s.ms)}</span></span>`).join('')}</div>`;
 }
-function usageChartHTML(kind, groups, base) {
+function usageChartHTML(kind, groups, base, pauseMs = 0) {
   const top = USE.showAll[kind] ? groups.length : USE_TOP[kind];
   const segs = usageSegs(groups, top);
+  /* Com "contar pausas" marcado, as pausas viram um trecho próprio na barra e um chip com o tempo. */
+  if (USE.pauses && pauseMs > 0) segs.push({ id: '_pausas', label: 'Pausas', ms: pauseMs, color: '#94A3B8' });
   const toggle = `<div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn sm ${USE.chart === 'barra' ? 'primary' : ''}" data-act="usage-chart" data-c="barra">Barra</button><button class="btn sm ${USE.chart === 'rosca' ? 'primary' : ''}" data-act="usage-chart" data-c="rosca">Rosca</button>${groups.length > USE_TOP[kind] ? `<button class="btn sm ghost" data-act="usage-more" data-t="${kind}">${USE.showAll[kind] ? 'Só os ' + USE_TOP[kind] + ' maiores' : 'Mostrar todos (' + groups.length + ')'}</button>` : ''}</div>`;
   if (!segs.length) return `${toggle}<div class="muted small" style="margin-top:8px">Sem registro no período.</div>`;
   const chart = USE.chart === 'rosca'
@@ -184,11 +191,11 @@ VIEWS.usage = () => {
   if (USE.tab === 'clientes') body = usageClientsHTML(d);
   else if (USE.tab === 'meses') body = usageMonthsHTML();
   else if (USE.tab === 'sites') body = d.sites.length
-    ? `${usageChartHTML('sites', d.sites, d.base)}${usageCompareHTML('sites', d.sites, d.base)}`
-    : '<div class="muted small">Nenhum site com endereço registrado no período. Os sites aparecem quando o navegador grava o endereço da aba.</div>';
+    ? `${usageChartHTML('sites', d.sites, d.base, d.pauseMs)}${usageCompareHTML('sites', d.sites, d.base)}`
+    : '<div class="muted small">Nenhum site registrado no período. Sites são as abas de navegador (Chrome, Safari etc.) gravadas com o título.</div>';
   else {
     const groups = USE.tab === 'arquivos' ? d.files.groups : d.prog.groups;
-    body = `${usageChartHTML(USE.tab, groups, d.base)}${usageCompareHTML(USE.tab, groups, d.base)}`;
+    body = `${usageChartHTML(USE.tab, groups, d.base, d.pauseMs)}${usageCompareHTML(USE.tab, groups, d.base)}`;
   }
   return {
     title: 'Uso de programas',
@@ -198,7 +205,7 @@ VIEWS.usage = () => {
         <option value="mes" ${USE.period === 'mes' ? 'selected' : ''}>Mês atual</option>
         <option value="30d" ${USE.period === '30d' ? 'selected' : ''}>Últimos 30 dias</option>
         <option value="tudo" ${USE.period === 'tudo' ? 'selected' : ''}>Tudo</option></select>
-      <label class="row small" style="gap:6px"><input type="checkbox" data-on="usage-pauses" ${USE.pauses ? 'checked' : ''}> contar pausas na base</label>`,
+      <label class="row small" style="gap:6px"><input type="checkbox" data-on="usage-pauses" ${USE.pauses ? 'checked' : ''}> contar pausas</label>`,
     html: `<div class="stack" style="gap:14px">
       <div class="pf-kpis">
         <div class="kpi"><span class="k">Tempo com programa</span><span class="v mono">${fmtDur(d.work)}</span><span class="s">${d.ents.length} sessão(ões)</span></div>

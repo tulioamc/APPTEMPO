@@ -987,3 +987,28 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .prod-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .85em; color: var(--fg-2); }
 .prod-leg { display: inline-flex; align-items: center; gap: 6px; }
 .prod-sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+/* Uso de programas: chips da legenda acendem o trecho correspondente na barra */
+.usage-legend.act-chips { flex-direction: row; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.usage-donut-row .usage-legend.act-chips { margin-top: 0; flex: 1 1 260px; }
+.usage-seg.act-dim { opacity: .25; }
+.usage-seg.act-hl { box-shadow: inset 0 0 0 2px #1E293B; }
+
+/* Demais: cinza como "Outros"; ao passar o mouse, cada programa agrupado acende na sua cor */
+.usage-rest { background: transparent; padding: 0; gap: 0; }
+.usage-rest.act-hl { outline: 2px solid #1E293B; outline-offset: -2px; }
+.usage-sub { flex: 1 0 1px; height: 100%; background: #CBD5E1; box-shadow: inset -1px 0 0 rgba(255,255,255,.5); }
+
+/* Relatório Produtividade: chips acendem os segmentos da cor no hover */
+.prod-legend.act-chips { margin-top: 8px; }
+.prod-seg.act-dim { opacity: .25; }
+.prod-seg.act-hl { box-shadow: inset 0 0 0 2px #1E293B; }
+
+/* Uso de programas: trecho de pausas (listrado), com chip e hover como os demais */
+.usage-seg.usage-pausa { background: repeating-linear-gradient(45deg, #CBD5E1 0 6px, #E2E8F0 6px 8px); color: #334155; }
+
+/* Relatório Produtividade: Produtivo verde claro, Distração vermelho claro, Ocioso amarelo, Descanso cinza */
+.prod-p { background: #4ADE80; }
+.prod-d { background: #F87171; }
+.prod-y { background: #FACC15; }
+.prod-z { background: #CBD5E1; }
