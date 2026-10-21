@@ -773,6 +773,8 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .day-strip .seg-b.pausa, .act-strip .seg-b.pausa { background: repeating-linear-gradient(0deg, var(--ph, #d1d1d1) 0 4px, var(--pg, color-mix(in oklab, var(--ph, #d1d1d1) 35%, var(--surface))) 4px 8px); box-shadow: none; opacity: .9; }
 
 .strip-tip { position: fixed; z-index: 450; display: none; pointer-events: none; background: var(--fg); color: var(--bg); padding: 6px 9px; border-radius: 6px; font-size: .8em; line-height: 1.4; white-space: pre-line; box-shadow: var(--shadow); max-width: 280px; }
+.strip-tip .tip-h { font-weight: 700; font-size: calc(1em + 5pt); line-height: 1.25; margin-bottom: 3px; }
+.strip-tip b { font-weight: 700; }
 
 /* gráficos de tempo */
 .hbars { display: flex; flex-direction: column; gap: 8px; }
