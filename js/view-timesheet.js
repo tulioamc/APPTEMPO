@@ -348,7 +348,7 @@ function openEntryModal(id) {
       ${e ? `<div class="field"><label for="em-reason">Motivo da correção</label><input id="em-reason" class="input" name="reason" placeholder="Ex.: esqueci de pausar no almoço"><span class="hint">Fica guardado no histórico da sessão junto com os horários anteriores.</span></div>` : ''}
       ${e?.edits?.length ? `<div class="stack" style="gap:6px"><span class="lbl">Histórico de correções</span><div class="timeline">${e.edits.slice().reverse().map(x => `<div class="tl"><span class="w">${fmtDateTime(x.at)}</span><span class="b"></span><span>${esc(x.reason || 'Sem motivo informado')}<br><span class="faint small">Antes: ${x.before.map(s => `${fmtTime(s.s)}–${s.e ? fmtTime(s.e) : '…'}`).join(', ')}</span></span></div>`).join('')}</div></div>` : ''}
     </div>
-    <div class="df">${e ? `<button class="btn danger left" data-x="del">${icon('trash')} Excluir</button>` : ''}<button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="save">Salvar</button></div>`;
+    <div class="df">${e ? `<button class="btn danger left" data-x="del">${icon('trash')} Excluir</button>` : ''}<button class="btn" data-act="close-layer">Cancelar</button>${e && e.state === 'running' ? `<button class="btn" data-x="pause">${icon('pause')} Pausar</button>` : ''}${e && e.state === 'paused' ? `<button class="btn" data-x="resume">${icon('play')} Retomar</button>` : ''}${e && e.state !== 'done' ? `<button class="btn" data-x="stop">${icon('stop')} Encerrar</button>` : ''}<button class="btn primary" data-x="save">Salvar</button></div>`;
   };
   const syncRev = (ly) => {
     const r = ly.box.querySelector('#em-rev'); const w = ly.box.querySelector('#em-wt'); if (!r) return;
@@ -388,6 +388,14 @@ function openEntryModal(id) {
     if (x === "act-chip") { if ((b.dataset.mode !== "program")) openActGroup(e.id, b.dataset.g, redraw); else openProgChoice([e.id], b.dataset.g, b.dataset.label || 'Programa', { redraw }); return; }
     if (x === 'addseg') { const last = segs[segs.length - 1]; const base = last.e ? new Date(last.e) : new Date(); const s = new Date(base.getTime() + 30 * 60000); segs.push({ s: s.toISOString(), e: new Date(s.getTime() + 3600000).toISOString() }); redraw(); }
     if (x === 'delseg') { segs.splice(Number(b.dataset.i), 1); openSeg = null; redraw(); }
+    if (x === 'pause' || x === 'resume' || x === 'stop') {
+      const cur = db.get('tempo_time_entries', e.id); if (!cur) return;
+      l.close();
+      if (x === 'pause') { pauseEntry(cur); toast('Sessão pausada'); }
+      else if (x === 'resume') { resumeEntry(cur); toast('Sessão retomada'); }
+      else await ACTIONS['ts-stop']();
+      return;
+    }
     if (x === 'del') {
       if (!await confirmBox({ title: 'Excluir sessão?', body: `A sessão de ${fmtDur(entryMs(e))} sai dos totais e relatórios. Não dá para desfazer.`, ok: 'Excluir', danger: true })) return;
       db.remove('tempo_time_entries', e.id); l.close(); toast('Sessão excluída');

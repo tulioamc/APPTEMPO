@@ -102,12 +102,12 @@ document.addEventListener('keydown', (e) => {
   if (db.undo()) toast('Alteração desfeita'); else toast('Nada para desfazer');
 });
 
-function confirmBox({ title, body, ok = 'Confirmar', danger = false }) {
+function confirmBox({ title, body, ok = 'Confirmar', no = 'Cancelar', danger = false }) {
   return new Promise(res => {
     let done = false;
     const l = openLayer({
       html: `<div class="dh"><h2>${esc(title)}</h2></div><div class="db"><div>${body}</div></div>
-      <div class="df"><button class="btn" data-x="no">Cancelar</button><button class="btn ${danger ? 'danger solid' : 'primary'}" data-x="yes" autofocus>${esc(ok)}</button></div>`,
+      <div class="df"><button class="btn" data-x="no">${esc(no)}</button><button class="btn ${danger ? 'danger solid' : 'primary'}" data-x="yes" autofocus>${esc(ok)}</button></div>`,
       onClose: () => { if (!done) res(false); }
     });
     l.box.addEventListener('click', (e) => { const b = e.target.closest('[data-x]'); if (!b) return; done = true; res(b.dataset.x === 'yes'); l.close(); });

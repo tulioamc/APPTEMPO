@@ -77,15 +77,21 @@ const db = {
   async refresh() {
     if (!this.adapter || !this.adapter.loadAll) return;
     try {
+      const seq = this.writes || 0;
       if (this.adapter.queue) await this.adapter.queue;
       const snap = await this.adapter.loadAll(); if (!snap) return;
+      // se alguém gravou durante a busca, o retrato do servidor pode ser antigo: descarta e deixa para a próxima
+      if ((this.writes || 0) !== seq || this.pending > 0) return;
       TABLES.forEach(t => this.data[t] = snap[t] || []); this.emit();
     } catch (e) { /* sem rede: tenta de novo na próxima vez */ }
   },
   subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
   emit() { this.listeners.forEach(fn => fn()); },
   /* Envia ao adapter sem travar a interface; falhas aparecem na barra lateral. */
-  push(p) { Promise.resolve(p).then(() => { if (this.syncError) { this.syncError = null; this.emit(); } }).catch(e => { this.syncError = e.message; this.emit(); }); },
+  push(p) {
+    this.writes = (this.writes || 0) + 1; this.pending = (this.pending || 0) + 1;
+    Promise.resolve(p).then(() => { if (this.syncError) { this.syncError = null; this.emit(); } }).catch(e => { this.syncError = e.message; this.emit(); }).finally(() => { this.pending--; });
+  },
 
   all(t) { return this.data[t]; },
   get(t, id) { return id ? this.data[t].find(r => r.id === id) || null : null; },

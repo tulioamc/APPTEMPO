@@ -236,7 +236,7 @@ function depsHTML(t) {
 async function taskDeadlineFlow(t, v) {
   if (!t.deadline || !v) { changeTaskDeadline(t, v || null, ''); return true; }
   const reason = await askReason(t.deadline, v); if (reason === null) return false;
-  const isAdjust = await confirmBox({ title: 'O motivo é ajuste?', body: 'Se for ajuste, a tarefa original fica como foi entregue e o novo prazo vai para uma tarefa “[Ajuste NN]”. Se não for, é um adiamento comum da tarefa.', ok: 'Sim, é ajuste' });
+  const isAdjust = await confirmBox({ title: 'O motivo é ajuste?', body: 'Se for ajuste, a tarefa original fica como foi entregue e o novo prazo vai para uma tarefa “[Ajuste NN]”. Se não for, é um adiamento comum da tarefa.', ok: 'Sim, é ajuste', no: 'Não é ajuste' });
   changeTaskDeadline(t, v, reason, isAdjust); return true;
 }
 let askingReason = false;

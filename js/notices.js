@@ -183,10 +183,19 @@ function todoDueLabel(data) {
 /* To-do manual */
 ACTIONS['todo-add'] = () => {
   const inp = $('#todo-new'); const raw = (inp?.value || '').trim(); if (!raw) return;
-  if (todoAddRaw(raw) && inp) inp.value = '';
+  const alarm = !!document.getElementById('todo-alarm')?.checked;
+  if (todoAddRaw(raw, alarm) && inp) inp.value = '';
 };
+/* Mostra o checkbox "Alarme" só quando o texto tem horário. */
+function todoAlarmPeek(inp) {
+  const w = document.getElementById('todo-alarm-wrap'); if (!w) return;
+  const p = parseTodoText(String(inp.value || '').replace(TODO_ALARM_RE, '').trim());
+  w.style.display = p.due ? 'inline-flex' : 'none';
+  if (!p.due) { const c = document.getElementById('todo-alarm'); if (c) c.checked = false; }
+}
+const TODO_ALARM_RE = /\s!alarme\s*$/i;
 /* Cria um to-do a partir do texto: "!seg,qua" = fixo; "[1h]" ou "[30min]" = tempo estimado. */
-function todoAddRaw(raw) {
+function todoAddRaw(raw, alarm = false) {
   const fm = raw.match(/\s!([a-zçã,]+)\s*$/i);
   if (fm) {
     const words = fm[1].toLowerCase().split(',').map(x => x.trim());
@@ -202,8 +211,9 @@ function todoAddRaw(raw) {
   const est = em ? Number(em[1]) * (em[2].toLowerCase() === 'h' ? 60 : 1) : null;
   const text = em ? raw.slice(0, em.index).trim() : raw;
   const p = parseTodoText(text);
-  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: { ...(p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {}), ...(est ? { est } : {}) }, decision: '', decided_at: null, snooze_until: null }, true);
-  db.emit(); return true;
+  const withAlarm = !!(alarm && p.due);
+  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: { ...(p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {}), ...(est ? { est } : {}), ...(withAlarm ? { alarm: true, alarm_criado: false } : {}) }, decision: '', decided_at: null, snooze_until: null }, true);
+  db.emit(); todoAlarmSync(); return true;
 }
 /* Ponte para o app de Mac (⇧⌘T): recebe o texto e cria o to-do. */
 window.todoQuickAdd = (text) => { const t = String(text || '').trim(); if (t) todoAddRaw(t); };
@@ -297,15 +307,23 @@ ACTIONS['notice-cut'] = (el) => {
 };
 
 /* To-do editável: clique no texto, reescreva (data e hora em linguagem natural) e confirme com Enter ou ao sair do campo. */
-function todoEditRaw(n) { const d = n.data || {}; return d.due ? `${n.title} ${todoDueLabel(d)}` : n.title; }
+function todoEditRaw(n) { const d = n.data || {}; const base = d.due ? `${n.title} ${todoDueLabel(d)}` : n.title; return d.alarm && d.due ? `${base} !alarme` : base; }
 ACTIONS['todo-edit'] = (el) => { S.todoEdit = el.dataset.id; render(); setTimeout(() => { const i = $('#todo-edit'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 0); };
 ACTIONS['todo-key'] = (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } else if (e.key === 'Escape') { S.todoEdit = null; render(); } };
 ACTIONS['todo-save'] = (el) => {
   const id = el.dataset.id; if (S.todoEdit !== id) return; S.todoEdit = null;
-  const raw = el.value.trim(); if (!raw || !db.get('tempo_notices', id)) { render(); return; }
+  const raw0 = el.value.trim(); if (!raw0 || !db.get('tempo_notices', id)) { render(); return; }
+  const cur = db.get('tempo_notices', id);
+  const alarm = TODO_ALARM_RE.test(raw0); const raw = raw0.replace(TODO_ALARM_RE, '').trim();
   const p = parseTodoText(raw);
-  db.update('tempo_notices', id, { title: p.title, data: p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {} }, true);
-  db.emit();
+  const old = cur.data || {};
+  const keep = p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {};
+  const mudou = p.due !== old.due || (alarm && !old.alarm);
+  const data = { ...old, ...keep, ...(p.due ? {} : { due: undefined, deadline: undefined, end: undefined }) };
+  if (!p.due) { delete data.due; delete data.deadline; delete data.end; }
+  if (alarm && p.due) { data.alarm = true; if (mudou) data.alarm_criado = false; } else { delete data.alarm; delete data.alarm_criado; }
+  db.update('tempo_notices', id, { title: p.title, data }, true);
+  db.emit(); todoAlarmSync();
 };
 
 /* To-do: item (um só modelo para o painel e para a aba). */
@@ -424,7 +442,7 @@ VIEWS.todo = () => {
   const sug = tab === 'open' ? todoSuggestions() : [];
   const html = `<div class="panel"><div class="panel-b" style="padding:16px;max-width:720px">
     <div class="row between"><b>To-do</b><span class="faint small">Hoje: ${todayDone} de ${todayTotal.length} feitas</span></div>
-    <form class="row gap-s" style="margin-top:10px" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h · fixo: Pagar Rafa !seg,qua" autocomplete="off"><button class="btn sm" data-act="todo-add">Adicionar</button></form>
+    <form class="row gap-s" style="margin-top:10px" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h · fixo: Pagar Rafa !seg,qua" autocomplete="off" oninput="todoAlarmPeek(this)"><label id="todo-alarm-wrap" class="row gap-s small" style="display:none;align-items:center;white-space:nowrap"><input type="checkbox" id="todo-alarm"> Alarme</label><button class="btn sm" data-act="todo-add">Adicionar</button></form>
     <div class="seg" style="margin-top:12px">${TABS.map(([v, l]) => `<button class="${tab === v ? 'on' : ''}" data-act="todo-tab" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="row between" style="margin-top:8px"><span class="faint small">Ordem: ${todoSortMode() === 'manual' ? '<b>minha ordem</b>' : '<button class="btn sm ghost" data-act="todo-sort" data-v="manual">minha ordem</button>'} · ${todoSortMode() === 'alpha' ? '<b>A–Z</b>' : '<button class="btn sm ghost" data-act="todo-sort" data-v="alpha">A–Z</button>'}</span></div>
     <div class="todo-list" style="margin-top:12px">${todoGroupsHTML(all.filter(pick[tab] || pick.open))}</div>
@@ -442,7 +460,7 @@ function sidePanelHTML() {
   return `<aside class="side-panel">
     ${pixSideHTML()}
     <div class="card"><div class="row between"><b>To-do</b><span class="row gap-s"><span class="faint small">${todos.filter(t => t.status !== 'done').length} abertas</span><button class="btn sm ghost" data-act="go" data-route="todo">Ver todos</button></span></div>
-      <form class="row gap-s" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h" autocomplete="off"><button class="btn sm" data-act="todo-add">Adicionar</button></form>
+      <form class="row gap-s" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h" autocomplete="off" oninput="todoAlarmPeek(this)"><label id="todo-alarm-wrap" class="row gap-s small" style="display:none;align-items:center;white-space:nowrap"><input type="checkbox" id="todo-alarm"> Alarme</label><button class="btn sm" data-act="todo-add">Adicionar</button></form>
       <div class="todo-list">${todoGroupsHTML(todos, 7)}</div>
     </div>
     <div class="card"><div class="row between"><b>Avisos</b><button class="btn sm ghost" data-act="go" data-route="notices">Ver todos</button></div>
@@ -542,3 +560,19 @@ const endTouchDrag = (e) => {
 document.addEventListener('pointerup', endTouchDrag);
 document.addEventListener('pointercancel', (e) => { if (e.pointerType === 'touch') { clearTouchDrag(); tActive = false; document.querySelectorAll('.todo.dragging, .todo.drop-before').forEach(x => x.classList.remove('dragging', 'drop-before')); } });
 document.addEventListener('touchmove', (e) => { if (tActive) e.preventDefault(); }, { passive: false });
+
+/* Alarme no Mac: o app de Mac cria um lembrete no app Lembretes (sincroniza com o iPhone).
+   Só roda dentro do app de Mac (window.pywebview); marca cada item como criado para não repetir. */
+function todoAlarmSync() {
+  const api = window.pywebview && window.pywebview.api;
+  if (!api || !api.criar_lembrete) return;
+  db.where('tempo_notices', n => n.kind === 'todo' && n.status !== 'done' && n.data && n.data.alarm && n.data.due && !n.data.alarm_criado).forEach(n => {
+    Promise.resolve(api.criar_lembrete(n.title, n.data.due)).then(ok => {
+      if (!ok) return;
+      const r = db.get('tempo_notices', n.id); if (!r) return;
+      db.update('tempo_notices', n.id, { data: { ...r.data, alarm_criado: true } }, true);
+    }).catch(() => { /* tenta de novo na próxima vez */ });
+  });
+}
+window.addEventListener('pywebviewready', todoAlarmSync);
+
