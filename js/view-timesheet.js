@@ -29,7 +29,7 @@ function dayReviewHTML(day, entries) {
     <div class="small muted" style="margin-top:4px">Bruto ${fmtDur(bruto)} · trabalho ${fmtDur(trab)} · pausas ${fmtDur(Math.max(0, bruto - trab))}</div>
     <div style="height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin:8px 0"><span style="display:block;height:100%;width:${pct}%;background:var(--accent)"></span></div>
     <div class="small">${pct >= 100 ? 'Meta batida' : `Faltam ${fmtDur(Math.max(0, metaMs - trab))} para a meta`}</div>
-    ${gaps.length ? `<div class="lbl" style="margin-top:10px">Lacunas</div>${gaps.map(([a, b]) => `<div class="row between small"><span class="mono">${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}</span><span class="row" style="gap:8px"><span class="mono">${fmtDur(b - a)}</span><button class="btn sm" data-act="ts-manual">Lançar</button></span></div>`).join('')}` : ''}
+    ${gaps.length ? `<div class="lbl" style="margin-top:10px">Lacunas</div>${gaps.map(([a, b]) => `<div class="row between small"><span class="mono" data-act="gap-log" data-a="${a}" data-b="${b}" style="cursor:pointer;text-decoration:underline dotted" title="Ver a atividade desta lacuna">${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}</span><span class="row" style="gap:8px"><span class="mono">${fmtDur(b - a)}</span><button class="btn sm" data-act="ts-manual">Lançar</button></span></div>`).join('')}` : ''}
   </div>`;
 }
 CHANGES['meta-dia'] = (el) => { db.setSetting('metaDia', Number(el.value) || 6); render(); };
@@ -59,6 +59,7 @@ VIEWS.timesheet = () => {
         ${a.state === 'running' ? `<button class="btn" data-act="ts-pause">${icon('pause')} Pausar</button>` : `<button class="btn primary" data-act="ts-resume">${icon('play')} Retomar</button>`}
         <button class="btn" data-act="ts-switch">Trocar de projeto</button>
         <button class="btn danger" data-act="ts-stop">${icon('stop')} Encerrar</button>
+        <button class="btn" data-act="ts-log-start" data-id="${a.id}">Início pelo log</button>
         <button class="btn" data-act="ts-edit" data-id="${a.id}">${icon('edit')} Abrir sessão atual</button>
       </div>
       ${sessionSumHTML(a)}
@@ -277,7 +278,77 @@ ACTIONS['ts-start-proj'] = (el) => {
   toast(`Registro iniciado em ${p.name}`);
 };
 ACTIONS['ts-switch-proj'] = (el) => { const p = db.get('tempo_projects', el.dataset.id); if (p) switchTo(p, null); };
-ACTIONS['ts-manual'] = () => openEntryModal(null);
+ACTIONS['ts-manual'] = () => openForgotModal();
+
+/* ---------- lacunas e início pelo log de atividade ---------- */
+const logDayRecs = (day) => (db.setting(logKeyOf(day), null) || []).slice().sort((x, y) => new Date(x.from) - new Date(y.from));
+const hmOf = (iso) => `${pad(new Date(iso).getHours())}:${pad(new Date(iso).getMinutes())}`;
+function logSuggestions(day) {
+  const recs = logDayRecs(day); if (!recs.length) return [];
+  const out = [{ iso: recs[0].from, label: 'Abriu o computador' }];
+  const seen = new Set();
+  recs.forEach(r => {
+    if (r.from === recs[0].from) return;
+    const k = /^terminal$/i.test(r.app) ? 'Terminal' : shortProgram(r.app);
+    if (seen.has(k)) return; seen.add(k);
+    out.push({ iso: r.from, label: `Usou ${k} pela primeira vez` });
+  });
+  return out.slice(0, 12);
+}
+function openForgotModal() {
+  openStartPicker({ day: S.tsDay || ymd(new Date()), title: 'Esqueci de iniciar', hint: 'Você ajusta o fim e o projeto depois.', onPick: (ms) => openEntryModal(null, new Date(ms).toISOString()) });
+}
+/* Escolha de horário de início a partir do log do dia. before: só horários antes desse instante (sessão ativa). */
+function openStartPicker({ day, title, hint = '', before = null, onPick }) {
+  const today = day;
+  const sugs = logSuggestions(today).filter(x => before == null || new Date(x.iso).getTime() < before);
+  const l = openLayer({ html: `<div class="dh"><h2>${esc(title)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db"><div class="stack" style="gap:8px">
+      <span class="small muted">Sugestões do log de atividade de ${esc(fmtDate(today))}. Marque uma para começar a partir dali, ou digite a hora.</span>
+      ${sugs.length ? sugs.map(x => `<label class="row" style="gap:10px;align-items:center;padding:4px 0"><input type="checkbox" data-fg="${new Date(x.iso).getTime()}"><span class="mono small">${hmOf(x.iso)}</span><span>${esc(x.label)}</span></label>`).join('') : '<div class="empty small">Sem sugestões de registro neste dia.</div>'}
+      <div class="row" style="gap:8px;align-items:center"><span class="small">Ou hora manual</span><input id="fg-hora" class="input sm mono" placeholder="hh:mm" inputmode="numeric" style="width:90px"></div>
+    </div></div>
+    <div class="df"><span class="left small muted">${esc(hint)}</span><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-fg-go>Continuar</button></div>` });
+  l.box.addEventListener('change', (e) => {
+    if (!e.target.matches('[data-fg]')) return;
+    l.box.querySelectorAll('[data-fg]').forEach(x => { if (x !== e.target) x.checked = false; });
+  });
+  l.box.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-fg-go]')) return;
+    const chk = l.box.querySelector('[data-fg]:checked');
+    const hora = (l.box.querySelector('#fg-hora')?.value || '').trim();
+    let start = null;
+    if (/^\d{1,2}:\d{2}$/.test(hora)) start = new Date(`${today}T${hora.padStart(5, '0')}`).getTime();
+    else if (chk) start = Number(chk.dataset.fg);
+    if (!start) return toast('Escolha uma sugestão ou digite a hora');
+    l.close();
+    onPick(start);
+  });
+}
+/* Sessão ativa: muda o início para um horário escolhido e leva para a sessão a atividade do log entre esse horário e o início atual. */
+ACTIONS['ts-log-start'] = (el) => {
+  const a = db.get('tempo_time_entries', el.dataset.id); if (!a || a.state === 'done') return;
+  const oldMs = new Date(entryStart(a)).getTime();
+  openStartPicker({ day: ymd(new Date(oldMs)), title: 'Início pelo log', hint: 'A atividade do log até o início atual entra na sessão.', before: oldMs, onPick: (ms) => {
+    if (ms >= oldMs) return toast('Escolha um horário antes do início atual.');
+    if (ms > Date.now()) return toast('O início não pode ser no futuro.');
+    const segs = clone(a.segments); segs[0] = { ...segs[0], s: new Date(ms).toISOString() };
+    db.update('tempo_time_entries', a.id, { segments: segs });
+    let n = 0;
+    logDayRecs(ymd(new Date(ms))).forEach(r => {
+      if (new Date(r.to).getTime() > ms && new Date(r.from).getTime() < oldMs) { recordActivity(a, { from: r.from, to: r.to, app: r.app, doc: r.doc, folder: r.folder, rid: r.rid }); n++; }
+    });
+    toast(`Início ajustado. ${n} registro(s) do log entraram na sessão.`);
+    render();
+  } });
+};
+/* Lacuna: mostra a atividade registrada no log dentro do intervalo. */
+ACTIONS['gap-log'] = (el) => {
+  const a = Number(el.dataset.a), b = Number(el.dataset.b);
+  const recs = logDayRecs(ymd(new Date(a))).filter(r => new Date(r.to) > a && new Date(r.from) < b);
+  const rows = recs.length ? recs.map(r => `<div class="row between small" style="padding:4px 0"><span class="mono">${hmOf(r.from)}–${hmOf(r.to)}</span><span style="flex:1;margin:0 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortProgram(r.app))}${r.doc ? ' · ' + esc(r.doc) : ''}</span><span class="mono">${fmtDur(new Date(r.to) - new Date(r.from))}</span></div>`).join('') : '<div class="empty small">Nenhuma atividade registrada neste intervalo.</div>';
+  openLayer({ html: `<div class="dh"><h2>Lacuna · ${hmOf(a)}–${hmOf(b)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div><div class="db"><div class="stack" style="gap:2px">${rows}</div></div>` });
+};
 
 /* ---------- seletor hierárquico ---------- */
 function pickerHTML(sel, q = '') {
@@ -384,11 +455,13 @@ function openStartModal(preset) {
 }
 
 /* ---------- editar / apontamento manual ---------- */
-function openEntryModal(id) {
+function openEntryModal(id, startIso = null) {
   const e = id ? db.get('tempo_time_entries', id) : null;
   const sel = e ? entrySel(e) : blankSel();
   const today = S.tsDay || ymd(new Date());
-  let segs = e ? clone(e.segments) : [{ s: new Date(`${today}T09:00`).toISOString(), e: new Date(`${today}T10:00`).toISOString() }];
+  let segs = e ? clone(e.segments) : startIso
+    ? [{ s: startIso, e: new Date(Math.max(Date.now(), new Date(startIso).getTime() + 60000)).toISOString() }]
+    : [{ s: new Date(`${today}T09:00`).toISOString(), e: new Date(`${today}T10:00`).toISOString() }];
   let showPicker = !e;
   const LOG_RE = /^\d{2}:\d{2}–\d{2}:\d{2} .+$/;
   const allLines = (e?.notes || '').split('\n');

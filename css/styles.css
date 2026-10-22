@@ -1154,3 +1154,8 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .rf-sum .rf-m { color: #2E9E6B; font-weight: 700; }
 .rf-pick.rf-pk-M { color: #2E9E6B; }
 .rf-pick.rf-pk-M.on { background: #2E9E6B; }
+
+/* Cmd+J: mira e marcação do comentário visual (app do Mac) */
+.fb-overlay { position: fixed; inset: 0; z-index: 9000; cursor: crosshair; background: rgba(0, 0, 0, .06); touch-action: none; }
+.fb-hint { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 13px; pointer-events: none; }
+.fb-box { position: fixed; border: 2px solid #2563eb; background: rgba(37, 99, 235, .3); pointer-events: none; }
