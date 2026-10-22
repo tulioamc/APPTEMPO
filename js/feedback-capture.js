@@ -20,27 +20,34 @@
     if (!nativo()) return toast('O Cmd+J funciona no app do Mac.');
     const ov = document.createElement('div');
     ov.className = 'fb-overlay';
-    ov.innerHTML = '<div class="fb-hint">Clique para marcar um ponto ou arraste uma área · Esc cancela</div><div class="fb-box" hidden></div>';
+    ov.innerHTML = '<div class="fb-hint">Clique para marcar um ponto ou arraste uma área · Esc cancela</div><div class="fb-box" hidden></div><div class="fb-mira" hidden></div>';
     document.body.appendChild(ov);
     modo = { overlay: ov, box: ov.querySelector('.fb-box'), start: null };
-    ov.addEventListener('pointerdown', (e) => { modo.start = { x: e.clientX, y: e.clientY }; ov.setPointerCapture(e.pointerId); });
-    ov.addEventListener('pointermove', (e) => { if (modo?.start) desenhar(retangulo(modo.start, { x: e.clientX, y: e.clientY })); });
+    const mira = ov.querySelector('.fb-mira');
+    const mover = (e) => { mira.hidden = false; mira.style.left = e.clientX + 'px'; mira.style.top = e.clientY + 'px'; };
+    ov.addEventListener('pointerenter', mover);
+    ov.addEventListener('pointerdown', (e) => { mover(e); modo.start = { x: e.clientX, y: e.clientY }; ov.setPointerCapture(e.pointerId); });
+    ov.addEventListener('pointermove', (e) => { mover(e); if (modo?.start) desenhar(retangulo(modo.start, { x: e.clientX, y: e.clientY })); });
     ov.addEventListener('pointerup', (e) => {
       if (!modo?.start) return;
       const r = retangulo(modo.start, { x: e.clientX, y: e.clientY });
+      const clique = Math.abs(e.clientX - modo.start.x) < 6 && Math.abs(e.clientY - modo.start.y) < 6;
       modo.start = null;
       desenhar(r);
-      concluir(r);
+      concluir(r, clique);
     });
   }
 
-  async function concluir(r) {
-    await new Promise(res => setTimeout(res, 120)); // a marcação aparece antes do print
+  async function concluir(r, clique) {
+    // print sempre da tela toda: clique marca um círculo; arrasto deixa a área marcada clara e o resto com máscara azul
+    modo.box.classList.toggle('ponto', clique);
+    modo.overlay.classList.add('fb-limpo'); // sem dica e sem mira no print; a máscara azul e a marcação ficam
+    await new Promise(res => setTimeout(res, clique ? 80 : 120)); // a marcação aparece antes do print
     const pagina = (location.hash || '#inicio').slice(1);
     const versao = typeof APP_VERSION !== 'undefined' ? APP_VERSION : '';
     let id;
     try {
-      id = await window.pywebview.api.capturar_feedback({ ...r, pagina, versao });
+      id = await window.pywebview.api.capturar_feedback({ ...r, tela: true, pagina, versao });
     } catch (err) {
       fechar();
       return toast('Não foi possível tirar o print. Confira a permissão de gravação de tela do Mac.');
