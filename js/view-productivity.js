@@ -37,7 +37,8 @@ function prodCollect() {
   const all = db.all('tempo_time_entries');
   const clip = (s, e) => { const x = Math.max(s, a), y = Math.min(e, b); return y > x ? [x, y] : null; };
   const work = [];
-  all.forEach(e => entryBruIntervals(e).forEach(([s, t]) => { const c = clip(s, t); if (c) work.push(c); }));
+  // produtivo = só os intervalos trabalhados (pausa nunca é trabalho); a união evita contar o mesmo horário duas vezes
+  all.forEach(e => (e.segments || []).forEach(x => { if (!x.s) return; const c = clip(new Date(x.s).getTime(), x.e ? new Date(x.e).getTime() : Date.now()); if (c) work.push(c); }));
   work.sort((x, y) => x[0] - y[0]);
   const union = prodMerge(work, 0);
   const pauses = pauseGapsOf(all).map(g => {
@@ -100,7 +101,9 @@ function prodStats(C) {
   const dayTable = [...dt.entries()]
     .map(([key, r]) => { const b = byDay.get(key) || { n: 0, max: 0 }; return { key, ...r, n: b.n, max: b.max }; })
     .sort((x, y) => new Date(y.key) - new Date(x.key));
-  const dowDays = prodDowDays(C.a, C.b);
+  // média por dia da semana: divide só pelos dias com registro (antes do histórico começar não conta)
+  const dowDays = [0, 0, 0, 0, 0, 0, 0];
+  dt.forEach((r, key) => { if (r.prod + r.dist + r.ocio > 0) dowDays[new Date(key).getDay()]++; });
   return {
     hours, dows, dowDays, tot, base, blocks, longest, days, dayTable,
     pctProd: base > 0 ? tot.prod / base * 100 : 0,

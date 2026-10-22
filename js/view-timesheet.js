@@ -29,7 +29,7 @@ function dayReviewHTML(day, entries) {
     <div class="small muted" style="margin-top:4px">Bruto ${fmtDur(bruto)} · trabalho ${fmtDur(trab)} · pausas ${fmtDur(Math.max(0, bruto - trab))}</div>
     <div style="height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin:8px 0"><span style="display:block;height:100%;width:${pct}%;background:var(--accent)"></span></div>
     <div class="small">${pct >= 100 ? 'Meta batida' : `Faltam ${fmtDur(Math.max(0, metaMs - trab))} para a meta`}</div>
-    ${gaps.length ? `<div class="lbl" style="margin-top:10px">Lacunas</div>${gaps.map(([a, b]) => `<div class="row between small"><span class="mono" data-act="gap-log" data-a="${a}" data-b="${b}" style="cursor:pointer;text-decoration:underline dotted" title="Ver a atividade desta lacuna">${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}</span><span class="row" style="gap:8px"><span class="mono">${fmtDur(b - a)}</span><button class="btn sm" data-act="ts-manual">Lançar</button></span></div>`).join('')}` : ''}
+    ${gaps.length ? `<div class="lbl" style="margin-top:10px">Lacunas</div>${gaps.map(([a, b]) => `<div class="row between small"><span class="mono" data-act="gap-log" data-a="${a}" data-b="${b}" style="cursor:pointer;text-decoration:underline dotted" title="Ver a atividade desta lacuna">${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}</span><span class="row" style="gap:8px"><span class="mono">${fmtDur(b - a)}</span><button class="btn sm" data-act="ts-manual" data-a="${a}" data-b="${b}">Lançar</button></span></div>`).join('')}` : ''}
   </div>`;
 }
 CHANGES['meta-dia'] = (el) => { db.setSetting('metaDia', Number(el.value) || 6); render(); };
@@ -70,7 +70,7 @@ VIEWS.timesheet = () => {
     timer = `<div class="timer-card">
       <span class="timer-state"><span class="dot"></span>Sem sessão ativa</span>
       <div class="timer-digits faint">00:00<span class="sec">:00</span></div>
-      <div class="timer-actions"><button class="btn primary" data-act="ts-start">${icon('play')} Iniciar registro</button><button class="btn" data-act="ts-manual">${icon('plus')} Esqueci de iniciar</button></div>
+      <div class="timer-actions"><button class="btn primary" data-act="ts-start">${icon('play')} Iniciar registro</button><button class="btn" data-act="ts-forgot">${icon('plus')} Esqueci de iniciar</button></div>
       ${rec.length ? `<div class="stack" style="gap:6px"><span class="lbl">Continuar de onde parou</span><div class="recent">${rec.map((r, i) => `<button class="btn sm" data-act="ts-quick" data-i="${i}" title="${esc(selPath(r.sel).join(' › '))}">${icon('play')} ${esc(r.label)}</button>`).join('')}</div></div>` : ''}
     </div>`;
   }
@@ -119,8 +119,15 @@ function dayStrip(entries, day) {
       bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Pausa${g.why ? ' (' + g.why + ')' : ''}\n${fmtTime(g.s)} – ${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}"></span>`;
     });
   });
-  return `<div class="day-strip" data-report="1" data-t0="${base.getTime()}" data-span="${span}" data-ents="${entries.map(e => e.id).join(',')}" aria-label="Linha do tempo do dia">${bars}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
+  return `<div class="day-strip" data-report="1" data-t0="${base.getTime()}" data-span="${span}" data-ents="${entries.map(e => e.id).join(',')}" aria-label="Linha do tempo do dia">${bars}${nowNeedleHTML(base, span)}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
 }
+/* Agulha: onde estamos no dia (só no dia de hoje, entre 7h e 24h). */
+function nowNeedleHTML(base, span) {
+  const t = Date.now() - base.getTime();
+  if (t < 0 || t > span) return '';
+  return `<span class="now-needle" data-now-needle="${base.getTime()}" data-span="${span}" style="left:${t / span * 100}%" title="Agora"></span>`;
+}
+function updateNowNeedle(el) { const t = Date.now() - Number(el.dataset.nowNeedle), span = Number(el.dataset.span); if (t < 0 || t > span) { el.style.display = 'none'; return; } el.style.left = (t / span * 100) + '%'; }
 function updateLiveStrip(el) { const span = 17 * 3600000; const st = Number(el.dataset.st); const en = Math.min(span, Date.now() - Number(el.dataset.stripLive)); el.style.width = Math.max(.3, (en - st) / span * 100) + '%'; }
 
 function recentSelections(n) {
@@ -278,15 +285,25 @@ ACTIONS['ts-start-proj'] = (el) => {
   toast(`Registro iniciado em ${p.name}`);
 };
 ACTIONS['ts-switch-proj'] = (el) => { const p = db.get('tempo_projects', el.dataset.id); if (p) switchTo(p, null); };
-ACTIONS['ts-manual'] = () => openForgotModal();
+/* Apontamento manual (sessão já encerrada). Na lacuna, já vem com o intervalo dela. */
+ACTIONS['ts-manual'] = (el) => {
+  const a = Number(el?.dataset?.a), b = Number(el?.dataset?.b);
+  if (a && b) openEntryModal(null, new Date(a).toISOString(), new Date(b).toISOString());
+  else openEntryModal(null);
+};
+/* Esqueci de iniciar: escolhe a hora em que começou e inicia o cronômetro a partir dela. */
+ACTIONS['ts-forgot'] = () => openForgotModal();
 
 /* ---------- lacunas e início pelo log de atividade ---------- */
 const logDayRecs = (day) => (db.setting(logKeyOf(day), null) || []).slice().sort((x, y) => new Date(x.from) - new Date(y.from));
 const hmOf = (iso) => `${pad(new Date(iso).getHours())}:${pad(new Date(iso).getMinutes())}`;
-function logSuggestions(day) {
-  const recs = logDayRecs(day); if (!recs.length) return [];
-  const out = [{ iso: recs[0].from, label: 'Abriu o computador' }];
-  const seen = new Set();
+function logSuggestions(day, after = null) {
+  const recs = logDayRecs(day).filter(r => after == null || new Date(r.to).getTime() > after)
+    .map(r => (after != null && new Date(r.from).getTime() < after ? { ...r, from: new Date(after).toISOString() } : r));
+  if (!recs.length) return [];
+  const nomeDe = (r) => (/^terminal$/i.test(r.app) ? 'Terminal' : shortProgram(r.app));
+  const out = [{ iso: recs[0].from, label: after != null ? `Primeira atividade depois da última sessão (${nomeDe(recs[0])})` : 'Abriu o computador' }];
+  const seen = new Set(after != null ? [nomeDe(recs[0])] : []);
   recs.forEach(r => {
     if (r.from === recs[0].from) return;
     const k = /^terminal$/i.test(r.app) ? 'Terminal' : shortProgram(r.app);
@@ -296,15 +313,23 @@ function logSuggestions(day) {
   return out.slice(0, 12);
 }
 function openForgotModal() {
-  openStartPicker({ day: S.tsDay || ymd(new Date()), title: 'Esqueci de iniciar', hint: 'Você ajusta o fim e o projeto depois.', onPick: (ms) => openEntryModal(null, new Date(ms).toISOString()) });
+  if (activeEntry()) return toast('Já existe uma sessão ativa. Use "Início pelo log" para puxar o início.');
+  openStartPicker({ day: ymd(new Date()), title: 'Esqueci de iniciar', hint: 'Depois você escolhe o projeto, e o cronômetro segue contando.', onPick: (ms) => openStartModal(null, ms) });
+}
+/* Sugestões a partir do fim da última sessão (antes disso o tempo já está registrado). */
+function startSuggestions(day, before = null, excludeId = null) {
+  const lim = before ?? Date.now();
+  const after = lastEndBefore(lim, excludeId);
+  const sugs = logSuggestions(day, after).filter(x => new Date(x.iso).getTime() < lim);
+  return { after, sugs };
 }
 /* Escolha de horário de início a partir do log do dia. before: só horários antes desse instante (sessão ativa). */
-function openStartPicker({ day, title, hint = '', before = null, onPick }) {
+function openStartPicker({ day, title, hint = '', before = null, excludeId = null, onPick }) {
   const today = day;
-  const sugs = logSuggestions(today).filter(x => before == null || new Date(x.iso).getTime() < before);
+  const { after, sugs } = startSuggestions(today, before, excludeId);
   const l = openLayer({ html: `<div class="dh"><h2>${esc(title)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db"><div class="stack" style="gap:8px">
-      <span class="small muted">Sugestões do log de atividade de ${esc(fmtDate(today))}. Marque uma para começar a partir dali, ou digite a hora.</span>
+      <span class="small muted">${after ? `Sugestões do log desde o fim da última sessão (${hmOf(new Date(after).toISOString())}).` : `Sugestões do log de atividade de ${esc(fmtDate(today))}.`} Marque uma para começar a partir dali, ou digite a hora.</span>
       ${sugs.length ? sugs.map(x => `<label class="row" style="gap:10px;align-items:center;padding:4px 0"><input type="checkbox" data-fg="${new Date(x.iso).getTime()}"><span class="mono small">${hmOf(x.iso)}</span><span>${esc(x.label)}</span></label>`).join('') : '<div class="empty small">Sem sugestões de registro neste dia.</div>'}
       <div class="row" style="gap:8px;align-items:center"><span class="small">Ou hora manual</span><input id="fg-hora" class="input sm mono" placeholder="hh:mm" inputmode="numeric" style="width:90px"></div>
     </div></div>
@@ -321,6 +346,7 @@ function openStartPicker({ day, title, hint = '', before = null, onPick }) {
     if (/^\d{1,2}:\d{2}$/.test(hora)) start = new Date(`${today}T${hora.padStart(5, '0')}`).getTime();
     else if (chk) start = Number(chk.dataset.fg);
     if (!start) return toast('Escolha uma sugestão ou digite a hora');
+    if (after && start < after) { start = after; toast(`Ajustei para ${hmOf(new Date(after).toISOString())}, fim da sessão anterior, para não sobrepor.`); }
     l.close();
     onPick(start);
   });
@@ -329,15 +355,13 @@ function openStartPicker({ day, title, hint = '', before = null, onPick }) {
 ACTIONS['ts-log-start'] = (el) => {
   const a = db.get('tempo_time_entries', el.dataset.id); if (!a || a.state === 'done') return;
   const oldMs = new Date(entryStart(a)).getTime();
-  openStartPicker({ day: ymd(new Date(oldMs)), title: 'Início pelo log', hint: 'A atividade do log até o início atual entra na sessão.', before: oldMs, onPick: (ms) => {
-    if (ms >= oldMs) return toast('Escolha um horário antes do início atual.');
+  openStartPicker({ day: ymd(new Date(oldMs)), title: 'Início pelo log', hint: 'A atividade do log até o início atual entra na sessão.', before: oldMs, excludeId: a.id, onPick: (ms) => {
+    ms = freeStartFrom(ms, a.id);
+    if (ms >= oldMs) return toast('Esse horário já está em outra sessão. Escolha um horário antes do início atual.');
     if (ms > Date.now()) return toast('O início não pode ser no futuro.');
     const segs = clone(a.segments); segs[0] = { ...segs[0], s: new Date(ms).toISOString() };
     db.update('tempo_time_entries', a.id, { segments: segs });
-    let n = 0;
-    logDayRecs(ymd(new Date(ms))).forEach(r => {
-      if (new Date(r.to).getTime() > ms && new Date(r.from).getTime() < oldMs) { recordActivity(a, { from: r.from, to: r.to, app: r.app, doc: r.doc, folder: r.folder, rid: r.rid }); n++; }
-    });
+    const n = attachLogTo(db.get('tempo_time_entries', a.id), ms, oldMs);
     toast(`Início ajustado. ${n} registro(s) do log entraram na sessão.`);
     render();
   } });
@@ -414,6 +438,20 @@ function bindPicker(layer, sel, rerender) {
 const blankSel = () => ({ agency_id: '', client_id: '', project_id: '', task_id: '', sub_id: '' });
 function defaultWorkType(sel) { const t = db.get('tempo_tasks', sel.sub_id) || db.get('tempo_tasks', sel.task_id); const p = t?.parent_id ? db.get('tempo_tasks', t.parent_id) : null; return t?.work_type_id || p?.work_type_id || ''; }
 
+/* "Comecei às": vazio = agora. Mostra as sugestões do log desde a última sessão. */
+function startFieldHTML(startMs) {
+  const { sugs } = startSuggestions(ymd(new Date()));
+  const val = startMs ? hmOf(new Date(startMs).toISOString()) : '';
+  return `<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap"><label class="small" for="st-ini">Comecei às</label><input id="st-ini" class="input sm mono" name="started_at" placeholder="agora" value="${val}" inputmode="numeric" style="width:90px">${sugs.length ? `<select class="input sm" style="width:auto" onchange="if(this.value)document.getElementById('st-ini').value=this.value"><option value="">Sugestões do log</option>${sugs.map(x => `<option value="${hmOf(x.iso)}">${hmOf(x.iso)} · ${esc(x.label)}</option>`).join('')}</select>` : ''}<span class="small muted">Vazio começa agora.</span></div>`;
+}
+/* hh:mm de hoje → ms; vazio → null; inválido → false. */
+function parseStartField(v) {
+  v = String(v || '').trim(); if (!v) return null;
+  if (!/^\d{1,2}:\d{2}$/.test(v)) return false;
+  const t = new Date(`${ymd(new Date())}T${v.padStart(5, '0')}`).getTime();
+  return Number.isFinite(t) ? t : false;
+}
+
 /* Revisão ao iniciar: mostra a última sessão concluída daquela tarefa antes de começar. */
 function lastSessionText(sel) {
   const tid = sel.sub_id || sel.task_id; if (!tid) return '';
@@ -422,7 +460,7 @@ function lastSessionText(sel) {
   const note = (last.notes || '').split('\n').find(l => l.trim() && !/^\d{2}:\d{2}–/.test(l));
   return `Última sessão desta tarefa: ${fmtDate(ymd(new Date(entryStart(last))))} · ${fmtTime(entryStart(last))}–${fmtTime(entryEnd(last))} · ${fmtDur(entryMs(last))}${note ? ' · ' + note : ''}`;
 }
-function openStartModal(preset) {
+function openStartModal(preset, startMs = null) {
   if (activeEntry()) { toast('Já existe uma sessão ativa. Encerre ou pause antes de iniciar outra.'); go('timesheet'); return; }
   const sel = Object.assign(blankSel(), preset || {});
   const now = new Date(); const nightOrWeekend = now.getDay() === 0 || now.getDay() === 6 || now.getHours() >= 22 || now.getHours() < 8;
@@ -437,6 +475,7 @@ function openStartModal(preset) {
         <div class="field"><label for="st-wt">Tipo de trabalho</label><select id="st-wt" class="input" name="work_type_id">${options(workTypes(), defaultWorkType(sel), { empty: true, emptyLabel: 'Sem tipo' })}</select></div>
         <div class="field"><label for="st-notes">Notas</label><input id="st-notes" class="input" name="notes" placeholder="Opcional"></div>
       </div>
+      ${startFieldHTML(startMs)}
       ${nightOrWeekend ? `<div class="banner info small">${icon('bell')} ${ctxRule?.active ? 'Fora do horário comercial: o lembrete de hora em hora está ativo.' : 'Fora do horário comercial. O lembrete “Noite e fim de semana” está desligado nas Preferências.'}</div>`
         : `<label class="check small"><input type="checkbox" name="hourly" id="st-hourly"> Lembrar de hora em hora enquanto esta sessão estiver ativa</label>`}
     </div>
@@ -448,19 +487,23 @@ function openStartModal(preset) {
   l.box.addEventListener('click', (e) => {
     if (!e.target.closest('[data-x="go"]')) return;
     const f = formData(l.box);
-    const ent = startEntry({ ...selToEntry(sel), work_type_id: f.work_type_id || null, notes: f.notes || '', revision_id: null });
+    const ini = parseStartField(f.started_at);
+    if (ini === false) return toast('Use a hora no formato hh:mm.');
+    if (ini && ini > Date.now()) return toast('O início não pode ser no futuro.');
+    const ent = startEntry({ ...selToEntry(sel), work_type_id: f.work_type_id || null, notes: f.notes || '', revision_id: null }, ini);
+    if (ent && ini && Math.abs(new Date(entryStart(ent)).getTime() - ini) > 60e3) toast(`Começa às ${fmtTime(entryStart(ent))}: antes disso o tempo já está em outra sessão.`);
     if (f.hourly) db.insert('tempo_reminders', { name: 'De hora em hora (sessão atual)', kind: 'stop', active: true, days: 'date', date: ymd(new Date()), customDays: [], freq: 'interval', time: '00:00', intervalHours: 1, nightWeekendOnly: false, done: false, lastFired: new Date().toISOString(), entry_id: ent?.id }, true);
-    l.close(); toast('Registro iniciado'); if (S.route !== 'timesheet') render();
+    l.close(); toast(ini ? `Registro iniciado desde ${fmtTime(entryStart(ent))}` : 'Registro iniciado'); if (S.route !== 'timesheet') render();
   });
 }
 
 /* ---------- editar / apontamento manual ---------- */
-function openEntryModal(id, startIso = null) {
+function openEntryModal(id, startIso = null, endIso = null) {
   const e = id ? db.get('tempo_time_entries', id) : null;
   const sel = e ? entrySel(e) : blankSel();
   const today = S.tsDay || ymd(new Date());
   let segs = e ? clone(e.segments) : startIso
-    ? [{ s: startIso, e: new Date(Math.max(Date.now(), new Date(startIso).getTime() + 60000)).toISOString() }]
+    ? [{ s: startIso, e: endIso || new Date(Math.max(Date.now(), new Date(startIso).getTime() + 60000)).toISOString() }]
     : [{ s: new Date(`${today}T09:00`).toISOString(), e: new Date(`${today}T10:00`).toISOString() }];
   let showPicker = !e;
   const LOG_RE = /^\d{2}:\d{2}–\d{2}:\d{2} .+$/;
@@ -582,6 +625,10 @@ function openEntryModal(id, startIso = null) {
         if (i && new Date(s.s) < new Date(segs[i - 1].e)) return toast('Os intervalos não podem se sobrepor.');
       }
       if (!running && new Date(segs[segs.length - 1].e) > new Date()) return toast('O apontamento não pode terminar no futuro.');
+      // nunca sobrepor: só confere os intervalos novos ou alterados (dados antigos não travam a edição)
+      const antes = new Set((e?.segments || []).map(x => `${x.s}|${x.e}`));
+      const ov = overlapOf(segs.filter(x => !antes.has(`${x.s}|${x.e}`)), e?.id || null);
+      if (ov) return toast(`Esse horário já está em outra sessão (${entryTitle(ov.entry)}, ${fmtTime(new Date(ov.a).toISOString())}–${fmtTime(new Date(ov.b).toISOString())}). Ajuste para não sobrepor.`);
       const data = { ...selToEntry(sel), work_type_id: f.work_type_id || null, revision_id: f.revision_id || null, notes: [(f.notes || '').replace(/\s+$/, ''), ...logLines].filter(Boolean).join('\n'), segments: segs };
       if (e) {
         const changed = JSON.stringify(e.segments) !== JSON.stringify(segs);

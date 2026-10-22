@@ -164,6 +164,7 @@ setInterval(() => {
   $$('[data-tick]').forEach(el => { const e = db.get('tempo_time_entries', el.dataset.tick); if (e) el.innerHTML = el.dataset.fmt === 'big' ? bigClock(entryMs(e)) : fmtClock(entryMs(e)); });
   $$('[data-tick-day]').forEach(el => { el.textContent = fmtDur(entriesOn(parseYmd(el.dataset.tickDay)).reduce((s, e) => s + entryMs(e), 0)); });
   if (a && a.state === 'running' && S.route === 'timesheet') $$('[data-strip-live]').forEach(el => updateLiveStrip(el, a));
+  $$('[data-now-needle]').forEach(updateNowNeedle);
 }, 1000);
 function bigClock(ms) { const c = fmtClock(ms); return `${c.slice(0, 5)}<span class="sec">${c.slice(5)}</span>`; }
 
@@ -283,7 +284,7 @@ function suggestStart(p, seg) {
   const client = p ? clientOf(p) : null;
   const sel = { project_id: pid, client_id: client?.id || null, agency_id: client?.agency_id || null, task_id: null, work_type_id: null, notes: '', revision_id: null };
   const e = startEntry(sel); if (!e) return;
-  db.update('tempo_time_entries', e.id, { segments: [{ s: seg.from, e: null }] }, true);
+  db.update('tempo_time_entries', e.id, { segments: [{ s: new Date(freeStartFrom(new Date(seg.from).getTime(), e.id)).toISOString(), e: null }] }, true);
   notifyNative(p ? `Contando em ${p.name}` : `Detectada atividade no ${shortProgram(seg.app)}`, `Confirme para entrar no bruto, negue para arquivar.`);
   const unsaved = !seg.folder ? 'Arquivo ainda não salvo. ' : '';
   addNotice({ kind: 'start', key: `start:${e.id}`, title: p ? `Começar ${p.name}?` : `Detectada atividade no ${shortProgram(seg.app)}`, body: `${unsaved}Confirme para entrar no bruto, negue para arquivar.`, entity: 'entry', entity_id: e.id, project_id: pid, data: { project_id: pid, entry_id: e.id, snapshot: null, from: seg.from, app: seg.app, unsaved: !seg.folder } });

@@ -430,6 +430,37 @@ function actLogFootHTML(e, legacyLines) {
   return `<div class="act-foot"><span class="lbl">Log</span><div class="act-log">${rows.map(r => esc(r.line)).join('<br>')}</div></div>`;
 }
 
+/* Título de janela de programa Adobe/Maxon → arquivo ou janela do sistema.
+   "Adobe After Effects 2026 - /Users/.../Brenda Reel_01.aep *" → arquivo "Brenda Reel_01.aep" (o caminho fica na dica).
+   Sem caminho e sem "Programa ano - " na frente (Save As, Composition Settings, Import File…) = janela do sistema. */
+function actDocInfo(app, doc) {
+  let d = String(doc || '').trim().replace(/\s*\*\s*$/, '');
+  if (!d || d.toLowerCase() === String(app || '').trim().toLowerCase() || d.toLowerCase() === shortProgram(app).toLowerCase()) return { win: true, name: d || shortProgram(app) };
+  const m = d.match(/^(?:adobe\s+)?[^/]*?\b(?:19|20)\d{2}(?:\.\d+)*\s+-\s+(.+)$/i) || d.match(/^(?:cinema 4d|redshift|zbrush)[^-/]*-\s+(.+)$/i);
+  let rest = m ? m[1].trim() : d;
+  rest = rest.replace(/\s+@\s+\d[\s\S]*$/, '');          // Photoshop: "arquivo.psd @ 50% (RGB/8)"
+  const br = rest.match(/^\[(.+?)\]/); if (br) rest = br[1].replace(/\s*\*\s*$/, '').trim(); // Cinema 4D: "[cena.c4d] - Main"
+  if (rest.includes('/')) { const name = rest.split('/').pop().trim() || rest; return { win: false, name, path: rest }; }
+  if (m) return { win: false, name: rest, path: '' };
+  return { win: true, name: d };
+}
+/* Linhas da janela do grupo: um arquivo por linha (mesmo arquivo com e sem "*" vira um só); janelas do sistema numa linha só. */
+function actRowsOf(g) {
+  const fam = String(g.id).startsWith('app:');
+  if (!fam) return g.items.map(i => ({ keys: [i.key], name: i.doc || i.app, tip: i.doc || i.app, ms: i.ms }));
+  const files = new Map(); const wins = { keys: [], names: new Map(), ms: 0 };
+  g.items.forEach(i => {
+    const inf = actDocInfo(i.app, i.doc);
+    if (inf.win) { wins.keys.push(i.key); wins.ms += i.ms; wins.names.set(inf.name, (wins.names.get(inf.name) || 0) + i.ms); return; }
+    const k = (inf.path || inf.name).toLowerCase();
+    const r = files.get(k) || { keys: [], name: inf.name, tip: inf.path || inf.name, ms: 0 };
+    r.keys.push(i.key); r.ms += i.ms; files.set(k, r);
+  });
+  const out = [...files.values()].sort((a, b) => b.ms - a.ms);
+  if (wins.keys.length) out.push({ keys: wins.keys, name: 'Janelas do sistema', win: true, ms: wins.ms, tip: [...wins.names.entries()].sort((a, b) => b[1] - a[1]).map(([n, ms]) => `${n} · ${fmtDur(ms)}`).join('\n') });
+  return out;
+}
+
 /* Janela de um grupo de arquivos: desfazer, juntar com outro grupo ou mover o tempo para outro projeto/tarefa. */
 function openActGroup(entryId, gid, onDone) {
   if (gid === 'outros') return openOthersPanel([entryId], 'both', onDone);
@@ -439,8 +470,8 @@ function openActGroup(entryId, gid, onDone) {
   openLayer({
     render: () => `<div class="dh"><h2>${esc(g.label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
       <div class="db stack" style="gap:8px">
-        <span class="lbl">Tempo por versão</span>
-        ${g.items.map(i => `<label class="row between" style="cursor:pointer"><span class="row" style="gap:8px">${g.items.length > 1 ? `<input type="checkbox" data-sel="${esc(i.key)}">` : ''}<span>${esc(i.doc || i.app)}</span></span><span class="mono small">${fmtDur(i.ms)}</span></label>`).join('')}
+        <span class="lbl">${String(g.id).startsWith('app:') ? 'Tempo por arquivo' : 'Tempo por versão'}</span>
+        ${actRowsOf(g).map(r => `<label class="row between" style="cursor:pointer;gap:10px"><span class="row" style="gap:8px;min-width:0">${g.items.length > 1 ? `<input type="checkbox" data-sel="${esc(r.keys.join('\n'))}">` : ''}<span title="${esc(r.tip)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap${r.win ? ';color:var(--fg-2)' : ''}">${esc(r.name)}</span></span><span class="mono small">${fmtDur(r.ms)}</span></label>`).join('')}
         <div class="row between"><span class="lbl">Total</span><span class="mono small">${fmtDur(g.ms)}</span></div>
         ${g.items.length > 1 ? `<div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" data-x="act-split">Separar selecionados</button><button class="btn ghost" data-x="act-ungroup">Desfazer agrupamento</button></div>` : ''}
         ${others.length ? `<div class="field"><label for="act-target">Agrupar com outro</label><select id="act-target" class="input">${others.map(o => `<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('')}</select></div><div class="row"><button class="btn" data-x="act-merge">Agrupar</button></div>` : ''}
@@ -462,7 +493,7 @@ function openActGroup(entryId, gid, onDone) {
         const x = b.dataset.x;
         if (x === 'act-color') { actSetColor(g.id, b.dataset.c); ly.close(); onDone && onDone(); return; }
         if (x === 'act-ungroup') { actUngroup(g); }
-        else if (x === 'act-split') { const keys = [...ly.box.querySelectorAll('[data-sel]:checked')].map(c => c.dataset.sel); if (!keys.length) return toast('Marque os arquivos que quer separar.'); actSplit(keys); }
+        else if (x === 'act-split') { const keys = [...ly.box.querySelectorAll('[data-sel]:checked')].flatMap(c => c.dataset.sel.split('\n')); if (!keys.length) return toast('Marque os arquivos que quer separar.'); actSplit(keys); }
         else if (x === 'act-merge') { actMerge(g, ly.box.querySelector('#act-target').value); }
         else if (x === 'act-move') {
           if (!proj.value) return toast('Escolha um projeto.');

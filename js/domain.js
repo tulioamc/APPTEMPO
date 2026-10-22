@@ -315,11 +315,64 @@ function lastWorkType(projectId) {
     .sort((a, b) => new Date(entryStart(b)) - new Date(entryStart(a)));
   return es[0]?.work_type_id || db.get('tempo_projects', projectId)?.work_type_id || null;
 }
-function startEntry(sel) {
+/* ---------- nunca sobrepor: um horário só pode estar em uma sessão ----------
+   Intervalos ocupados por outras sessões (trecho aberto conta até agora), já unidos. */
+function busyIntervals(excludeId = null, at = Date.now()) {
+  const iv = db.all('tempo_time_entries').filter(e => e.id !== excludeId)
+    .flatMap(e => (e.segments || []).filter(x => x.s).map(x => [new Date(x.s).getTime(), x.e ? new Date(x.e).getTime() : at]))
+    .filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0]);
+  const out = [];
+  iv.forEach(([a, b]) => { const l = out[out.length - 1]; if (l && a <= l[1]) l[1] = Math.max(l[1], b); else out.push([a, b]); });
+  return out;
+}
+/* Primeiro horário livre a partir de ms: se cair dentro de outra sessão, vai para o fim dela. */
+function freeStartFrom(ms, excludeId = null) {
+  let t = ms;
+  busyIntervals(excludeId).forEach(([a, b]) => { if (t >= a && t < b) t = b; });
+  return t;
+}
+/* Fim da última sessão antes de "ms" (no mesmo dia). Base das sugestões de início. */
+function lastEndBefore(ms, excludeId = null) {
+  const d0 = new Date(ms); d0.setHours(0, 0, 0, 0);
+  let end = null;
+  busyIntervals(excludeId).forEach(([a, b]) => { const f = Math.min(b, ms); if (a < ms && f > d0.getTime()) end = Math.max(end ?? 0, f); });
+  return end;
+}
+/* Sessão que já ocupa algum dos intervalos (para avisar antes de salvar). */
+function overlapOf(segs, excludeId = null, at = Date.now()) {
+  const T = (x) => (x ? new Date(x).getTime() : at);
+  for (const e of db.all('tempo_time_entries')) {
+    if (e.id === excludeId) continue;
+    for (const o of e.segments || []) {
+      if (!o.s) continue;
+      for (const m of segs) {
+        const a = Math.max(T(m.s), T(o.s)), b = Math.min(T(m.e), T(o.e));
+        if (b - a > 1000) return { entry: e, a, b };
+      }
+    }
+  }
+  return null;
+}
+/* Log do dia → sessão: a atividade registrada entre "de" e "até" entra na sessão (o log é um só, cada trecho vai para uma sessão). */
+function attachLogTo(entry, fromMs, toMs) {
+  let n = 0;
+  const days = []; const d = new Date(fromMs); d.setHours(0, 0, 0, 0);
+  while (d.getTime() <= toMs) { days.push(ymd(d)); d.setDate(d.getDate() + 1); }
+  days.forEach(d => (db.setting(logKeyOf(d), null) || []).forEach(r => {
+    const a = new Date(r.from).getTime(), b = new Date(r.to).getTime();
+    if (b > fromMs && a < toMs) { recordActivity(entry, { from: r.from, to: r.to, app: r.app, doc: r.doc, folder: r.folder, rid: r.rid }); n++; }
+  }));
+  return n;
+}
+/* startMs: começou antes (esqueci de iniciar). O início nunca cai dentro de outra sessão, e a atividade do log desde então entra na sessão. */
+function startEntry(sel, startMs = null) {
   if (activeEntry()) return null; // impede sessão duplicada
   const work_type_id = sel.work_type_id || lastWorkType(sel.project_id) || null;
-  const e = db.insert('tempo_time_entries', { ...sel, work_type_id, state: 'running', segments: [{ s: nowISO(), e: null }], edits: [] });
+  const now = Date.now();
+  const ini = startMs != null && startMs < now ? Math.min(freeStartFrom(startMs), now) : now;
+  const e = db.insert('tempo_time_entries', { ...sel, work_type_id, state: 'running', segments: [{ s: new Date(ini).toISOString(), e: null }], edits: [] });
   db.setSetting('lastSeen', Date.now());
+  if (ini < now - 1000 && typeof attachLogTo === 'function') attachLogTo(e, ini, now);
   return e;
 }
 // troca: o tempo de agora até a volta vai para o projeto "to" (fica como "Trabalho em …", sem pausa)
