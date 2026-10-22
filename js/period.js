@@ -111,6 +111,7 @@ function reportPanelHTML(day) {
     pauseGapsOf([e]).forEach(g => { const k = g.why || 'manual'; pauses.set(k, (pauses.get(k) || 0) + (new Date(g.e) - new Date(g.s))); });
     const tk = e.work_type_id || '_'; types.set(tk, (types.get(tk) || 0) + entryMs(e));
     actList(e.id).forEach(r => {
+      if (/spotify/i.test(String(r.app || ''))) return; // música não entra no rastreio
       const ms = new Date(r.to) - new Date(r.from); if (!(ms > 0)) return;
       const tn = toolName(r); progs.set(tn, (progs.get(tn) || 0) + ms);
       const fk = `${r.app}|${r.doc || ''}`;
@@ -125,7 +126,7 @@ function reportPanelHTML(day) {
   const progItems = items(progs, k => shortProgram(k), k => toolColor(k));
   // arquivos sem nome próprio (só o programa), nomes iguais ao do programa e sites do Chrome já aparecem em "Programas e sites"
   const fileItems = [...files.values()].filter(f => f.doc && !f.app.toLowerCase().includes(f.doc.toLowerCase()) && !isChromeSite(f.app, f.doc))
-    .sort((x, y) => y.ms - x.ms).map(f => ({ label: f.label, ms: f.ms, color: toolColor(f.app) }));
+    .sort((x, y) => y.ms - x.ms).map(f => ({ label: f.label, ms: f.ms, color: actColorMap()['a:' + `${f.app}|${f.doc || ''}`] || toolColor(toolAlias(f.app)) }));
 
   const section = (title, list) => {
     const total = list.reduce((s, i) => s + i.ms, 0);

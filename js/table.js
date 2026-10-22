@@ -10,7 +10,9 @@ function tableState(id, cols, defHidden = [], defSort = null) {
   if (!S.tables) S.tables = clone(db.setting('tables', {}) || {});
   const keys = Object.keys(cols);
   let t = S.tables[id];
-  if (!t) t = S.tables[id] = { order: [...keys], hidden: [...defHidden], widths: {}, sort: defSort };
+  if (!t) t = S.tables[id] = { order: [...keys], hidden: [...defHidden], widths: {}, sorts: defSort ? [defSort] : [] };
+  if (t.sort !== undefined && !t.sorts) { t.sorts = t.sort ? [t.sort] : []; delete t.sort; }
+  if (!t.sorts) t.sorts = [];
   keys.forEach(k => { if (!t.order.includes(k)) { t.order.push(k); if (defHidden.includes(k)) t.hidden.push(k); } });
   t.order = t.order.filter(k => keys.includes(k));
   return t;
@@ -35,7 +37,12 @@ function gridTable({ id, cols, rows, rowAttrs = () => '', defHidden = [], defSor
   TABLE_DEFS[id] = { cols, rowById: rowById || ((rid) => rows.find(r => r.id === rid)) };
   const vis = t.order.filter(k => !t.hidden.includes(k));
   let list = rows;
-  if (sortable && t.sort && cols[t.sort.key]?.sort) { const g = cols[t.sort.key].sort; list = [...rows].sort((a, b) => { const x = g(a), y = g(b); return (x > y ? 1 : x < y ? -1 : 0) * t.sort.dir; }); }
+  // ordenação: até 3 critérios, na ordem em que foram escolhidos (o mais recente é o primeiro)
+  const sorts = sortable ? t.sorts.filter(s => cols[s.key]?.sort) : [];
+  if (sorts.length) list = [...rows].sort((a, b) => {
+    for (const s of sorts) { const g = cols[s.key].sort; const x = g(a), y = g(b); const c = (x > y ? 1 : x < y ? -1 : 0); if (c) return c * s.dir; }
+    return 0;
+  });
   // largura padrão = conteúdo mais largo da coluna (sem espaço sobrando); notas/observações ficam com largura fixa
   const isLong = (k) => /note|obs|anota/i.test(k) || cols[k].long;
   const stripTxt = (h) => String(h ?? '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
@@ -48,8 +55,10 @@ function gridTable({ id, cols, rows, rowAttrs = () => '', defHidden = [], defSor
   // tabelas irmãs: a largura sai do conteúdo de todas as linhas do grupo (widthRows), não só desta tabela
   const W = (k) => wt.widths[k] || (cols[k].w && isLong(k) ? cols[k].w : fitW(k, widthRows && group ? widthRows : list));
   const total = vis.reduce((s, k) => s + W(k), 0);
-  const head = vis.map(k => { const c = cols[k]; const s = t.sort?.key === k;
-    return `<th draggable="true" data-col="${k}" data-table="${id}" class="${sortable && c.sort ? 'sortable' : ''} ${c.money ? 'money' : ''}" ${sortable && c.sort ? `data-act="tsort"` : ''} aria-sort="${s ? (t.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><span class="th-in">${c.ico ? `<span class="ico">${icon(c.ico)}</span>` : ''}<span class="th-l">${c.label}</span>${s ? (t.sort.dir > 0 ? ' ↑' : ' ↓') : ''}</span><span class="rz" data-rz="${k}" aria-hidden="true"></span></th>`; }).join('');
+  const head = vis.map(k => { const c = cols[k]; const si = sorts.findIndex(x => x.key === k); const s = si >= 0;
+    const arrow = s ? ` ${sorts[si].dir > 0 ? '↑' : '↓'}${sorts.length > 1 ? si + 1 : ''}` : '';
+    return `<th draggable="true" data-col="${k}" data-table="${id}" class="${sortable && c.sort ? 'sortable' : ''} ${c.money ? 'money' : ''}" ${sortable && c.sort ? `data-act="tsort"` : ''} aria-sort="${s ? (sorts[si].dir > 0 ? 'ascending' : 'descending') : 'none'}"><span class="th-in">${c.ico ? `<span class="ico">${icon(c.ico)}</span>` : ''}<span class="th-l">${c.label}</span>${arrow}</span><span class="rz" data-rz="${k}" aria-hidden="true"></span></th>`; }).join('');
+  const sortBar = sorts.length ? `<div class="sort-bar small muted" style="margin:0 0 8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">Ordem: ${sorts.map((s, i) => `${i ? '<span>&gt;</span>' : ''}<b style="color:var(--text)">${esc(cols[s.key].label)}</b> ${s.dir > 0 ? '↑' : '↓'}`).join(' ')} <button class="btn sm ghost" data-act="tsort-clear" data-table="${id}">Limpar ordem</button></div>` : '';
   const body = list.map(r => `<tr ${rowAttrs(r)}>${selCell(id, r)}${vis.map(k => { const c = cols[k]; const ed = c.edit && (!c.edit.when || c.edit.when(r));
     return `<td class="${c.cls ? (typeof c.cls === 'function' ? c.cls(r) : c.cls) : ''} ${c.money ? 'money' : ''} ${isLong(k) ? 'obs' : ''} ${ed ? 'editable' : ''}" ${ed ? `data-act="cell" data-table="${id}" data-col="${k}" data-id="${r.id}"` : ''}>${c.cell(r)}</td>`; }).join('')}</tr>`).join('');
   const foot = footer ? `<tfoot><tr><td class="sel-col"></td>${vis.map((k, i) => { const c = cols[k]; if (c.val) { const s = list.reduce((a, r) => a + (c.val(r) || 0), 0); return `<td class="money">${i === 0 ? `Contagem <b>${list.length}</b> · ` : ''}Soma <b>${c.fmt ? c.fmt(s) : fmtMoney0(s)}</b></td>`; } return i === 0 ? `<td>Contagem <b>${list.length}</b></td>` : '<td></td>'; }).join('')}</tr></tfoot>` : '';
@@ -57,16 +66,22 @@ function gridTable({ id, cols, rows, rowAttrs = () => '', defHidden = [], defSor
   const allSel = list.length > 0 && pick === list.length;
   const headSel = `<th class="sel-col"><input type="checkbox" data-on="tsel-all" data-table="${id}" data-ids="${list.map(r => r.id).join(',')}" ${allSel ? 'checked' : ''} aria-label="Selecionar todas"></th>`;
   const bar = sel.size ? `<div class="sel-bar small"><b>${sel.size}</b> selecionada(s). Edite uma célula de uma delas e a mudança vai para todas <button class="btn sm ghost" data-act="tsel-clear" data-table="${id}">Limpar seleção</button></div>` : '';
-  return `${bar}<div class="table-wrap"><table class="grid fixed ${cls}" data-table="${id}" data-group="${gid}" style="width:${total + 34}px"><colgroup><col class="sel-col" style="width:34px">${vis.map(k => `<col data-col="${k}" style="width:${W(k)}px">`).join('')}</colgroup><thead><tr>${headSel}${head}</tr></thead><tbody>${body}</tbody>${foot}</table></div>`;
+  return `${bar}${sortBar}<div class="table-wrap"><table class="grid fixed ${cls}" data-table="${id}" data-group="${gid}" style="width:${total + 34}px"><colgroup><col class="sel-col" style="width:34px">${vis.map(k => `<col data-col="${k}" style="width:${W(k)}px">`).join('')}</colgroup><thead><tr>${headSel}${head}</tr></thead><tbody>${body}</tbody>${foot}</table></div>`;
 }
 
 let justResized = 0;
+// clique numa coluna nova: vira o critério principal; clique de novo inverte; terceiro clique tira. Máximo de 3 critérios.
 ACTIONS.tsort = (el) => {
   if (Date.now() - justResized < 300) return;
   const t = S.tables[el.dataset.table]; const k = el.dataset.col;
-  t.sort = t.sort?.key === k ? (t.sort.dir > 0 ? { key: k, dir: -1 } : null) : { key: k, dir: 1 };
+  const list = (t.sorts || []).slice(); const i = list.findIndex(s => s.key === k);
+  if (i < 0) list.unshift({ key: k, dir: 1 });
+  else if (list[i].dir > 0) list[i] = { key: k, dir: -1 };
+  else list.splice(i, 1);
+  t.sorts = list.slice(0, 3); delete t.sort;
   saveTables();
 };
+ACTIONS['tsort-clear'] = (el) => { const t = S.tables[el.dataset.table]; if (!t) return; t.sorts = []; delete t.sort; saveTables(); };
 
 /* ---------- reordenar arrastando o cabeçalho ---------- */
 let dragCol = null;
