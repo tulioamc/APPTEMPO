@@ -112,7 +112,8 @@ const shortName = (s, max = 30) => { s = String(s || ''); return s.length > max 
 const ACT_BROWSER_RE = /chrome|safari|edge|firefox|arc|brave|opera|vivaldi/i; /* registros de navegador são sites, não programas */
 function actAnalyzeList(list0, mode) {
   // Terminal e Finder não têm arquivo nem pasta na análise (registros antigos podem ter guardado nome de usuário ou pasta): viram só o app
-  const list = list0.filter(x => mode === "site" ? ACT_BROWSER_RE.test(String(x.app || "")) : (mode === "program" || mode === "file") ? !ACT_BROWSER_RE.test(String(x.app || "")) : true).map(x => (/^(terminal|finder)$/i.test(String(x.app || '')) ? { ...x, doc: null, folder: null } : x));
+  // Programa: o navegador conta como programa (Chrome), além dos sites dentro dele. Arquivo: sem navegador (os sites ficam em Site).
+const list = list0.filter(x => mode === "site" ? ACT_BROWSER_RE.test(String(x.app || "")) : mode === "file" ? !ACT_BROWSER_RE.test(String(x.app || "")) : true).map(x => (/^(terminal|finder)$/i.test(String(x.app || '')) ? { ...x, doc: null, folder: null } : x));
   if (!list.length) return { groups: [], records: [] };
   const info = {};
   list.forEach(x => { const k = actKeyOf(x); info[k] = info[k] || { key: k, app: x.app, doc: x.doc, folder: x.folder }; });
