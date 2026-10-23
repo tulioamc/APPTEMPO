@@ -309,12 +309,16 @@ function logSuggestions(day) {
   return out.slice(0, 12);
 }
 function openForgotModal() {
-  openStartPicker({ day: S.tsDay || ymd(new Date()), title: 'Esqueci de iniciar', hint: 'Você ajusta o fim e o projeto depois.', onPick: (ms) => openEntryModal(null, new Date(ms).toISOString()) });
+  const day = S.tsDay || ymd(new Date());
+  const dayStart = new Date(`${day}T00:00:00`).getTime(), dayEnd = new Date(`${day}T23:59:59.999`).getTime();
+  const lastEnd = db.all('tempo_time_entries').flatMap(e => (e.segments || []).map(s => s.e ? new Date(s.e).getTime() : Date.now()))
+    .filter(t => t >= dayStart && t <= dayEnd).reduce((m, t) => Math.max(m, t), dayStart);
+  openStartPicker({ day, title: 'Esqueci de iniciar', hint: 'As sugestões começam depois do fim do último registro do dia.', after: lastEnd, onPick: (ms) => openEntryModal(null, new Date(ms).toISOString()) });
 }
-/* Escolha de horário de início a partir do log do dia. before: só horários antes desse instante (sessão ativa). */
-function openStartPicker({ day, title, hint = '', before = null, onPick }) {
+/* Escolha de horário a partir do log. before limita o início; after evita sugerir horários anteriores ao último registro. */
+function openStartPicker({ day, title, hint = '', before = null, after = null, onPick }) {
   const today = day;
-  const sugs = logSuggestions(today).filter(x => before == null || new Date(x.iso).getTime() < before);
+  const sugs = logSuggestions(today).filter(x => (before == null || new Date(x.iso).getTime() < before) && (after == null || new Date(x.iso).getTime() >= after));
   const l = openLayer({ html: `<div class="dh"><h2>${esc(title)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db"><div class="stack" style="gap:8px">
       <span class="small muted">Sugestões do log de atividade de ${esc(fmtDate(today))}. Marque uma para começar a partir dali, ou digite a hora.</span>
@@ -334,6 +338,7 @@ function openStartPicker({ day, title, hint = '', before = null, onPick }) {
     if (/^\d{1,2}:\d{2}$/.test(hora)) start = new Date(`${today}T${hora.padStart(5, '0')}`).getTime();
     else if (chk) start = Number(chk.dataset.fg);
     if (!start) return toast('Escolha uma sugestão ou digite a hora');
+    if (after != null && start < after) return toast('Escolha um horário a partir do fim do último registro do dia.');
     l.close();
     onPick(start);
   });
@@ -447,9 +452,11 @@ function openStartModal(preset) {
       <div data-picker></div>
       <div id="st-last" class="small muted"></div>
       <div class="grid2">
+        <div class="field"><label for="st-started">Comecei às (opcional)</label><input id="st-started" class="input mono" type="datetime-local" name="started_at" value=""></div>
         <div class="field"><label for="st-wt">Tipo de trabalho</label><select id="st-wt" class="input" name="work_type_id">${options(workTypes(), defaultWorkType(sel), { empty: true, emptyLabel: 'Sem tipo' })}</select></div>
         <div class="field"><label for="st-notes">Notas</label><input id="st-notes" class="input" name="notes" placeholder="Opcional"></div>
       </div>
+      <div class="small muted">Deixe vazio para começar agora. Se escolher um horário anterior, o cronômetro contará desde esse horário e o log de atividade será associado à sessão.</div>
       ${nightOrWeekend ? `<div class="banner info small">${icon('bell')} ${ctxRule?.active ? 'Fora do horário comercial: o lembrete de hora em hora está ativo.' : 'Fora do horário comercial. O lembrete “Noite e fim de semana” está desligado nas Preferências.'}</div>`
         : `<label class="check small"><input type="checkbox" name="hourly" id="st-hourly"> Lembrar de hora em hora enquanto esta sessão estiver ativa</label>`}
     </div>
@@ -461,7 +468,25 @@ function openStartModal(preset) {
   l.box.addEventListener('click', (e) => {
     if (!e.target.closest('[data-x="go"]')) return;
     const f = formData(l.box);
-    const ent = startEntry({ ...selToEntry(sel), work_type_id: f.work_type_id || null, notes: f.notes || '', revision_id: null });
+    const startedVal = l.box.querySelector('#st-started')?.value;
+    const startAt = startedVal ? new Date(startedVal).getTime() : Date.now();
+    if (!Number.isFinite(startAt) || startAt > Date.now()) return toast('Informe um horário válido, que não esteja no futuro.');
+    const ent = startEntry({ ...selToEntry(sel), work_type_id: f.work_type_id || null, notes: f.notes || '', revision_id: null, startAt });
+    if (!ent) return;
+    if (startAt < Date.now()) {
+      let d = new Date(startAt); d.setHours(0,0,0,0);
+      const lastDay = new Date(); lastDay.setHours(0,0,0,0);
+      let imported = 0;
+      while (d <= lastDay) {
+        const recs = logDayRecs(ymd(d));
+        recs.forEach(r => {
+          const a = Math.max(startAt, new Date(r.from).getTime()), b = Math.min(Date.now(), new Date(r.to).getTime());
+          if (b > a) { recordActivity(ent, { from: new Date(a).toISOString(), to: new Date(b).toISOString(), app: r.app, doc: r.doc, folder: r.folder, rid: r.rid }); imported++; }
+        });
+        d.setDate(d.getDate()+1);
+      }
+      if (imported) toast(`Registro iniciado retroativamente. ${imported} atividade(s) do log associadas.`);
+    }
     if (f.hourly) db.insert('tempo_reminders', { name: 'De hora em hora (sessão atual)', kind: 'stop', active: true, days: 'date', date: ymd(new Date()), customDays: [], freq: 'interval', time: '00:00', intervalHours: 1, nightWeekendOnly: false, done: false, lastFired: new Date().toISOString(), entry_id: ent?.id }, true);
     l.close(); toast('Registro iniciado'); if (S.route !== 'timesheet') render();
   });
@@ -595,6 +620,14 @@ function openEntryModal(id, startIso = null) {
         if (i && new Date(s.s) < new Date(segs[i - 1].e)) return toast('Os intervalos não podem se sobrepor.');
       }
       if (!running && new Date(segs[segs.length - 1].e) > new Date()) return toast('O apontamento não pode terminar no futuro.');
+      const occupied = db.all('tempo_time_entries').filter(other => !e || other.id !== e.id).flatMap(other => (other.segments || []).map(seg => ({
+        a: new Date(seg.s).getTime(), b: seg.e ? new Date(seg.e).getTime() : Date.now(), title: entryTitle(other), start: seg.s, end: seg.e
+      }))).filter(x => x.b > x.a);
+      for (const seg of segs) {
+        const a = new Date(seg.s).getTime(), b = seg.e ? new Date(seg.e).getTime() : Date.now();
+        const clash = occupied.find(x => a < x.b && b > x.a);
+        if (clash) return toast(`Esse horário já está ocupado por outra sessão (${fmtTime(clash.start)}–${clash.end ? fmtTime(clash.end) : 'agora'} · ${clash.title}). Ajuste os intervalos para não sobrepor.`);
+      }
       const data = { ...selToEntry(sel), work_type_id: f.work_type_id || null, revision_id: f.revision_id || null, notes: [(f.notes || '').replace(/\s+$/, ''), ...logLines].filter(Boolean).join('\n'), segments: segs };
       if (e) {
         const changed = JSON.stringify(e.segments) !== JSON.stringify(segs);
