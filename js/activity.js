@@ -113,7 +113,13 @@ const ACT_BROWSER_RE = /chrome|safari|edge|firefox|arc|brave|opera|vivaldi/i; /*
 function actAnalyzeList(list0, mode) {
   // Terminal e Finder não têm arquivo nem pasta na análise (registros antigos podem ter guardado nome de usuário ou pasta): viram só o app
   // Programa: o navegador conta como programa (Chrome), além dos sites dentro dele. Arquivo: sem navegador (os sites ficam em Site).
-const list = list0.filter(x => mode === "site" ? ACT_BROWSER_RE.test(String(x.app || "")) : mode === "file" ? !ACT_BROWSER_RE.test(String(x.app || "")) : true).map(x => (/^(terminal|finder)$/i.test(String(x.app || '')) ? { ...x, doc: null, folder: null } : x));
+const SYSTEM_WINDOW_RE = /^(save as|save|open|import|export|composition settings|composition settings\b|project settings|render settings|render queue|preferences|settings|new composition|new project|file info|document setup|print|page setup|font|color settings|output module|interpret footage|media encoder|dialog|window)$/i;
+const list = list0.filter(x => mode === "site" ? ACT_BROWSER_RE.test(String(x.app || "")) : mode === "file" ? !ACT_BROWSER_RE.test(String(x.app || "")) : true).map(x => {
+    if (/^(terminal|finder)$/i.test(String(x.app || ''))) return { ...x, doc: null, folder: null };
+    const family = appFamily(x.app);
+    if (family && SYSTEM_WINDOW_RE.test(String(x.doc || '').trim()) && !x.folder) return { ...x, doc: 'Janelas do sistema', folder: null, _systemWindow: family };
+    return x;
+  });
   if (!list.length) return { groups: [], records: [] };
   const info = {};
   list.forEach(x => { const k = actKeyOf(x); info[k] = info[k] || { key: k, app: x.app, doc: x.doc, folder: x.folder }; });
@@ -124,6 +130,7 @@ const list = list0.filter(x => mode === "site" ? ACT_BROWSER_RE.test(String(x.ap
     if (mode === "program") return "p:" + toolAlias(x.app);
     const k = actKeyOf(x);
     if (links[k]) return links[k];
+    if (x.doc === 'Janelas do sistema') return 'syswin:' + (appFamily(x.app) || 'Aplicativo');
     const fam = appFamily(x.app);
     if (fam) return 'app:' + String(x.app || '').toLowerCase();
     const pre = docPre(x.doc);
@@ -159,6 +166,7 @@ const list = list0.filter(x => mode === "site" ? ACT_BROWSER_RE.test(String(x.ap
     let label;
     if (mode === 'program') label = shortProgram(items[0].app);
     else if (String(g.id).startsWith('app:')) label = shortProgram(items[0].app);
+    else if (String(g.id).startsWith('syswin:')) label = 'Janelas do sistema';
     else if (String(g.id).startsWith('pre:')) {
       const exts = [...new Set(items.map(it => (String(it.doc || '').match(/\.[^.]+$/) || [''])[0]))];
       label = docPre(items[0].doc) + (exts.length === 1 ? exts[0] : '');
@@ -290,7 +298,11 @@ function actMoveGroup(entryId, g, pick, ranges = null) {
 
 /* Dica do bloco: cada grupo com o tempo de cada versão/arquivo. */
 // 1ª linha = nome do grupo + tempo total (vira o título da dica); depois, um arquivo por linha
-const actTip = (g) => `${g.label} ${fmtDur(g.ms)}\n${g.items.map(i => `${i.doc || i.app}: ${fmtDur(i.ms)}`).join('\n')}`;
+const actTip = (g) => `${g.label} ${fmtDur(g.ms)}\n${g.items.map(i => {
+  const name = i.doc && i.doc !== 'Janelas do sistema' ? i.doc : (i.doc || i.app);
+  const path = i.folder ? ` · Caminho: ${i.folder}${i.doc ? '/' + i.doc : ''}` : '';
+  return `${name}: ${fmtDur(i.ms)}${path}`;
+}).join('\n')}`;
 
 /* Uma faixa só, com 100% da largura = todo o tempo da sessão. Cada trecho ocupa a parte proporcional ao seu tempo;
    o que não tem registro fica cinza. Os pausas saem da conta (a faixa mostra só o tempo trabalhado). */
