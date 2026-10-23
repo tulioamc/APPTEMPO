@@ -1167,6 +1167,6 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 /* Agulha do horário atual na timeline, alinhada à estética azul do Tempo. */
 .day-strip { position: relative; }
 .day-now { position: absolute; z-index: 4; top: -3px; bottom: -3px; width: 2px; background: var(--accent, #2E43D6); pointer-events: none; transform: translateX(-1px); box-shadow: 0 0 0 1px rgba(255,255,255,.9); }
-.day-now::before { content: ''; position: absolute; top: -2px; left: 50%; width: 8px; height: 8px; border-radius: 2px; background: var(--accent, #2E43D6); transform: translateX(-50%) rotate(45deg); }
+.day-now::before { content: ''; position: absolute; top: -4px; left: 50%; width: 9px; height: 9px; border: 1.5px solid #fff; border-radius: 50%; background: var(--accent, #2E43D6); transform: translateX(-50%); box-shadow: 0 1px 3px rgba(17,24,39,.18); }
 .day-now i { position: absolute; top: 0; bottom: 0; left: 50%; width: 6px; transform: translateX(-50%); background: rgba(46,67,214,.12); }
 
