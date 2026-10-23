@@ -313,7 +313,7 @@ function openForgotModal() {
   const dayStart = new Date(`${day}T00:00:00`).getTime(), dayEnd = new Date(`${day}T23:59:59.999`).getTime();
   const lastEnd = db.all('tempo_time_entries').flatMap(e => (e.segments || []).map(s => s.e ? new Date(s.e).getTime() : Date.now()))
     .filter(t => t >= dayStart && t <= dayEnd).reduce((m, t) => Math.max(m, t), dayStart);
-  openStartPicker({ day, title: 'Esqueci de iniciar', hint: 'As sugestões começam depois do fim do último registro do dia.', after: lastEnd, onPick: (ms) => openEntryModal(null, new Date(ms).toISOString()) });
+  openStartPicker({ day, title: 'Esqueci de iniciar', hint: 'As sugestões começam depois do fim do último registro do dia.', after: lastEnd, onPick: (ms) => openStartModal({ startAt: ms }) });
 }
 /* Escolha de horário a partir do log. before limita o início; after evita sugerir horários anteriores ao último registro. */
 function openStartPicker({ day, title, hint = '', before = null, after = null, onPick }) {
@@ -445,6 +445,7 @@ function openStartModal(preset) {
   const sel = Object.assign(blankSel(), preset || {});
   const now = new Date(); const nightOrWeekend = now.getDay() === 0 || now.getDay() === 6 || now.getHours() >= 22 || now.getHours() < 8;
   const ctxRule = db.all('tempo_reminders').find(r => r.kind === 'context' && r.nightWeekendOnly);
+  const startValue = sel.startAt ? new Date(sel.startAt - new Date(sel.startAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
   const l = openLayer({
     wide: true,
     html: `<div class="dh">${icon('play')}<h2>Iniciar registro</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
@@ -452,7 +453,7 @@ function openStartModal(preset) {
       <div data-picker></div>
       <div id="st-last" class="small muted"></div>
       <div class="grid2">
-        <div class="field"><label for="st-started">Comecei às (opcional)</label><input id="st-started" class="input mono" type="datetime-local" name="started_at" value=""></div>
+        <div class="field"><label for="st-started">Comecei às (opcional)</label><input id="st-started" class="input mono" type="datetime-local" name="started_at" value="${startValue}"></div>
         <div class="field"><label for="st-wt">Tipo de trabalho</label><select id="st-wt" class="input" name="work_type_id">${options(workTypes(), defaultWorkType(sel), { empty: true, emptyLabel: 'Sem tipo' })}</select></div>
         <div class="field"><label for="st-notes">Notas</label><input id="st-notes" class="input" name="notes" placeholder="Opcional"></div>
       </div>
