@@ -296,8 +296,8 @@ ACTIONS['ts-manual'] = () => openForgotModal();
 /* ---------- lacunas e início pelo log de atividade ---------- */
 const logDayRecs = (day) => (db.setting(logKeyOf(day), null) || []).slice().sort((x, y) => new Date(x.from) - new Date(y.from));
 const hmOf = (iso) => `${pad(new Date(iso).getHours())}:${pad(new Date(iso).getMinutes())}`;
-function logSuggestions(day) {
-  const recs = logDayRecs(day); if (!recs.length) return [];
+function logSuggestions(day, after = null) {
+  const recs = logDayRecs(day).filter(r => after == null || new Date(r.from).getTime() >= after); if (!recs.length) return [];
   const out = [{ iso: recs[0].from, label: 'Abriu o computador' }];
   const seen = new Set();
   recs.forEach(r => {
@@ -318,7 +318,7 @@ function openForgotModal() {
 /* Escolha de horário a partir do log. before limita o início; after evita sugerir horários anteriores ao último registro. */
 function openStartPicker({ day, title, hint = '', before = null, after = null, onPick }) {
   const today = day;
-  const sugs = logSuggestions(today).filter(x => (before == null || new Date(x.iso).getTime() < before) && (after == null || new Date(x.iso).getTime() >= after));
+  const sugs = logSuggestions(today, after).filter(x => before == null || new Date(x.iso).getTime() < before);
   const l = openLayer({ html: `<div class="dh"><h2>${esc(title)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db"><div class="stack" style="gap:8px">
       <span class="small muted">Sugestões do log de atividade de ${esc(fmtDate(today))}. Marque uma para começar a partir dali, ou digite a hora.</span>
