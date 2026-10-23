@@ -94,15 +94,12 @@ function entryGaps(e) { const segs = e.segments || []; const out = []; for (let 
 /* Lacunas de trecho movido: saem do bruto da sessão de origem (o tempo já está no projeto de destino). */
 /* Intervalos do bruto de uma sessão (início→fim, sem as lacunas movidas). */
 function entryBruIntervals(e, at = Date.now()) {
-  const segs = e.segments || []; if (!segs.length) return [];
-  const out = []; let a = new Date(segs[0].s).getTime();
-  for (let i = 0; i < segs.length - 1; i++) {
-    const end = segs[i].e ? new Date(segs[i].e).getTime() : at, start = new Date(segs[i + 1].s).getTime();
-    if (isForaWhy(segs[i].why) && segs[i].e && start > end) { if (end > a) out.push([a, end]); a = start; }
-  }
-  const l = segs[segs.length - 1]; const b = l.e ? new Date(l.e).getTime() : at;
-  if (b > a) out.push([a, b]);
-  return out;
+  // Cada segmento é um intervalo trabalhado separado. Não unir pausas entre segmentos.
+  // Isso evita que pausas sejam contadas como trabalho produtivo nos relatórios.
+  return (e.segments || []).filter(s => s.s).map(s => {
+    const a = new Date(s.s).getTime(), b = s.e ? new Date(s.e).getTime() : at;
+    return b > a ? [a, b] : null;
+  }).filter(Boolean);
 }
 /* Pausas do conjunto de sessões, sobrepostas: um horário só é pausa se nenhuma sessão do conjunto estiver trabalhando nele.
    Assim, tempo parado numa sessão enquanto outra roda não conta como pausa (e o "fora" de trecho movido fica de fora). */
@@ -317,8 +314,27 @@ function lastWorkType(projectId) {
 }
 function startEntry(sel) {
   if (activeEntry()) return null; // impede sessão duplicada
-  const work_type_id = sel.work_type_id || lastWorkType(sel.project_id) || null;
-  const e = db.insert('tempo_time_entries', { ...sel, work_type_id, state: 'running', segments: [{ s: nowISO(), e: null }], edits: [] });
+  const { startAt, ...data } = sel;
+  let startMs = Number.isFinite(Number(startAt)) && startAt !== null && startAt !== undefined ? Number(startAt) : Date.now();
+  const now = Date.now();
+  if (startMs > now) { toast('O início não pode ser no futuro.'); return null; }
+  // Se o horário escolhido já estiver ocupado por outra sessão, começa ao fim dela.
+  const overlaps = () => db.all('tempo_time_entries').filter(e => e.id !== sel.id).flatMap(e => (e.segments || []).map(s => ({
+    a: new Date(s.s).getTime(), b: s.e ? new Date(s.e).getTime() : now, e
+  }))).filter(x => x.b > x.a && x.a <= startMs && startMs < x.b);
+  let conflict = overlaps(), guard = 0;
+  while (conflict.length && guard++ < 20) {
+    startMs = Math.max(...conflict.map(x => x.b));
+    conflict = overlaps();
+  }
+  if (startMs >= now) {
+    if (Number(startAt) < now) toast('O horário escolhido estava ocupado por outra sessão. O registro começará agora.');
+    startMs = now;
+  } else if (Number(startAt) !== startMs) {
+    toast('O horário escolhido estava ocupado por outra sessão. O início foi ajustado para o fim dela.');
+  }
+  const work_type_id = data.work_type_id || lastWorkType(data.project_id) || null;
+  const e = db.insert('tempo_time_entries', { ...data, work_type_id, state: 'running', segments: [{ s: new Date(startMs).toISOString(), e: null }], edits: [] });
   db.setSetting('lastSeen', Date.now());
   return e;
 }
