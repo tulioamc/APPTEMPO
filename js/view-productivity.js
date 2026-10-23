@@ -65,10 +65,10 @@ function prodSpread(s, e, cb) {
   }
 }
 /* Dias de cada dia da semana no período (para média por dia). */
-function prodDowDays(a, b) {
+function prodDowDays(a, b, dayRecords = []) {
+  // A média por dia da semana usa apenas dias que realmente têm registros, não todos os dias do período.
   const cnt = [0, 0, 0, 0, 0, 0, 0];
-  const d = new Date(a); d.setHours(0, 0, 0, 0);
-  while (d.getTime() < b) { cnt[d.getDay()]++; d.setDate(d.getDate() + 1); }
+  dayRecords.forEach(t => { const d = new Date(t); cnt[d.getDay()]++; });
   return cnt;
 }
 function prodZero() { return { prod: 0, dist: 0, ocio: 0 }; }
@@ -100,7 +100,10 @@ function prodStats(C) {
   const dayTable = [...dt.entries()]
     .map(([key, r]) => { const b = byDay.get(key) || { n: 0, max: 0 }; return { key, ...r, n: b.n, max: b.max }; })
     .sort((x, y) => new Date(y.key) - new Date(x.key));
-  const dowDays = prodDowDays(C.a, C.b);
+  const dowDays = prodDowDays(C.a, C.b, [...dt.keys()].map(k => {
+    const [y, m, d] = k.split('/').length === 3 ? k.split('/') : [null, null, null];
+    return new Date(k).getTime();
+  }));
   return {
     hours, dows, dowDays, tot, base, blocks, longest, days, dayTable,
     pctProd: base > 0 ? tot.prod / base * 100 : 0,
