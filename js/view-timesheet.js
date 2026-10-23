@@ -97,7 +97,8 @@ VIEWS.timesheet = () => {
 };
 
 function dayStrip(entries, day) {
-  const START = 7, END = 24; const span = (END - START) * 3600000;
+  // Escala de 24 horas: meio-dia fica exatamente no centro da timeline.
+  const START = 0, END = 24; const span = (END - START) * 3600000;
   const base = new Date(day); base.setHours(START, 0, 0, 0);
   let bars = '';
   entries.forEach(e => {
@@ -119,9 +120,21 @@ function dayStrip(entries, day) {
       bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Pausa${g.why ? ' (' + g.why + ')' : ''}\n${fmtTime(g.s)} – ${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}"></span>`;
     });
   });
-  return `<div class="day-strip" data-report="1" data-t0="${base.getTime()}" data-span="${span}" data-ents="${entries.map(e => e.id).join(',')}" aria-label="Linha do tempo do dia">${bars}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
+  const now = new Date();
+  const showNow = isToday(day);
+  const marker = showNow ? `<span class="day-now" data-now-marker data-t0="${base.getTime()}" data-span="${span}" style="left:${(now.getTime() - base.getTime()) / span * 100}%" aria-label="Horário atual"><i></i></span>` : '';
+  return `<div class="day-strip" data-report="1" data-t0="${base.getTime()}" data-span="${span}" data-ents="${entries.map(e => e.id).join(',')}" aria-label="Linha do tempo do dia">${bars}${marker}</div><div class="day-axis">${[0, 3, 6, 9, 12, 15, 18, 21].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
 }
-function updateLiveStrip(el) { const span = 17 * 3600000; const st = Number(el.dataset.st); const en = Math.min(span, Date.now() - Number(el.dataset.stripLive)); el.style.width = Math.max(.3, (en - st) / span * 100) + '%'; }
+function updateLiveStrip(el) { const span = 24 * 3600000; const st = Number(el.dataset.st); const en = Math.min(span, Date.now() - Number(el.dataset.stripLive)); el.style.width = Math.max(.3, (en - st) / span * 100) + '%'; }
+if (!window.__tempoNowMarkerTimer) {
+  window.__tempoNowMarkerTimer = setInterval(() => {
+    document.querySelectorAll('[data-now-marker]').forEach(el => {
+      const span = Number(el.dataset.span) || 86400000;
+      const pct = (Date.now() - Number(el.dataset.t0)) / span * 100;
+      el.style.left = Math.max(0, Math.min(100, pct)) + '%';
+    });
+  }, 15000);
+}
 
 function recentSelections(n) {
   const seen = new Set(); const out = [];
