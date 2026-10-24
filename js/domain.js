@@ -353,16 +353,37 @@ function overlapOf(segs, excludeId = null, at = Date.now()) {
   }
   return null;
 }
-/* Log do dia → sessão: a atividade registrada entre "de" e "até" entra na sessão (o log é um só, cada trecho vai para uma sessão). */
-function attachLogTo(entry, fromMs, toMs) {
-  let n = 0;
-  const days = []; const d = new Date(fromMs); d.setHours(0, 0, 0, 0);
-  while (d.getTime() <= toMs) { days.push(ymd(d)); d.setDate(d.getDate() + 1); }
-  days.forEach(d => (db.setting(logKeyOf(d), null) || []).forEach(r => {
-    const a = new Date(r.from).getTime(), b = new Date(r.to).getTime();
-    if (b > fromMs && a < toMs) { recordActivity(entry, { from: r.from, to: r.to, app: r.app, doc: r.doc, folder: r.folder, rid: r.rid }); n++; }
-  }));
-  return n;
+/* Começou atrasado: as pausas desse período vêm do log, como se o cronômetro estivesse rodando.
+   - App de pausa (WhatsApp, Telegram, Instagram e sites de pausa) → pausa com o nome do app.
+   - Buraco entre dois registros maior que o limite de ociosidade (Preferências, padrão 5 min) → pausa "ocioso".
+   O começo (antes do 1º registro) e o fim (o app em uso agora ainda não foi registrado) não viram pausa. */
+function retroPausesOf(fromMs, toMs) {
+  const idleMs = (Number(db.setting('idleMinutes', 5)) || 5) * 60e3;
+  const recs = actPoolBetween(fromMs, toMs).map(r => ({ a: new Date(r.from).getTime(), b: new Date(r.to).getTime(), r })).sort((x, y) => x.a - y.a);
+  const out = [];
+  recs.forEach(x => { if (typeof pausaRec === 'function' && pausaRec(x.r)) out.push({ a: x.a, b: x.b, why: shortProgram(x.r.app) === 'Google Chrome' ? (x.r.doc || 'app') : shortProgram(x.r.app) }); });
+  let fim = null;
+  recs.forEach(x => { if (fim !== null && x.a - fim > idleMs) out.push({ a: fim, b: x.a, why: 'ocioso' }); fim = fim === null ? x.b : Math.max(fim, x.b); });
+  return out.sort((x, y) => x.a - y.a).filter(p => p.b - p.a >= 60e3);
+}
+/* Aplica as pausas retroativas nos intervalos da sessão entre fromMs e toMs. Devolve quantas entraram. */
+function applyRetroPauses(e, fromMs, toMs) {
+  const ps = retroPausesOf(fromMs, toMs); if (!ps.length) return 0;
+  const T = (x) => new Date(x).getTime();
+  let segs = clone(e.segments || []);
+  ps.forEach(p => {
+    const out = [];
+    segs.forEach(sg => {
+      const a = T(sg.s), b = sg.e ? T(sg.e) : Infinity;
+      if (b <= p.a || a >= p.b) { out.push(sg); return; }
+      if (a < p.a) out.push({ ...sg, e: new Date(p.a).toISOString(), why: p.why });
+      if (b > p.b) out.push({ ...sg, s: new Date(p.b).toISOString() });
+      else if (a < p.a && sg.why) out[out.length - 1].why = p.why;
+    });
+    segs = out;
+  });
+  db.update('tempo_time_entries', e.id, { segments: segs, edits: auditEdit(e, e.segments, `${ps.length} pausa(s) do período retroativo aplicada(s) pelo log (${ps.map(p => `${fmtTime(new Date(p.a).toISOString())}–${fmtTime(new Date(p.b).toISOString())} ${p.why}`).join(', ')})`) }, true);
+  return ps.length;
 }
 /* startMs: começou antes (esqueci de iniciar). O início nunca cai dentro de outra sessão, e a atividade do log desde então entra na sessão. */
 function startEntry(sel, startMs = null) {
@@ -372,7 +393,7 @@ function startEntry(sel, startMs = null) {
   const ini = startMs != null && startMs < now ? Math.min(freeStartFrom(startMs), now) : now;
   const e = db.insert('tempo_time_entries', { ...sel, work_type_id, state: 'running', segments: [{ s: new Date(ini).toISOString(), e: null }], edits: [] });
   db.setSetting('lastSeen', Date.now());
-  if (ini < now - 1000 && typeof attachLogTo === 'function') attachLogTo(e, ini, now);
+  if (ini < now - 60e3) { const n = applyRetroPauses(e, ini, now); if (n) setTimeout(() => toast(`${n} pausa(s) desse período entraram pelo log (WhatsApp, parado…).`, { ms: 5000 }), 300); }
   return e;
 }
 // troca: o tempo de agora até a volta vai para o projeto "to" (fica como "Trabalho em …", sem pausa)

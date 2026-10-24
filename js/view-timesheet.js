@@ -373,8 +373,9 @@ ACTIONS['ts-log-start'] = (el) => {
     if (ms > Date.now()) return toast('O início não pode ser no futuro.');
     const segs = clone(a.segments); segs[0] = { ...segs[0], s: new Date(ms).toISOString() };
     db.update('tempo_time_entries', a.id, { segments: segs });
-    const n = attachLogTo(db.get('tempo_time_entries', a.id), ms, oldMs);
-    toast(`Início ajustado. ${n} registro(s) do log entraram na sessão.`);
+    const np = applyRetroPauses(db.get('tempo_time_entries', a.id), ms, oldMs);
+    const n = actPoolBetween(ms, oldMs).length;
+    toast(`Início ajustado. ${n} registro(s) do log entraram na sessão${np ? ` e ${np} pausa(s)` : ''}.`);
     render();
   } });
 };
