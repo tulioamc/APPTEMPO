@@ -479,7 +479,43 @@ function migrateMovedTo() {
 }
 /* Conferência dos registros (ao abrir o app): sessão encerrada não pode ter trecho aberto, porque ele contaria até agora.
    Remove o trecho aberto e deixa rastro no histórico de correções. */
+/* Um horário, uma sessão: se duas sessões têm o mesmo horário, a do cronômetro fica com ele.
+   Prioridade: sessão aberta > cronômetro > trecho movido/copiado > lançamento manual; empate, a mais antiga.
+   Quem perde fica só com o que sobra (as lacunas criadas são "fora", não pausa); se não sobrar nada, é apagada.
+   Roda ao abrir o app; sem sobreposição, não grava nada. */
+function resolveOverlaps(at = Date.now()) {
+  const T = (x) => new Date(x).getTime();
+  const rank = (e) => e.state !== 'done' ? 0 : e.manual ? 3 : /^(Movido|Copiado|Tempo pausado)/.test(e.notes || '') ? 2 : 1;
+  const ents = db.all('tempo_time_entries').slice().sort((a, b) => rank(a) - rank(b) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  const claimed = []; let mudou = 0, apagou = 0, perdido = 0;
+  const sub = (a, b) => { let pcs = [[a, b]]; claimed.forEach(([c, d]) => { pcs = pcs.flatMap(([x, y]) => (d <= x || c >= y) ? [[x, y]] : [...(c > x ? [[x, c]] : []), ...(d < y ? [[d, y]] : [])]); }); return pcs.filter(([x, y]) => y - x >= 1000); };
+  ents.forEach(e => {
+    const out = []; let changed = false;
+    (e.segments || []).forEach(sg => {
+      if (!sg.s) return;
+      const a = T(sg.s), aberto = !sg.e, b = aberto ? at : T(sg.e);
+      const pcs = sub(a, b);
+      if (pcs.length === 1 && pcs[0][0] === a && pcs[0][1] === b) { out.push(sg); return; }
+      changed = true; perdido += (b - a) - pcs.reduce((t, [x, y]) => t + (y - x), 0);
+      pcs.forEach(([x, y], i) => {
+        const { s: _s, e: _e, why, ...rest } = sg;
+        const novo = { ...rest, s: new Date(x).toISOString(), e: aberto && y === b && i === pcs.length - 1 ? null : new Date(y).toISOString() };
+        if (i < pcs.length - 1) novo.why = 'fora'; else if (why) novo.why = why;
+        out.push(novo);
+      });
+    });
+    out.forEach(sg => claimed.push([T(sg.s), sg.e ? T(sg.e) : at]));
+    if (!changed) return;
+    if (!out.length && e.state === 'done') { db.remove('tempo_time_entries', e.id, true); apagou++; }
+    else if (out.length) { db.update('tempo_time_entries', e.id, { segments: out, edits: auditEdit(e, e.segments, 'Horário que já estava em outra sessão removido (um horário, uma sessão; o cronômetro fica com ele)') }, true); mudou++; }
+  });
+  return { mudou, apagou, perdido };
+}
 function checkEntries() {
+  // só mexe nos dados depois de ler o banco (o retrato salvo no aparelho pode estar velho)
+  if (db.adapter && db.adapter.persistent && !db.loaded) { if (db.syncError) return; return setTimeout(checkEntries, 3000); }
+  const ov = resolveOverlaps();
+  if (ov.mudou || ov.apagou) toast(`Tempo sobreposto corrigido: ${fmtDur(ov.perdido)} repetido saiu de ${ov.mudou + ov.apagou} sessão(ões)${ov.apagou ? ` (${ov.apagou} apagada(s) por estar toda dentro de outra)` : ''}. O cronômetro ficou com o horário.`, { ms: 12000 });
   migrateForaGaps();
   migrateMovedTo();
   const movidos = migrateMovedGaps();

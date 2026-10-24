@@ -68,16 +68,66 @@ function actSetColor(gid, color) {
 }
 const actSwatches = (gid) => `<div class="act-swatches">${ACT_PALETTE.map(c => `<button type="button" class="act-swatch" data-x="act-color" data-c="${c}" style="background:${c}" aria-label="Cor ${c}"></button>`).join('')}<button type="button" class="act-swatch none" data-x="act-color" data-c="" aria-label="Cor padrão">×</button><label class="act-swatch" title="Outra cor" style="position:relative;background:conic-gradient(#EF4444,#F59E0B,#84CC16,#06B6D4,#2563EB,#DB2777,#EF4444);cursor:pointer"><input type="color" data-x="act-custom" data-g="${esc(gid || '')}" value="#2563eb" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0" aria-label="Outra cor"></label></div>`;
 
-function actList(entryId) { return db.setting('act:' + entryId, []) || []; }
-
-/* Chamado a cada segmento de Mac vindo com sessão rodando (ver suggestActivity em app.js). */
-function recordActivity(a, seg) {
-  const list = actList(a.id);
-  if (list.some(x => x.from === seg.from && x.app === seg.app && x.doc === (seg.doc || null))) return;
-  // Terminal não grava o nome da janela (que é o usuário): fica só como "Terminal"
-  const doc = /^terminal$/i.test(String(seg.app || '')) ? null : (seg.doc || null);
-  db.setSetting('act:' + a.id, [...list, { from: seg.from, to: seg.to, app: seg.app, doc, folder: seg.folder || null, rid: seg.rid || null }]);
+/* ---------- LISTA ÚNICA DE ATIVIDADE ----------
+   Todo registro do Mac fica numa lista só: o log do dia (actlog:), a lixeira (lixeira:) e, para dias antigos,
+   as cópias que as sessões guardavam (act:<sessão>, só leitura). Cada registro tem um programa e um arquivo/site.
+   A sessão dona de cada minuto é a que tem esse horário nos intervalos dela — e o banco não deixa duas sessões
+   terem o mesmo horário (tempo_time_claims). Por isso um registro nunca aparece em duas tarefas. */
+let ACT_POOL = null;
+function actPool() {
+  const rows = db.data.tempo_settings || [];
+  const rev = (db.setRev || 0) + '|' + rows.length;
+  if (ACT_POOL && ACT_POOL.rev === rev && ACT_POOL.rows === rows) return ACT_POOL.byDay;
+  const seen = new Map();
+  const add = (r, prio) => {
+    if (!r || !r.from || !r.to || !r.app) return;
+    const k = r.from + '|' + r.app + '|' + (r.doc || '');
+    const cur = seen.get(k);
+    if (!cur || prio > cur.p) seen.set(k, { p: prio, r });
+  };
+  rows.forEach(x => {
+    if (!x || !x.key || !x.value) return;
+    if (x.key.startsWith('actlog:') && Array.isArray(x.value)) x.value.forEach(r => add(r, 3));
+    else if (x.key.startsWith('lixeira:') && Array.isArray(x.value.records)) x.value.records.forEach(r => add(r, 2));
+    else if (x.key.startsWith('act:') && Array.isArray(x.value)) x.value.forEach(r => add(r, 1));
+  });
+  const byDay = new Map();
+  seen.forEach(({ r }) => { const d = ymd(new Date(r.from)); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d).push(r); });
+  byDay.forEach(l => l.sort((a, b) => new Date(a.from) - new Date(b.from)));
+  ACT_POOL = { rev, rows, byDay };
+  return byDay;
 }
+/* Registros da lista única entre a e b (ms), já cortados no intervalo. */
+function actPoolBetween(a, b) {
+  const pool = actPool(); const out = [];
+  const d = new Date(a); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - 1);   // registro que começou no dia anterior
+  for (; d.getTime() <= b; d.setDate(d.getDate() + 1)) {
+    (pool.get(ymd(d)) || []).forEach(r => {
+      const x = Math.max(a, new Date(r.from).getTime()), y = Math.min(b, new Date(r.to).getTime());
+      if (y > x) out.push(x === new Date(r.from).getTime() && y === new Date(r.to).getTime() ? r : { ...r, from: new Date(x).toISOString(), to: new Date(y).toISOString() });
+    });
+  }
+  return out;
+}
+const ACT_LIST_MEMO = new Map();
+/* Atividade de uma sessão = a lista única dentro dos intervalos dela (sem os apps de pausa, que viram pausa). */
+function actList(entryId) {
+  const e = db.get('tempo_time_entries', entryId); if (!e) return [];
+  const aberto = (e.segments || []).some(x => x.s && !x.e);
+  const memoKey = (db.setRev || 0) + '|' + (db.data.tempo_settings || []).length + '|' + JSON.stringify(e.segments) + (aberto ? '|' + Math.floor(Date.now() / 30e3) : '');
+  const m = ACT_LIST_MEMO.get(entryId); if (m && m.k === memoKey) return m.v;
+  const v = [];
+  (e.segments || []).forEach(s => {
+    if (!s.s) return;
+    actPoolBetween(new Date(s.s).getTime(), s.e ? new Date(s.e).getTime() : Date.now()).forEach(r => { if (!(typeof pausaRec === 'function' && pausaRec(r)) && !/spotify/i.test(String(r.app || ''))) v.push(r); });
+  });
+  if (ACT_LIST_MEMO.size > 400) ACT_LIST_MEMO.clear();
+  ACT_LIST_MEMO.set(entryId, { k: memoKey, v });
+  return v;
+}
+
+/* A atividade já está na lista única (log do dia): a sessão enxerga sozinha o que cai nos intervalos dela. */
+function recordActivity(a, seg) { /* nada a gravar: ver actList */ }
 
 const actKeyOf = (x) => [x.app || '', x.folder || '', x.doc || ''].join('|');
 /* "Video Promo 01.aep" -> "video promo.aep" (só número de versão separado por espaço, _ ou -) */
@@ -268,6 +318,9 @@ function actMoveGroup(entryId, g, pick, ranges = null) {
   const c = clientOf(p);
   const rest = actSubtract(e.segments || [], cuts, p.id);
   const label = tkProjectLabel(p);
+  // a sessão de origem perde esse tempo antes (o banco não aceita o mesmo horário em duas sessões)
+  if (!rest.length && e.state !== 'running') db.remove('tempo_time_entries', e.id, true);
+  else db.update('tempo_time_entries', e.id, { segments: rest.length ? rest : [{ s: nowISO(), e: null }], edits: [...(e.edits || []), { at: nowISO(), reason: `${g.label} movido para ${label}`, before: e.segments }] }, true);
   // trava: se o mesmo tempo já está lançado nesse projeto, não cria duplicata (só tira da origem)
   if (!segsCoveredIn(moved, p.id, e.id)) {
     // o registro novo leva o tempo do arquivo e os registros brutos dele
@@ -278,12 +331,7 @@ function actMoveGroup(entryId, g, pick, ranges = null) {
       work_type_id: lastWorkType(p.id), revision_id: null, notes: `Movido de outra sessão: ${g.label}`,
       state: 'done', segments: moved, edits: [{ at: nowISO(), reason: `Arquivo ${g.label} movido para ${label}`, before: e.segments }],
     });
-    db.setSetting('act:' + nova.id, mine);
   }
-  // a sessão de origem perde esse tempo (e os registros brutos desse arquivo)
-  db.setSetting('act:' + entryId, [...list.filter(x => !keys.has(actKeyOf(x))), ...leftover]);
-  if (!rest.length && e.state !== 'running') db.remove('tempo_time_entries', e.id);
-  else db.update('tempo_time_entries', e.id, { segments: rest.length ? rest : [{ s: nowISO(), e: null }], edits: [...(e.edits || []), { at: nowISO(), reason: `${g.label} movido para ${label}`, before: e.segments }] }, true);
   db.emit();
   return true;
 }

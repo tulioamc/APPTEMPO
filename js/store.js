@@ -76,7 +76,7 @@ const db = {
     if (cached && this.onCache) { try { this.onCache(); } catch (e) { /* segue: a tela completa vem depois */ } }
     try {
       const snap = await this.adapter.loadAll();
-      if (snap) { TABLES.forEach(t => this.data[t] = snap[t] || []); this.saveCache(); }
+      if (snap) { TABLES.forEach(t => this.data[t] = snap[t] || []); this.saveCache(); this.loaded = true; }
     } catch (e) { if (!cached) this.syncError = e.message; }
   },
   loadCache() {
@@ -144,6 +144,7 @@ const db = {
   restore(snap) { const d = this.empty(); TABLES.forEach(t => d[t] = Array.isArray(snap[t]) ? snap[t] : []); this.data = d; this.push(this.adapter.replaceAll(d)); this.emit(); },
   setting(key, fallback) { const s = this.data.tempo_settings.find(r => r.key === key); return s ? s.value : fallback; },
   setSetting(key, value) {
+    this.setRev = (this.setRev || 0) + 1;   // a lista única de atividade (activity.js) se refaz quando muda
     const s = this.data.tempo_settings.find(r => r.key === key);
     if (s) this.update('tempo_settings', s.id, { value }); else this.insert('tempo_settings', { key, value });
   }

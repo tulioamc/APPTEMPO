@@ -269,3 +269,32 @@ create table if not exists tempo_bank_payment_links (
 alter table tempo_bank_payment_links enable row level security;
 drop policy if exists own_rows on tempo_bank_payment_links;
 create policy own_rows on tempo_bank_payment_links for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Um horário, uma sessão (25/10/2026): os intervalos de cada sessão viram "posses" e o banco recusa posses sobrepostas.
+create extension if not exists btree_gist;
+create table if not exists tempo_time_claims (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  entry_id uuid not null references tempo_time_entries(id) on delete cascade,
+  period tstzrange not null,
+  constraint tempo_time_claims_sem_sobreposicao exclude using gist (user_id with =, period with &&)
+);
+create index if not exists tempo_time_claims_entry on tempo_time_claims(entry_id);
+alter table tempo_time_claims enable row level security;
+drop policy if exists own_rows on tempo_time_claims;
+create policy own_rows on tempo_time_claims for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create or replace function tempo_claims_sync() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  delete from tempo_time_claims where entry_id = new.id;
+  insert into tempo_time_claims (user_id, entry_id, period)
+  select new.user_id, new.id, r from (
+    select unnest(range_agg(tstzrange((x->>'s')::timestamptz, nullif(x->>'e', '')::timestamptz, '[)'))) r
+    from jsonb_array_elements(coalesce(new.segments, '[]'::jsonb)) x
+    where x->>'s' is not null and (nullif(x->>'e', '') is null or (x->>'e')::timestamptz > (x->>'s')::timestamptz)
+  ) z;
+  return new;
+exception when exclusion_violation then
+  raise exception 'tempo_sobreposto: esse horário já está em outra sessão' using errcode = '23P01';
+end $$;
+drop trigger if exists tempo_claims_sync on tempo_time_entries;
+create trigger tempo_claims_sync after insert or update of segments on tempo_time_entries
+  for each row execute function tempo_claims_sync();

@@ -28,6 +28,9 @@ function actMoveRange(entryId, a, b, pick) {
   const label = tkProjectLabel(p);
   const intervalo = `${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}`;
   const movedSegs = [{ s: new Date(a).toISOString(), e: new Date(b).toISOString() }];
+  // a origem perde o intervalo antes (o banco não aceita o mesmo horário em duas sessões)
+  if (!rest.length && e.state !== 'running') db.remove('tempo_time_entries', e.id, true);
+  else db.update('tempo_time_entries', e.id, { segments: rest.length ? rest : [{ s: nowISO(), e: null }], edits: [...(e.edits || []), { at: nowISO(), reason: `Intervalo ${intervalo} movido para ${label}`, before: e.segments }] }, true);
   // trava: se o intervalo já está lançado nesse projeto, não cria duplicata
   if (!segsCoveredIn(movedSegs, p.id, e.id)) {
     const nova = db.insert('tempo_time_entries', {
@@ -36,11 +39,7 @@ function actMoveRange(entryId, a, b, pick) {
       state: 'done', segments: movedSegs,
       edits: [{ at: nowISO(), reason: `Intervalo ${intervalo} movido para ${label}`, before: e.segments }],
     });
-    db.setSetting('act:' + nova.id, inRange);
   }
-  db.setSetting('act:' + entryId, keep);
-  if (!rest.length && e.state !== 'running') db.remove('tempo_time_entries', e.id);
-  else db.update('tempo_time_entries', e.id, { segments: rest.length ? rest : [{ s: nowISO(), e: null }], edits: [...(e.edits || []), { at: nowISO(), reason: `Intervalo ${intervalo} movido para ${label}`, before: e.segments }] }, true);
   db.emit();
   return true;
 }
@@ -96,7 +95,6 @@ function actDeleteRange(entryId, a, b) {
   if (!inRange.length && JSON.stringify(rest) === JSON.stringify(e.segments || [])) return false;
   const intervalo = `${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}`;
   inRange.forEach(r => logTomb(r.rid, r));   // apagar na sessão também apaga no log (o último a mexer vale)
-  db.setSetting('act:' + entryId, list.filter(r => !inRange.includes(r)));
   logReconcile();
   if (!rest.length && e.state !== 'running') db.remove('tempo_time_entries', e.id);
   else db.update('tempo_time_entries', e.id, { segments: rest.length ? rest : [{ s: nowISO(), e: null }], edits: [...(e.edits || []), { at: nowISO(), reason: `Intervalo ${intervalo} excluído`, before: e.segments }] }, true);

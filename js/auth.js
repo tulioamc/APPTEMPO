@@ -47,7 +47,14 @@ class SupabaseAdapter {
     for (const t of TABLES) out[t] = await this.fetchAll(t);
     return out;
   }
-  check(res, what) { if (res && res.error) throw new Error(`${what}: ${res.error.message}`); return res; }
+  check(res, what) {
+    if (res && res.error) {
+      // trava do banco: o mesmo horário não pode estar em duas sessões
+      if (/tempo_sobreposto|sem_sobreposicao|exclusion/i.test(res.error.message || '')) { setTimeout(() => { try { toast('Esse horário já está em outra sessão. Não salvei para não duplicar tempo.', { ms: 6000 }); db.refresh(); } catch (e) {} }); throw new Error('Horário já ocupado por outra sessão'); }
+      throw new Error(`${what}: ${res.error.message}`);
+    }
+    return res;
+  }
   insert(t, row) {
     return this.enqueue(async () => {
       if (SUPA_JSON_TABLES[t]) return this.check(await this.client.from(t).insert({ id: row.id, data: this.payload(t, row).data }), `inserir ${t}`);

@@ -89,8 +89,11 @@ function logPurge() {
   const days = Number(db.setting('logRetentionDays', LOG_DEFAULT_DAYS));
   if (!days) return;
   const cut = Date.now() - days * 864e5;
+  // registros que estão dentro de alguma sessão ficam para sempre (são a atividade dessa sessão); só o resto sai
+  const busy = busyIntervals();
+  const emSessao = (x) => { const a = new Date(x.from).getTime(), b = new Date(x.to).getTime(); return busy.some(([c, d]) => c < b && d > a); };
   logSettings().filter(r => r.key.startsWith('lixeira:') && r.value && r.value.savedAt && new Date(r.value.savedAt).getTime() < cut)
-    .forEach(r => db.setSetting(r.key, null));
+    .forEach(r => { const keep = (r.value.records || []).filter(emSessao); if (keep.length === (r.value.records || []).length) return; db.setSetting(r.key, keep.length ? { ...r.value, records: keep } : null); });
   const edits = logEditsOf(); const kept = edits.filter(e => new Date(e.at).getTime() >= cut);
   if (kept.length !== edits.length) db.setSetting('logEdits', kept);
 }
@@ -242,7 +245,10 @@ function logCopyToTask(day, a, b, pick) {
   if (!inR.length) return null;
   const p = db.get('tempo_projects', pick.project_id); if (!p) return null;
   const c = clientOf(p);
-  const merged = actMergeIntervals(inR.map(r => ({ a: new Date(r.from).getTime(), b: new Date(r.to).getTime() })).filter(x => x.b > x.a));
+  // só o que ainda não está em nenhuma sessão (um horário pertence a uma sessão só)
+  const livres = []; busyIntervals().reduce((pcs, [c, d]) => pcs.flatMap(x => (d <= x.a || c >= x.b) ? [x] : [...(c > x.a ? [{ a: x.a, b: c }] : []), ...(d < x.b ? [{ a: d, b: x.b }] : [])]), actMergeIntervals(inR.map(r => ({ a: new Date(r.from).getTime(), b: new Date(r.to).getTime() })).filter(x => x.b > x.a))).forEach(x => { if (x.b - x.a >= 1000) livres.push(x); });
+  if (!livres.length) { toast('Esse trecho já está todo em outras sessões.'); return null; }
+  const merged = livres;
   const intervalo = `${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}`;
   const nova = db.insert('tempo_time_entries', {
     project_id: p.id, client_id: c?.id || null, agency_id: c?.agency_id || null, task_id: pick.task_id || null,
@@ -250,7 +256,6 @@ function logCopyToTask(day, a, b, pick) {
     state: 'done', segments: merged.map(m => ({ s: new Date(m.a).toISOString(), e: new Date(m.b).toISOString() })),
     edits: [{ at: nowISO(), reason: `Trecho do log de ${day} (${intervalo}) copiado para ${tkProjectLabel(p)}`, before: null }],
   });
-  db.setSetting('act:' + nova.id, inR);
   db.emit();
   return nova;
 }
