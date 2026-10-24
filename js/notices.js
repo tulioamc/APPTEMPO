@@ -34,7 +34,10 @@ function decideNotice(n, status, decision, extra) {
 }
 /* Avisos ligados a um projeto ganham o play "Começar" (abre o Iniciar registro já no projeto). */
 const noticeButtons = (n) => {
-  const base = noticeBtnsBase(n);
+  let base = noticeBtnsBase(n);
+  // "Resolver": leva até onde o aviso se resolve (projeto, orçamento, despesa ou a sessão da pausa)
+  const temDestino = (n.entity === 'project' && n.entity_id) || n.entity === 'quote' || n.entity === 'expense';
+  if (base && temDestino) base = base.replace('<div class="row gap-s">', `<div class="row gap-s"><button class="btn sm primary" data-act="notice-open" data-id="${n.id}" title="Ir até o item para resolver">Resolver</button>`);
   if (!base || !n.data?.project_id) return base;
   return base.replace(/<\/div>$/, `<button class="btn sm icon ghost" data-act="notice-play" data-id="${n.id}" title="Começar registro" aria-label="Começar registro">${icon('play')}</button></div>`);
 };
@@ -162,6 +165,17 @@ function parseTodoText(text) {
     const rm = t.match(/(?<![\p{L}\p{N}])(depois\s+de\s+amanh[ãa]|amanh[ãa]|hoje)(?![\p{L}\p{N}])/iu);
     if (rm) { const w = sem(rm[1]); const n = w.startsWith('depois') ? 2 : w.startsWith('amanh') ? 1 : 0; day = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + n); t = t.replace(rm[0], ' '); }
   }
+  // 4-) duração: "de 1 hora", "por 30 min", "1h30 de duração", "de 1 h às 14h" (h solto só com "de/por/durante" e espaço antes do h)
+  let dur = null;
+  const dr = t.match(/(?<![\p{L}\p{N}])(?:(?:de|por|durante|dura(?:[çc][ãa]o)?:?)\s+)?(\d{1,2})(?:[.,](\d))?\s*(horas?|hrs?|min(?:utos?)?)(?:\s*(\d{2})(?![\p{L}\p{N}]))?(?:\s+de\s+dura[çc][ãa]o)?(?![\p{L}\p{N}])/iu)
+    || t.match(/(?<![\p{L}\p{N}])(?:de|por|durante)\s+(\d{1,2})()\s+(h)(\d{2})?(?=\s+(?:[àa]s?|a\s+partir)\s)/iu)
+    || t.match(/(?<![\p{L}\p{N}])(\d{1,2})()\s*(h)\s*(\d{2})?\s+de\s+dura[çc][ãa]o(?![\p{L}\p{N}])/iu)
+    || t.match(/(?<![\p{L}\p{N}])dura(?:[çc][ãa]o)?:?\s+(\d{1,2})()\s*(h)\s*(\d{2})?(?![\p{L}\p{N}])/iu);
+  if (dr) {
+    const n = Number(dr[1]) + (dr[2] ? Number(dr[2]) / 10 : 0); const u = dr[3].toLowerCase();
+    const m = u.startsWith('min') ? n : Math.round(n * 60) + Number(dr[4] || 0);
+    if (m > 0 && m <= 24 * 60) { dur = m; t = t.replace(dr[0], ' '); }
+  }
   // 4a) intervalo: "7h30 às 8h", "7h30 até 8h", "das 7h30 a 8h", "7h30-8h"
   let end = null;
   const rg = t.match(/(?<![\p{L}\p{N}])(?:das?\s+)?(\d{1,2})\s*(?::|h)\s*(\d{2})?\s*(?:[àa]s?|at[ée]|-|–)\s*(\d{1,2})(?:\s*(?::|h)\s*(\d{2})?)?(?![\p{L}\p{N}])/iu);
@@ -173,10 +187,12 @@ function parseTodoText(text) {
   if (hh === null && tm && Number(tm[1]) <= 23 && Number(tm[2] || 0) <= 59) { hh = Number(tm[1]); mi = Number(tm[2] || 0); t = t.replace(tm[0], ' '); }
   const deadline = /(?<![\p{L}\p{N}])at[ée](?![\p{L}\p{N}])/iu.test(orig);
   const title = t.replace(/\s+/g, ' ').replace(/(?<![\p{L}\p{N}])(at[ée]|[àa]s?|de|do|da|para)\s*$/iu, '').replace(/[\s,.;:-]+$/, '').trim() || orig;
-  if (!day && hh === null) return { title: orig, due: null, deadline: false, end: null };
+  if (!day && hh === null) return { title: dur ? title : orig, due: null, deadline: false, end: null, dur };
   const d = day || hoje;
   const h = hh === null ? 20 : hh, m = hh === null ? 0 : mi;
-  return { title, due: `${ymd(d)}T${pad(h)}:${pad(m)}`, deadline: deadline && !end, end };
+  // duração com horário de início vira o fim ("de 1 h às 14h" → 14h às 15h), se couber no mesmo dia
+  if (!end && dur && hh !== null) { const fim = hh * 60 + mi + dur; if (fim < 24 * 60) end = `${pad(Math.floor(fim / 60))}:${pad(fim % 60)}`; }
+  return { title, due: `${ymd(d)}T${pad(h)}:${pad(m)}`, deadline: deadline && !end, end, dur };
 }
 function todoDueLabel(data) {
   const [ds, ts] = data.due.split('T'); const [h, m] = ts.split(':').map(Number);
@@ -215,18 +231,36 @@ function todoAddRaw(raw, alarm = false) {
     }
   }
   const em = raw.match(/\s\[(\d+)(h|min)\]\s*$/i);
-  const est = em ? Number(em[1]) * (em[2].toLowerCase() === 'h' ? 60 : 1) : null;
   const text = em ? raw.slice(0, em.index).trim() : raw;
   const p = parseTodoText(text);
+  const est = em ? Number(em[1]) * (em[2].toLowerCase() === 'h' ? 60 : 1) : (p.dur || null);
   const withAlarm = !!(alarm && p.due);
-  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: { ...(p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {}), ...(est ? { est } : {}), ...(withAlarm ? { alarm: true, alarm_criado: false } : {}) }, decision: '', decided_at: null, snooze_until: null }, true);
+  const lig = todoFindLink(p.title);
+  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: { ...(p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {}), ...(est ? { est } : {}), ...lig, ...(withAlarm ? { alarm: true, alarm_criado: false } : {}) }, decision: '', decided_at: null, snooze_until: null }, true);
   db.emit(); todoAlarmSync(); return true;
+}
+/* To-do ligado sozinho: se o texto cita um projeto aberto (ou, sem projeto, um cliente), guarda o vínculo.
+   O play já abre o Iniciar registro nele, e o item mostra o chip. Nome com 3+ letras, palavra inteira, sem acento. */
+function todoFindLink(title) {
+  const sem = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const txt = ' ' + sem(title).replace(/[^\p{L}\p{N}]+/gu, ' ') + ' ';
+  const has = (name) => { const k = sem(name).replace(/[^\p{L}\p{N}]+/gu, ' ').trim(); return k.length >= 3 && txt.includes(' ' + k + ' '); };
+  const pj = db.all('tempo_projects').filter(p => !p.archived && !['done', 'closed'].includes(db.get('tempo_status_options', p.status_id)?.category) && has(p.name)).sort((a, b) => String(b.name).length - String(a.name).length)[0];
+  if (pj) return { project_id: pj.id };
+  const cl = db.all('tempo_clients').filter(c => !c.archived && has(c.name)).sort((a, b) => String(b.name).length - String(a.name).length)[0];
+  return cl ? { client_id: cl.id } : {};
 }
 /* Ponte para o app de Mac (⇧⌘T): recebe o texto e cria o to-do. */
 window.todoQuickAdd = (text) => { const t = String(text || '').trim(); if (t) todoAddRaw(t); };
 ACTIONS['todo-play'] = (el) => {
   const n = db.get('tempo_notices', el.dataset.id); const t = n?.data?.taskId ? db.get('tempo_tasks', n.data.taskId) : null;
-  if (!t) return openStartModal({});
+  if (!t) {
+    const pj = n?.data?.project_id ? db.get('tempo_projects', n.data.project_id) : null;
+    if (pj) { const c = clientOf(pj); return openStartModal({ agency_id: c?.agency_id || '__none', client_id: pj.client_id, project_id: pj.id }); }
+    const cl = n?.data?.client_id ? db.get('tempo_clients', n.data.client_id) : null;
+    if (cl) return openStartModal({ agency_id: cl.agency_id || '__none', client_id: cl.id });
+    return openStartModal({});
+  }
   const p = db.get('tempo_projects', t.project_id); const c = clientOf(p);
   openStartModal({ agency_id: c?.agency_id || '__none', client_id: p.client_id, project_id: p.id, task_id: t.parent_id || t.id, sub_id: t.parent_id ? t.id : '' });
 };
@@ -338,6 +372,7 @@ ACTIONS['todo-save'] = (el) => {
   const mudou = p.due !== old.due || (alarm && !old.alarm);
   const data = { ...old, ...keep, ...(p.due ? {} : { due: undefined, deadline: undefined, end: undefined }) };
   if (!p.due) { delete data.due; delete data.deadline; delete data.end; }
+  if (!data.taskId) { delete data.project_id; delete data.client_id; Object.assign(data, todoFindLink(p.title)); }
   if (alarm && p.due) { data.alarm = true; if (mudou) data.alarm_criado = false; } else { delete data.alarm; delete data.alarm_criado; }
   db.update('tempo_notices', id, { title: p.title, data }, true);
   db.emit(); todoAlarmSync();
@@ -348,7 +383,9 @@ function todoItemHTML(t) {
   const est = t.data?.est;
   const real = t.data?.taskId ? db.where('tempo_time_entries', e => e.task_id === t.data.taskId).reduce((s, e) => s + entryMs(e), 0) : 0;
   const estTxt = est ? `<span class="todo-due">${real ? fmtDur(real) + ' / ' : 'est. '}${fmtDur(est * 60000)}</span>` : '';
-  return `<div class="todo ${t.status === 'done' ? 'done' : ''}" data-tid="${t.id}" ${t.status === 'done' || todoSortMode() === 'alpha' ? '' : 'draggable="true"'}><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" oninput="todoAlarmPeek(this,'todo-edit-alarm-wrap','todo-edit-alarm')" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-cancel']()"><label id="todo-edit-alarm-wrap" class="row gap-s small" onmousedown="event.preventDefault()" style="display:${parseTodoText(todoEditRaw(t)).due ? 'inline-flex' : 'none'};align-items:center;white-space:nowrap"><input type="checkbox" id="todo-edit-alarm" ${t.data?.alarm ? 'checked' : ''}> Alarme</label>` : `<span class="grow todo-title" data-act="todo-edit" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${estTxt}${t.data?.adiou ? `<span class="todo-due">adiou ${t.data.adiou}x</span>` : ''}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="btn sm icon ghost" data-act="todo-play" data-id="${t.id}" aria-label="Começar registro" title="Começar registro">${icon('play')}</button><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`;
+  const lig = t.data?.project_id ? db.get('tempo_projects', t.data.project_id) : (t.data?.client_id ? db.get('tempo_clients', t.data.client_id) : null);
+  const ligTxt = lig && !t.data?.taskId ? `<span class="todo-due" title="${t.data.project_id ? 'Projeto' : 'Cliente'} ligado pelo texto">${esc(lig.name)}</span>` : '';
+  return `<div class="todo ${t.status === 'done' ? 'done' : ''}" data-tid="${t.id}" ${t.status === 'done' || todoSortMode() === 'alpha' ? '' : 'draggable="true"'}><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" oninput="todoAlarmPeek(this,'todo-edit-alarm-wrap','todo-edit-alarm')" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-cancel']()"><label id="todo-edit-alarm-wrap" class="row gap-s small" onmousedown="event.preventDefault()" style="display:${parseTodoText(todoEditRaw(t)).due ? 'inline-flex' : 'none'};align-items:center;white-space:nowrap"><input type="checkbox" id="todo-edit-alarm" ${t.data?.alarm ? 'checked' : ''}> Alarme</label>` : `<span class="grow todo-title" data-act="todo-edit" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${ligTxt}${estTxt}${t.data?.adiou ? `<span class="todo-due">adiou ${t.data.adiou}x</span>` : ''}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="btn sm icon ghost" data-act="todo-play" data-id="${t.id}" aria-label="Começar registro" title="Começar registro">${icon('play')}</button><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`;
 }
 /* Abertos primeiro; concluídos agrupados por dia da resolução, mais recentes primeiro.
    recentDays: mostra só os concluídos dos últimos N dias (o painel usa 7). */

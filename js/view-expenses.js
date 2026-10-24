@@ -89,8 +89,7 @@ CHANGES['ex-field'] = (el) => {
 };
 CHANGES['ex-status'] = (el) => {
   const r = db.get('tempo_expenses', el.dataset.id); if (!r) return;
-  const done = el.value === EX_DONE[r.kind];
-  db.update('tempo_expenses', r.id, { status: el.value, paid_on: done ? (r.paid_on || ymd(new Date())) : (el.value === EX_OFF ? r.paid_on : null) });
+  exSetStatus(r, el.value);
 };
 CHANGES['ex-import'] = async (el) => {
   const file = el.files[0]; if (!file) return;
@@ -136,7 +135,31 @@ function exComboItems(kind) {
 }
 function exSetStatus(r, v) {
   const done = v === EX_DONE[r.kind];
+  const antes = { ...r };
   db.update('tempo_expenses', r.id, { status: v, paid_on: done ? (r.paid_on || ymd(new Date())) : (v === EX_OFF ? r.paid_on : null) });
+  exSyncPayment(antes, db.get('tempo_expenses', r.id));
+}
+/* Entrada ligada a um projeto marcada como Recebido → pagamento do projeto.
+   Liga a um pagamento que já existe (mesmo valor, até 30 dias de distância) ou cria um com a nota "Entrada: <nome>".
+   Ao desmarcar, apaga só o pagamento que ela mesma criou. */
+const EX_PAY_NOTE = (r) => `Entrada: ${r.name || 'sem nome'}`;
+function exSyncPayment(antes, r) {
+  if (!r || r.kind !== 'in' || !r.project_id) return;
+  const amt = Math.round(Number(r.amount || 0) * 100) / 100; if (!(amt > 0)) return;
+  const era = antes.status === EX_DONE.in, agora = r.status === EX_DONE.in;
+  if (era === agora) return;
+  const mesmo = (x) => Math.abs(Number(x.amount || 0) - amt) < 0.005;
+  if (agora) {
+    const dia = r.paid_on || ymd(new Date()); const t0 = new Date(dia + 'T12:00').getTime();
+    const perto = (x) => !x.date || Math.abs(new Date(x.date + 'T12:00').getTime() - t0) <= 30 * 864e5;
+    const ja = db.where('tempo_payments', x => x.project_id === r.project_id && mesmo(x) && perto(x))[0];
+    if (ja) { if (!ja.date) db.update('tempo_payments', ja.id, { date: dia }); toast('Ligado ao pagamento do projeto que já existia.'); return; }
+    db.insert('tempo_payments', { project_id: r.project_id, amount: amt, date: dia, note: EX_PAY_NOTE(r), invoice: '' });
+    const p = db.get('tempo_projects', r.project_id); toast(`Pagamento de ${fmtMoney(amt)} lançado em ${p ? p.name : 'projeto'}.`);
+  } else {
+    const meu = db.where('tempo_payments', x => x.project_id === r.project_id && mesmo(x) && x.note === EX_PAY_NOTE(r) && (!antes.paid_on || x.date === antes.paid_on))[0];
+    if (meu) { db.remove('tempo_payments', meu.id); toast('Pagamento do projeto desfeito.'); }
+  }
 }
 const EX_COLS = {
   cat: { label: 'Categoria', ico: 'layers', w: 170, cell: r => r.cat ? exCatTags(r.cat) : '<span class="faint">—</span>', edit: { type: 'combo', kind: 'ex_cat', allowEmpty: true, emptyLabel: 'Sem categoria', get: r => r.cat, set: (r, v) => db.update('tempo_expenses', r.id, { cat: v || null }) } },

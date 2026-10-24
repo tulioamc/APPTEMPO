@@ -24,9 +24,54 @@ VIEWS.finance = () => {
     <div class="panel"><div class="panel-h"><h3>Em aberto por agência</h3></div><div class="panel-b">${ags.length ? `<div class="bars">${ags.map(x => `<div class="bar-row"><span class="lab">${x.a ? esc(x.a.name) : 'Clientes diretos'} <span class="faint small">· ${x.n}</span></span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf(x.a?.color || 'gray')};width:${x.v / maxAg * 100}%"></div></div><span class="val">${fmtMoney0(x.v)}</span></div>`).join('')}</div>` : '<div class="muted small">Nada em aberto com esses filtros.</div>'}</div></div>
     <div class="panel"><div class="panel-h"><h3>Pagamentos recebidos</h3><span class="grow"></span><span class="mono small">${fmtMoney0(pays.reduce((s, x) => s + Number(x.amount), 0))}</span></div><div class="panel-b tight" style="max-height:260px;overflow:auto">${pays.length ? gridTable({ id: 'finpays', cls: 'fin', cols: PAYCOLS, rows: pays, defSort: null, sortable: false, footer: false, rowAttrs: x => `data-act="fin-open" data-id="${x.project_id}"`, rowById: (id) => db.get('tempo_payments', id) }) : '<div class="empty small">Nenhum pagamento no período.</div>'}</div></div>
   </div>
+  ${finFlowHTML()}
   <div class="panel"><div class="panel-h"><h3>Projetos</h3><span class="grow"></span>${colsBtn('finance')}<button class="btn sm" data-act="csv-copy" data-kind="finance">${icon('copy')} Copiar CSV</button></div><div class="panel-b tight">${list.length ? gridTable({ id: 'finance', cls: 'fin', cols: FCOLS, rows: list, defHidden: ['status'], defSort: null, rowAttrs: p => `data-act="fin-open" data-id="${p.id}"`, rowById: (id) => db.get('tempo_projects', id) }) : `<div class="empty">${icon('money')}<b>Nenhum projeto com esses filtros</b></div>`}</div></div>`;
   return { title: 'Financeiro PJ', actions: '', html };
 };
+/* Fluxo de entradas (bruto × líquido), previsão do que falta receber pelo prazo e concentração de receita por cliente.
+   Usa só os pagamentos dos projetos; o imposto é a reserva de ~6% (ajustável em impostoPct). Não depende dos filtros acima. */
+function finFlowHTML() {
+  const taxa = Number(db.setting('impostoPct', 6)) || 0;
+  const hoje = new Date(); const ymOf = (d) => d.slice(0, 7);
+  const mesAdd = (n) => { const d = new Date(hoje.getFullYear(), hoje.getMonth() + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+  const MES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const lab = (ym) => `${MES[Number(ym.slice(5, 7)) - 1]}/${ym.slice(2, 4)}`;
+  const pays = db.all('tempo_payments').filter(x => x.date && Number(x.amount) > 0);
+  // entradas dos últimos 6 meses
+  const passados = [-5, -4, -3, -2, -1, 0].map(mesAdd);
+  const porMes = Object.fromEntries(passados.map(m => [m, 0]));
+  pays.forEach(x => { const m = ymOf(x.date); if (m in porMes) porMes[m] += Number(x.amount); });
+  // a receber nos próximos 3 meses, pelo prazo do projeto (vencido entra no mês atual)
+  const futuros = [0, 1, 2].map(mesAdd); const prev = Object.fromEntries(futuros.map(m => [m, 0])); let semPrazo = 0;
+  db.all('tempo_projects').filter(p => !p.archived).forEach(p => {
+    const r = remainingOf(p) || 0; if (r <= 0) return;
+    if (!p.deadline) { semPrazo += r; return; }
+    let m = ymOf(p.deadline); if (m < futuros[0]) m = futuros[0];
+    if (m in prev) prev[m] += r;
+  });
+  const maxV = Math.max(1, ...Object.values(porMes), ...Object.values(prev));
+  const barra = (v, cor) => `<div class="ap-bar" style="flex:1"><i style="width:${(v / maxV * 100).toFixed(1)}%${cor ? ';background:' + cor : ''}"></i></div>`;
+  const linhaPass = passados.map(m => { const b = porMes[m]; return `<div class="row gap-s small" style="align-items:center"><span style="width:52px">${lab(m)}</span>${barra(b)}<span class="mono" style="width:190px;text-align:right">${fmtMoney0(b)} <span class="faint">· líq. ${fmtMoney0(b * (1 - taxa / 100))}</span></span></div>`; }).join('');
+  const linhaFut = futuros.map(m => `<div class="row gap-s small" style="align-items:center"><span style="width:52px">${lab(m)}</span>${barra(prev[m], 'var(--warn)')}<span class="mono" style="width:190px;text-align:right">${fmtMoney0(prev[m])}</span></div>`).join('');
+  // concentração: últimos 12 meses por cliente
+  const desde = mesAdd(-11); const porCli = {}; let tot = 0;
+  pays.filter(x => ymOf(x.date) >= desde).forEach(x => { const p = db.get('tempo_projects', x.project_id); const c = p ? clientOf(p) : null; const k = c?.name || 'Sem cliente'; porCli[k] = (porCli[k] || 0) + Number(x.amount); tot += Number(x.amount); });
+  const ranking = Object.entries(porCli).sort((a, b) => b[1] - a[1]);
+  const topPct = tot ? ranking[0][1] / tot * 100 : 0;
+  const conc = ranking.slice(0, 6).map(([n, v]) => `<div class="bar-row"><span class="lab">${esc(n)}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf('blue')};width:${(v / tot * 100).toFixed(1)}%"></div></div><span class="val">${Math.round(v / tot * 100)}%</span></div>`).join('');
+  const bruto6 = Object.values(porMes).reduce((a, b) => a + b, 0);
+  return `<div class="grid2" style="align-items:start">
+    <div class="panel"><div class="panel-h"><h3>Entradas e previsão</h3><span class="grow"></span><span class="small muted">imposto ${taxa}%</span></div><div class="panel-b">
+      <div class="lbl">Recebido (bruto · líquido)</div>${linhaPass}
+      <div class="small muted" style="margin:4px 0 12px">6 meses: ${fmtMoney0(bruto6)} bruto · ${fmtMoney0(bruto6 * (1 - taxa / 100))} líquido · média ${fmtMoney0(bruto6 / 6)}/mês</div>
+      <div class="lbl">A receber, pelo prazo do projeto</div>${linhaFut}
+      ${semPrazo ? `<div class="small muted" style="margin-top:4px">+ ${fmtMoney0(semPrazo)} em projetos sem prazo</div>` : ''}
+    </div></div>
+    <div class="panel"><div class="panel-h"><h3>Concentração de receita</h3><span class="grow"></span><span class="small muted">últimos 12 meses</span></div><div class="panel-b">
+      ${tot ? `<div class="bars">${conc}</div><div class="small ${topPct > 50 ? '' : 'muted'}" style="margin-top:8px${topPct > 50 ? ';color:var(--warn)' : ''}">${topPct > 50 ? `Atenção: ${esc(ranking[0][0])} responde por ${Math.round(topPct)}% do que entrou.` : `Maior cliente: ${Math.round(topPct)}% do total.`}</div>` : '<span class="faint small">Sem pagamentos nos últimos 12 meses.</span>'}
+    </div></div>
+  </div>`;
+}
 const PAYCOLS = {
   date: { label: 'Data', ico: 'cal', w: 100, sort: x => x.date || '', cell: x => x.date ? fmtDate(x.date) : '<span class="faint">sem data</span>' },
   name: { label: 'Projeto', ico: 'list', w: 240, sort: x => db.get('tempo_projects', x.project_id)?.name || '', cell: x => { const p = db.get('tempo_projects', x.project_id); return p ? `<b>${esc(p.name)}</b>` : ''; } },
@@ -1130,7 +1175,16 @@ function bankFixedMatch(t) {
     const nm = e.name.toLowerCase();
     const nameOk = word.length >= 4 && nm.includes(word);
     return nameOk && Math.abs(Number(e.amount) - amt) <= Math.max(5, Number(e.amount) * 0.03);
-  }) || null;
+  }) || bankFixedByValue(t, amt, ym, linked);
+}
+/* Casamento só pelo valor: sem nome parecido, sugere o custo fixo do mês com o valor exato,
+   desde que seja o único em aberto com esse valor e não haja outra saída igual no mês esperando vínculo. */
+function bankFixedByValue(t, amt, ym, linked) {
+  const igual = (v) => Math.abs(Number(v) - amt) < 0.01;
+  const cands = db.all('tempo_expenses').filter(e => e.kind === 'out' && e.month === ym && !linked.has(e.id) && e.name && e.amount != null && e.status !== 'Pago' && igual(e.amount));
+  if (cands.length !== 1) return null;
+  const rivais = (BANK.all[t.entity] || []).filter(x => x.id !== t.id && x.flow === 'out' && !x.expense_id && (x.posted_on || '').slice(0, 7) === ym && igual(Math.abs(Number(x.amount))));
+  return rivais.length ? null : cands[0];
 }
 function bankReimbMatch(t) {
   if (t.flow !== 'in' || !/sulam/i.test(t.counterpart || '') || t.reimb_linked) return null;
