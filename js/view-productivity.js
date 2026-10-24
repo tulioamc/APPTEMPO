@@ -357,10 +357,10 @@ VIEWS.productivity = () => {
   const body = !hasData
     ? '<div class="muted small">Sem registro de trabalho no período escolhido.</div>'
     : `<div class="kpi-row">
-        <div class="kpi"><span class="k">Produtivo</span><span class="v mono">${fmtDur(S.tot.prod)}</span><span class="s">trabalho sem contar duplicado</span></div>
-        <div class="kpi"><span class="k">% produtivo</span><span class="v mono">${usePctTxt(S.pctProd)}</span><span class="s">produtivo ÷ (produtivo + distração + ocioso)</span></div>
-        <div class="kpi"><span class="k">Maior bloco de foco</span><span class="v mono">${fmtDur(S.longest)}</span><span class="s">pausas de até 1 min não quebram</span></div>
-        <div class="kpi"><span class="k">Blocos por dia</span><span class="v mono">${S.blocksPerDay.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</span><span class="s">${S.blocks.length} bloco(s) em ${S.days.length} dia(s)</span></div>
+        <div class="kpi" data-tip="${esc(`Produtivo ${fmtDur(S.tot.prod)}\nSó trabalho: as pausas ficam fora.\nMédia por dia com registro: ${fmtDur(S.tot.prod / Math.max(1, S.dayTable.length))}\nDistração ${fmtDur(S.tot.dist)} · ocioso ${fmtDur(S.tot.ocio)}`)}"><span class="k">Produtivo</span><span class="v mono">${fmtDur(S.tot.prod)}</span><span class="s">só trabalho, sem pausas e sem contar duplicado</span></div>
+        <div class="kpi" data-tip="${esc(`${usePctTxt(S.pctProd)} produtivo\nBase ${fmtDur(S.base)}: produtivo ${fmtDur(S.tot.prod)} + distração ${fmtDur(S.tot.dist)} + ocioso ${fmtDur(S.tot.ocio)}`)}"><span class="k">% produtivo</span><span class="v mono">${usePctTxt(S.pctProd)}</span><span class="s">produtivo ÷ (produtivo + distração + ocioso)</span></div>
+        <div class="kpi" data-tip="${esc(`Maior bloco ${fmtDur(S.longest)}\nTrabalho contínuo; uma pausa de mais de 1 min encerra o bloco.\nMédia do maior bloco por dia: ${fmtDur(S.longestPerDay)}`)}"><span class="k">Maior bloco de foco</span><span class="v mono">${fmtDur(S.longest)}</span><span class="s">pausas de até 1 min não quebram</span></div>
+        <div class="kpi" data-tip="${esc(`${S.blocks.length} blocos em ${S.days.length} dia(s)\nBloco = trabalho contínuo sem pausa de mais de 1 min.`)}"><span class="k">Blocos por dia</span><span class="v mono">${S.blocksPerDay.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</span><span class="s">${S.blocks.length} bloco(s) em ${S.days.length} dia(s)</span></div>
       </div>
 
       <section class="card stack" style="gap:10px;margin-top:14px"><h3>Por hora do dia</h3>
@@ -476,4 +476,23 @@ function prodComparacoesHTML() {
     <span class="lbl">Trimestres (este ano e ano passado)</span>${trimTab}
     <span class="lbl">Análise geral</span><div class="small">${frases.map(f => `<div>${esc(f)}</div>`).join('')}</div>
   </div></section>`;
+}
+
+/* Barrinha de produtividade de um conjunto de sessões (janela da sessão e Resumo): produtivo, distração e ocioso,
+   em tempo e % — mesma conta do Relatório Produtividade (pausa nunca é trabalho). */
+function prodOfEntries(entries, at = Date.now()) {
+  const work = entries.flatMap(e => (e.segments || []).filter(x => x.s).map(x => [new Date(x.s).getTime(), x.e ? new Date(x.e).getTime() : at])).filter(([a, b]) => b > a);
+  const r = { prod: unionMs(work), dist: 0, ocio: 0 };
+  pauseGapsOf(entries, at).forEach(g => { r[prodPauseCls(g.why)] += new Date(g.e) - new Date(g.s); });
+  r.base = r.prod + r.dist + r.ocio;
+  return r;
+}
+function prodMiniHTML(entries) {
+  const r = prodOfEntries(entries); if (!r.base) return '';
+  const pct = (k) => r.base ? r[k] / r.base * 100 : 0;
+  const DESC = { prod: 'Trabalho no computador, sem pausas.', dist: 'Pausas em WhatsApp, Telegram e Instagram.', ocio: 'Demais pausas: parado, tela bloqueada, Mac dormindo ou pausa manual.' };
+  const tip = (k) => `${PROD_NAME[k]} ${fmtDur(r[k])} · ${usePctTxt(pct(k))}\n${DESC[k]}\nBase: ${fmtDur(r.base)} (produtivo + distração + ócio)`;
+  const bar = PROD_KEYS.filter(k => r[k] > 0).map(k => `<span class="pm-seg" data-hk="${k}" data-tip="${esc(tip(k))}" style="width:${pct(k).toFixed(2)}%;background:${PROD_COLOR[k]}"></span>`).join('');
+  const txt = PROD_KEYS.map(k => `<span class="pm-lbl" data-hk="${k}" data-tip="${esc(tip(k))}"><i style="background:${PROD_COLOR[k]}"></i>${PROD_NAME[k]} <b class="mono">${fmtDur(r[k])}</b> <span class="mono muted">${Math.round(pct(k))}%</span></span>`).join('');
+  return `<div class="pm-wrap" data-hkroot="1"><div class="pm-bar">${bar}</div><div class="pm-txt">${txt}</div></div>`;
 }

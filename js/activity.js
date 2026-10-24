@@ -290,7 +290,13 @@ function actMoveGroup(entryId, g, pick, ranges = null) {
 
 /* Dica do bloco: cada grupo com o tempo de cada versão/arquivo. */
 // 1ª linha = nome do grupo + tempo total (vira o título da dica); depois, um arquivo por linha
-const actTip = (g) => `${g.label} ${fmtDur(g.ms)}\n${g.items.map(i => `${i.doc || i.app}: ${fmtDur(i.ms)}`).join('\n')}`;
+const actTip = (g) => { const its = (g.items || []).slice().sort((a, b) => b.ms - a.ms); const top = its.slice(0, 12).map(i => `${shortName(actItemName(i), 48)}: ${fmtDur(i.ms)}`); if (its.length > 12) top.push(`+${its.length - 12} outros: ${fmtDur(its.slice(12).reduce((t, i) => t + i.ms, 0))}`); return `${g.label} ${fmtDur(g.ms)}\n${top.join('\n')}`; };
+/* Nome curto de um item: arquivo (sem o caminho) ou site; janelas internas dos programas viram "Janela: <nome>". */
+function actItemName(i) {
+  if (!i.doc) return shortProgram(i.app);
+  if (appFamily(i.app)) { const inf = actDocInfo(i.app, i.doc); return inf.win ? 'Janela: ' + inf.name : inf.name; }
+  return i.doc;
+}
 
 /* Uma faixa só, com 100% da largura = todo o tempo da sessão. Cada trecho ocupa a parte proporcional ao seu tempo;
    o que não tem registro fica cinza. Os pausas saem da conta (a faixa mostra só o tempo trabalhado). */
@@ -317,18 +323,50 @@ const pauseKind = (why) => {
 const pauseHatch = (why) => PAUSE_HATCH[pauseKind(why)];
 
 /* Espaço "fora" de um lançamento (trecho movido ou trabalho recebido), na faixa de qualquer tela. */
-function actMovedSpanHTML(seg, x, w) {
+/* Sessão do outro projeto que ocupa o trecho movido (para mostrar a tarefa). */
+function actMovedDest(pid, a, b) {
+  if (!pid || !a || !b) return null;
+  const A = new Date(a).getTime(), B = new Date(b).getTime();
+  return db.all('tempo_time_entries').find(x => x.project_id === pid && (x.segments || []).some(s => s.s && new Date(s.s).getTime() < B && (s.e ? new Date(s.e).getTime() : Date.now()) > A)) || null;
+}
+function actMovedSpanHTML(seg, x, w, gapEnd = null) {
   const recebido = !!seg.troca || (!seg.movedTo && !!seg.movedFrom);   // troca de projeto ou pedaços recebidos: o trabalho foi em outro projeto
   const idOutro = seg.movedTo || seg.movedFrom || '';
   const dst = db.get('tempo_projects', idOutro);
-  const nome = dst ? tkProjectLabel(dst) : null;
+  const dEnt = actMovedDest(idOutro, seg.e, gapEnd);
+  const tarefa = dEnt?.task_id ? db.get('tempo_tasks', dEnt.task_id)?.name : null;
+  const nome = dst ? tkProjectLabel(dst) + (tarefa ? ' › ' + tarefa : '') : null;
+  const quando = seg.e && gapEnd ? `\n${fmtTime(seg.e)}–${fmtTime(gapEnd)} · ${fmtDur(new Date(gapEnd) - new Date(seg.e))}` : '';
   const cor = (dst && (clientOf(dst)?.color || dst.color)) || '#94A3B8';
   const texto = recebido ? 'Trabalho em ' + (nome || 'outro projeto') : (nome ? 'Movido → ' + nome : 'Movido');
-  const dica = recebido ? texto + ' · clique para abrir'
-    : (nome ? 'Movido para ' + nome + ' · clique para abrir'
-      : 'Movido para [destino não registrado]\nObs.: este trecho está marcado como movido, mas o projeto de destino não ficou gravado. Abra a sessão para conferir ou refazer a movimentação.');
+  const dica = recebido ? texto + quando + '\nClique para abrir'
+    : (nome ? 'Movido para ' + nome + quando + '\nClique para abrir'
+      : 'Movido para [destino não registrado]' + quando + '\nObs.: este trecho está marcado como movido, mas o projeto de destino não ficou gravado. Abra a sessão para conferir ou refazer a movimentação.');
   return `<span class="act-moved" data-pid="${esc(idOutro)}" style="left:${x}%;width:${w}%;--mv:${esc(cor)}" data-tip="${esc(dica)}"></span>`;   // o texto aparece só no hover (data-tip)
 }
+/* Trabalho sem registro de programa: intervalos trabalhados da sessão que nenhum registro de atividade cobre
+   (app do Mac fechado, trabalho fora do computador, celular). Conta como trabalho, não como pausa. Só trechos de 1 min ou mais. */
+function actUnspecOf(e, at = Date.now()) {
+  const rec = actList(e.id).map(r => [new Date(r.from).getTime(), new Date(r.to).getTime()]).filter(([a, b]) => b > a).sort((p, q) => p[0] - q[0]);
+  const cov = []; rec.forEach(([a, b]) => { const l = cov[cov.length - 1]; if (l && a <= l[1] + 15e3) l[1] = Math.max(l[1], b); else cov.push([a, b]); });
+  const out = [];
+  (e.segments || []).forEach(s => {
+    if (!s.s) return;
+    let a = new Date(s.s).getTime(); const b = s.e ? new Date(s.e).getTime() : at;
+    cov.forEach(([c, d]) => { if (d <= a || c >= b) return; if (c > a) out.push([a, c]); a = Math.max(a, d); });
+    if (b > a) out.push([a, b]);
+  });
+  return out.filter(([a, b]) => b - a >= 60e3);
+}
+const actUnspecMs = (list) => list.reduce((t, e) => t + actUnspecOf(e).reduce((s, [a, b]) => s + (b - a), 0), 0);
+const ACT_UNSPEC_TIP = 'Trabalho não especificado\nTempo da sessão sem registro de programa: app do Mac fechado, trabalho fora do computador ou no celular. Conta como trabalho, não como pausa.';
+function actUnspecSpanHTML(a, b, x, w) {
+  return `<span class="seg-b unspec" data-g="unspec" style="left:${x}%;width:${w}%" data-tip="${esc(`Não especificado ${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())} · ${fmtDur(b - a)}\nTrabalhado, mas sem registro de programa (app do Mac fechado, fora do computador ou no celular).`)}"></span>`;
+}
+function actUnspecChipHTML(ms) {
+  return ms > 0 ? `<span class="act-chip act-unspec" data-g="unspec" style="--tb:#94A3B8" data-tip="${esc(ACT_UNSPEC_TIP + '\nTotal: ' + fmtDur(ms))}"><i></i>* Não especificado <span class="faint">${fmtDur(ms)}</span></span>` : '';
+}
+
 /* Checkbox "Mostrar trabalho em outros projetos": aparece só se houver espaços "fora" nas sessões. Igual na revisão e no resumo. */
 function actForaToggleHTML(ents) {
   if (!ents.some(e => (e.segments || []).some(x => x.why === 'moved'))) return '';
@@ -358,7 +396,7 @@ function actStripHTML(e, A, mode = '') {
     const a = e.segments[i].e, b = e.segments[i + 1].s;
     if (e.segments[i].why !== 'moved' || !a || !b || new Date(b) <= new Date(a)) continue;
     const x = pct(new Date(a).getTime()), y = pct(new Date(b).getTime());
-    bars += actMovedSpanHTML(e.segments[i], x, Math.max(.3, y - x));
+    bars += actMovedSpanHTML(e.segments[i], x, Math.max(.3, y - x), b);
   }
   A.records.forEach(r => {
     const g = byId[r.gid]; if (!g) return;
@@ -366,6 +404,8 @@ function actStripHTML(e, A, mode = '') {
     if (y <= x) return;
     bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}"${g.parent ? ` data-par="${esc(g.parent)}" data-tbc="${esc(g.color)}"` : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" style="--tb:${g.parent ? '#94A3B8' : g.color};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(actTip(g))}"></span>`;
   });
+  // trabalhado mas sem registro de programa: "Não especificado" (não é pausa)
+  actUnspecOf(e).forEach(([a, b]) => { const x = pct(a), y = pct(b); if (y > x) bars += actUnspecSpanHTML(a, b, x, Math.max(.3, y - x)); });
   // trechos marcados para mover (seleção em andamento nesta sessão)
   if (mode === 'program' && ACT_SEL && ACT_SEL.key === e.id) {
     ACT_SEL.ranges.concat(ACT_SEL.drag ? [ACT_SEL.drag] : []).forEach(r => { const x = pct(r.a), y = pct(r.b); if (y > x) bars += `<span class="res-sel-range" style="left:${x}%;width:${Math.max(.3, y - x)}%"></span>`; });
@@ -391,7 +431,7 @@ function actOthMembersAttr(A) {
   return m.length ? ` data-members="${esc(JSON.stringify(m))}"` : '';
 }
 function actChipsHTML(A, mode) {
-  return `<div class="act-chips">${A.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="act-chip"${g.id === 'outros' ? ' data-hl="outros"' + actOthMembersAttr(A) : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="${esc(actTip(g))}"><i></i>${esc(g.label)}${mode !== "site" && g.items.length > 1 ? ` <span class="act-more" title="Ver os ${g.items.length} arquivos">+${g.items.length}</span>` : ''} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
+  return `<div class="act-chips">${A.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="act-chip"${g.id === 'outros' ? ' data-hl="outros"' + actOthMembersAttr(A) : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" data-tip="${esc(actTip(g))}"><i></i>${esc(g.label)}${mode !== "site" && g.items.length > 1 ? ` <span class="act-more" title="Ver os ${g.items.length} arquivos">+${g.items.length}</span>` : ''} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
 }
 
 /* Pausas da sessão em caixinhas: o total, e dentro dele ócio, bloqueada, WhatsApp, Telegram e manual, com o tempo de cada um. */
@@ -412,7 +452,8 @@ function actSectionHTML(e) {
   const fvBtns = ['file', 'site'].map(v => `<button class="btn sm ${fv === v || fv === 'both' ? 'primary' : ''}" data-act="act-fview" data-v="${v}" aria-pressed="${fv === v || fv === 'both'}">${ACT_FV_LBL[v]}</button>`).join('');
   const fileSec = `<div class="act-sec"><div class="row between"><span class="lbl">${ACT_FV_LBL[fv]}</span><span class="row" style="gap:4px">${fvBtns}</span></div>${actStripHTML(e, file, fv)}${actChipsHTML(file, fv)}</div>`;
   const toggle = actForaToggleHTML([e]);
-  return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${sec('Por programa', 'program', prog)}${fileSec}<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div><span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
+  const secP = `<div class="act-sec"><div class="row between"><span class="lbl">Por programa</span></div>${actStripHTML(e, prog, 'program')}${actChipsHTML(prog, 'program').replace(/<\/div>$/, actUnspecChipHTML(actUnspecMs([e])) + '</div>')}</div>`;
+  return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${secP}${fileSec}<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div><span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
 }
 
 /* Log discreto no fim do formulário da sessão: cada registro de atividade (programa e arquivo) e cada pausa, por horário.
@@ -462,9 +503,12 @@ function actRowsOf(g) {
 }
 
 /* Janela de um grupo de arquivos: desfazer, juntar com outro grupo ou mover o tempo para outro projeto/tarefa. */
+/* entryId pode ser uma sessão ou uma lista (Resumo): as opções são as mesmas da sessão em andamento. */
 function openActGroup(entryId, gid, onDone) {
-  if (gid === 'outros') return openOthersPanel([entryId], 'both', onDone);
-  const A = ["both", "site", "file"].map(m => actAnalyze(entryId, m)).find(x => x.groups.some(g => g.id === gid)) || actAnalyze(entryId, "both");
+  const ids = [].concat(entryId);
+  if (gid === 'outros') return openOthersPanel(ids, 'both', onDone);
+  const lista = ids.flatMap(id => actList(id));
+  const A = ["both", "site", "file"].map(m => actAnalyzeList(lista, m)).find(x => x.groups.some(g => g.id === gid)) || actAnalyzeList(lista, "both");
   const g = A.groups.find(x => x.id === gid); if (!g) return;
   const others = A.groups.filter(x => x.id !== gid);
   openLayer({
@@ -499,7 +543,9 @@ function openActGroup(entryId, gid, onDone) {
           if (!proj.value) return toast('Escolha um projeto.');
           const label = tkProjectLabel(db.get('tempo_projects', proj.value));
           if (!await confirmBox({ title: 'Mover tempo?', body: `O tempo de ${g.label} sai desta sessão e vai para ${label}.`, ok: 'Mover' })) return;
-          if (!actMoveGroup(entryId, g, { project_id: proj.value, task_id: task.value || null })) return toast('Nada para mover.');
+          const chaves = new Set(g.items.map(i => i.key)); let movidos = 0;
+          ids.forEach(id => { const g2 = ["both", "site", "file"].flatMap(m => actAnalyze(id, m).groups).find(x => !x.hidden && x.id !== 'outros' && x.items.some(i => chaves.has(i.key))); if (g2 && actMoveGroup(id, g2, { project_id: proj.value, task_id: task.value || null })) movidos++; });
+          if (!movidos) return toast('Nada para mover.');
           toast('Tempo movido');
         }
         else return;
@@ -710,12 +756,18 @@ function actProjectHTML(entries) {
   const sec = (title, mode) => {
     const A = actAnalyzeList(list, mode);
     let off = 0, bars = '';
-    A.groups.forEach(g => {
+    const vis = A.groups.filter(g => !g.hidden);   // os pequenos ficam dentro de "Outros"
+    vis.forEach(g => {
       const w = Math.min(100 - off, g.ms / total * 100); if (w <= 0) return;
-      bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%" data-tip="${esc(actTip(g))}"></span>`;
+      bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%" data-tip="${esc(actTip(g) + '\n' + usePctTxt(g.ms / total * 100) + ' do trabalho do projeto')}"></span>`;
       off += w;
     });
-    return `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div><div class="act-strip">${bars}</div><div class="act-chips">${A.groups.map(g => `<span class="act-chip" data-g="${esc(g.id)}" style="--tb:${g.color}"><i></i>${esc(g.label)} <span class="faint">${fmtH(g.ms)}</span></span>`).join('')}</div></div>`;
+    const un = mode === 'program' ? actUnspecMs(entries) : 0;
+    if (un > 0 && off < 100) { const w = Math.min(100 - off, un / total * 100); bars += `<span class="seg-b unspec" data-g="unspec" style="left:${off}%;width:${Math.max(.3, w)}%" data-tip="${esc(ACT_UNSPEC_TIP + '\nTotal: ' + fmtDur(un))}"></span>`; off += w; }
+    const chip = (g) => g.id === 'outros'
+      ? `<span class="act-chip" data-g="outros" data-hl="outros"${actOthMembersAttr(A)} style="--tb:${g.color}"><i></i>Outros <span class="faint">${fmtH(g.ms)}</span></span>`
+      : `<span class="act-chip" data-g="${esc(g.id)}" style="--tb:${g.color}" data-tip="${esc(actTip(g) + '\n' + usePctTxt(g.ms / total * 100) + ' do trabalho do projeto')}"><i></i>${esc(g.label)} <span class="faint">${fmtH(g.ms)}</span></span>`;
+    return `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div><div class="act-strip">${bars}</div><div class="act-chips">${vis.map(chip).join('')}${mode === 'program' ? actUnspecChipHTML(un) : ''}</div></div>`;
   };
   return `<div class="stack" style="gap:10px;margin-bottom:14px">${sec('Por programa', 'program')}${sec('Por arquivo / página', 'both')}</div>`;
 }

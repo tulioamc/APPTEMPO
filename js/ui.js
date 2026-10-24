@@ -171,3 +171,10 @@ ACTIONS['pick-swatch'] = (el) => {
   const inp = wrap.querySelector('input[type=hidden]'); inp.value = el.dataset.color; inp.dispatchEvent(new Event('change', { bubbles: true }));
 };
 ACTIONS['close-layer'] = () => topLayer()?.close();
+
+/* "Bruto · trabalho · pausas" com dica em cada número (o que é e de onde vem). */
+function btpLineHTML(bruto, trab, pausa, { cap = false, extra = '' } = {}) {
+  const pct = (v) => (bruto > 0 ? Math.round(v / bruto * 100) : 0) + '%';
+  const w = (t) => (cap ? t[0].toUpperCase() + t.slice(1) : t);
+  return `<span data-tip="${esc(`Bruto ${fmtDur(bruto)}\nDo início ao fim das sessões, sem contar duas vezes o mesmo horário. Inclui as pausas.`)}">${w('bruto')} ${fmtDur(bruto)}</span> · <span data-tip="${esc(`Trabalho ${fmtDur(trab)} · ${pct(trab)} do bruto\nSó o tempo trabalhado: bruto menos as pausas.${extra}`)}">trabalho ${fmtDur(trab)}</span> · <span data-tip="${esc(`Pausas ${fmtDur(pausa)} · ${pct(pausa)} do bruto\nParado, tela bloqueada, Mac dormindo, WhatsApp e pausas manuais. Pausa nunca é trabalho.`)}">pausas ${fmtDur(pausa)}</span>`;
+}

@@ -18,7 +18,7 @@ function tsPeriodRange(day, p) {
 /* Faixa do dia nos modos pausas, programas ou arquivos (a visão "tudo" é a faixa de sessões, em dayStrip).
    Tem o mesmo formato e o mesmo arrastar para zoom da faixa principal. */
 function reportStrip(entries, day, mode) {
-  const START = 7, END = 24; const span = (END - START) * 3600000;
+  const START = 0, END = 24; const span = (END - START) * 3600000; // 24 h: meio-dia no centro
   const base = new Date(day); base.setHours(START, 0, 0, 0);
   const clip = (t) => Math.min(span, Math.max(0, t - base));
   let bars = '';
@@ -44,7 +44,7 @@ function reportStrip(entries, day, mode) {
       });
     });
   }
-  return `<div class="day-strip" data-report="1" data-t0="${base.getTime()}" data-span="${span}" data-ents="${entries.map(e => e.id).join(',')}" aria-label="Linha do tempo do dia">${bars}${nowNeedleHTML(base, span)}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
+  return `<div class="day-strip" data-report="1" data-t0="${base.getTime()}" data-span="${span}" data-ents="${entries.map(e => e.id).join(',')}" aria-label="Linha do tempo do dia">${bars}${nowNeedleHTML(base, span)}</div><div class="day-axis">${[0, 3, 6, 9, 12, 15, 18, 21].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
 }
 
 /* Faixa agregada de um dia: cada projeto soma o seu tempo (cor do cliente/agência), pausas pela cor da categoria. */
@@ -139,7 +139,7 @@ function reportPanelHTML(day) {
       body = `${head}${more ? `<details class="rep-more"><summary class="small muted" style="cursor:pointer;padding:4px 0">+${list.length - 8} outros (clique para ver todos)</summary><div style="margin-top:6px">${more}</div></details>` : ''}`;
     }
     return `<details class="rep-det" style="border-top:1px solid var(--line);padding-top:8px">
-      <summary style="cursor:pointer;font-weight:600"><span class="lbl" style="display:inline">${title}</span> <span class="mono small muted">${list.length ? fmtDur(total) : ''}</span></summary>
+      <summary style="cursor:pointer;font-weight:600"><span class="lbl" style="display:inline">${title}</span> <span class="mono small muted" ${list.length ? `data-tip="${esc(`${title}\n${fmtDur(total)} em ${list.length} ${list.length === 1 ? 'item' : 'itens'}\nMaior: ${list[0].label} · ${fmtDur(list[0].ms)}`)}"` : ''}>${list.length ? fmtDur(total) : ''}</span></summary>
       <div class="stack" style="gap:6px;margin-top:10px">${body}</div>
     </details>`;
   };
@@ -152,9 +152,9 @@ function reportPanelHTML(day) {
   const seg = (list, cur, attr) => `<div class="seg" style="display:flex;gap:6px;flex-wrap:wrap">${list.map(([k, l]) => `<button class="btn sm ${cur === k ? 'primary' : ''}" ${attr}="${k}">${l}</button>`).join('')}</div>`;
   const stripHTML = p === 'dia' ? (v === 'tudo' ? dayStrip(es, day) : reportStrip(es, day, v)) : '';
   const chartHTML = `<div class="stack" style="gap:6px">
-      <div class="row between"><span class="lbl">${p === 'dia' ? 'Semana' : 'Dias do período'}</span><span class="mono small">${fmtDur(chartSum)}</span></div>
+      <div class="row between"><span class="lbl">${p === 'dia' ? 'Semana' : 'Dias do período'}</span><span class="mono small" data-tip="${esc(`Total ${fmtDur(chartSum)}\nTrabalho somado dos dias mostrados.\nMédia por dia com registro: ${fmtDur(chartSum / Math.max(1, chart.filter(x => x.ms > 0).length))}`)}">${fmtDur(chartSum)}</span></div>
       <div style="display:grid;grid-template-columns:repeat(${chart.length},1fr);gap:${chart.length > 8 ? 3 : 6}px;align-items:end;height:70px">
-        ${chart.map(x => `<button data-act="ts-day" data-day="${ymd(x.d)}" data-agg-day="${ymd(x.d)}" title="${fmtDate(ymd(x.d))} · ${fmtDur(x.ms)}" style="border:0;background:none;padding:0;min-width:0;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-end;height:100%;gap:4px"><span style="display:block;height:${Math.max(3, x.ms / maxW * 46)}px;border-radius:3px;background:${ymd(x.d) === S.tsDay ? 'var(--accent)' : 'var(--surface-3)'}"></span><span class="small ${ymd(x.d) === S.tsDay ? '' : 'faint'}" style="text-align:center;font-size:11px">${chart.length <= 7 ? WEEKDAYS[x.d.getDay()] : x.d.getDate()}</span></button>`).join('')}
+        ${chart.map(x => `<button data-act="ts-day" data-day="${ymd(x.d)}" data-agg-day="${ymd(x.d)}" data-tip="${esc(`${WEEKDAYS[x.d.getDay()]} ${fmtDate(ymd(x.d))}\nTrabalho: ${fmtDur(x.ms)}\n${Math.round(x.ms / ((Number(db.setting('metaDia', 6)) || 6) * 36e5) * 100)}% da meta do dia (${Number(db.setting('metaDia', 6)) || 6} h)\nClique para abrir o dia`)}" style="border:0;background:none;padding:0;min-width:0;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-end;height:100%;gap:4px"><span style="display:block;height:${Math.max(3, x.ms / maxW * 46)}px;border-radius:3px;background:${ymd(x.d) === S.tsDay ? 'var(--accent)' : 'var(--surface-3)'}"></span><span class="small ${ymd(x.d) === S.tsDay ? '' : 'faint'}" style="text-align:center;font-size:11px">${chart.length <= 7 ? WEEKDAYS[x.d.getDay()] : x.d.getDate()}</span></button>`).join('')}
       </div>
       <div class="ts-agg-box" id="ts-agg-box" data-agg-cur="${ymd(day)}">${dayAggHTML(day)}</div>
       <div hidden id="ts-agg-store-html">${chart.map(x => `<span data-store="${ymd(x.d)}">${dayAggHTML(x.d)}</span>`).join('')}</div>
@@ -164,11 +164,11 @@ function reportPanelHTML(day) {
     <div class="panel-h">
       <h3>Relatório do Time Sheet</h3><span class="grow"></span>
       <span class="small muted">${fmtDate(ymd(a))}${ymd(a) !== ymd(b) ? ' a ' + fmtDate(ymd(b)) : ''}</span>
-      <span class="mono" style="font-weight:600;font-size:1.1em;margin-left:10px" ${p === 'dia' ? `data-tick-day="${S.tsDay}"` : ''}>${fmtDur(net)}</span>
+      <span class="mono" data-tip="Trabalho do período (líquido, sem pausas)" style="font-weight:600;font-size:1.1em;margin-left:10px" ${p === 'dia' ? `data-tick-day="${S.tsDay}"` : ''}>${fmtDur(net)}</span>
     </div>
     <div class="panel-b stack" style="gap:12px">
       <div class="row between" style="flex-wrap:wrap;gap:8px">${seg(TS_PERIODS, p, 'data-tsp')}${seg(TS_VIEWS, v, 'data-tsv')}</div>
-      <div class="small muted">bruto ${fmtDur(bruto)} · trabalho ${fmtDur(net)} · pausas ${fmtDur(Math.max(0, bruto - net))}</div>
+      <div class="small muted">${btpLineHTML(bruto, net, Math.max(0, bruto - net))}</div>
       ${stripHTML}
       ${chartHTML}
       <div class="stack" style="gap:6px">${sections.join('')}</div>

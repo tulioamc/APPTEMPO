@@ -118,6 +118,8 @@ function openResumo(title, ids) {
         const mv = ev.target.closest('.act-moved[data-pid]');
         if (mv && mv.dataset.pid) { l.close(); return openProject(mv.dataset.pid); }
         if (ACT_SEL) return;   // enquanto marca trechos, o clique só serve para arrastar
+        const fileEl = ev.target.closest('[data-x="res-file"]');
+        if (fileEl) return openActGroup(allIds, fileEl.dataset.g, reabrir);
         const chipEl = ev.target.closest('[data-x="res-prog"]');
         if (chipEl) return menuPrograma(chipEl.dataset.g, chipEl.dataset.label);
         const seg = ev.target.closest('.res-strip .act-b[data-g]');
@@ -164,6 +166,37 @@ function resumoHTML(title, es) {
   const sess = es.map(e => { const st = new Date(entryStart(e)).getTime(); const en = new Date(entryEnd(e)).getTime(); return { e, st, en, span: Math.max(1, en - st) }; });
   const totalSpan = sess.reduce((t, x) => t + x.span, 0) || 1;
   let bar = '', note = '';
+  const fileAn = actAnalyzeList(tagged, "both");
+  const fColorOf = Object.fromEntries(fileAn.groups.map(g => [g.id, g.color]));
+  const fParentOf = Object.fromEntries(fileAn.groups.map(g => [g.id, g.parent || null]));
+  const fOthAttr = actOthMembersAttr(fileAn);
+  /* Faixa cronológica dos arquivos/sites (mesma régua da de programas). */
+  const fileCron = () => {
+    let off = 0, parts = '';
+    sess.forEach((x, i) => {
+      const base = off, wS = x.span / totalSpan * 100;
+      const pos = (a, b) => ({ l: base + Math.max(0, a - x.st) / x.span * wS, w: Math.max(.3, (Math.min(x.span, b - x.st) - Math.max(0, a - x.st)) / x.span * wS) });
+      fileAn.records.filter(r => r._i === i).forEach(r => { const g = fileAn.groups.find(z => z.id === r.gid); const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}"${fParentOf[r.gid] ? ` data-par="${esc(fParentOf[r.gid])}" data-tbc="${esc(fColorOf[r.gid])}"` : ''}${fParentOf[r.gid] === 'outros' ? fOthAttr : ''} data-tip="${esc(g ? actTip(g) : r.app)}" style="--tb:${fParentOf[r.gid] ? '#94A3B8' : (fColorOf[r.gid] || 'var(--accent)')};left:${q.l}%;width:${q.w}%"></span>`; });
+      actUnspecOf(x.e).forEach(([a, b]) => { const q = pos(a, b); parts += actUnspecSpanHTML(a, b, q.l, q.w); });
+      pauseGapsOf([x.e]).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" data-pk="${pauseKind(g.why || 'manual')}" data-tip="${esc(`Pausa · ${pauseLabel(g.why)}\n${fmtTime(g.s)}–${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
+      if (i > 0) parts += `<span class="act-sep" style="left:${base}%"></span>`;
+      off += wS;
+    });
+    return `<div class="act-strip res-fstrip" style="height:26px">${parts}</div>`;
+  };
+  /* Por tarefa: cada sessão pinta sua fatia com a cor da tarefa; passar o mouse numa tarefa acende só ela. */
+  const tasks = [];
+  const taskOf = (e) => { const t = db.get('tempo_tasks', e.task_id); const k = t ? t.id : '_'; let r = tasks.find(z => z.k === k); if (!r) { r = { k, name: t ? (t.parent_id ? (db.get('tempo_tasks', t.parent_id)?.name + ' › ' + t.name) : t.name) : 'Sem tarefa', ms: 0, n: 0 }; tasks.push(r); } return r; };
+  es.forEach(e => { const r = taskOf(e); r.ms += entryMs(e); r.n++; });
+  tasks.sort((a, b) => b.ms - a.ms).forEach((t, i) => { t.color = t.k === '_' ? '#CBD5E1' : ACT_PALETTE[(i * 5 + 1) % ACT_PALETTE.length]; });
+  const taskTip = (t) => `${t.name}\n${fmtDur(t.ms)} de trabalho · ${usePctTxt(totalTrab ? t.ms / totalTrab * 100 : 0)} do projeto\n${t.n} ${t.n === 1 ? 'sessão' : 'sessões'}`;
+  let taskBar = '';
+  if (tasks.length > 1) {
+    let parts = '';
+    if (mode === 'cron') { let off = 0; sess.forEach((x) => { const w = x.span / totalSpan * 100; const t = taskOf(x.e); parts += `<span class="seg-b fill res-task" data-hk="${esc(t.k)}" data-tip="${esc(`${t.name}\n${fmtTime(entryStart(x.e))}–${fmtTime(entryEnd(x.e))} · ${fmtDur(entryMs(x.e))}`)}" style="--tb:${t.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; }); }
+    else { let off = 0; tasks.forEach(t => { const w = totalTrab ? t.ms / totalTrab * 100 : 0; parts += `<span class="seg-b fill res-task" data-hk="${esc(t.k)}" data-tip="${esc(taskTip(t))}" style="--tb:${t.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; }); }
+    taskBar = `<div class="act-sec" data-hkroot="1"><div class="lbl">Por tarefa</div><div class="act-strip" style="height:22px">${parts}</div><div class="act-chips">${tasks.map(t => `<span class="act-chip res-task" data-hk="${esc(t.k)}" data-tip="${esc(taskTip(t))}" style="--tb:${t.color}"><i></i>${esc(t.name)} <span class="faint">${fmtDur(t.ms)}</span></span>`).join('')}</div></div>`;
+  }
   if (mode === 'cron') {
     let off = 0, parts = '';
     const slices = [];
@@ -171,12 +204,13 @@ function resumoHTML(title, es) {
       const base = off, wS = x.span / totalSpan * 100;
       slices.push({ e: x.e.id, l: base, w: wS, st: x.st, span: x.span });
       const pos = (a, b) => ({ l: base + Math.max(0, a - x.st) / x.span * wS, w: Math.max(.3, (Math.min(x.span, b - x.st) - Math.max(0, a - x.st)) / x.span * wS) });
-      an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}"${parentOf[r.gid] ? ` data-par="${esc(parentOf[r.gid])}" data-tbc="${esc(colorOf[r.gid])}"` : ''}${parentOf[r.gid] === 'outros' ? othAttr : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" title="${esc(r.app)}${r.doc ? ' · ' + esc(r.doc) : ''}" style="--tb:${parentOf[r.gid] ? '#94A3B8' : (colorOf[r.gid] || 'var(--accent)')};left:${q.l}%;width:${q.w}%"></span>`; });
+      an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}"${parentOf[r.gid] ? ` data-par="${esc(parentOf[r.gid])}" data-tbc="${esc(colorOf[r.gid])}"` : ''}${parentOf[r.gid] === 'outros' ? othAttr : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" data-tip="${esc(`${shortProgram(r.app)} · ${fmtTime(r.from)}–${fmtTime(r.to)} · ${fmtDur(new Date(r.to) - new Date(r.from))}${r.doc ? '\n' + actItemName(r) : ''}`)}" style="--tb:${parentOf[r.gid] ? '#94A3B8' : (colorOf[r.gid] || 'var(--accent)')};left:${q.l}%;width:${q.w}%"></span>`; });
       if (db.setting('actShowFora', true)) (x.e.segments || []).forEach((sg, k, arr) => {
         if (sg.why !== 'moved' || k >= arr.length - 1 || !sg.e || !arr[k + 1].s) return;
-        const q = pos(new Date(sg.e).getTime(), new Date(arr[k + 1].s).getTime()); if (q.w > 0) parts += actMovedSpanHTML(sg, q.l, q.w);
+        const q = pos(new Date(sg.e).getTime(), new Date(arr[k + 1].s).getTime()); if (q.w > 0) parts += actMovedSpanHTML(sg, q.l, q.w, arr[k + 1].s);
       });
-      pauseGapsOf([x.e]).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" data-pk="${pauseKind(g.why || 'manual')}" title="Pausa · ${esc(pauseLabel(g.why))}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
+      actUnspecOf(x.e).forEach(([a, b]) => { const q = pos(a, b); parts += actUnspecSpanHTML(a, b, q.l, q.w); });
+      pauseGapsOf([x.e]).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" data-pk="${pauseKind(g.why || 'manual')}" data-tip="${esc(`Pausa · ${pauseLabel(g.why)}\n${fmtTime(g.s)}–${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
       if (i > 0) parts += `<span class="act-sep" style="left:${base}%"></span>`;
       off += wS;
     });
@@ -187,25 +221,28 @@ function resumoHTML(title, es) {
     let off = 0, parts = '';
     an.groups.filter(g => !g.hidden).forEach(g => { const w = g.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" data-g="${esc(g.id)}"${g.id === 'outros' ? ' data-par="outros" data-tbc="' + esc(g.color) + '"' + othAttr : ''} title="${esc(g.label)} · ${fmtDur(g.ms)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
     pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).forEach(bk => { const w = bk.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" data-pk="${bk.kind}" title="${esc(bk.label)} · ${fmtDur(bk.ms)}" style="--ph:${bk.color};--pg:${pauseGapOf(bk.color)};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
-    const restMs = Math.max(0, totalBruto - an.groups.reduce((t, g) => t + g.ms, 0) - totalPausa);
+    const unMs = actUnspecMs(es);
+    if (unMs > 0 && off < 100) { const w = Math.min(100 - off, unMs / tot * 100); parts += `<span class="seg-b unspec" style="left:${off}%;width:${Math.max(.3, w)}%" data-tip="${esc(ACT_UNSPEC_TIP + '\nTotal: ' + fmtDur(unMs))}"></span>`; off += w; }
+    const restMs = Math.max(0, totalBruto - an.groups.reduce((t, g) => t + g.ms, 0) - totalPausa - unMs);
     if (restMs > 1000 && off < 100) parts += `<span class="act-track" style="left:${off}%;width:${100 - off}%"></span>`;
     bar = `<div class="act-strip" style="height:34px">${parts}</div>`;
     note = 'Tudo junto: cada programa soma o tempo de todas as sessões, e as pausas ficam por categoria. A barra inteira é o bruto.';
   }
-  const legendChips = an.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="res-prog"${g.id === 'outros' ? ' data-hl="outros"' + actOthMembersAttr(an) : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-label="${esc(g.label)}" style="--tb:${g.color}" title="Clique para ver as opções deste programa"><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('');
+  const legendChips = an.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="res-prog"${g.id === 'outros' ? ' data-hl="outros"' + actOthMembersAttr(an) : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-label="${esc(g.label)}" style="--tb:${g.color}"${g.id === 'outros' ? '' : ` data-tip="${esc(actTip(g) + '\nClique para mover, agrupar ou mudar a cor')}"`}><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('') + actUnspecChipHTML(actUnspecMs(es));
   const pauseChips = pauseBucketChip ? pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).map(pauseBucketChip).join('') : '';
-  const fileAn = actAnalyzeList(tagged, "both");
   const fileMembers = (g) => {
     const arr = g.id === 'outros' ? fileAn.groups.filter(x => x.parent === 'outros').map(x => ({ l: x.label, ms: x.ms, c: x.color }))
       : (g.items || []).slice(0, 15).map(it => ({ l: it.doc || it.app, ms: it.ms, c: g.color }));
     return arr.length ? ` data-members="${esc(JSON.stringify(arr))}"` : '';
   };
-  const fileChips = fileAn.groups.filter(g => !g.hidden).map(g => `<span class="act-chip" style="--tb:${g.color}"${fileMembers(g)}><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></span>`).join('');
-  const legendHTML = `<div class="lbl" style="margin-top:14px">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Arquivo / site</div><div class="act-chips">${fileChips || '<span class="muted small">Sem arquivos ou sites registrados.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || '<span class="muted small">Sem pausas.</span>'}</div>`;
+  const fileChips = fileAn.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="res-file" data-g="${esc(g.id)}" style="--tb:${g.color}"${g.id === 'outros' ? fileMembers(g) : ` data-tip="${esc(actTip(g) + '\nClique para separar, agrupar, mudar a cor ou mover')}"`}><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('');
+  const legendHTML = `<div class="lbl" style="margin-top:14px">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Arquivo / site</div>${mode === 'cron' ? fileCron() : ''}<div class="act-chips">${fileChips || '<span class="muted small">Sem arquivos ou sites registrados.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || '<span class="muted small">Sem pausas.</span>'}</div>`;
   const sessions = resumoSessionsHTML(es, mode);
   return `<div class="dh"><div class="grow"><span class="small muted">Resumo</span><h2 style="margin-top:2px">${esc(title)}</h2></div>${toggles}<button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
   <div class="db stack" style="gap:12px">
-    <div class="small muted">Bruto ${fmtDur(totalBruto)} · trabalho ${fmtDur(totalTrab)} · pausas ${fmtDur(totalPausa)} · ${es.length} sessão(ões)</div>
+    <div class="small muted"><span data-tip="${esc(`Bruto ${fmtDur(totalBruto)}\nDo início ao fim de cada sessão, sem contar duas vezes o mesmo horário. Inclui as pausas.`)}">Bruto ${fmtDur(totalBruto)}</span> · <span data-tip="${esc(`Trabalho ${fmtDur(totalTrab)}\nSó o tempo trabalhado (bruto menos pausas).\nCom registro de programa: ${fmtDur(Math.max(0, totalTrab - actUnspecMs(es)))}\nNão especificado: ${fmtDur(actUnspecMs(es))}`)}">trabalho ${fmtDur(totalTrab)}</span> · <span data-tip="${esc(`Pausas ${fmtDur(totalPausa)}\n${Object.entries(pauseByWhy).map(([k, ms]) => pauseLabel(k) + ': ' + fmtDur(ms)).join('\n')}`)}">pausas ${fmtDur(totalPausa)}</span> · ${es.length} sessão(ões)</div>
+    ${prodMiniHTML(es)}
+    ${taskBar}
     ${actForaToggleHTML(es)}
     ${actSelBarHTML(key)}
     <div class="act-sec">${bar}<div class="muted" style="font-size:.78em;line-height:1.5;margin-top:6px">${note}</div>${legendHTML}</div>

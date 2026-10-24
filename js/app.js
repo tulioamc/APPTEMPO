@@ -301,6 +301,7 @@ async function suggestActivity(seg) {
   if (!(toMs > fromMs) || toMs - fromMs < 10000) return;
   // o log do dia recebe tudo, com ou sem sessão ativa
   const logged = logAppend(seg);
+  trackUnsaved(seg, toMs - fromMs);
   const a = activeEntry();
   const pauseApps = (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
   // sites que pausam: navegador em primeiro plano com um desses termos no título da aba (ex.: Instagram no Chrome)
@@ -314,6 +315,33 @@ async function suggestActivity(seg) {
   // app que pausa: só marca no bruto (o cronômetro segue) e vira aviso para você conferir
   // WhatsApp/Telegram não são atividade: viram pausa (a partir de 1 minuto, como as outras atividades)
   if (isPauseApp) suggestPause(fromMs, toMs, 'app', siteHit ? siteHit.replace(/^./, c => c.toUpperCase()) : seg.app);
+}
+/* Arquivo sem salvar há muito tempo (programas de criação). "Nunca salvo" (Untitled, Sem título, sem caminho):
+   avisa com 15 min de uso; alterações não salvas (título com "*"): com 30 min. Repete a cada novo bloco do mesmo tamanho.
+   Salvou (sumiu o "*" e tem caminho) → zera. Janelas internas (Save As, Composition Settings…) não contam. */
+const UNSAVED_NEW_MS = 15 * 60e3, UNSAVED_DIRTY_MS = 30 * 60e3;
+const UNSAVED_RE = /untitled|sem t[ií]tulo|sem nome|novo arquivo|novo documento|arquivo sem nome|unnamed|unsaved|^documento ?\d*$/i;
+const UNSAVED_STATE = {};
+function trackUnsaved(seg, ms) {
+  if (!DESIGN_APP_RE.test(seg.app) || !seg.doc) return;
+  const doc = String(seg.doc);
+  const fam = appFamily(seg.app);
+  const inf = fam ? actDocInfo(seg.app, doc) : { win: false, name: doc.replace(/\s*\*\s*$/, ''), path: seg.folder || '' };
+  if (inf.win) return;
+  const nunca = UNSAVED_RE.test(inf.name) || (!inf.path && !seg.folder && !/\.[a-z0-9]{2,5}$/i.test(inf.name));   // sem caminho e sem extensão = ainda não foi salvo
+  const sujo = /\*\s*$/.test(doc) || nunca;
+  const key = shortProgram(seg.app) + '|' + inf.name.toLowerCase();
+  if (!sujo) { delete UNSAVED_STATE[key]; return; }
+  const st = UNSAVED_STATE[key] || (UNSAVED_STATE[key] = { ms: 0, n: 0 });
+  st.ms += ms;
+  const lim = nunca ? UNSAVED_NEW_MS : UNSAVED_DIRTY_MS;
+  const n = Math.floor(st.ms / lim);
+  if (n <= st.n) return;
+  st.n = n;
+  const title = nunca ? `Arquivo nunca salvo há ${fmtDur(st.ms)}` : `Sem salvar há ${fmtDur(st.ms)}`;
+  const body = `${inf.name} no ${shortProgram(seg.app)}. ${nunca ? 'Dê um nome e salve numa pasta do projeto' : 'Salve (Cmd+S)'} para não perder o trabalho.`;
+  addNotice({ kind: 'salvar', key: `salvar:${key}:${ymd(new Date())}:${n}`, title, body, data: { app: seg.app, doc: inf.name, ms: st.ms } });
+  notifyNative(title, body);
 }
 CHANGES['pause-apps'] = (el) => { db.setSetting('pauseApps', el.value.split(',').map(x => x.trim()).filter(Boolean)); };
 CHANGES['pause-sites'] = (el) => { db.setSetting('pauseSites', el.value.split(',').map(x => x.trim()).filter(Boolean)); };

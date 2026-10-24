@@ -26,9 +26,9 @@ function dayReviewHTML(day, entries) {
   if (!entries.length) return '';
   return `<div class="card" style="margin:0 0 12px">
     <div class="row between"><b>Resumo do dia</b><span class="faint small">Meta <input class="input sm mono" type="number" min="1" step="0.5" value="${metaH}" data-on="meta-dia" style="width:64px;text-align:right"> h</span></div>
-    <div class="small muted" style="margin-top:4px">Bruto ${fmtDur(bruto)} · trabalho ${fmtDur(trab)} · pausas ${fmtDur(Math.max(0, bruto - trab))}</div>
+    <div class="small muted" style="margin-top:4px">${btpLineHTML(bruto, trab, Math.max(0, bruto - trab), { cap: true })}</div>
     <div style="height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin:8px 0"><span style="display:block;height:100%;width:${pct}%;background:var(--accent)"></span></div>
-    <div class="small">${pct >= 100 ? 'Meta batida' : `Faltam ${fmtDur(Math.max(0, metaMs - trab))} para a meta`}</div>
+    <div class="small" data-tip="${esc(`Meta do dia: ${metaH} h\nTrabalhado: ${fmtDur(trab)} · ${Math.round(trab / metaMs * 100)}%`)}">${pct >= 100 ? 'Meta batida' : `Faltam ${fmtDur(Math.max(0, metaMs - trab))} para a meta`}</div>
     ${gaps.length ? `<div class="lbl" style="margin-top:10px">Lacunas</div>${gaps.map(([a, b]) => `<div class="row between small"><span class="mono" data-act="gap-log" data-a="${a}" data-b="${b}" style="cursor:pointer;text-decoration:underline dotted" title="Ver a atividade desta lacuna">${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}</span><span class="row" style="gap:8px"><span class="mono">${fmtDur(b - a)}</span><button class="btn sm" data-act="ts-manual" data-a="${a}" data-b="${b}">Lançar</button></span></div>`).join('')}` : ''}
   </div>`;
 }
@@ -97,7 +97,7 @@ VIEWS.timesheet = () => {
 };
 
 function dayStrip(entries, day) {
-  const START = 7, END = 24; const span = (END - START) * 3600000;
+  const START = 0, END = 24; const span = (END - START) * 3600000; // 24 h: meio-dia no centro
   const base = new Date(day); base.setHours(START, 0, 0, 0);
   let bars = '';
   entries.forEach(e => {
@@ -119,7 +119,7 @@ function dayStrip(entries, day) {
       bars += `<span class="seg-b pausa" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${st / span * 100}%;width:${Math.max(.3, (en - st) / span * 100)}%" data-tip="${esc(`Pausa${g.why ? ' (' + g.why + ')' : ''}\n${fmtTime(g.s)} – ${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}"></span>`;
     });
   });
-  return `<div class="day-strip" data-report="1" data-t0="${base.getTime()}" data-span="${span}" data-ents="${entries.map(e => e.id).join(',')}" aria-label="Linha do tempo do dia">${bars}${nowNeedleHTML(base, span)}</div><div class="day-axis">${[7, 10, 13, 16, 19, 22].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
+  return `<div class="day-strip" data-report="1" data-t0="${base.getTime()}" data-span="${span}" data-ents="${entries.map(e => e.id).join(',')}" aria-label="Linha do tempo do dia">${bars}${nowNeedleHTML(base, span)}</div><div class="day-axis">${[0, 3, 6, 9, 12, 15, 18, 21].map(h => `<span>${pad(h)}h</span>`).join('')}<span>24h</span></div>`;
 }
 /* Agulha: onde estamos no dia (só no dia de hoje, entre 7h e 24h). */
 function nowNeedleHTML(base, span) {
@@ -128,7 +128,7 @@ function nowNeedleHTML(base, span) {
   return `<span class="now-needle" data-now-needle="${base.getTime()}" data-span="${span}" style="left:${t / span * 100}%" title="Agora"></span>`;
 }
 function updateNowNeedle(el) { const t = Date.now() - Number(el.dataset.nowNeedle), span = Number(el.dataset.span); if (t < 0 || t > span) { el.style.display = 'none'; return; } el.style.left = (t / span * 100) + '%'; }
-function updateLiveStrip(el) { const span = 17 * 3600000; const st = Number(el.dataset.st); const en = Math.min(span, Date.now() - Number(el.dataset.stripLive)); el.style.width = Math.max(.3, (en - st) / span * 100) + '%'; }
+function updateLiveStrip(el) { const span = 24 * 3600000; const st = Number(el.dataset.st); const en = Math.min(span, Date.now() - Number(el.dataset.stripLive)); el.style.width = Math.max(.3, (en - st) / span * 100) + '%'; }
 
 function recentSelections(n) {
   const seen = new Set(); const out = [];
@@ -258,6 +258,7 @@ function activeProjectsHTML(cur) {
   const fixados = db.setting('apFixados', []) || [];
   const base = db.where('tempo_projects', p => !p.archived && statusCat(p.status_id) === 'active').map(p => ({ p, st: apStats(p), fixo: fixados.includes(p.id) }));
   if (!base.length) return '';
+  const fechado = !!db.setting('apFechado', false);
   base.sort((x, y) => (y.fixo - x.fixo) || (y.st.last - x.st.last) || String(x.p.name).localeCompare(String(y.p.name), 'pt-BR'));
   const cards = base.map(({ p, st, fixo }) => {
     const c = clientOf(p);
@@ -265,11 +266,22 @@ function activeProjectsHTML(cur) {
     if (cur && cur.project_id === p.id) acao = '<span class="pm-badge">● Em andamento</span>';
     else if (cur) acao = `<button class="btn sm" data-act="ts-switch-proj" data-id="${esc(p.id)}">${icon('play')} Trocar para este</button>`;
     else acao = `<button class="btn sm primary" data-act="ts-start-proj" data-id="${esc(p.id)}">${icon('play')} Iniciar</button>`;
-    return `<div class="ap-card ${fixo ? 'ap-fixo' : ''}"><div class="row between" style="align-items:flex-start;gap:6px"><div class="stack" style="gap:2px;min-width:0"><b>${esc(p.name)}</b><span class="small muted">${esc(c?.name || 'Sem cliente')}</span></div><button class="btn sm ghost" data-act="ap-pin" data-id="${esc(p.id)}" title="${fixo ? 'Desafixar' : 'Fixar no topo'}">${fixo ? 'Desafixar' : 'Fixar'}</button></div>
-      <span class="small muted mono">hoje ${fmtDur(st.hoje)} · semana ${fmtDur(st.semana)}</span>${Number(p.estimated_hours) > 0 ? `<div class="ap-bar" title="${fmtDur(st.total)} de ${Number(p.estimated_hours)} h estimadas"><i style="width:${Math.min(100, st.total / (Number(p.estimated_hours) * 3600e3) * 100).toFixed(1)}%"></i></div><span class="small muted mono">${fmtDur(st.total)} de ${Number(p.estimated_hours)} h</span>` : ''}<div class="row" style="gap:6px;flex-wrap:wrap">${acao}<button class="btn sm ghost" data-act="ap-resumo" data-id="${esc(p.id)}">Resumo</button><button class="btn sm ghost" data-act="ap-card" data-id="${esc(p.id)}">Card</button></div></div>`;
+    const est = Number(p.estimated_hours) > 0 ? Number(p.estimated_hours) * 3600e3 : 0;
+    const estPct = est ? st.total / est * 100 : 0;
+    const ultima = st.last ? `${fmtDate(ymd(new Date(st.last)))} às ${fmtTime(new Date(st.last).toISOString())}` : 'nunca';
+    return `<div class="ap-card ${fixo ? 'ap-fixo' : ''}">
+      <div class="ap-top">
+        <div class="row between" style="align-items:flex-start;gap:6px"><b class="ap-name">${esc(p.name)}</b><button class="btn sm ap-pin" data-act="ap-pin" data-id="${esc(p.id)}" title="${fixo ? 'Desafixar' : 'Fixar no topo'}">${fixo ? 'Desafixar' : 'Fixar'}</button></div>
+        <div>${c ? clientTag(c) : '<span class="faint small">Sem cliente</span>'}</div>
+        <span class="small muted mono"><span data-tip="${esc(`Hoje: ${fmtDur(st.hoje)}\nTrabalho líquido registrado hoje neste projeto.`)}">hoje ${fmtDur(st.hoje)}</span> · <span data-tip="${esc(`Semana: ${fmtDur(st.semana)}\nDesde segunda-feira.\nTotal no projeto: ${fmtDur(st.total)}\nÚltima sessão: ${ultima}`)}">semana ${fmtDur(st.semana)}</span></span>
+        ${est ? `<div class="ap-bar" data-tip="${esc(`${fmtDur(st.total)} de ${Number(p.estimated_hours)} h estimadas · ${usePctTxt(estPct)}\n${st.total > est ? 'Passou ' + fmtDur(st.total - est) + ' do estimado.' : 'Faltam ' + fmtDur(est - st.total) + ' para o estimado.'}`)}"><i style="width:${Math.min(100, estPct).toFixed(1)}%${st.total > est ? ';background:#EF4444' : ''}"></i></div><span class="small muted mono">${fmtDur(st.total)} de ${Number(p.estimated_hours)} h</span>` : ''}
+      </div>
+      <div class="ap-actions">${acao}<button class="btn sm" data-act="ap-resumo" data-id="${esc(p.id)}">Resumo</button><button class="btn sm" data-act="ap-card" data-id="${esc(p.id)}">Card</button></div>
+    </div>`;
   }).join('');
-  return `<div class="panel"><div class="panel-h"><h3>Projetos ativos</h3><span class="small muted">${base.length}</span></div><div class="panel-b"><div class="ap-grid">${cards}</div></div></div>`;
+  return `<div class="panel"><div class="panel-h"><button class="btn sm icon ghost" data-act="ap-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="ap-toggle" style="cursor:pointer">Projetos ativos</h3><span class="small muted">${base.length}</span></div>${fechado ? '' : `<div class="panel-b"><div class="ap-grid">${cards}</div></div>`}</div>`;
 }
+ACTIONS['ap-toggle'] = () => db.setSetting('apFechado', !db.setting('apFechado', false));
 ACTIONS['ap-resumo'] = (el) => openProject(el.dataset.id, 'overview');
 ACTIONS['ap-card'] = (el) => openProject(el.dataset.id, 'tasks');
 ACTIONS['ap-pin'] = (el) => {
@@ -550,6 +562,7 @@ function openEntryModal(id, startIso = null, endIso = null) {
         <div class="field"><label for="em-wt">Tipo de trabalho</label><select id="em-wt" class="input" name="work_type_id">${options(workTypes(), e?.work_type_id || defaultWorkType(sel), { empty: true, emptyLabel: 'Sem tipo' })}</select></div>
         <div class="field"><label for="em-rev">Rodada de revisão</label><select id="em-rev" class="input" name="revision_id" ${revs.length ? '' : 'disabled'}>${options(revs, e?.revision_id, { empty: true, emptyLabel: revs.length ? 'Não é revisão' : 'Projeto sem rodadas', label: r => `Rodada ${r.number} — ${r.description.slice(0, 40)}` })}</select></div>
       </div>
+      ${e ? `<div class="act-sec"><div class="lbl">Produtividade</div>${prodMiniHTML([e])}</div>` : ''}
       ${e ? actSectionHTML(e) : ''}
       <div class="field"><label for="em-notes">Notas</label><textarea id="em-notes" class="input" name="notes">${esc(userNotes)}</textarea></div>
       <div class="grid2" style="align-items:start">
@@ -644,12 +657,13 @@ function openEntryModal(id, startIso = null, endIso = null) {
   });
 }
 
-/* dica flutuante das barras do dia: o que é e quanto tempo durou */
+/* Dica flutuante: qualquer elemento com data-tip (barras, chips, números de horas e %).
+   Com mais de uma linha, a primeira vira o título. */
 let stripTip = null;
 document.addEventListener('mouseover', (e) => {
-  const b = e.target.closest?.('.seg-b[data-tip]'); if (!b) return;
+  const b = e.target.closest?.('[data-tip]'); if (!b || !b.dataset.tip) return;
   if (!stripTip) { stripTip = document.createElement('div'); stripTip.className = 'strip-tip'; document.body.appendChild(stripTip); }
-  if (b.classList.contains('act-b')) {
+  if (b.classList.contains('act-b') || b.dataset.tip.includes('\n')) {
     // dica de atividade: título (app + total) maior e em negrito; nas linhas, o tempo em negrito
     const [tit, ...linhas] = b.dataset.tip.split('\n');
     const tempo = (l) => { const m = l.match(/^(.*): (\S[^:]*)$/); return m ? `${esc(m[1])}: <b>${esc(m[2])}</b>` : esc(l); };
@@ -662,7 +676,10 @@ document.addEventListener('mousemove', (e) => {
   const x = Math.min(e.clientX + 12, innerWidth - stripTip.offsetWidth - 8);
   stripTip.style.left = Math.max(8, x) + 'px'; stripTip.style.top = (e.clientY - stripTip.offsetHeight - 10 < 8 ? e.clientY + 16 : e.clientY - stripTip.offsetHeight - 10) + 'px';
 });
-document.addEventListener('mouseout', (e) => { if (stripTip && e.target.closest?.('.seg-b[data-tip]')) stripTip.style.display = 'none'; });
+document.addEventListener('mouseout', (e) => { const b = e.target.closest?.('[data-tip]'); if (stripTip && b && !(e.relatedTarget && b.contains(e.relatedTarget))) stripTip.style.display = 'none'; });
+/* Trecho movido para outro projeto: ao passar o mouse, os outros trechos da faixa esmaecem. */
+document.addEventListener('mouseover', (e) => { const m = e.target.closest?.('.act-moved'); const st = m?.closest('.act-strip'); if (!st) return; st.classList.add('mv-focus'); m.classList.add('mv-on'); });
+document.addEventListener('mouseout', (e) => { const m = e.target.closest?.('.act-moved'); const st = m?.closest('.act-strip'); if (!st) return; st.classList.remove('mv-focus'); m.classList.remove('mv-on'); });
 
 
 /* Sessões do mesmo projeto, tarefa e título (ex.: várias do "Time Sheet") viram um item recolhível.
@@ -685,7 +702,7 @@ function entryRowHTML(e) {
           <span class="when">${fmtTime(entryStart(e))}–${e.state === 'done' ? fmtTime(entryEnd(e)) : '…'}</span>
           <div class="what"><div class="t">${esc(entryTitle(e))} ${e.state !== 'done' ? `<span class="tag pill c-blue small">${e.state === 'running' ? 'em andamento' : 'pausada'}</span>` : ''}${e.edits?.length ? ' <span class="inh" title="Editada">editada</span>' : ''}${e.revision_id ? ' <span class="inh">revisão</span>' : ''}</div>
           <div class="p">${entryPathHTML(e)}${e.notes && x.project ? ' · ' + esc(e.notes.split('\n')[0]) : ''}</div></div>
-          <span class="ent-tag">${wtTag(e.work_type_id)}</span><span class="dur" ${e.state !== 'done' ? `data-tick="${e.id}"` : ''}>${e.state !== 'done' ? fmtClock(entryMs(e)) : fmtDur(entryMs(e))}</span><span class="ent-caret" aria-hidden="true"></span>
+          <span class="ent-tag">${wtTag(e.work_type_id)}</span><span class="dur" data-tip="${esc(`Trabalho ${fmtDur(entryMs(e))}\nBruto ${fmtDur(entryBrutoMs(e))} · pausas ${fmtDur(pauseGapsOf([e]).reduce((t, g) => t + (new Date(g.e) - new Date(g.s)), 0))}\n${(e.segments || []).length} intervalo(s)`)}" ${e.state !== 'done' ? `data-tick="${e.id}"` : ''}>${e.state !== 'done' ? fmtClock(entryMs(e)) : fmtDur(entryMs(e))}</span><span class="ent-caret" aria-hidden="true"></span>
         </div>`;
 }
 /* Cabeçalho das colunas da lista do dia (mesma grade das linhas). */
@@ -709,7 +726,7 @@ function groupedRowsHTML(entries) {
       <summary class="entry grp-sum" data-act="ts-resumo" data-title="${esc(entryTitle(list[0]))}" data-ids="${list.map(e => e.id).join(',')}">
         <span class="when">${fmtTime(first)}–${fmtTime(last)}</span>
         <div class="what"><div class="t">${esc(entryTitle(list[0]))} <span class="tag pill small">${list.length} sessões</span></div><div class="p">${entryPathHTML(list[0])}</div></div>
-        <span class="ent-tag">${tags}</span><span class="dur">${fmtDur(total)}</span><button type="button" class="grp-caret" data-act="grp-caret" aria-label="Ver sessões" title="Ver sessões">▾</button>
+        <span class="ent-tag">${tags}</span><span class="dur" data-tip="${esc(`${list.length} sessões · trabalho ${fmtDur(total)}\nMédia por sessão: ${fmtDur(total / list.length)}\nMaior: ${fmtDur(Math.max(...list.map(entryMs)))}`)}">${fmtDur(total)}</span><button type="button" class="grp-caret" data-act="grp-caret" aria-label="Ver sessões" title="Ver sessões">▾</button>
       </summary>
       <div class="grp-kids">${list.map(entryRowHTML).join('')}</div>
     </details>`;
@@ -725,7 +742,7 @@ function sessionSumHTML(a) {
   const liq = entryMs(a);
   return `<div class="small muted" style="display:flex;gap:6px 12px;flex-wrap:wrap">
     <span>Projetos: ${nomes.map(esc).join(', ') || '—'}</span>
-    <span class="mono">pausa ${fmtDur(pausa)}</span>
-    <span class="mono">bruto ${fmtDur(bruto)}</span>
-    <span class="mono">líquido ${fmtDur(liq)}</span></div>`;
+    <span class="mono" data-tip="${esc(`Pausas da sessão: ${fmtDur(pausa)}\n${pauseGapsOf([a]).length} pausa(s). Pausa nunca é trabalho.`)}">pausa ${fmtDur(pausa)}</span>
+    <span class="mono" data-tip="${esc(`Bruto: ${fmtDur(bruto)}\nDo início da sessão até agora, com as pausas.`)}">bruto ${fmtDur(bruto)}</span>
+    <span class="mono" data-tip="${esc(`Líquido: ${fmtDur(liq)} · ${bruto ? Math.round(liq / bruto * 100) : 0}% do bruto\nSó o tempo trabalhado.`)}">líquido ${fmtDur(liq)}</span></div>`;
 }
