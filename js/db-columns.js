@@ -244,6 +244,7 @@ window.DB_COLUMNS = {
   "cat",
   "note",
   "amount",
+  "amount_sug",
   "due_date",
   "paid_on",
   "status",

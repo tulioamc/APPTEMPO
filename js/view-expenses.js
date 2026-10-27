@@ -25,14 +25,20 @@ const exDayOf = (iso) => iso ? Number(iso.slice(8, 10)) : 1;
 const exDateIn = (ym, day) => { const [y, m] = ym.split('-').map(Number); const last = new Date(y, m, 0).getDate(); return `${ym}-${String(Math.min(day, last)).padStart(2, '0')}`; };
 const exInstLabel = (r) => r.inst_total ? `${r.inst_no || 1}/${r.inst_total}` : '';
 
-/* Copia um mês para outro. Não copia linhas "Não teve" nem parcelas já encerradas. */
+/* Valor ainda não confirmado: veio do mês anterior como sugestão, aparece em cinza claro e não entra nas somas. */
+const exIsSug = (r) => r.amount == null && r.amount_sug != null;
+/* Entrada que se repete todo mês: só renda (salário, Amanda…). Freela e entrada ligada a projeto não se repetem. */
+const exInRepete = (r) => !r.project_id && /renda/i.test(r.cat || '') && !/freela/i.test(r.cat || '');
+/* Copia um mês para outro. Não copia linhas "Não teve", parcelas já encerradas nem entradas que não são renda.
+   Os valores vão como sugestão (amount_sug); só contam depois de confirmados. */
 function exCopyMonth(target, src) {
   if (exRows(target).length || !src) return false;
   exRows(src).forEach(r => {
     if (r.status === EX_OFF) return;
+    if (r.kind === 'in' && !exInRepete(r)) return;
     if (r.inst_total && (r.inst_no || 1) >= r.inst_total) return;
     db.insert('tempo_expenses', {
-      month: target, kind: r.kind, name: r.name || '', cat: r.cat || '', note: r.note || '', amount: r.amount ?? null,
+      month: target, kind: r.kind, name: r.name || '', cat: r.cat || '', note: r.note || '', amount: null, amount_sug: r.amount ?? r.amount_sug ?? null,
       due_date: r.due_date ? exDateIn(target, exDayOf(r.due_date)) : null, paid_on: null, status: EX_OPEN[r.kind],
       inst_no: r.inst_total ? (r.inst_no || 1) + 1 : null, inst_total: r.inst_total || null, order: r.order ?? 0
     }, true);
@@ -138,7 +144,8 @@ function exComboItems(kind) {
 function exSetStatus(r, v) {
   const done = v === EX_DONE[r.kind];
   const antes = { ...r };
-  db.update('tempo_expenses', r.id, { status: v, paid_on: done ? (r.paid_on || ymd(new Date())) : (v === EX_OFF ? r.paid_on : null) });
+  const conf = done && exIsSug(r) ? { amount: Number(r.amount_sug), amount_sug: null } : {}; // pago/recebido confirma a sugestão
+  db.update('tempo_expenses', r.id, { status: v, paid_on: done ? (r.paid_on || ymd(new Date())) : (v === EX_OFF ? r.paid_on : null), ...conf });
   exSyncPayment(antes, db.get('tempo_expenses', r.id));
 }
 /* Entrada ligada a um projeto marcada como Recebido → pagamento do projeto.
@@ -167,7 +174,7 @@ const EX_COLS = {
   cat: { label: 'Categoria', ico: 'layers', w: 170, cell: r => r.cat ? exCatTags(r.cat) : '<span class="faint">—</span>', edit: { type: 'combo', kind: 'ex_cat', allowEmpty: true, emptyLabel: 'Sem categoria', get: r => r.cat, set: (r, v) => db.update('tempo_expenses', r.id, { cat: v || null }) } },
   name: { label: 'Nome', ico: 'text', cls: 'name', sort: r => r.name || '', w: 220, cell: r => esc(r.name || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.name, set: (r, v) => db.update('tempo_expenses', r.id, { name: (v || '').trim() }) } },
   due_date: { label: 'Vencimento', ico: 'cal', w: 120, cell: r => r.due_date ? fmtDate(r.due_date) : '<span class="faint">—</span>', sort: r => r.due_date || '', edit: { type: 'date', get: r => r.due_date, set: (r, v) => db.update('tempo_expenses', r.id, { due_date: v || null }) } },
-  amount: { label: 'Valor', ico: 'money', sort: r => r.amount || 0, money: true, w: 130, cell: r => `<span class="ex-sign">${r.kind === 'in' ? '+' : '−'}</span> ${fmtMoney(r.amount || 0)}`, val: r => (r.status === EX_OFF ? 0 : (r.amount || 0)), edit: { type: 'money', get: r => r.amount, set: (r, v) => db.update('tempo_expenses', r.id, { amount: Math.abs(v || 0) }) } },
+  amount: { label: 'Valor', ico: 'money', sort: r => r.amount || 0, money: true, w: 130, cell: r => exIsSug(r) ? `<span class="ex-sug" title="Sugestão do mês anterior. Clique para confirmar ou mudar; até lá não entra na soma."><span class="ex-sign">${r.kind === 'in' ? '+' : '−'}</span> ${fmtMoney(r.amount_sug)}</span>` : `<span class="ex-sign">${r.kind === 'in' ? '+' : '−'}</span> ${fmtMoney(r.amount || 0)}`, val: r => (r.status === EX_OFF ? 0 : (r.amount || 0)), edit: { type: 'money', get: r => exIsSug(r) ? r.amount_sug : r.amount, confirm: exIsSug, set: (r, v) => db.update('tempo_expenses', r.id, { amount: Math.abs(v || 0), amount_sug: null }) } },
   status: { label: 'Status', ico: 'spin', w: 150, cell: r => { const c = exComboItems(r.kind === 'in' ? 'ex_in' : 'ex_out').find(x => x.id === r.status); return c ? c.html : esc(r.status || ''); }, edit: { type: 'combo', kind: r => r.kind === 'in' ? 'ex_in' : 'ex_out', get: r => r.status, set: (r, v) => exSetStatus(r, v) } },
   paid_on: { label: 'Paga em', ico: 'cal', w: 120, cell: r => r.paid_on ? fmtDate(r.paid_on) : '<span class="faint">—</span>', sort: r => r.paid_on || '', edit: { type: 'date', get: r => r.paid_on, set: (r, v) => db.update('tempo_expenses', r.id, { paid_on: v || null }) } },
   inst: { label: 'Parcela', ico: 'hash', w: 90, cell: r => exInstLabel(r) || '<span class="faint">—</span>', edit: { type: 'text', get: r => exInstLabel(r), set: (r, v) => { const m = String(v || '').match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/); db.update('tempo_expenses', r.id, m ? { inst_no: Number(m[1]), inst_total: Number(m[2]) } : { inst_no: null, inst_total: null }); } } },

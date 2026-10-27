@@ -185,7 +185,7 @@ ACTIONS.cell = (td, e) => {
     if (done) return; done = true;
     const v = ed.type === 'money' ? moneyVal(inp) : ed.type === 'number' ? numIn(inp.value) : ed.type === 'date' ? (inp.value || null) : inp.value.trim();
     if (ed.type === 'text' && ed.required && !v) { render(); return; }
-    if (String(v ?? '') === String(cur ?? '')) { render(); return; }
+    if (String(v ?? '') === String(cur ?? '') && !(ed.confirm && ed.confirm(row))) { render(); return; }
     await ed.set(row, v); propagateEdit(td.dataset.table, td.dataset.col, row, v); render();
   };
   inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); commit(); } if (ev.key === 'Escape') { done = true; ev.stopPropagation(); render(); } });
