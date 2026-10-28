@@ -298,3 +298,6 @@ end $$;
 drop trigger if exists tempo_claims_sync on tempo_time_entries;
 create trigger tempo_claims_sync after insert or update of segments on tempo_time_entries
   for each row execute function tempo_claims_sync();
+
+-- V2.03.02: valor sugerido (copiado do mês anterior) até ser confirmado; não entra nas somas
+alter table public.tempo_expenses add column if not exists amount_sug numeric(12,2);

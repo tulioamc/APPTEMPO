@@ -656,6 +656,7 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 .ex-plus { color:var(--ok, #1D7A4A); font-weight:600; }
 .ex-minus { color:var(--bad, #B3261E); font-weight:600; }
 .ex-sign { font-weight:600; margin-right:4px; color:var(--fg-3); }
+.ex-sug, .ex-sug .ex-sign { color:var(--fg-3); opacity:.55; font-style:italic; }
 .ex-off { opacity:.45; }
 .ex-table select.rb-in { padding-right:6px; }
 
