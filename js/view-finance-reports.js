@@ -364,6 +364,34 @@ async function bankAutoReimb() {
   return true;
 }
 // Sugestões por nome/CNAE viram categoria de verdade (só saídas, e só contrapartes ainda sem categoria).
+// IOF de compra internacional e a devolução ("IOF de volta de X") formam um par: a cobrança vira Viagem e a devolução
+// "Reembolso Outros→Viagem", que se anulam. Assinatura no exterior (ex.: Anthropic) fica em Assinaturas.
+// Não mexe no que você já revisou.
+async function bankAutoIof() {
+  const every = BANK.every || [];
+  const isOut = (t) => t.flow === 'out' && /^IOF de compra internacional/i.test(t.counterpart || '');
+  const volta = (t) => t.flow === 'in' && (/^IOF de volta de\s+(.+)/i.exec(t.counterpart || '') || [])[1];
+  const livre = (t) => t.review_status !== 'revisado' && t.scope !== 'interna';
+  const base = (merch) => (merch && suggestCat(merch, null) === 'Assinaturas') ? 'Assinaturas' : 'Viagem';
+  const usados = new Set(); const set = {};
+  const dia = (d) => new Date((d || '') + 'T12:00').getTime();
+  every.filter(t => volta(t)).forEach(v => {
+    const b = base(volta(v));
+    const par = every.find(o => isOut(o) && !usados.has(o.id) && Math.abs(Math.abs(Number(o.amount)) - Number(v.amount)) < 0.005 && Math.abs(dia(o.posted_on) - dia(v.posted_on)) <= 5 * 864e5);
+    if (par) { usados.add(par.id); if (livre(par) && par.category !== b) (set[b] ||= []).push(par.id); }
+    const cv = REEMB_OUT + '→' + b;
+    if (livre(v) && v.category !== cv) (set[cv] ||= []).push(v.id);
+  });
+  every.filter(o => isOut(o) && !usados.has(o.id) && !o.category && livre(o)).forEach(o => (set.Viagem ||= []).push(o.id));
+  const cats = Object.keys(set); if (!cats.length) return false;
+  const cl = db.adapter.client;
+  for (const c of cats) {
+    const { error } = await cl.from('tempo_bank_txns').update({ category: c, updated_at: new Date().toISOString() }).in('id', set[c]);
+    if (error) { toast('Erro: ' + error.message); break; }
+    every.forEach(t => { if (set[c].includes(t.id)) t.category = c; });
+  }
+  return true;
+}
 async function bankAutoCategory() {
   const every = BANK.every || [];
   const has = new Set(every.filter(x => x.category).map(x => x.counterpart || '—'));
@@ -428,19 +456,26 @@ async function bankAutoPJ() {
 async function bankLoadTxns() {
   await bankLoadRaw();
   let changed = await bankAutoTherapy();
+  if (await bankAutoIof()) changed = true;
   if (await bankAutoCategory()) changed = true;
   if (await bankAutoReimb()) changed = true;
   if (await bankAutoFixed()) changed = true;
   if (await bankAutoPJ()) changed = true;
   if (changed) await bankLoadRaw();
 }
+// Conta do mês do lançamento ou do seguinte (conta de novembro paga no fim de outubro). Em aberto vem antes da já paga à mão; empate → mesmo mês.
+const bankNextYm = (ym) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const bankMonthsFor = (ym) => [ym, bankNextYm(ym)];
+const bankDone = (e) => e.status === 'Pago' || e.status === 'Recebido';
+const bankPickExp = (list, ym) => list.slice().sort((a, b) => (bankDone(a) - bankDone(b)) || ((a.month !== ym) - (b.month !== ym)))[0] || null;
 // Gasto fixo aprendido: a contraparte → nomes de gasto fixo que você já vinculou a ela.
 function bankFixedLearned() {
   const map = {};
   (BANK.every || []).forEach(t => {
-    if (t.flow !== 'out' || !t.expense_id || !t.counterpart) return;
+    if (!t.expense_id || !t.counterpart) return;
     const e = db.get('tempo_expenses', t.expense_id); if (!e || !e.name) return;
-    (map[t.counterpart] = map[t.counterpart] || new Set()).add(e.name);
+    const k = t.flow + '|' + t.counterpart; // entrada e saída aprendem separado (ex.: BRENDA → Salário)
+    (map[k] = map[k] || new Set()).add(e.name);
   });
   return map;
 }
@@ -451,14 +486,18 @@ async function bankAutoFixed() {
   const expenses = db.all('tempo_expenses');
   const todo = [];
   (BANK.every || []).forEach(t => {
-    if (t.flow !== 'out' || t.expense_id || t.scope === 'interna' || !t.counterpart || !learned[t.counterpart]) return;
+    const lk = t.flow + '|' + t.counterpart;
+    if (t.expense_id || t.scope === 'interna' || !t.counterpart || !learned[lk]) return;
     const ym = (t.posted_on || '').slice(0, 7), amt = Math.abs(Number(t.amount));
-    const names = learned[t.counterpart];
-    let e = expenses.find(x => x.kind === 'out' && x.month === ym && !taken.has(x.id) && (x.amount ?? x.amount_sug) != null
-      && names.has(x.name) && Math.abs(Number(x.amount ?? x.amount_sug) - amt) <= Math.max(5, Number(x.amount ?? x.amount_sug) * 0.06));
+    const names = learned[lk]; const kind = t.flow === 'in' ? 'in' : 'out';
+    const meses = bankMonthsFor(ym);
+    // Mês do lançamento ou o seguinte: se o deste mês já está ligado (ex.: salário de outubro pago em 30/09), vai para o próximo.
+    let e = bankPickExp(expenses.filter(x => x.kind === kind && meses.includes(x.month) && !taken.has(x.id) && (x.amount ?? x.amount_sug) != null
+      && names.has(x.name) && Math.abs(Number(x.amount ?? x.amount_sug) - amt) <= Math.max(5, Number(x.amount ?? x.amount_sug) * 0.06)), ym);
     if (!e) {
+      if (kind === 'in') return; // entrada sem linha no mês: espera a tabela do mês existir (abre no dia 25)
       // Sem gasto fixo deste nome no mês: cria com o valor do banco (não cria duplicado se já existe um com esse nome).
-      if (expenses.some(x => x.kind === 'out' && x.month === ym && names.has(x.name))) return;
+      if (expenses.some(x => x.kind === 'out' && meses.includes(x.month) && names.has(x.name) && !taken.has(x.id))) return;
       e = db.insert('tempo_expenses', { month: ym, kind: 'out', name: [...names][0], cat: '', note: '', amount: amt, due_date: null, paid_on: t.posted_on, status: 'Pago', inst_no: null, inst_total: null, order: expenses.filter(x => x.month === ym).length });
       expenses.push(e);
       taken.add(e.id); todo.push({ t, e, created: true });
@@ -471,7 +510,7 @@ async function bankAutoFixed() {
     const { t, e } = todo[i];
     const { error } = await db.adapter.client.from('tempo_bank_txns').update({ expense_id: e.id, updated_at: new Date().toISOString() }).eq('id', t.id);
     if (error) { toast('Erro: ' + error.message); todo.slice(i).forEach(y => { if (y.created) db.remove('tempo_expenses', y.e.id, true); }); break; }
-    db.update('tempo_expenses', e.id, { amount: Math.abs(Number(t.amount)), amount_sug: null, status: 'Pago', paid_on: t.posted_on });
+    db.update('tempo_expenses', e.id, { amount: Math.abs(Number(t.amount)), amount_sug: null, status: e.kind === 'in' ? 'Recebido' : 'Pago', paid_on: t.posted_on });
   }
   return true;
 }
@@ -1170,19 +1209,20 @@ function bankFixedMatch(t) {
   const linked = new Set((BANK.all[t.entity] || []).map(x => x.expense_id).filter(Boolean));
   const ym = (t.posted_on || '').slice(0, 7);
   const word = cp.split(/\s+/)[0];
-  return db.all('tempo_expenses').find(e => {
-    if (e.kind !== 'out' || e.month !== ym || linked.has(e.id) || !e.name || (e.amount ?? e.amount_sug) == null) return false;
+  const meses = bankMonthsFor(ym);
+  return bankPickExp(db.all('tempo_expenses').filter(e => {
+    if (e.kind !== 'out' || !meses.includes(e.month) || linked.has(e.id) || !e.name || (e.amount ?? e.amount_sug) == null) return false;
     const nm = e.name.toLowerCase();
     const nameOk = word.length >= 4 && nm.includes(word);
     const v = Number(e.amount ?? e.amount_sug);
     return nameOk && Math.abs(v - amt) <= Math.max(5, v * 0.03);
-  }) || bankFixedByValue(t, amt, ym, linked);
+  }), ym) || bankFixedByValue(t, amt, ym, linked);
 }
 /* Casamento só pelo valor: sem nome parecido, sugere o custo fixo do mês com o valor exato,
    desde que seja o único em aberto com esse valor e não haja outra saída igual no mês esperando vínculo. */
 function bankFixedByValue(t, amt, ym, linked) {
   const igual = (v) => Math.abs(Number(v) - amt) < 0.01;
-  const cands = db.all('tempo_expenses').filter(e => e.kind === 'out' && e.month === ym && !linked.has(e.id) && e.name && (e.amount ?? e.amount_sug) != null && e.status !== 'Pago' && igual(e.amount ?? e.amount_sug));
+  const cands = db.all('tempo_expenses').filter(e => e.kind === 'out' && bankMonthsFor(ym).includes(e.month) && !linked.has(e.id) && e.name && (e.amount ?? e.amount_sug) != null && e.status !== 'Pago' && igual(e.amount ?? e.amount_sug));
   if (cands.length !== 1) return null;
   const rivais = (BANK.all[t.entity] || []).filter(x => x.id !== t.id && x.flow === 'out' && !x.expense_id && (x.posted_on || '').slice(0, 7) === ym && igual(Math.abs(Number(x.amount))));
   return rivais.length ? null : cands[0];
