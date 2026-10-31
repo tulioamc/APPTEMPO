@@ -364,6 +364,34 @@ async function bankAutoReimb() {
   return true;
 }
 // Sugestões por nome/CNAE viram categoria de verdade (só saídas, e só contrapartes ainda sem categoria).
+// IOF de compra internacional e a devolução ("IOF de volta de X") formam um par: a cobrança vira Viagem e a devolução
+// "Reembolso Outros→Viagem", que se anulam. Assinatura no exterior (ex.: Anthropic) fica em Assinaturas.
+// Não mexe no que você já revisou.
+async function bankAutoIof() {
+  const every = BANK.every || [];
+  const isOut = (t) => t.flow === 'out' && /^IOF de compra internacional/i.test(t.counterpart || '');
+  const volta = (t) => t.flow === 'in' && (/^IOF de volta de\s+(.+)/i.exec(t.counterpart || '') || [])[1];
+  const livre = (t) => t.review_status !== 'revisado' && t.scope !== 'interna';
+  const base = (merch) => (merch && suggestCat(merch, null) === 'Assinaturas') ? 'Assinaturas' : 'Viagem';
+  const usados = new Set(); const set = {};
+  const dia = (d) => new Date((d || '') + 'T12:00').getTime();
+  every.filter(t => volta(t)).forEach(v => {
+    const b = base(volta(v));
+    const par = every.find(o => isOut(o) && !usados.has(o.id) && Math.abs(Math.abs(Number(o.amount)) - Number(v.amount)) < 0.005 && Math.abs(dia(o.posted_on) - dia(v.posted_on)) <= 5 * 864e5);
+    if (par) { usados.add(par.id); if (livre(par) && par.category !== b) (set[b] ||= []).push(par.id); }
+    const cv = REEMB_OUT + '→' + b;
+    if (livre(v) && v.category !== cv) (set[cv] ||= []).push(v.id);
+  });
+  every.filter(o => isOut(o) && !usados.has(o.id) && !o.category && livre(o)).forEach(o => (set.Viagem ||= []).push(o.id));
+  const cats = Object.keys(set); if (!cats.length) return false;
+  const cl = db.adapter.client;
+  for (const c of cats) {
+    const { error } = await cl.from('tempo_bank_txns').update({ category: c, updated_at: new Date().toISOString() }).in('id', set[c]);
+    if (error) { toast('Erro: ' + error.message); break; }
+    every.forEach(t => { if (set[c].includes(t.id)) t.category = c; });
+  }
+  return true;
+}
 async function bankAutoCategory() {
   const every = BANK.every || [];
   const has = new Set(every.filter(x => x.category).map(x => x.counterpart || '—'));
@@ -428,6 +456,7 @@ async function bankAutoPJ() {
 async function bankLoadTxns() {
   await bankLoadRaw();
   let changed = await bankAutoTherapy();
+  if (await bankAutoIof()) changed = true;
   if (await bankAutoCategory()) changed = true;
   if (await bankAutoReimb()) changed = true;
   if (await bankAutoFixed()) changed = true;
