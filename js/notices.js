@@ -276,6 +276,25 @@ let SCAN_SEEN = null; // chaves geradas nesta varredura
 let SCAN_CHANGED = false; // a varredura criou ou resolveu algum aviso
 /* Férias (6): dias marcados em Ajustes (ou no banco, chave ferias) não geram prazo, cobrança, orçamento nem conta. */
 let FERIAS_HOJE = false;
+/* Feriados nacionais, de Pernambuco e de Recife. Carnaval, Sexta-feira Santa e Corpus Christi seguem a Páscoa. */
+function pascoa(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(y, mes - 1, dia);
+}
+function feriadosDoAno(y) {
+  const p = pascoa(y), mov = (n) => { const d = new Date(p); d.setDate(d.getDate() + n); return ymd(d); };
+  const fixos = [['01-01', 'Confraternização universal', 'nacional'], ['04-21', 'Tiradentes', 'nacional'], ['05-01', 'Dia do trabalho', 'nacional'],
+    ['09-07', 'Independência', 'nacional'], ['10-12', 'Nossa Senhora Aparecida', 'nacional'], ['11-02', 'Finados', 'nacional'],
+    ['11-15', 'Proclamação da República', 'nacional'], ['11-20', 'Consciência Negra', 'nacional'], ['12-25', 'Natal', 'nacional'],
+    ['03-06', 'Revolução Pernambucana', 'PE'], ['06-24', 'São João', 'PE'], ['07-16', 'Nossa Senhora do Carmo (Recife)', 'Recife']]
+    .map(([md, nome, tipo]) => ({ data: `${y}-${md}`, nome, tipo }));
+  fixos.push({ data: mov(-47), nome: 'Carnaval', tipo: 'nacional' }, { data: mov(-48), nome: 'Carnaval', tipo: 'nacional' },
+    { data: mov(-2), nome: 'Sexta-feira Santa', tipo: 'nacional' }, { data: mov(60), nome: 'Corpus Christi', tipo: 'PE' });
+  return fixos.sort((x, z) => x.data.localeCompare(z.data));
+}
 function emFerias(day) { return (db.setting('ferias', []) || []).some(f => f && f.inicio && f.fim && day >= f.inicio && day <= f.fim); }
 function scanAlerts() {
   const today = ymd(new Date());
@@ -293,6 +312,13 @@ function scanAlerts() {
     if (pay === 'Atrasado' || (pay === 'Não Pago' && p.deadline && daysBetween(p.deadline, today) > 0)) { const cl = clientOf(p); todoOnce('Cobrar ' + (cl?.name || p.name)); }
     /* projeto pago sem nota fiscal: vira to-do para emitir */
     if (pay === 'Pago' && !p.invoice_at) todoOnce('Emitir nota ' + p.name);
+  });
+  /* Orçamento enviado sem resposta: aviso aos 7 e aos 15 dias, e To-Do para cobrar. */
+  db.all('tempo_quotes').filter(q => q.sent_at && !['Aprovado', 'Recusado', 'Vencido'].includes(statusName(q.status_id))).forEach(q => {
+    const d = daysBetween(q.sent_at, today); if (d === null || d < 7) return;
+    const etapa = d >= 15 ? 15 : 7;
+    addNotice({ kind: 'orcamento', key: `follow:${q.id}:${etapa}`, title: `Sem resposta há ${d} dias: ${q.name}`, body: `Enviado em ${fmtDate(q.sent_at)}. Cobre a resposta do cliente.`, entity: 'quote', entity_id: q.id, data: {} }, true);
+    todoOnce(`Cobrar orçamento ${q.name}`);
   });
   db.all('tempo_quotes').filter(q => q.valid_until && !['Aprovado', 'Recusado', 'Vencido'].includes(statusName(q.status_id))).forEach(q => {
     const d = daysBetween(today, q.valid_until); if (d === null || d < 0 || d > 3) return;

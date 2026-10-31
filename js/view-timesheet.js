@@ -82,6 +82,7 @@ VIEWS.timesheet = () => {
     ${reportPanelHTML(day)}
   </div>
   ${dayReviewHTML(day, entries)}
+  ${metaMesStripHTML()}
   ${activeProjectsHTML(a)}
   <div class="panel">
     <div class="panel-h">
@@ -254,6 +255,23 @@ function apStats(p) {
   });
   return { hoje, semana, last, total };
 }
+/* Meta do mês na tela Hoje: barrinha e % sempre visíveis; os valores em R$ ficam atrás do olhinho (db.setting metaOlho). */
+function metaMesStripHTML() {
+  const goal = Number(db.setting('metaFinanceira', 0)) || 0; if (!goal) return '';
+  const mk = ymd(new Date()).slice(0, 7);
+  const recebido = db.all('tempo_payments').filter(p => String(p.date || '').startsWith(mk)).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const pct = Math.min(100, recebido / goal * 100);
+  const aberto = !!db.setting('metaOlho', false);
+  const txt = recebido >= goal ? 'meta batida' : `meta não batida, faltam ${Math.round(100 - pct)}%`;
+  const valor = aberto ? `${fmtMoney0(recebido)} de ${fmtMoney0(goal)}` : '••••';
+  return `<div class="panel"><div class="panel-b row between" style="flex-wrap:wrap;gap:10px;align-items:center">
+    <span class="lbl" style="display:inline">Meta do mês</span>
+    <div class="pm-bar" style="flex:1;min-width:160px"><span style="width:${Math.round(pct)}%"></span></div>
+    <span class="small">${txt}</span>
+    <span class="mono small muted">${valor}</span>
+    <button class="btn sm icon ghost" data-act="meta-olho" aria-label="Mostrar ou esconder valores" title="Mostrar ou esconder valores">${icon(aberto ? 'eye' : 'eyeOff')}</button></div></div>`;
+}
+ACTIONS['meta-olho'] = () => { db.setSetting('metaOlho', !db.setting('metaOlho', false)); render(); };
 function activeProjectsHTML(cur) {
   const fixados = db.setting('apFixados', []) || [];
   const base = db.where('tempo_projects', p => !p.archived && statusCat(p.status_id) === 'active').map(p => ({ p, st: apStats(p), fixo: fixados.includes(p.id) }));
