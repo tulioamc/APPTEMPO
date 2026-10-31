@@ -434,6 +434,10 @@ async function bankLoadTxns() {
   if (await bankAutoPJ()) changed = true;
   if (changed) await bankLoadRaw();
 }
+// Conta do mês do lançamento ou do seguinte (conta de novembro paga no fim de outubro). Em aberto vem antes da já paga à mão; empate → mesmo mês.
+const bankNextYm = (ym) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const bankMonthsFor = (ym) => [ym, bankNextYm(ym)];
+const bankPickExp = (list, ym) => list.slice().sort((a, b) => ((a.status === 'Pago') - (b.status === 'Pago')) || ((a.month !== ym) - (b.month !== ym)))[0] || null;
 // Gasto fixo aprendido: a contraparte → nomes de gasto fixo que você já vinculou a ela.
 function bankFixedLearned() {
   const map = {};
@@ -454,11 +458,12 @@ async function bankAutoFixed() {
     if (t.flow !== 'out' || t.expense_id || t.scope === 'interna' || !t.counterpart || !learned[t.counterpart]) return;
     const ym = (t.posted_on || '').slice(0, 7), amt = Math.abs(Number(t.amount));
     const names = learned[t.counterpart];
-    let e = expenses.find(x => x.kind === 'out' && x.month === ym && !taken.has(x.id) && (x.amount ?? x.amount_sug) != null
-      && names.has(x.name) && Math.abs(Number(x.amount ?? x.amount_sug) - amt) <= Math.max(5, Number(x.amount ?? x.amount_sug) * 0.06));
+    const meses = bankMonthsFor(ym);
+    let e = bankPickExp(expenses.filter(x => x.kind === 'out' && meses.includes(x.month) && !taken.has(x.id) && (x.amount ?? x.amount_sug) != null
+      && names.has(x.name) && Math.abs(Number(x.amount ?? x.amount_sug) - amt) <= Math.max(5, Number(x.amount ?? x.amount_sug) * 0.06)), ym);
     if (!e) {
       // Sem gasto fixo deste nome no mês: cria com o valor do banco (não cria duplicado se já existe um com esse nome).
-      if (expenses.some(x => x.kind === 'out' && x.month === ym && names.has(x.name))) return;
+      if (expenses.some(x => x.kind === 'out' && meses.includes(x.month) && names.has(x.name) && !taken.has(x.id))) return;
       e = db.insert('tempo_expenses', { month: ym, kind: 'out', name: [...names][0], cat: '', note: '', amount: amt, due_date: null, paid_on: t.posted_on, status: 'Pago', inst_no: null, inst_total: null, order: expenses.filter(x => x.month === ym).length });
       expenses.push(e);
       taken.add(e.id); todo.push({ t, e, created: true });
@@ -1170,19 +1175,20 @@ function bankFixedMatch(t) {
   const linked = new Set((BANK.all[t.entity] || []).map(x => x.expense_id).filter(Boolean));
   const ym = (t.posted_on || '').slice(0, 7);
   const word = cp.split(/\s+/)[0];
-  return db.all('tempo_expenses').find(e => {
-    if (e.kind !== 'out' || e.month !== ym || linked.has(e.id) || !e.name || (e.amount ?? e.amount_sug) == null) return false;
+  const meses = bankMonthsFor(ym);
+  return bankPickExp(db.all('tempo_expenses').filter(e => {
+    if (e.kind !== 'out' || !meses.includes(e.month) || linked.has(e.id) || !e.name || (e.amount ?? e.amount_sug) == null) return false;
     const nm = e.name.toLowerCase();
     const nameOk = word.length >= 4 && nm.includes(word);
     const v = Number(e.amount ?? e.amount_sug);
     return nameOk && Math.abs(v - amt) <= Math.max(5, v * 0.03);
-  }) || bankFixedByValue(t, amt, ym, linked);
+  }), ym) || bankFixedByValue(t, amt, ym, linked);
 }
 /* Casamento só pelo valor: sem nome parecido, sugere o custo fixo do mês com o valor exato,
    desde que seja o único em aberto com esse valor e não haja outra saída igual no mês esperando vínculo. */
 function bankFixedByValue(t, amt, ym, linked) {
   const igual = (v) => Math.abs(Number(v) - amt) < 0.01;
-  const cands = db.all('tempo_expenses').filter(e => e.kind === 'out' && e.month === ym && !linked.has(e.id) && e.name && (e.amount ?? e.amount_sug) != null && e.status !== 'Pago' && igual(e.amount ?? e.amount_sug));
+  const cands = db.all('tempo_expenses').filter(e => e.kind === 'out' && bankMonthsFor(ym).includes(e.month) && !linked.has(e.id) && e.name && (e.amount ?? e.amount_sug) != null && e.status !== 'Pago' && igual(e.amount ?? e.amount_sug));
   if (cands.length !== 1) return null;
   const rivais = (BANK.all[t.entity] || []).filter(x => x.id !== t.id && x.flow === 'out' && !x.expense_id && (x.posted_on || '').slice(0, 7) === ym && igual(Math.abs(Number(x.amount))));
   return rivais.length ? null : cands[0];
