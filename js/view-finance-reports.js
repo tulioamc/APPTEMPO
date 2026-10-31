@@ -466,14 +466,16 @@ async function bankLoadTxns() {
 // Conta do mês do lançamento ou do seguinte (conta de novembro paga no fim de outubro). Em aberto vem antes da já paga à mão; empate → mesmo mês.
 const bankNextYm = (ym) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const bankMonthsFor = (ym) => [ym, bankNextYm(ym)];
-const bankPickExp = (list, ym) => list.slice().sort((a, b) => ((a.status === 'Pago') - (b.status === 'Pago')) || ((a.month !== ym) - (b.month !== ym)))[0] || null;
+const bankDone = (e) => e.status === 'Pago' || e.status === 'Recebido';
+const bankPickExp = (list, ym) => list.slice().sort((a, b) => (bankDone(a) - bankDone(b)) || ((a.month !== ym) - (b.month !== ym)))[0] || null;
 // Gasto fixo aprendido: a contraparte → nomes de gasto fixo que você já vinculou a ela.
 function bankFixedLearned() {
   const map = {};
   (BANK.every || []).forEach(t => {
-    if (t.flow !== 'out' || !t.expense_id || !t.counterpart) return;
+    if (!t.expense_id || !t.counterpart) return;
     const e = db.get('tempo_expenses', t.expense_id); if (!e || !e.name) return;
-    (map[t.counterpart] = map[t.counterpart] || new Set()).add(e.name);
+    const k = t.flow + '|' + t.counterpart; // entrada e saída aprendem separado (ex.: BRENDA → Salário)
+    (map[k] = map[k] || new Set()).add(e.name);
   });
   return map;
 }
@@ -484,13 +486,16 @@ async function bankAutoFixed() {
   const expenses = db.all('tempo_expenses');
   const todo = [];
   (BANK.every || []).forEach(t => {
-    if (t.flow !== 'out' || t.expense_id || t.scope === 'interna' || !t.counterpart || !learned[t.counterpart]) return;
+    const lk = t.flow + '|' + t.counterpart;
+    if (t.expense_id || t.scope === 'interna' || !t.counterpart || !learned[lk]) return;
     const ym = (t.posted_on || '').slice(0, 7), amt = Math.abs(Number(t.amount));
-    const names = learned[t.counterpart];
+    const names = learned[lk]; const kind = t.flow === 'in' ? 'in' : 'out';
     const meses = bankMonthsFor(ym);
-    let e = bankPickExp(expenses.filter(x => x.kind === 'out' && meses.includes(x.month) && !taken.has(x.id) && (x.amount ?? x.amount_sug) != null
+    // Mês do lançamento ou o seguinte: se o deste mês já está ligado (ex.: salário de outubro pago em 30/09), vai para o próximo.
+    let e = bankPickExp(expenses.filter(x => x.kind === kind && meses.includes(x.month) && !taken.has(x.id) && (x.amount ?? x.amount_sug) != null
       && names.has(x.name) && Math.abs(Number(x.amount ?? x.amount_sug) - amt) <= Math.max(5, Number(x.amount ?? x.amount_sug) * 0.06)), ym);
     if (!e) {
+      if (kind === 'in') return; // entrada sem linha no mês: espera a tabela do mês existir (abre no dia 25)
       // Sem gasto fixo deste nome no mês: cria com o valor do banco (não cria duplicado se já existe um com esse nome).
       if (expenses.some(x => x.kind === 'out' && meses.includes(x.month) && names.has(x.name) && !taken.has(x.id))) return;
       e = db.insert('tempo_expenses', { month: ym, kind: 'out', name: [...names][0], cat: '', note: '', amount: amt, due_date: null, paid_on: t.posted_on, status: 'Pago', inst_no: null, inst_total: null, order: expenses.filter(x => x.month === ym).length });
@@ -505,7 +510,7 @@ async function bankAutoFixed() {
     const { t, e } = todo[i];
     const { error } = await db.adapter.client.from('tempo_bank_txns').update({ expense_id: e.id, updated_at: new Date().toISOString() }).eq('id', t.id);
     if (error) { toast('Erro: ' + error.message); todo.slice(i).forEach(y => { if (y.created) db.remove('tempo_expenses', y.e.id, true); }); break; }
-    db.update('tempo_expenses', e.id, { amount: Math.abs(Number(t.amount)), amount_sug: null, status: 'Pago', paid_on: t.posted_on });
+    db.update('tempo_expenses', e.id, { amount: Math.abs(Number(t.amount)), amount_sug: null, status: e.kind === 'in' ? 'Recebido' : 'Pago', paid_on: t.posted_on });
   }
   return true;
 }
