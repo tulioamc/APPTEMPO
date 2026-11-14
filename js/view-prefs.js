@@ -1,12 +1,31 @@
 /* =====================================================================
    PREFERÊNCIAS
    ===================================================================== */
-const PREF_TABS = [['appearance', 'Aparência', 'gear'], ['types', 'Tipos de trabalho', 'tag'], ['extypes', 'Tipos de despesa', 'layers'], ['programs', 'Programas', 'tag'], ['status', 'Status', 'spin'], ['reminders', 'Lembretes', 'bell'], ['timesheet', 'Time Sheet', 'clock'], ['data', 'Dados e backup', 'db'], ['integrations', 'Integrações', 'layers']];
+const PREF_TABS = [['appearance', 'Aparência', 'gear'], ['types', 'Tipos de trabalho', 'tag'], ['extypes', 'Tipos de despesa', 'layers'], ['programs', 'Programas', 'tag'], ['status', 'Status', 'spin'], ['reminders', 'Lembretes', 'bell'], ['timesheet', 'Time Sheet', 'clock'], ['periods', 'Férias e viagens', 'cal'], ['data', 'Dados e backup', 'db'], ['integrations', 'Integrações', 'layers']];
 VIEWS.prefs = () => {
-  const body = { appearance: prefAppearance, types: prefTypes, extypes: prefExTypes, programs: programasPanel, status: prefStatus, reminders: prefReminders, timesheet: prefTimesheet, data: prefData, integrations: prefIntegrations }[S.pref]();
+  const body = { appearance: prefAppearance, types: prefTypes, extypes: prefExTypes, programs: programasPanel, status: prefStatus, reminders: prefReminders, timesheet: prefTimesheet, periods: prefPeriods, data: prefData, integrations: prefIntegrations }[S.pref]();
   return { title: 'Configurações', html: `<div class="row" style="justify-content:flex-end;margin-bottom:8px"><button class="btn sm" data-act="go" data-route="import">Importar do Notion</button></div><div class="pref-layout"><nav class="pref-nav">${PREF_TABS.map(([k, l, i]) => `<button class="nav-btn ${S.pref === k ? 'active' : ''}" data-act="pref-tab" data-v="${k}">${icon(i)}<span>${l}</span></button>`).join('')}</nav><div class="stack" style="min-width:0">${body}${logRetentionPanel()}</div></div>` };
 };
 ACTIONS['pref-tab'] = (el) => { S.pref = el.dataset.v; render(); };
+/* Férias (não geram aviso) e viagens (compras no período viram Viagem no extrato). Feriados ficam listados. */
+function prefPeriods() {
+  const lista = (key, titulo, dica) => { const arr = db.setting(key, []) || [];
+    return `<div class="panel"><div class="panel-h"><h3>${titulo}</h3><span class="small muted">${dica}</span></div><div class="panel-b stack">
+      ${arr.length ? arr.map((p, i) => `<div class="row between small"><span>${fmtDate(p.inicio)} a ${fmtDate(p.fim)}${p.nome ? ' · ' + esc(p.nome) : ''}</span><button class="icon-btn ghost" data-act="per-del" data-k="${key}" data-i="${i}" title="Remover">×</button></div>`).join('') : '<span class="faint small">Nenhum período.</span>'}
+      <div class="row" style="flex-wrap:wrap;gap:8px"><input id="per-${key}-i" type="date" class="input sm" aria-label="Início"><input id="per-${key}-f" type="date" class="input sm" aria-label="Fim"><input id="per-${key}-n" class="input sm" placeholder="Nome (opcional)" style="max-width:200px"><button class="btn sm" data-act="per-add" data-k="${key}">Adicionar</button></div></div></div>`; };
+  const hoje = ymd(new Date()), ano = new Date().getFullYear();
+  const prox = [...feriadosDoAno(ano), ...feriadosDoAno(ano + 1)].filter(f => f.data >= hoje).slice(0, 12);
+  return lista('ferias', 'Férias e folgas', 'não geram aviso de prazo, cobrança, orçamento nem conta') +
+    lista('viagens', 'Viagens', 'compras e gastos no período viram Viagem no extrato') +
+    `<div class="panel"><div class="panel-h"><h3>Próximos feriados</h3><span class="small muted">nacionais, de Pernambuco e de Recife</span></div><div class="panel-b small stack">${prox.map(f => `<div class="row between"><span>${fmtDate(f.data)} · ${esc(f.nome)}</span><span class="faint">${f.tipo}</span></div>`).join('')}</div></div>`;
+}
+ACTIONS['per-add'] = (el) => {
+  const k = el.dataset.k; const i = document.getElementById(`per-${k}-i`)?.value, f = document.getElementById(`per-${k}-f`)?.value, n = (document.getElementById(`per-${k}-n`)?.value || '').trim();
+  if (!i || !f || f < i) return toast('Informe início e fim (o fim depois do início).');
+  db.setSetting(k, [...(db.setting(k, []) || []), { inicio: i, fim: f, nome: n }].sort((a, b) => a.inicio.localeCompare(b.inicio)));
+  toast('Período salvo'); render();
+};
+ACTIONS['per-del'] = (el) => { const k = el.dataset.k, arr = (db.setting(k, []) || []).slice(); arr.splice(Number(el.dataset.i), 1); db.setSetting(k, arr); render(); };
 
 function prefAppearance() {
   const th = db.setting('theme', 'system'), ac = db.setting('accent', 'cobalto'), fo = db.setting('font', 'sonoma'), fs = db.setting('fontSize', 14), rd = db.setting('radius', DEFAULT_RADIUS), rp = db.setting('rowPad', 3), rf = db.setting('rowPadFin', 0);

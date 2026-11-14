@@ -364,6 +364,18 @@ async function bankAutoReimb() {
   return true;
 }
 // Sugestões por nome/CNAE viram categoria de verdade (só saídas, e só contrapartes ainda sem categoria).
+// Modo viagem: saída pessoal sem categoria dentro de um período de viagem (Ajustes → Férias e viagens) vira Viagem.
+async function bankAutoViagem() {
+  const viagens = (db.setting('viagens', []) || []).filter(v => v.inicio && v.fim);
+  if (!viagens.length) return false;
+  const ids = (BANK.every || []).filter(t => t.flow === 'out' && t.entity === 'pf' && !t.category && t.scope !== 'interna' && t.review_status !== 'revisado'
+    && viagens.some(v => t.posted_on >= v.inicio && t.posted_on <= v.fim)).map(t => t.id);
+  if (!ids.length) return false;
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: 'Viagem', updated_at: new Date().toISOString() }).in('id', ids);
+  if (error) { toast('Erro: ' + error.message); return false; }
+  (BANK.every || []).forEach(t => { if (ids.includes(t.id)) t.category = 'Viagem'; });
+  return true;
+}
 // IOF de compra internacional e a devolução ("IOF de volta de X") formam um par: a cobrança vira Viagem e a devolução
 // "Reembolso Outros→Viagem", que se anulam. Assinatura no exterior (ex.: Anthropic) fica em Assinaturas.
 // Não mexe no que você já revisou.
@@ -456,6 +468,7 @@ async function bankAutoPJ() {
 async function bankLoadTxns() {
   await bankLoadRaw();
   let changed = await bankAutoTherapy();
+  if (await bankAutoViagem()) changed = true;
   if (await bankAutoIof()) changed = true;
   if (await bankAutoCategory()) changed = true;
   if (await bankAutoReimb()) changed = true;

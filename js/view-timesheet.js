@@ -82,6 +82,7 @@ VIEWS.timesheet = () => {
     ${reportPanelHTML(day)}
   </div>
   ${dayReviewHTML(day, entries)}
+  ${metaMesStripHTML()}
   ${activeProjectsHTML(a)}
   <div class="panel">
     <div class="panel-h">
@@ -156,6 +157,7 @@ ACTIONS['ts-pause'] = () => { const a = activeEntry(); if (a?.state === 'running
    app de pausa), ocioso (sem nenhum registro) e outras atividades. Só pergunta se "outras" passar de 15 min
    ou de 10,1% do tempo pausado; caso contrário, ignora. Nunca computa sozinho. */
 const PAUSA_MAX_OUTRAS_MS = 15 * 60e3, PAUSA_MAX_OUTRAS_PCT = 0.101;
+const PAUSA_LONGA_MS = 30 * 60e3;   // pausa longa (ou com bloqueio do Mac): o padrão no retorno é não computar
 function pausaRec(r) {
   const app = String(r.app || '').trim().toLowerCase();
   const apps = (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
@@ -171,6 +173,12 @@ function unionMs(arr) {
   srt.forEach(([a, b]) => { if (!cur) cur = [a, b]; else if (a <= cur[1]) cur[1] = Math.max(cur[1], b); else { tot += cur[1] - cur[0]; cur = [a, b]; } });
   if (cur) tot += cur[1] - cur[0];
   return tot;
+}
+/* Há bloqueio ou suspensão do Mac (registro de loginwindow) entre s e e? */
+function bloqueioEntre(s, e) {
+  const days = [...new Set([ymd(new Date(s)), ymd(new Date(e))])];
+  const recs = days.flatMap(d => db.setting(logKeyOf(d), null) || []);
+  return recs.some(r => String(r.app || '').toLowerCase() === 'loginwindow' && new Date(r.to).getTime() > s && new Date(r.from).getTime() < e);
 }
 function analisePausa(s, e) {
   const total = e - s;
@@ -197,11 +205,13 @@ ACTIONS['ts-resume'] = async () => {
   resumeEntry(a); toast('Sessão retomada');
   if (!pIni) return;
   const an = analisePausa(pIni, Date.now());
-  if (!an.pergunta) return;
+  const bloqueio = last?.why === 'mac';   // o Mac bloqueou ou dormiu durante a pausa
+  const longa = an.total >= PAUSA_LONGA_MS || bloqueio;
+  if (!an.pergunta && !longa) return;
   const ok = await confirmBox({
     title: 'Computar o tempo pausado?',
-    body: `Enquanto a sessão estava pausada (${fmtDur(an.total)}), ${fmtDur(an.other)} foram em outras atividades${an.resumo ? ` (${esc(an.resumo)})` : ''}. WhatsApp (${fmtDur(an.whats)}) e ociosidade (${fmtDur(an.idle)}) foram ignorados.`,
-    ok: 'Escolher projeto ou tarefa', no: 'Não computar' });
+    body: `Enquanto a sessão estava pausada (${fmtDur(an.total)}), ${fmtDur(an.other)} foram em outras atividades${an.resumo ? ` (${esc(an.resumo)})` : ''}. WhatsApp (${fmtDur(an.whats)}) e ociosidade (${fmtDur(an.idle)}) foram ignorados.${longa ? `<br><span class="small muted">${bloqueio ? 'O Mac bloqueou durante a pausa. ' : ''}Pausa longa: o padrão é não computar, a menos que você tenha trabalhado nesse tempo.</span>` : ''}`,
+    ok: 'Escolher projeto ou tarefa', no: 'Não computar', padraoNao: longa });
   if (!ok) return;
   const e = db.insert('tempo_time_entries', { project_id: null, client_id: null, agency_id: null, task_id: null, work_type_id: null, notes: 'Tempo pausado', revision_id: null, state: 'done', segments: [{ s: new Date(pIni).toISOString(), e: new Date(Date.now()).toISOString() }], edits: [] });
   openEntryModal(e.id);
@@ -254,6 +264,23 @@ function apStats(p) {
   });
   return { hoje, semana, last, total };
 }
+/* Meta do mês na tela Hoje: barrinha e % sempre visíveis; os valores em R$ ficam atrás do olhinho (db.setting metaOlho). */
+function metaMesStripHTML() {
+  const goal = Number(db.setting('metaFinanceira', 0)) || 0; if (!goal) return '';
+  const mk = ymd(new Date()).slice(0, 7);
+  const recebido = db.all('tempo_payments').filter(p => String(p.date || '').startsWith(mk)).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const pct = Math.min(100, recebido / goal * 100);
+  const aberto = !!db.setting('metaOlho', false);
+  const txt = recebido >= goal ? 'meta batida' : `meta não batida, faltam ${Math.round(100 - pct)}%`;
+  const valor = aberto ? `${fmtMoney0(recebido)} de ${fmtMoney0(goal)}` : '••••';
+  return `<div class="panel"><div class="panel-b row between" style="flex-wrap:wrap;gap:10px;align-items:center">
+    <span class="lbl" style="display:inline">Meta do mês</span>
+    <div class="pm-bar" style="flex:1;min-width:160px"><span style="width:${Math.round(pct)}%"></span></div>
+    <span class="small">${txt}</span>
+    <span class="mono small muted">${valor}</span>
+    <button class="btn sm icon ghost" data-act="meta-olho" aria-label="Mostrar ou esconder valores" title="Mostrar ou esconder valores">${icon(aberto ? 'eye' : 'eyeOff')}</button></div></div>`;
+}
+ACTIONS['meta-olho'] = () => { db.setSetting('metaOlho', !db.setting('metaOlho', false)); render(); };
 function activeProjectsHTML(cur) {
   const fixados = db.setting('apFixados', []) || [];
   const base = db.where('tempo_projects', p => !p.archived && statusCat(p.status_id) === 'active').map(p => ({ p, st: apStats(p), fixo: fixados.includes(p.id) }));
@@ -642,6 +669,9 @@ function openEntryModal(id, startIso = null, endIso = null) {
       // nunca sobrepor: só confere os intervalos novos ou alterados (dados antigos não travam a edição)
       const antes = new Set((e?.segments || []).map(x => `${x.s}|${x.e}`));
       const ov = overlapOf(segs.filter(x => !antes.has(`${x.s}|${x.e}`)), e?.id || null);
+      // intervalo longo com bloqueio do Mac dentro: quase sempre é tempo fora. Pede confirmação antes de contar.
+      const bloq = segs.filter(s => s.e && new Date(s.e) - new Date(s.s) >= 60 * 60e3 && bloqueioEntre(new Date(s.s).getTime(), new Date(s.e).getTime()));
+      if (bloq.length && !(await confirmBox({ title: 'Intervalo com bloqueio do Mac', body: `${bloq.length === 1 ? 'Um intervalo longo' : bloq.length + ' intervalos longos'} tem o Mac bloqueado dentro dele. Se você estava fora, o tempo não deveria contar.`, ok: 'Salvar mesmo assim', no: 'Voltar e ajustar', padraoNao: true }))) return;
       if (ov) return toast(`Esse horário já está em outra sessão (${entryTitle(ov.entry)}, ${fmtTime(new Date(ov.a).toISOString())}–${fmtTime(new Date(ov.b).toISOString())}). Ajuste para não sobrepor.`);
       const data = { ...selToEntry(sel), work_type_id: f.work_type_id || null, revision_id: f.revision_id || null, notes: [(f.notes || '').replace(/\s+$/, ''), ...logLines].filter(Boolean).join('\n'), segments: segs };
       if (e) {

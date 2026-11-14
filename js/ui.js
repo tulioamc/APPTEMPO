@@ -3,6 +3,8 @@
    ===================================================================== */
 const ICONS = {
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff: '<path d="M3 3l18 18"/><path d="M10.6 6.1A10 10 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3.2 3.9M6.6 6.6A17 17 0 0 0 2 12s3.5 6 10 6a9.8 9.8 0 0 0 5.4-1.6"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   check: '<path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/>',
   doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
@@ -103,12 +105,12 @@ document.addEventListener('keydown', (e) => {
   if (db.undo()) toast('Alteração desfeita'); else toast('Nada para desfazer');
 });
 
-function confirmBox({ title, body, ok = 'Confirmar', no = 'Cancelar', danger = false }) {
+function confirmBox({ title, body, ok = 'Confirmar', no = 'Cancelar', danger = false, padraoNao = false }) {
   return new Promise(res => {
     let done = false;
     const l = openLayer({
       html: `<div class="dh"><h2>${esc(title)}</h2></div><div class="db"><div>${body}</div></div>
-      <div class="df"><button class="btn" data-x="no">${esc(no)}</button><button class="btn ${danger ? 'danger solid' : 'primary'}" data-x="yes" autofocus>${esc(ok)}</button></div>`,
+      <div class="df"><button class="btn ${padraoNao ? 'primary' : ''}" data-x="no" ${padraoNao ? 'autofocus' : ''}>${esc(no)}</button><button class="btn ${danger ? 'danger solid' : (padraoNao ? '' : 'primary')}" data-x="yes" ${padraoNao ? '' : 'autofocus'}>${esc(ok)}</button></div>`,
       onClose: () => { if (!done) res(false); }
     });
     l.box.addEventListener('click', (e) => { const b = e.target.closest('[data-x]'); if (!b) return; done = true; res(b.dataset.x === 'yes'); l.close(); });
