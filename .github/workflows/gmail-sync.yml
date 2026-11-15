@@ -1,0 +1,17 @@
+name: Sincronizar Gmail
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'   # a cada 2 horas (UTC)
+  workflow_dispatch:         # permite rodar na mão pela aba Actions
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar a sincronização do Gmail
+        env:
+          SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
+        run: |
+          curl -fsS -X POST "https://apptempo-abon.vercel.app/api/gmail/sync" \
+            -H "x-sync-secret: $SYNC_SECRET"
