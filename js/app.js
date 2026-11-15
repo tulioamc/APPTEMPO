@@ -217,6 +217,7 @@ window.TempoBridge = {
     catch (e) { console.warn('reportIdle', e); }
   },
   reportActivity: (seg) => suggestActivity(seg),
+  reportWhatsApp: (linhas) => waReport(linhas),
   version: 3,
 };
 
