@@ -445,10 +445,55 @@ function stopTrimStart(e, segs) {
   const firstAct = bs[0][0];
   if (firstAct - s0 > STOP_IDLE_MS && firstAct < lim) segs[0].s = new Date(firstAct).toISOString();
 }
-function stopEntry(e, at) {
-  const segs = clone(e.segments); stopTrimStart(e, segs); const last = segs[segs.length - 1];
-  if (!last.e) last.e = stopCutAt(e, at || nowISO(), last);
-  db.update('tempo_time_entries', e.id, { state: 'done', segments: segs });
+/* Fim da sessão: a sessão termina onde começou a última parada grande (mais de 15 min), atravessando pausas.
+   Parada = tudo que não é atividade de programa dentro da sessão: pausas, ociosidade, WhatsApp e outros apps de pausa.
+   Uso de programa no meio da parada (ex.: 10 s no Claude antes de clicar em encerrar) não salva a parada:
+   - até 5% do tempo parado e menos de 5 min → ignora e corta no começo da parada, sozinho;
+   - 5 min ou mais (ainda até 5% do tempo parado) → pergunta.
+   Devolve { auto, ask }: o corte que vale sem perguntar e o corte mais cedo que precisa de confirmação. */
+const STOP_PCT = 0.05;
+function stopPlan(e, end) {
+  const endMs = new Date(end).getTime();
+  const segIv = (e.segments || []).filter(s => s.s).map(s => [new Date(s.s).getTime(), s.e ? Math.min(new Date(s.e).getTime(), endMs) : endMs]).filter(([a, b]) => b > a);
+  const bs = [];
+  actBursts(e).forEach(([a, b]) => segIv.forEach(([x, y]) => { const p = Math.max(a, x), q = Math.min(b, y, endMs); if (q > p) bs.push([p, q]); }));
+  bs.sort((u, v) => u[0] - v[0]);
+  let depois = 0, auto = null, ask = null;
+  for (let k = bs.length - 1; k >= 0; k--) {
+    const t = bs[k][1], cauda = endMs - t;
+    if (cauda > STOP_IDLE_MS && depois <= cauda * STOP_PCT) {
+      const c = { cut: new Date(t).toISOString(), parado: cauda, uso: depois };
+      if (depois < STOP_SHORT_MS) auto = c; else ask = c;
+    }
+    depois += bs[k][1] - bs[k][0];
+  }
+  return { auto, ask: ask && (!auto || new Date(ask.cut) < new Date(auto.cut)) ? ask : null };
+}
+/* Corta a sessão no instante dado: o que vem depois sai (atividade continua no registro do dia, fora da sessão). */
+function cutSegmentsAt(segs, cutISO) {
+  const c = new Date(cutISO).getTime();
+  return segs.filter(s => new Date(s.s).getTime() < c).map(s => (!s.e || new Date(s.e).getTime() > c) ? { ...s, e: new Date(c).toISOString() } : s);
+}
+function stopEntry(e, at, cut) {
+  const end = at || nowISO();
+  let segs = clone(e.segments); stopTrimStart(e, segs);
+  const corte = cut !== undefined ? cut : (stopPlan({ ...e, segments: segs }, end).auto?.cut || null);
+  if (corte) segs = cutSegmentsAt(segs, corte);
+  const last = segs[segs.length - 1];
+  if (last && !last.e) last.e = end;
+  const edits = corte ? [...(e.edits || []), { at: nowISO(), reason: `Encerrada às ${fmtTime(corte)}, começo da parada (o tempo parado até o clique em encerrar não conta)`, before: e.segments }] : (e.edits || []);
+  db.update('tempo_time_entries', e.id, { state: 'done', segments: segs, edits });
+}
+/* Encerrar pelo botão: quando a parada tem 5 min ou mais de uso de programa no meio, pergunta. */
+async function stopEntryAsk(e) {
+  const end = nowISO(); const plan = stopPlan(e, end);
+  if (!plan.ask) return stopEntry(e, end);
+  const a = plan.ask, b = plan.auto;
+  const ok = await confirmBox({
+    title: 'Encerrar no começo da parada?',
+    body: `Você ficou parado de ${fmtTime(a.cut)} até agora (${fmtDur(a.parado)}). No meio disso houve ${fmtDur(a.uso)} de uso de programa.<br><span class="small muted">Encerrando às ${fmtTime(a.cut)}, esse uso também fica de fora.${b ? ` Se não, a sessão termina às ${fmtTime(b.cut)}, depois dele.` : ' Se não, a sessão vai até agora.'}</span>`,
+    ok: `Encerrar às ${fmtTime(a.cut)}`, no: b ? `Encerrar às ${fmtTime(b.cut)}` : 'Manter até agora' });
+  return stopEntry(e, end, ok ? a.cut : (b ? b.cut : null));
 }
 /* Migração (uma vez): lacunas que já eram trechos movidos para outro projeto viram "movido", com o destino.
    Uma lacuna conta como movida se os lançamentos "Movido de outra sessão" cobrem quase todo o seu tempo. */

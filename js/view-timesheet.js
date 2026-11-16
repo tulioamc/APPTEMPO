@@ -219,7 +219,7 @@ ACTIONS['ts-resume'] = async () => {
 ACTIONS['ts-stop'] = async () => { let a = activeEntry(); if (!a) return; const todas = openEntries();
   const ps = pausesOf(a.id);
   if (ps.length) { const n = ps.length; const ok = await confirmBox({ title: `${n} pausa(s) sugerida(s)`, body: `Antes de encerrar: inserir ${n === 1 ? 'a pausa sugerida' : 'as ' + n + ' pausas sugeridas'} na sessão? <br><span class="small muted">Se não, as sugestões ficam registradas como ignoradas na aba Avisos.</span>`, ok: 'Inserir e encerrar' }); if (ok) ps.forEach(n => applyPause(db.get('tempo_time_entries', a.id), n)); else ps.forEach(n => decideNotice(n, 'ignored', 'Ignorada ao encerrar a sessão')); a = db.get('tempo_time_entries', a.id); }
-  todas.forEach(x => stopEntry(x)); toast(todas.length > 1 ? `${todas.length} sessões encerradas` : `Sessão encerrada · ${fmtDur(entryMs(a))}`, { actions: [{ label: 'Revisar', run: () => openEntryModal(a.id) }] }); };
+  for (const x of todas) await stopEntryAsk(x); toast(todas.length > 1 ? `${todas.length} sessões encerradas` : `Sessão encerrada · ${fmtDur(entryMs(a))}`, { actions: [{ label: 'Revisar', run: () => openEntryModal(a.id) }] }); };
 /* Troca de projeto sem pausar: a sessão atual fica aberta, mas parada, e o tempo enquanto a outra roda vira "Trabalho em …". */
 function switchTo(proj, taskId) {
   const cur = db.all('tempo_time_entries').find(e => e.state === 'running') || null;

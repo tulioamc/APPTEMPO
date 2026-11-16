@@ -191,7 +191,7 @@ function rbNoteCell(r) {
   txt.replace(RB_LINK_RE, (m, rotulo, caminho, i) => {
     out += esc(txt.slice(fim, i));
     const p = caminho.trim();
-    out += `<button class="tag c-blue" data-act="file-open" data-path="${esc(p)}" title="${esc(p)}">${rotulo === 'LINK NF' ? 'Nota fiscal' : 'Comprovante'}</button>`;
+    out += `<span class="tag c-blue rb-file" role="button" tabindex="0" data-act="file-open" data-path="${esc(p)}" data-tip="${esc(`Abrir o arquivo\n${p.split('/').pop()}`)}">${icon('doc', 'ico')}${rotulo === 'LINK NF' ? 'Nota fiscal' : 'Comprovante'}</span>`;
     fim = i + m.length;
     return m;
   });

@@ -41,7 +41,7 @@ const waTipoNome = (c) => { const o = c && c.tipo_id ? db.get('tempo_status_opti
    Contato cujo nome contém o nome de um cliente, de uma agência (ou da sigla dela) ou, nos grupos, de um projeto ativo
    ganha uma sugestão. Ex.: "[BRENDA] OPEN TO WORKS" → Agência · Brenda; "Carla BB" → Cliente · BB. Nada entra sem você aceitar. */
 const waNorm = (t) => ' ' + String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
-function waSugestao(c) {
+function waSugestaoCrua(c) {
   const nome = waNorm(c.name); if (nome.trim().length < 2) return null;
   const bate = (t, min = 3) => { const n = waNorm(t); return n.trim().length >= min && nome.includes(n); };
   if (c.tipo === 'grupo') {
@@ -53,6 +53,16 @@ function waSugestao(c) {
   const ag = (db.all('tempo_agencies') || []).filter(x => !x.archived && (bate(x.name) || (x.abbr && bate(x.abbr, 2)))).sort((a, b) => String(b.name).length - String(a.name).length)[0];
   if (ag) return { tipo: 'Agência', agency_id: ag.id, label: `Agência · ${ag.name}` };
   return null;
+}
+/* Sugestões negadas não voltam: guarda, por contato, o texto da sugestão que você negou. */
+const waSugNegadas = () => db.setting('waSugNegadas', {}) || {};
+function waSugestao(c) {
+  const s = waSugestaoCrua(c);
+  return s && waSugNegadas()[c.id] === s.label ? null : s;
+}
+function waNegarSugestao(c) {
+  const s = waSugestaoCrua(c); if (!s) return;
+  db.setSetting('waSugNegadas', { ...waSugNegadas(), [c.id]: s.label });
 }
 /* Aplica a sugestão: tipo + cliente/agência/projeto. */
 function waAceitarSugestao(c) {
@@ -79,7 +89,6 @@ async function waReportConversas(d) {
     await db.refresh();
   } catch (e) { console.warn('waReportConversas', e); }
   try { waRotularPausas(d.enviadas || []); } catch (e) { console.warn('waRotularPausas', e); }
-  try { waResponder(); } catch (e) { console.warn('waResponder', e); }
 }
 
 /* Celular: o WhatsApp do celular nunca cria pausa, só dá nome a uma que já existe.
@@ -118,7 +127,8 @@ function waMinutosUteis(deMs, ateMs) {
   }
   return total;
 }
-/* "Responder [contato]" no To-Do: mensagem de contato de trabalho sem resposta há 1 h (cliente) ou 2 h (colega, fornecedor,
+/* (Desligado em 16/11 a pedido do Tulio: não funcionou bem na prática. Fica a função, sem ser chamada.)
+   "Responder [contato]" no To-Do: mensagem de contato de trabalho sem resposta há 1 h (cliente) ou 2 h (colega, fornecedor,
    administrativo, agência), contando só o horário de trabalho. Some sozinha quando você responde. Grupos não geram tarefa. */
 function waPrazoResposta(c) { const t = waTipoNome(c); return (t === 'Cliente' || t === 'Misto (mais cliente)') ? 60 : 120; }
 function waResponder(agora = Date.now()) {

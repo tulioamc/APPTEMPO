@@ -85,9 +85,9 @@ VIEWS.contacts = () => {
   const comSug = [...novos, ...trab.filter(c => !c.client_id && !c.agency_id && !c.project_id)].filter(c => waSugestao(c));
   const bloco = (id, titulo, rows, extra, vazio, ocultas = []) => `<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>${titulo} <span class="muted">(${rows.length})</span></h3><span class="grow"></span>${extra || ''}${rows.length ? colsBtn(id) : ''}</div>
     <div class="panel-b tight">${rows.length ? gridTable({ id, cols: WACOLS, rows, defHidden: ocultas, rowById: (rid) => db.get('tempo_wa_contacts', rid) }) : `<div class="empty small">${vazio}</div>`}</div></div>`;
-  const html = `<div class="filters" style="margin-bottom:12px"><input class="input search" placeholder="Buscar contato" value="${esc(S.contacts.q || '')}" data-input="contacts-q"></div>
+  const html = (S.contacts.revisar && comSug.length ? waRevisaoHTML(comSug) : '') + `<div class="filters" style="margin-bottom:12px"><input class="input search" placeholder="Buscar contato" value="${esc(S.contacts.q || '')}" data-input="contacts-q"></div>
     ${bloco('wa-novos', 'Não classificados', novos,
-      (comSug.length ? `<button class="btn sm primary" data-act="wa-sug-todas" data-tip="Aceita as ${comSug.length} sugestões de tipo e cliente feitas pelo nome">Aceitar ${comSug.length} sugestões</button>` : '')
+      (comSug.length ? `<button class="btn sm primary" data-act="wa-revisar" data-tip="Ver uma por uma e aceitar ou negar">Analisar ${comSug.length} sugestões</button>` : '')
       + (novos.length ? `<button class="btn sm" data-act="wa-amigos" data-tip="Os ${novos.length} contatos sem tipo passam a ser Amigo (o tempo com eles continua sendo pausa)">Marcar ${novos.length} como Amigo</button>` : ''),
       'Nenhum contato esperando. Contato novo do WhatsApp aparece aqui.', ['vinc', 'resp', 'esperando'])}
     ${bloco('wa-trab', 'Trabalho', trab,
@@ -116,3 +116,30 @@ ACTIONS['wa-amigos'] = async () => {
 };
 /* Aviso "contatos sem classificar" leva direto para cá. */
 ACTIONS['wa-abrir'] = () => go('contacts');
+
+/* Análise das sugestões: uma linha por contato, com Aceitar ou Negar. Negada não volta a ser sugerida. */
+function waRevisaoHTML(lista) {
+  const r = S.contacts.rev || (S.contacts.rev = {});
+  const nOk = lista.filter(c => r[c.id] === 'ok').length, nNo = lista.filter(c => r[c.id] === 'no').length;
+  const linha = (c) => { const s = waSugestao(c), v = r[c.id];
+    return `<div class="row between" style="padding:8px 0;border-top:1px solid var(--line);gap:12px">
+      <span class="grow"><b>${esc(c.name)}</b> <span class="muted">→ ${esc(s.label)}</span></span>
+      <label class="check small"><input type="checkbox" data-act="wa-rev" data-id="${c.id}" data-v="ok" ${v === 'ok' ? 'checked' : ''}> Aceitar</label>
+      <label class="check small"><input type="checkbox" data-act="wa-rev" data-id="${c.id}" data-v="no" ${v === 'no' ? 'checked' : ''}> Negar</label></div>`; };
+  return `<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>Analisar sugestões <span class="muted">(${lista.length})</span></h3><span class="grow"></span>
+      <button class="btn sm" data-act="wa-rev-todas" data-v="ok">Aceitar todas</button><button class="btn sm" data-act="wa-rev-todas" data-v="no">Negar todas</button><button class="btn sm ghost" data-act="wa-rev-fechar">Fechar</button></div>
+    <div class="panel-b"><p class="small muted" style="margin:0 0 6px">A sugestão vem do nome do contato, que bate com um cliente, agência ou projeto cadastrado. Aceitar marca o tipo e liga ao cadastro. Negar faz essa sugestão não aparecer mais.</p>
+      ${lista.map(linha).join('')}
+      <div class="row" style="margin-top:12px;gap:8px"><button class="btn primary" data-act="wa-rev-aplicar" ${nOk + nNo ? '' : 'disabled'}>Aplicar (${nOk} aceitas, ${nNo} negadas)</button><span class="small muted">As que ficarem sem marcar continuam aqui.</span></div></div></div>`;
+}
+const waRevLista = () => waTodos().filter(c => (!c.tipo_id || (waEhTrabalho(c) && !c.client_id && !c.agency_id && !c.project_id)) && waSugestao(c));
+ACTIONS['wa-revisar'] = () => { S.contacts.revisar = true; S.contacts.rev = {}; render(); window.scrollTo(0, 0); };
+ACTIONS['wa-rev-fechar'] = () => { S.contacts.revisar = false; S.contacts.rev = {}; render(); };
+ACTIONS['wa-rev'] = (el) => { const r = S.contacts.rev || (S.contacts.rev = {}); r[el.dataset.id] = r[el.dataset.id] === el.dataset.v ? null : el.dataset.v; render(); };
+ACTIONS['wa-rev-todas'] = (el) => { const r = S.contacts.rev || (S.contacts.rev = {}); waRevLista().forEach(c => { r[c.id] = el.dataset.v; }); render(); };
+ACTIONS['wa-rev-aplicar'] = () => {
+  const r = S.contacts.rev || {}; let ok = 0, no = 0;
+  waRevLista().forEach(c => { if (r[c.id] === 'ok' && waAceitarSugestao(c)) ok++; else if (r[c.id] === 'no') { waNegarSugestao(c); no++; } });
+  S.contacts.rev = {}; if (!waRevLista().length) S.contacts.revisar = false;
+  db.emit(); toast(`${ok} aceitas, ${no} negadas`);
+};

@@ -1179,3 +1179,7 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .act-strip.mv-focus > *:not(.mv-on):not(.act-sep) { opacity: .25; transition: opacity .12s; }
 /* Faixa por tarefa no Resumo */
 .res-task { cursor: default; }
+/* Link de arquivo na Anotação (nota fiscal, comprovante): caixinha como as outras tags, com ícone de documento */
+.rb-file { cursor: pointer; }
+.rb-file .ico { width: 13px; height: 13px; flex: none; }
+.rb-file:hover { filter: brightness(.96); }

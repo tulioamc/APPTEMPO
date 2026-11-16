@@ -1,0 +1,42 @@
+// Encerrar: o tempo parado no fim (pausas, ocioso, WhatsApp) sai da sessão, mesmo com um uso curto de programa no meio.
+const test = require('node:test'), assert = require('node:assert');
+const { load } = require('./helpers');
+
+const T = (h, m = 0) => new Date(2026, 10, 16, h, m).toISOString();   // 16/11/2026, hora local
+const setup = (recs) => load(['js/store.js', 'js/domain.js'], ['db', 'stopPlan', 'cutSegmentsAt'], { actList: () => recs });
+
+test('10 s no Claude antes de encerrar não salvam 2 h paradas (o caso do print)', () => {
+  // trabalho 9h–11h; pausa 11h–12h; parado até 13h; 10 s no Claude às 12h59
+  const recs = [{ from: T(9), to: T(11) }, { from: T(12, 59), to: new Date(new Date(T(12, 59)).getTime() + 10e3).toISOString() }];
+  const e = { id: 'e', segments: [{ s: T(9), e: T(11), why: 'mac' }, { s: T(12), e: null }] };
+  const m = setup(recs);
+  const p = m.stopPlan(e, T(13));
+  assert.equal(p.auto.cut, T(11));
+  assert.equal(p.ask, null);
+  const segs = m.cutSegmentsAt(e.segments, p.auto.cut);
+  assert.equal(segs.length, 1); assert.equal(segs[0].e, T(11));
+});
+
+test('5 min ou mais de uso no meio de uma parada enorme: pergunta', () => {
+  // trabalho 8h–9h; esquecido até 19h; 6 min de uso às 14h
+  const recs = [{ from: T(8), to: T(9) }, { from: T(14), to: T(14, 6) }];
+  const e = { id: 'e', segments: [{ s: T(8), e: null }] };
+  const p = setup(recs).stopPlan(e, T(19));
+  assert.equal(p.ask.cut, T(9));          // corte mais cedo precisa de confirmação
+  assert.equal(p.auto.cut, T(14, 6));     // se disser não, corta depois do uso
+});
+
+test('trabalho de verdade no fim não é cortado', () => {
+  const recs = [{ from: T(9), to: T(10) }, { from: T(10, 30), to: T(12) }];
+  const e = { id: 'e', segments: [{ s: T(9), e: null }] };
+  const p = setup(recs).stopPlan(e, T(12, 5));
+  assert.equal(p.auto, null); assert.equal(p.ask, null);
+});
+
+test('uso acima de 5% da parada (e menos de 5 min) não é ignorado', () => {
+  // parada de 20 min com 3 min de uso no meio: 15% → não corta antes dele
+  const recs = [{ from: T(9), to: T(10) }, { from: T(10, 10), to: T(10, 13) }];
+  const e = { id: 'e', segments: [{ s: T(9), e: null }] };
+  const p = setup(recs).stopPlan(e, T(10, 20));
+  assert.equal(p.auto, null);
+});

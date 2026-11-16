@@ -654,3 +654,9 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 9. Análise de uso do próprio Tempo e sugestões de evolução do produto.
 
 **Escopo desta entrada:** registrar o épico no backlog. Não altera código, banco, configurações, integrações ou comportamento do aplicativo. Todos os itens acima permanecem como proposta/backlog até priorização e implementação.
+
+**V2.04.11 — encerrar corta o ócio do fim; sugestões com aceitar/negar; "Responder" desligado**
+- Encerrar (`stopPlan` / `stopEntryAsk` em `js/domain.js`): a sessão termina no começo da última parada grande (mais de 15 min), atravessando pausas. Parada = tudo que não é atividade de programa dentro da sessão (pausa, ocioso, WhatsApp e apps de pausa). Uso de programa no meio da parada: até 5% e menos de 5 min → ignorado e cortado junto; 5 min ou mais (ainda até 5%) → pergunta, com a opção de cortar depois desse uso. Antes, 10 s no Claude antes do clique em encerrar salvavam toda a parada.
+- Contatos: botão "Analisar N sugestões" abre uma lista com Aceitar e Negar em cada uma e "Aplicar". Negada não volta (setting `waSugNegadas`, por contato).
+- "Responder [contato]" desligado a pedido do Tulio (não funcionou bem: muitos números sem nome). As tarefas já criadas ficam para apagar.
+- Link da Anotação vira caixinha igual às outras tags, com ícone de documento.
