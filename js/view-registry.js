@@ -16,7 +16,7 @@ VIEWS.registry = () => {
     : `<div class="empty">${icon('users')}<b>${q ? 'Nada encontrado' : 'Nenhum contato ainda'}</b><span>Os contatos chegam pelo app do Mac. Marque quem é cliente, agência, colega, fornecedor ou administrativo: o tempo de WhatsApp com eles conta como trabalho, e o resto vira pausa.</span></div>`;
   else body = cls.length ? gridTable({ id: 'clients', cols: CLCOLS, rows: cls, rowAttrs: c => `data-act="party-open" data-kind="client" data-id="${c.id}"`, rowById: (id) => db.get('tempo_clients', id) })
     : `<div class="empty">${icon('users')}<b>${q ? 'Nada encontrado' : 'Nenhum cliente cadastrado'}</b><button class="btn primary" data-act="party-new" data-kind="client">${icon('plus')} Novo cliente</button></div>`;
-  const html = `<div class="panel"><div class="panel-h"><div class="seg">${[['agencies', `Agências (${db.all('tempo_agencies').filter(a => !a.archived).length})`], ['clients', `Clientes (${clients().length})`], ['wa', `Contatos WhatsApp (${db.all('tempo_wa_contacts').length})`]].map(([k, l]) => `<button class="${r.tab === k ? 'on' : ''}" data-act="reg-tab" data-v="${k}">${l}</button>`).join('')}</div><span class="grow"></span>${colsBtn(r.tab)}<label class="check small"><input type="checkbox" data-on="reg-arch" ${r.arch ? 'checked' : ''}> Mostrar arquivados</label></div>
+  const html = `<div class="panel"><div class="panel-h"><div class="seg">${[['agencies', `Agências (${db.all('tempo_agencies').filter(a => !a.archived).length})`], ['clients', `Clientes (${clients().length})`], ['wa', `Contatos WhatsApp (${(db.all('tempo_wa_contacts') || []).length})`]].map(([k, l]) => `<button class="${r.tab === k ? 'on' : ''}" data-act="reg-tab" data-v="${k}">${l}</button>`).join('')}</div><span class="grow"></span>${colsBtn(r.tab)}<label class="check small"><input type="checkbox" data-on="reg-arch" ${r.arch ? 'checked' : ''}> Mostrar arquivados</label></div>
     <div class="filters"><input id="rg-q" class="input search" placeholder="Buscar por nome, CNPJ ou contato" value="${esc(r.q)}" data-input="reg-q"></div>
     <div class="panel-b tight">${body}</div></div>`;
   return { title: 'Agências e clientes', actions: `<button class="btn" data-act="party-new" data-kind="agency">${icon('plus')} Agência</button><button class="btn primary" data-act="party-new" data-kind="client">${icon('plus')} Cliente</button>`, html };
@@ -201,10 +201,10 @@ CHANGES['fee-hours'] = (el) => {
    Quem é de trabalho (cliente, agência, colega, fornecedor, administrativo) faz o tempo de WhatsApp
    contar como trabalho. Quem não está marcado conta como amigo, e o tempo vira pausa.
    ===================================================================== */
-const waRows = (q) => db.all('tempo_wa_contacts')
+const waRows = (q) => (db.all('tempo_wa_contacts') || [])
   .filter(c => !q || String(c.name || '').toLowerCase().includes(q))
   .sort((a, b) => waMsgs(b.jid) - waMsgs(a.jid) || String(a.name || '').localeCompare(String(b.name || '')));
-const waMsgs = (jid) => db.all('tempo_wa_daily').filter(d => d.jid === jid).reduce((t, d) => t + (d.sent || 0), 0);
+const waMsgs = (jid) => (db.all('tempo_wa_daily') || []).filter(d => d.jid === jid).reduce((t, d) => t + (d.sent || 0), 0);
 const WACOLS = {
   name: { label: 'Contato', ico: 'text', cls: 'name', w: 260, sort: c => String(c.name || ''), cell: c => esc(c.name || '') },
   tipo: { label: 'Tipo', ico: 'spin', w: 190, sort: c => waTipoNome(c), cell: c => { const o = c.tipo_id ? db.get('tempo_status_options', c.tipo_id) : null; return o ? tag(o.name, o.color, { pill: true }) : '<span class="faint">Amigo (padrão)</span>'; },

@@ -487,3 +487,7 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - O app do Mac passa a mandar, junto da atividade do WhatsApp, com quem era a conversa (a que teve mais mensagens no período, com 2 min de folga dos dois lados). Só o nome da conversa; o texto nunca é lido.
 - Banco: `tempo_wa_contacts` ganhou `id`, `tipo_id` e `updated_at`, entrou no carregamento do site, no `tempo_sync_state()` e no gatilho `tempo_touch`. Tipos novos em `tempo_status_options` com kind `wa_tipo` (category `trabalho` ou `pausa`).
 - Anotação dos reembolsos: o caminho `[LINK NF]`/`[LINK PAGAMENTO]` virou botão. No app do Mac abre o arquivo (só dentro do iCloud); no navegador copia o caminho.
+
+**V2.04.05 — a aba Contatos WhatsApp não abria**
+- A contagem de mensagens lia `tempo_wa_daily`, que o site não carregava: a tela quebrava e o botão da aba parecia morto. Agora a tabela entra no carregamento (e no `tempo_sync_state()`), e as leituras dessas duas tabelas são defensivas.
+- Teste novo (`tests/telas.test.js`): a tela de Agências e clientes abre nas três abas com o banco vazio, e o tipo do contato manda no "Conta como". Era o tipo de erro que só aparecia clicando.

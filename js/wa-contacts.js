@@ -19,7 +19,7 @@ async function waReport(linhas) {
 function waContato(nome) {
   const n = String(nome || '').trim().toLowerCase();
   if (!n || n === 'whatsapp') return null;
-  return db.all('tempo_wa_contacts').find(c => String(c.name || '').trim().toLowerCase() === n) || null;
+  return (db.all('tempo_wa_contacts') || []).find(c => String(c.name || '').trim().toLowerCase() === n) || null;
 }
 /* Conversa de trabalho? Cliente, agência, colega, fornecedor, administrativo e "misto mais cliente".
    Sem classificação, o contato conta como amigo: o tempo vira pausa. */
