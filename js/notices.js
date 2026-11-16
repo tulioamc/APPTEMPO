@@ -403,6 +403,8 @@ ACTIONS['todo-save'] = (el) => {
   const keep = p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {};
   const mudou = p.due !== old.due || (alarm && !old.alarm);
   const data = { ...old, ...keep, ...(p.due ? {} : { due: undefined, deadline: undefined, end: undefined }) };
+  // empurrou: a data antiga já tinha passado e foi trocada por outra
+  if (old.due && old.due.slice(0, 10) < todoToday() && p.due && p.due.slice(0, 10) !== old.due.slice(0, 10)) data.adiou = (old.adiou || 0) + 1;
   if (!p.due) { delete data.due; delete data.deadline; delete data.end; }
   if (!data.taskId) { delete data.project_id; delete data.client_id; Object.assign(data, todoFindLink(p.title)); }
   if (alarm && p.due) { data.alarm = true; if (mudou) data.alarm_criado = false; } else { delete data.alarm; delete data.alarm_criado; }
@@ -464,17 +466,12 @@ const todoSetSilent = (key, value) => { const st = db.data.tempo_settings.find(r
 const todoDueDay = (n) => n.data?.due ? n.data.due.slice(0, 10) : null;
 const todoIsLate = (n) => n.status !== 'done' && !!n.data?.due && new Date(n.data.end ? n.data.due.slice(0, 10) + 'T' + n.data.end : n.data.due) < new Date();
 
-/* "adiou" conta os dias em que um to-do com data passou dessa data e continua aberto.
-   Antes da data (ou sem data) o contador fica zerado. */
+/* "adiou" conta quantas vezes o to-do foi empurrado: a data já tinha passado e você trocou para outra data.
+   Não sobe sozinho com o tempo. Uma vez, zera os contadores antigos (que subiam a cada dia). */
 function todoCarry() {
-  const today = todoToday();
-  if (db.setting('todoCarryDay', '') === today) return;
-  db.all('tempo_notices').filter(n => n.kind === 'todo' && n.status !== 'done').forEach(n => {
-    const due = todoDueDay(n);
-    if (due && due < today) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), adiou: (n.data?.adiou || 0) + 1 } }, true);
-    else if (n.data?.adiou) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), adiou: 0 } }, true);
-  });
-  todoSetSilent('todoCarryDay', today);
+  if (db.setting('todoAdiouV2', false)) return;
+  db.all('tempo_notices').filter(n => n.kind === 'todo' && n.data?.adiou).forEach(n => db.update('tempo_notices', n.id, { data: { ...(n.data || {}), adiou: 0 } }, true));
+  todoSetSilent('todoAdiouV2', true);
 }
 /* Fixos: criam o to-do do dia nos dias da semana escolhidos. */
 function todoFixedApply() {
