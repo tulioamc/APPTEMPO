@@ -536,3 +536,111 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - "Responder [contato]" no To-Do (`waResponder`): cliente e misto mais cliente após 1 h útil sem resposta, os outros de trabalho após 2 h; horário de trabalho = seg a sex, 9h às 19h, fora das férias. Fecha sozinha quando ele responde. Grupos não geram.
 - Colunas novas em Contatos: Sugestão, Resposta média, Esperando você. Aviso diário "Hoje: X no WhatsApp com amigos" ao passar do limite (padrão 30 min, ajustável no bloco Outros).
 - Pendente: silenciar o WhatsApp por 90 min no horário mais produtivo — falta o Tulio dizer o que "silenciar" deve fazer.
+
+---
+
+## Épico — Tempo Intelligence: inteligência integral, analista autônomo e assistente conversacional
+**Proposta consolidada em 16/11/2026.** Funcionalidade futura, sem alteração do código nesta etapa. O objetivo é transformar o Tempo em um sistema que não apenas registra dados, mas investiga, interpreta, identifica oportunidades e ajuda a tomar decisões.
+
+### 1. Assistente conversacional com dados reais
+- Área central **Tempo Intelligence**, com conversa em linguagem natural e acesso contextual aos dados do próprio Tempo.
+- Perguntas livres, por exemplo: "Quanto faturei nos últimos 3 meses?", "Qual agência mais atrasou pagamentos?", "Quais projetos deram menor R$/hora?", "Como foi minha produtividade nas manhãs?".
+- Responder com números calculados a partir dos registros reais, período explícito, critérios usados e links para abrir os registros/telas de origem.
+- Permitir investigação em várias etapas: a IA formula perguntas auxiliares, solicita consultas adicionais ao Tempo, cruza resultados e aprofunda a análise antes de responder. Não ficar limitada a um resumo fixo ou a um único conjunto pré-carregado.
+- Guardar histórico de conversas e investigações, com possibilidade de retomar análises anteriores.
+
+### 2. Analista autônomo e proativo
+- O GPT pode iniciar análises sem uma pergunta do usuário, formular hipóteses, decidir quais dados precisa consultar e pedir ao Tempo consultas adicionais por ferramentas controladas.
+- Identificar padrões, desvios, riscos, oportunidades e tendências; explicar evidências, período, grau de confiança e limitações.
+- Gerar relatório diário opcional, relatório semanal operacional e relatório mensal estratégico.
+- Acompanhar recomendações anteriores: aceita, recusada ou ignorada; depois verificar se o resultado esperado ocorreu.
+- Não confundir correlação com causa. Sinalizar quando os dados não permitem concluir algo.
+- Apresentar recomendações acionáveis, com impacto estimado quando possível, e permitir abrir os registros que sustentam cada conclusão.
+
+### 3. Áreas de análise
+**Trabalho e negócio**
+- Projetos, clientes, agências, contatos, propostas, aprovações, prazos, revisões, horas estimadas x realizadas, faturamento, recebimentos, inadimplência, concentração de receita, ticket médio e rentabilidade.
+- Investigar relações entre agência, cliente final, tipo de trabalho, preço, tempo gasto e resultado financeiro.
+- Detectar contatos sem vínculo, possíveis duplicidades, projetos sem apontamento, lacunas, propostas sem retorno e cobranças pendentes.
+
+**Finanças PJ e PF**
+- Manter PJ e PF separadas por padrão, com análises cruzadas somente quando autorizadas.
+- Distinguir receita, transferência interna, retirada, reembolso, despesa e custo; não contar transferências entre contas próprias como receita/despesa.
+- Analisar fluxo de caixa, contas a pagar/receber, cartão, parcelas futuras, assinaturas, gastos recorrentes, impostos, saldo e previsões.
+- Considerar a estrutura atual de reembolsos: destacar custo líquido e valores a receber do plano, sem inflar receitas e despesas.
+- Identificar lançamentos possivelmente duplicados, sem categoria, fora do padrão ou que mereçam conciliação, sempre sugerindo antes de alterar.
+
+**Produtividade e rotina**
+- Analisar tempo total, produtivo, pausado e não produtivo conforme as classificações já existentes no Tempo.
+- Cruzar produtividade por horário, dia da semana, projeto, tipo de atividade e categoria de aplicativo; identificar interrupções, dispersão, lacunas e padrões recorrentes.
+- Separar taxa de produtividade, aproveitamento do tempo e entrega efetiva. Tempo em aplicativo classificado como produtivo não comprova, sozinho, resultado entregue.
+- Descobrir os horários de maior rendimento a partir dos dados reais, sem assumir previamente que manhã ou tarde é melhor.
+- Sugerir experiências de rotina (por exemplo, proteger blocos de criação e concentrar mensagens/administrativo em horários menos produtivos) e comparar os resultados antes/depois.
+
+**Melhoria do próprio Tempo**
+- Observar fluxos repetitivos, tarefas manuais, telas pouco usadas, correções recorrentes e ações que poderiam ser automatizadas.
+- Sugerir novas funcionalidades, simplificações e automações com justificativa baseada no uso real.
+- Encaminhar ideias para uma seção própria do backlog, sem implementar mudanças no aplicativo por conta própria.
+
+### 4. Tempo Inteligente: sugestões e automações
+- Detectar novos contatos e sugerir vínculo com agência, cliente ou projeto, usando nome, histórico e contexto disponível.
+- Sugerir classificação de contatos e conversas do WhatsApp, vínculo de tempo a projetos, preenchimento de lacunas e identificação de revisões.
+- Sugerir conciliação entre extratos, pagamentos, parcelas, notas, reembolsos e contas a pagar/receber.
+- Detectar anomalias e avisar sobre prazos, projetos próximos do limite de horas, queda de R$/hora, concentração de receita e pagamentos atrasados.
+- Cada sugestão deve mostrar motivo, dados que a sustentam, confiança e impacto esperado, com ações **Aceitar**, **Editar**, **Ignorar** ou **Adiar**, quando aplicável.
+- Registrar permanentemente a sugestão e a decisão no histórico. Evitar repetir sugestões já resolvidas.
+
+### 5. Integração com Siri e Atalhos da Apple
+- Evoluir o atalho/link de início já previsto no item S17 para uma integração consistente com **Siri, app Atalhos e App Intents**, quando aplicável à arquitetura do app.
+- Comandos de voz para iniciar, pausar, retomar, encerrar e trocar a sessão; selecionar projeto, cliente ou tipo de trabalho; consultar a sessão atual e o tempo registrado hoje.
+- Exemplos: "E aí Siri, iniciar Tempo no projeto X"; "Pausar meu Tempo"; "Quanto trabalhei hoje?"; "Qual é minha próxima tarefa?".
+- Permitir ações rápidas sem abrir a interface, respeitando autenticação, estado da sessão e confirmação quando houver ambiguidade.
+- Criar atalhos configuráveis pelo usuário para registrar tarefa/to-do, adicionar anotação rápida e abrir um relatório ou projeto.
+- Considerar limitações e diferenças entre iPhone e macOS; oferecer fallback por link universal/URL scheme quando App Intents não estiver disponível.
+
+### 6. Integração com Alexa
+- Criar uma **Skill do Tempo** para Alexa, com vinculação segura da conta (account linking/OAuth) e comunicação com uma API do Tempo autenticada.
+- Comandos de voz para iniciar, pausar, retomar, encerrar e trocar sessões; consultar projeto atual, horas do dia/semana, tarefas e avisos pendentes.
+- Exemplos: "Alexa, peça ao Tempo para iniciar o projeto X"; "Alexa, quanto trabalhei hoje?"; "Alexa, quais são minhas tarefas pendentes?".
+- Permitir consultas ao Tempo Intelligence por voz, com respostas curtas e opção de aprofundar pelo app ou por novas perguntas.
+- Definir permissões por intenção: consultas não alteram dados; comandos que iniciam/encerram sessões ou criam registros exigem validação do contexto e confirmação quando necessário.
+- Avaliar disponibilidade regional/idioma da Alexa, requisitos de publicação da Skill e dependência de conexão com a internet. Não presumir suporte a todos os dispositivos ou idiomas.
+
+### 7. Arquitetura da IA e segurança
+- Usar **API oficial da OpenAI (GPT)** para o Tempo Intelligence; não usar API da Anthropic/Claude para esse recurso.
+- A assinatura do ChatGPT não inclui créditos da API: prever faturamento, limites e monitoramento próprios da API OpenAI.
+- Chave da API exclusivamente no backend/servidor; nunca embutida no JavaScript, app de Mac, PWA ou repositório.
+- O GPT não recebe acesso irrestrito ao banco e não executa SQL livre. O Tempo oferece ferramentas de consulta com escopo, filtros, limites e permissões definidos.
+- Fluxo: pergunta/hipótese do GPT → solicitação de consulta estruturada → validação e execução pelo Tempo → retorno dos dados necessários → análise do GPT → resposta ou nova consulta.
+- Cálculos determinísticos, somas, agrupamentos e métricas simples devem ser feitos localmente pelo Tempo; usar GPT para interpretação, hipóteses, linguagem natural e análises que agreguem valor.
+- Separação rigorosa de dados por usuário e por domínio PF/PJ. Dados sensíveis só entram em análises autorizadas.
+- A IA pode investigar e recomendar com autonomia, mas não pode apagar dados, alterar históricos, editar lançamentos financeiros, enviar cobranças ou executar ações irreversíveis sem confirmação explícita.
+- Registrar consultas, ações propostas, aprovações e resultados para auditoria.
+
+### 8. Controle de custos e desempenho
+- Agregar e resumir dados no Tempo antes de enviar à API; enviar apenas o necessário para cada pergunta.
+- Evitar reenviar histórico inteiro e repetir análises sem mudança relevante nos dados.
+- Cache de resultados, deduplicação de consultas e análises agendadas com frequência configurável.
+- Escolher modelo conforme complexidade: modelo econômico para classificação/resumo simples e modelo mais capaz para investigações complexas.
+- Definir orçamento mensal, alertas de consumo, limite por usuário e painel de uso/custo por recurso.
+- Permitir desligar análises automáticas e controlar quais áreas podem ser analisadas.
+
+### 9. Relatórios e memória de decisões
+- Diário opcional: resumo do dia, horas, projetos, pendências e alertas importantes.
+- Semanal: produtividade, andamento dos projetos, prazos, contatos, financeiro e prioridades da próxima semana.
+- Mensal: visão estratégica do negócio, rentabilidade, fluxo de caixa, concentração de receita, tendências e comparação histórica.
+- Cada recomendação deve manter: data, pergunta/hipótese, consultas realizadas, evidências, conclusão, confiança, ação sugerida, decisão do usuário e resultado observado.
+- Permitir configurar horário, frequência, áreas incluídas e entrega dentro do app; notificações externas poderão ser avaliadas depois.
+
+### 10. Sequência sugerida de implementação
+1. Infraestrutura da API OpenAI no backend, autenticação, ferramentas de consulta controladas, logs e controle de custos.
+2. Assistente conversacional que responde com dados reais e consegue pedir consultas adicionais.
+3. Relatórios automáticos e analista proativo, com histórico de investigações e recomendações.
+4. Análise de produtividade e rotina, com hipóteses e experimentos mensuráveis.
+5. Inteligência financeira PF/PJ, conciliação e previsões, respeitando as separações.
+6. Tempo Inteligente: sugestões contextuais e automações com fila de aprovação.
+7. Integração Siri/Atalhos/App Intents.
+8. Skill Alexa com vinculação de conta e comandos de voz.
+9. Análise de uso do próprio Tempo e sugestões de evolução do produto.
+
+**Escopo desta entrada:** registrar o épico no backlog. Não altera código, banco, configurações, integrações ou comportamento do aplicativo. Todos os itens acima permanecem como proposta/backlog até priorização e implementação.
