@@ -125,3 +125,11 @@ test('texto que não é nota continua sendo recusado', () => {
   assert.equal(t.nfseParse('um texto qualquer R$ 10,00'), null);
   assert.equal(t.nfseParse('NFS-e sem valor nenhum'), null);
 });
+
+test('dentista: comprovante das duas conversas vai para a linha Dentista (sem nota)', () => {
+  const t = setup();
+  t.nfseReport([{ id: 'd1', contato: 'CRESCERODONTO  DENTISTA', tipo: 'comprovante', texto: 'Comprovante Pix R$ 350,00 03/11/2026', data: '2026-11-03', arquivo: null }]);
+  t.nfseReport([{ id: 'd2', contato: '‎Cristiana da Fonte (Dentista Rafa)', tipo: 'comprovante', texto: 'Pix enviado R$ 200,00 05/11/2026', data: '2026-11-05', arquivo: null }]);
+  const avisos = t.db.all('tempo_notices').filter(n => /Dentista/.test(n.title));
+  assert.equal(avisos.length, 2);
+});

@@ -676,3 +676,7 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
   - Mesma pergunta para os outros apps e sites de distração (Telegram, Mensagens e os sites que já contam como pausa, ex.: Instagram e YouTube no Chrome).
   - Ao ligar o foco, ativar o "Não perturbe" do Mac e, por um atalho, o foco do iPhone. O resto dos avisos do Tempo continua normal.
 - Cruzar contatos com projetos: somar o tempo de WhatsApp com cada cliente às horas do projeto, para ver quanto custa atender cada um e se o preço cobre.
+
+**V2.04.14 — Dentista nos reembolsos**
+- Comprovantes da dentista do Rafa entram na linha "Dentista", vindos de "Cristiana da Fonte (Dentista Rafa)" ou de "CrescerOdonto Dentista" (app do Mac e site). Ela não passa nota nem tem reembolso: linhas Dentista de out e nov marcadas "Não se aplica" em Reembolso e Requerimento (repete nos meses novos).
+- Nome da conversa agora é comparado sem diferença de maiúsculas, acentos, espaços e marcas invisíveis do WhatsApp, no Mac e no site.

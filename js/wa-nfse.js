@@ -10,8 +10,14 @@ const NFSE_CONTATO_LINHA = {
   'Aloma Consultório': 'Aloma',
   'Erika Gomes (Clau/Aconchego)': 'Claudiane',
   'Homero Futebol/ Bicicleta/ Skate': 'Homero',
-  'ARGOS FINANCEIRO HUGO VIANA': 'Patrícia'
+  'ARGOS FINANCEIRO HUGO VIANA': 'Patrícia',
+  // dentista do Rafa: só comprovante (não tem nota nem reembolso); pode vir de qualquer uma das duas conversas
+  'Cristiana da Fonte (Dentista Rafa)': 'Dentista',
+  'CrescerOdonto Dentista': 'Dentista'
 };
+/* Nome da conversa sem diferença de maiúsculas, acentos, espaços e marcas invisíveis do WhatsApp. */
+const nfseChave = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const nfseLinhaDoContato = (contato) => { const k = nfseChave(contato); const e = Object.entries(NFSE_CONTATO_LINHA).find(([n]) => nfseChave(n) === k); return e ? e[1] : null; };
 
 /* Lê os campos da nota a partir do texto do PDF. Retorna null se não for NFS-e. */
 function nfseParse(texto) {
@@ -91,7 +97,7 @@ function nfseReport(itens) {
   const recebidos = [];
   itens.forEach(it => {
     try {
-      const nome = NFSE_CONTATO_LINHA[it.contato] || null;
+      const nome = nfseLinhaDoContato(it.contato);
       const ym = nfseJanelaMes(it.data);
       if (!nome || !ym) { recebidos.push(it.id); return; }
       const visto = (chave) => db.all('tempo_notices').some(x => x.key === chave);

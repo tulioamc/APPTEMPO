@@ -88,7 +88,17 @@ final class WhatsAppMonitor {
         "Erika Gomes (Clau/Aconchego)": "Claudiane",
         "Homero Futebol/ Bicicleta/ Skate": "Homero",
         "ARGOS FINANCEIRO HUGO VIANA": "Patrícia",
+        // dentista do Rafa: só comprovante (não tem nota nem reembolso); pode vir de qualquer uma das duas conversas
+        "Cristiana da Fonte (Dentista Rafa)": "Dentista",
+        "CrescerOdonto Dentista": "Dentista",
     ]
+    /// Nome da conversa sem diferença de maiúsculas, acentos, espaços e marcas invisíveis do WhatsApp.
+    static func chave(_ s: String) -> String {
+        let limpo = s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "pt_BR"))
+            .unicodeScalars.filter { !(0x200E...0x200F).contains($0.value) && !(0x202A...0x202E).contains($0.value) && !(0x2066...0x2069).contains($0.value) }
+        return String(String.UnicodeScalarView(limpo)).split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
+    private static let notasPorChave: [String: String] = Dictionary(uniqueKeysWithValues: notasContatos.map { (chave($0.key), $0.value) })
 
     private let queue = DispatchQueue(label: "tempo.whatsapp")
     /// Fila separada: a consulta de "com quem eu estava falando" não pode esperar a leitura das notas.
@@ -396,7 +406,7 @@ final class WhatsAppMonitor {
         diaFmt.locale = Locale(identifier: "en_US_POSIX")
         diaFmt.dateFormat = "yyyy-MM-dd"
         for (nome, caminho, coreData) in linhas {
-            guard let linha = WhatsAppMonitor.notasContatos[nome] else { continue }
+            guard let linha = WhatsAppMonitor.notasPorChave[WhatsAppMonitor.chave(nome)] else { continue }
             let candidatos = [WhatsAppMonitor.midia.appendingPathComponent(caminho),
                               WhatsAppMonitor.shared.appendingPathComponent(caminho)]
             guard let arquivo = candidatos.first(where: { fm.fileExists(atPath: $0.path) }),   // apagado ou ainda não baixado
