@@ -35,3 +35,46 @@ test('"adiou" não sobe sozinho com o passar dos dias', () => {
   t.todoCarry(); t.todoCarry();
   assert.equal(t.todos()[0].data.adiou, 0);
 });
+
+function setup2() {
+  const m = load(['js/store.js', 'js/domain.js', 'js/notices.js'], ['db', 'todoTodasHTML', 'todoRelatorio', 'todoFeitasHoje', 'todoToday', 'VIEWS'],
+    { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: { todoTab: 'todas' }, toast() {}, render() {}, icon: () => '', esc: (s) => String(s), $: () => null, $$: () => [], todoAlarmSync() {},
+      fmtDate: (d) => d, fmtDur: (ms) => `${Math.round(ms / 60e3)}min`, fmtDateShort: (d) => d, fmtTime: (d) => d, pixSideHTML: () => '', noticeButtons: () => '', tag: (t) => t, statusCat: () => '' });
+  m.db.data = m.db.empty();
+  return m;
+}
+const hojeISO = (h) => { const d = new Date(); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+
+test('Todas: agrupa por dia e mostra abertas, concluídas e atrasadas', () => {
+  const t = setup2(); const hoje = t.todoToday();
+  t.db.data.tempo_notices = [
+    { id: 'a', kind: 'todo', status: 'open', title: 'A', data: { due: hoje + 'T23:59' }, created_at: hojeISO(8) },
+    { id: 'b', kind: 'todo', status: 'done', title: 'B', data: { due: hoje + 'T10:00' }, decided_at: hojeISO(9), created_at: hojeISO(8) },
+    { id: 'c', kind: 'todo', status: 'open', title: 'C', data: { due: hoje + 'T00:01' }, created_at: hojeISO(0) },
+  ];
+  const html = t.todoTodasHTML(t.db.data.tempo_notices);
+  assert.ok(html.includes('01 aberta') && html.includes('01 concluída') && html.includes('01 atrasada'), html);
+});
+
+test('feitas hoje ficam no fim do painel; as de ontem e as dispensadas não', () => {
+  const t = setup2();
+  const ontem = new Date(Date.now() - 864e5).toISOString();
+  const lista = [
+    { id: 'x', kind: 'todo', status: 'done', title: 'Feita hoje', decided_at: hojeISO(1), data: {} },
+    { id: 'y', kind: 'todo', status: 'done', title: 'Feita ontem', decided_at: ontem, data: {} },
+    { id: 'z', kind: 'todo', status: 'done', title: 'Dispensada', decided_at: hojeISO(1), decision: 'Dispensado', data: {} },
+  ];
+  assert.deepEqual(t.todoFeitasHoje(lista).map(n => n.id), ['x']);
+});
+
+test('relatório: concluídas, atrasadas, adiadas e média por dia', () => {
+  const t = setup2(); const hoje = t.todoToday();
+  const lista = [
+    { id: '1', kind: 'todo', status: 'done', title: '1', data: { due: hoje + 'T10:00' }, decided_at: hojeISO(9), created_at: hojeISO(8) },     // no prazo
+    { id: '2', kind: 'todo', status: 'done', title: '2', data: { due: hoje + 'T00:01', adiou: 2 }, decided_at: hojeISO(1), created_at: hojeISO(0) },  // atrasada e adiada
+  ];
+  const r = t.todoRelatorio(lista, 'semana', false);
+  assert.equal(r.feitas, 2); assert.equal(r.atrasadas, 1); assert.equal(r.noPrazo, 1);
+  assert.equal(r.adiadas, 1); assert.equal(r.adiamentos, 2);
+  assert.ok(r.media > 0);
+});

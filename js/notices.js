@@ -410,11 +410,76 @@ ACTIONS['todo-save'] = (el) => {
   // empurrou: a data antiga já tinha passado e foi trocada por outra
   if (old.due && old.due.slice(0, 10) < todoToday() && p.due && p.due.slice(0, 10) !== old.due.slice(0, 10)) data.adiou = (old.adiou || 0) + 1;
   if (!p.due) { delete data.due; delete data.deadline; delete data.end; }
-  if (!data.taskId) { delete data.project_id; delete data.client_id; Object.assign(data, todoFindLink(p.title)); }
+  if (!data.taskId && !data.link_manual) { delete data.project_id; delete data.client_id; Object.assign(data, todoFindLink(p.title)); }
   if (alarm && p.due) { data.alarm = true; if (mudou) data.alarm_criado = false; } else { delete data.alarm; delete data.alarm_criado; }
   db.update('tempo_notices', id, { title: p.title, data }, true);
   db.emit(); todoAlarmSync();
 };
+
+/* Janela de edição do to-do: tarefa, dia, hora, fim, prazo, projeto ou cliente, estimativa, alarme e anotação.
+   A ligação escolhida aqui vale e não é refeita pelo texto (link_manual). */
+function openTodoModal(id) {
+  const n = db.get('tempo_notices', id); if (!n) return;
+  const d = n.data || {};
+  const [dia, hora] = d.due ? d.due.split('T') : ['', ''];
+  const ativo = (p) => !p.archived && !['done', 'closed', 'cancelled'].includes(db.get('tempo_status_options', p.status_id)?.category);
+  const projs = db.all('tempo_projects').filter(ativo).sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR'));
+  const cls = db.all('tempo_clients').filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR'));
+  const lig = d.project_id ? 'p:' + d.project_id : d.client_id ? 'c:' + d.client_id : '';
+  const opt = (v, l) => `<option value="${v}" ${lig === v ? 'selected' : ''}>${esc(l)}</option>`;
+  const salvar = (box) => { todoSalvarModal(n.id, box); };
+  openLayer({
+    render: () => `<div class="dh"><h2>Editar to-do</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+      <div class="db stack" style="gap:12px">
+        <div class="field"><label for="td-t">Tarefa</label><input id="td-t" class="input" value="${esc(n.title)}" autocomplete="off"></div>
+        <div class="row gap-s" style="flex-wrap:wrap;align-items:flex-end">
+          <div class="field"><label for="td-d">Dia</label><input id="td-d" type="date" class="input" value="${dia}"></div>
+          <div class="field"><label for="td-h">Hora</label><input id="td-h" type="time" class="input" value="${hora || ''}"></div>
+          <div class="field"><label for="td-f">Até (fim)</label><input id="td-f" type="time" class="input" value="${d.end || ''}"></div>
+          <label class="check small" style="margin-bottom:8px" data-tip="Aparece como &quot;até hoje 18h&quot;: é um limite, não um horário marcado"><input type="checkbox" id="td-prazo" ${d.deadline ? 'checked' : ''}> É prazo</label>
+        </div>
+        <div class="field"><label for="td-l">Projeto ou cliente</label><select id="td-l" class="input">${opt('', 'Nenhum')}
+          ${projs.length ? `<optgroup label="Projetos">${projs.map(p => { const c = db.get('tempo_clients', p.client_id); return opt('p:' + p.id, p.name + (c ? ' · ' + c.name : '')); }).join('')}</optgroup>` : ''}
+          ${cls.length ? `<optgroup label="Clientes">${cls.map(c => opt('c:' + c.id, c.name)).join('')}</optgroup>` : ''}</select></div>
+        <div class="row gap-s" style="flex-wrap:wrap;align-items:flex-end">
+          <div class="field"><label for="td-e">Estimativa (min)</label><input id="td-e" type="number" min="0" step="5" class="input" style="width:120px" value="${d.est || ''}"></div>
+          <label class="check small" style="margin-bottom:8px" data-tip="Cria um lembrete com alarme no app Lembretes (Mac e iPhone). Precisa de dia e hora."><input type="checkbox" id="td-a" ${d.alarm ? 'checked' : ''}> Alarme</label>
+        </div>
+        <div class="field"><label for="td-n">Anotação</label><textarea id="td-n" class="input" rows="3">${esc(n.body || '')}</textarea></div>
+        ${d.adiou ? `<span class="small muted">Adiada ${d.adiou}x.</span>` : ''}
+      </div>
+      <div class="df"><button class="btn danger" data-x="del">Excluir</button><span class="grow"></span><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="ok">Salvar</button></div>`,
+    onMount: (ly) => {
+      const t = ly.box.querySelector('#td-t'); t.focus(); t.setSelectionRange(t.value.length, t.value.length);
+      ly.box.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-x="ok"]')) { salvar(ly.box); ly.close(); }
+        else if (ev.target.closest('[data-x="del"]')) { ly.close(); ACTIONS['todo-del']({ dataset: { id: n.id } }); }
+      });
+      ly.box.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.tagName === 'INPUT') { ev.preventDefault(); salvar(ly.box); ly.close(); } });
+    },
+  });
+}
+function todoSalvarModal(id, box) {
+  const n = db.get('tempo_notices', id); if (!n) return;
+  const v = (s) => box.querySelector(s);
+  const old = n.data || {}; const data = { ...old };
+  const dia = v('#td-d').value, hora = v('#td-h').value, fim = v('#td-f').value;
+  const due = dia ? `${dia}T${hora || '20:00'}` : null;
+  if (due) { data.due = due; data.end = fim || null; data.deadline = v('#td-prazo').checked && !fim; }
+  else { delete data.due; delete data.end; delete data.deadline; }
+  // empurrou: a data antiga já tinha passado e foi trocada por outra
+  if (old.due && old.due.slice(0, 10) < todoToday() && due && due.slice(0, 10) !== old.due.slice(0, 10)) data.adiou = (old.adiou || 0) + 1;
+  const lig = v('#td-l').value;
+  delete data.project_id; delete data.client_id;
+  if (lig.startsWith('p:')) data.project_id = lig.slice(2); else if (lig.startsWith('c:')) data.client_id = lig.slice(2);
+  data.link_manual = true;
+  const est = Number(v('#td-e').value); if (est > 0) data.est = est; else delete data.est;
+  if (v('#td-a').checked && due) { if (!old.alarm || old.due !== due) data.alarm_criado = false; data.alarm = true; }
+  else { delete data.alarm; delete data.alarm_criado; }
+  db.update('tempo_notices', id, { title: v('#td-t').value.trim() || n.title, body: v('#td-n').value.trim(), data }, true);
+  db.emit(); todoAlarmSync(); toast('To-do salvo');
+}
+ACTIONS['todo-modal'] = (el) => openTodoModal(el.dataset.id);
 
 /* To-do: item (um só modelo para o painel e para a aba). */
 function todoItemHTML(t) {
@@ -422,8 +487,8 @@ function todoItemHTML(t) {
   const real = t.data?.taskId ? db.where('tempo_time_entries', e => e.task_id === t.data.taskId).reduce((s, e) => s + entryMs(e), 0) : 0;
   const estTxt = est ? `<span class="todo-due">${real ? fmtDur(real) + ' / ' : 'est. '}${fmtDur(est * 60000)}</span>` : '';
   const lig = t.data?.project_id ? db.get('tempo_projects', t.data.project_id) : (t.data?.client_id ? db.get('tempo_clients', t.data.client_id) : null);
-  const ligTxt = lig && !t.data?.taskId ? `<span class="todo-due" title="${t.data.project_id ? 'Projeto' : 'Cliente'} ligado pelo texto">${esc(lig.name)}</span>` : '';
-  return `<div class="todo ${t.status === 'done' ? 'done' : ''}" data-tid="${t.id}" ${t.status === 'done' || todoSortMode() === 'alpha' || S.todoEdit === t.id ? '' : 'draggable="true"'}><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" oninput="todoAlarmPeek(this,'todo-edit-alarm-wrap','todo-edit-alarm')" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-cancel']()"><label id="todo-edit-alarm-wrap" class="row gap-s small" onmousedown="event.preventDefault()" style="display:${parseTodoText(todoEditRaw(t)).due ? 'inline-flex' : 'none'};align-items:center;white-space:nowrap"><input type="checkbox" id="todo-edit-alarm" ${t.data?.alarm ? 'checked' : ''}> Alarme</label>` : `<span class="grow todo-title" data-act="todo-edit" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${ligTxt}${estTxt}${t.data?.adiou ? `<span class="todo-due">adiou ${t.data.adiou}x</span>` : ''}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="btn sm icon ghost" data-act="todo-play" data-id="${t.id}" aria-label="Começar registro" title="Começar registro">${icon('play')}</button><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`;
+  const ligTxt = lig && !t.data?.taskId ? `<span class="todo-due todo-lig" data-act="todo-modal" data-id="${t.id}" data-tip="${t.data.project_id ? 'Projeto' : 'Cliente'} ligado${t.data.link_manual ? '' : ' pelo texto'}. Clique para trocar.">${esc(lig.name)}</span>` : '';
+  return `<div class="todo ${t.status === 'done' ? 'done' : ''}" data-tid="${t.id}" ${t.status === 'done' || todoSortMode() === 'alpha' || S.todoEdit === t.id ? '' : 'draggable="true"'}><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" oninput="todoAlarmPeek(this,'todo-edit-alarm-wrap','todo-edit-alarm')" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-cancel']()"><label id="todo-edit-alarm-wrap" class="row gap-s small" onmousedown="event.preventDefault()" style="display:${parseTodoText(todoEditRaw(t)).due ? 'inline-flex' : 'none'};align-items:center;white-space:nowrap"><input type="checkbox" id="todo-edit-alarm" ${t.data?.alarm ? 'checked' : ''}> Alarme</label>` : `<span class="grow todo-title" data-act="todo-modal" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${ligTxt}${estTxt}${t.data?.adiou ? `<span class="todo-due">adiou ${t.data.adiou}x</span>` : ''}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="btn sm icon ghost" data-act="todo-play" data-id="${t.id}" aria-label="Começar registro" title="Começar registro">${icon('play')}</button><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`;
 }
 /* Abertos primeiro; concluídos agrupados por dia da resolução, mais recentes primeiro.
    recentDays: mostra só os concluídos dos últimos N dias (o painel usa 7). */
@@ -528,21 +593,25 @@ VIEWS.todo = () => {
   const todayDone = todayTotal.filter(n => n.status === 'done').length;
   const tab = S.todoTab || 'open';
   const pick = { open: n => n.status !== 'done', hoje: n => n.status !== 'done' && (todoDueDay(n) === today || todoIsLate(n)), atrasadas: n => todoIsLate(n), feitas: n => n.status === 'done' };
-  const TABS = [['open', 'Abertas'], ['hoje', 'Hoje'], ['atrasadas', 'Atrasadas'], ['feitas', 'Concluídas']];
+  const TABS = [['open', 'Abertas'], ['hoje', 'Hoje'], ['atrasadas', 'Atrasadas'], ['feitas', 'Concluídas'], ['todas', 'Todas']];
+  const lista = tab === 'todas' ? todoTodasHTML(all) : todoGroupsHTML(all.filter(pick[tab] || pick.open)) + (tab === 'hoje' ? todoFeitasHoje(all).map(todoItemHTML).join('') : '');
   const fixed = db.setting('todoFixed', []) || [];
   const sug = tab === 'open' ? todoSuggestions() : [];
-  const html = `<div class="panel"><div class="panel-b" style="padding:16px;max-width:720px">
+  const html = `<div class="todo-grid"><div class="panel"><div class="panel-b" style="padding:16px">
     <div class="row between"><b>To-do</b><span class="faint small">Hoje: ${todayDone} de ${todayTotal.length} feitas</span></div>
     <form class="row gap-s" style="margin-top:10px" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h · fixo: Pagar Rafa !seg,qua" autocomplete="off" oninput="todoAlarmPeek(this)"><label id="todo-alarm-wrap" class="row gap-s small" style="display:none;align-items:center;white-space:nowrap"><input type="checkbox" id="todo-alarm"> Alarme</label><button class="btn sm" data-act="todo-add">Adicionar</button></form>
     <div class="seg" style="margin-top:12px">${TABS.map(([v, l]) => `<button class="${tab === v ? 'on' : ''}" data-act="todo-tab" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="row between" style="margin-top:8px"><span class="faint small">Ordem: ${todoSortMode() === 'manual' ? '<b>minha ordem</b>' : '<button class="btn sm ghost" data-act="todo-sort" data-v="manual">minha ordem</button>'} · ${todoSortMode() === 'alpha' ? '<b>A–Z</b>' : '<button class="btn sm ghost" data-act="todo-sort" data-v="alpha">A–Z</button>'}</span></div>
-    <div class="todo-list" style="margin-top:12px">${todoGroupsHTML(all.filter(pick[tab] || pick.open))}</div>
+    <div class="todo-list" style="margin-top:12px">${lista}</div>
     ${sug.length ? `<div class="lbl" style="margin-top:16px">Sugestões</div>${sug.map(x => `<div class="row between small res-row"><span>${esc(x.title)}${x.deadline ? ` <span class="${x.deadline === todoToday() ? 'late' : 'faint'}">· ${x.deadline === todoToday() ? 'entrega hoje' : 'prazo ' + fmtDate(x.deadline)}</span>` : ''}</span><button class="btn sm" data-act="todo-suggest" data-title="${esc(x.title)}" data-deadline="${x.deadline || ''}" data-task="${x.taskId || ''}">Criar to-do</button></div>`).join('')}` : ''}
     ${tab === 'open' && fixed.length ? `<div class="lbl" style="margin-top:16px">Fixos</div>${fixed.map(f => `<div class="row between small res-row"><span>${esc(f.title)} <span class="faint">· ${f.days.length === 7 ? 'todo dia' : f.days.map(d => TODO_DAY_NAMES[d]).join(', ')}</span></span><button class="icon-btn ghost" data-act="todo-fixed-del" data-id="${f.id}" title="Remover fixo">×</button></div>`).join('')}` : ''}
-  </div></div>`;
+  </div></div>${todoRelatorioHTML(all)}</div>`;
   return { title: 'To-do', html };
 };
 
+/* Concluídas hoje (pela hora em que foram marcadas), na ordem em que foram feitas: ficam no fim da lista, riscadas. */
+const todoFeitasHoje = (todos) => todos.filter(t => t.status === 'done' && t.decided_at && ymd(new Date(t.decided_at)) === todoToday() && t.decision !== 'Dispensado')
+  .sort((a, b) => String(a.decided_at).localeCompare(String(b.decided_at)));
 /* Painel lateral da tela inicial (Time Sheet): to-do + avisos pendentes. */
 function sidePanelHTML() {
   todoCarry(); todoFixedApply(); todoSyncLinked();
@@ -552,7 +621,7 @@ function sidePanelHTML() {
     ${pixSideHTML()}
     <div class="card"><div class="row between"><b>To-do</b><span class="row gap-s"><span class="faint small">${todos.filter(t => t.status !== 'done').length} abertas</span><button class="btn sm ghost" data-act="go" data-route="todo">Ver todos</button></span></div>
       <form class="row gap-s" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h" autocomplete="off" oninput="todoAlarmPeek(this)"><label id="todo-alarm-wrap" class="row gap-s small" style="display:none;align-items:center;white-space:nowrap"><input type="checkbox" id="todo-alarm"> Alarme</label><button class="btn sm" data-act="todo-add">Adicionar</button></form>
-      <div class="todo-list">${todoGroupsHTML(todos.filter(t => t.status !== 'done'))}</div>
+      <div class="todo-list">${todoGroupsHTML(todos.filter(t => t.status !== 'done'))}${todoFeitasHoje(todos).map(todoItemHTML).join('')}</div>
     </div>
     <div class="card"><div class="row between"><b>Avisos</b><button class="btn sm ghost" data-act="go" data-route="notices">Ver todos</button></div>
       ${pend.length ? pend.map(n => `<div class="side-notice" data-act="notice-open" data-id="${n.id}" style="cursor:pointer" title="Ir até o item para resolver"><div class="small"><b>${esc(n.title)}</b>${n.kind === 'pause' ? '' : `<div class="faint">${esc(n.body || '')}</div>`}</div>${noticeButtons(n)}</div>`).join('') : '<span class="faint small">Sem avisos pendentes.</span>'}
@@ -677,3 +746,83 @@ function todoAlarmSync() {
 }
 window.addEventListener('pywebviewready', todoAlarmSync);
 
+/* ---- To-do: aba Todas (por dia) ----
+   Dia do item = dia marcado (due); sem dia, o dia em que foi criado. Cada dia mostra quantas abertas, concluídas e atrasadas
+   e abre com um clique. Hoje começa aberto. */
+const todoDiaDe = (n) => todoDueDay(n) || ymd(new Date(n.created_at || Date.now()));
+function todoTodasHTML(all) {
+  const lista = all.filter(n => n.decision !== 'Dispensado');
+  if (!lista.length) return '<span class="faint small">Nada por enquanto.</span>';
+  const by = {}; lista.forEach(n => { const k = todoDiaDe(n); (by[k] = by[k] || []).push(n); });
+  const abertos = db.setting('todoTodasAbertos', null) || [todoToday()];
+  const n2 = (x) => String(x).padStart(2, '0');
+  return Object.keys(by).sort().reverse().map(k => {
+    const it = by[k]; const [y, m, d] = k.split('-');
+    const late = it.filter(todoIsLate).length, feitas = it.filter(n => n.status === 'done').length, abertas = it.length - feitas - late;
+    const open = abertos.includes(k);
+    const conta = [abertas ? `${n2(abertas)} ${abertas === 1 ? 'aberta' : 'abertas'}` : '', feitas ? `${n2(feitas)} ${feitas === 1 ? 'concluída' : 'concluídas'}` : '', late ? `<span class="late">${n2(late)} ${late === 1 ? 'atrasada' : 'atrasadas'}</span>` : ''].filter(Boolean).join(' · ');
+    const ord = [...todoManualSort(it.filter(n => n.status !== 'done')), ...it.filter(n => n.status === 'done').sort((a, b) => String(a.decided_at).localeCompare(String(b.decided_at)))];
+    return `<div class="todo-day"><button class="todo-dayh" data-act="todo-dia" data-day="${k}">${icon(open ? 'chevD' : 'chevR')} ${k === todoToday() ? 'Hoje · ' : ''}${d}.${m}.${y} <span class="small muted" style="margin-left:8px">${conta}</span></button>${open ? ord.map(todoItemHTML).join('') : ''}</div>`;
+  }).join('');
+}
+ACTIONS['todo-dia'] = (el) => {
+  const k = el.dataset.day; const cur = db.setting('todoTodasAbertos', null) || [todoToday()];
+  db.setSetting('todoTodasAbertos', cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k]); render();
+};
+
+/* ---- To-do: relatório à direita ----
+   Período: semana, mês ou ano (até hoje). Concluídas = marcadas como feitas no período. Atrasadas = com dia no período
+   que passaram da hora (feitas depois ou ainda abertas). Adiadas = quantas vezes o dia de uma tarefa vencida foi trocado.
+   "Não contar fim de semana" tira sábado e domingo das contas e da média. */
+function todoPeriodo(per) {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const ini = new Date(hoje);
+  if (per === 'mes') ini.setDate(1);
+  else if (per === 'ano') { ini.setMonth(0, 1); }
+  else { const wd = (hoje.getDay() + 6) % 7; ini.setDate(hoje.getDate() - wd); }   // semana começa na segunda
+  return { ini: ymd(ini), fim: ymd(hoje) };
+}
+function todoRelatorio(all, per, semFds) {
+  const { ini, fim } = todoPeriodo(per);
+  const fds = (dia) => { const w = new Date(dia + 'T12:00:00').getDay(); return w === 0 || w === 6; };
+  const conta = (dia) => dia && dia >= ini && dia <= fim && !(semFds && fds(dia));
+  const lista = all.filter(n => n.decision !== 'Dispensado');
+  const feitas = lista.filter(n => n.status === 'done' && n.decided_at && conta(ymd(new Date(n.decided_at))));
+  const comDia = lista.filter(n => conta(todoDueDay(n)));
+  const limite = (n) => new Date(n.data.end ? n.data.due.slice(0, 10) + 'T' + n.data.end : n.data.due).getTime();
+  const atrasadas = comDia.filter(n => n.status === 'done' ? (n.decided_at && new Date(n.decided_at).getTime() > limite(n)) : todoIsLate(n));
+  const noPrazo = comDia.filter(n => n.status === 'done' && n.decided_at && new Date(n.decided_at).getTime() <= limite(n));
+  const adiamentos = comDia.reduce((t, n) => t + (n.data?.adiou || 0), 0), adiadas = comDia.filter(n => n.data?.adiou).length;
+  const criadas = lista.filter(n => conta(ymd(new Date(n.created_at || 0))));
+  let dias = 0; for (let d = new Date(ini + 'T12:00:00'); ymd(d) <= fim; d.setDate(d.getDate() + 1)) if (!(semFds && fds(ymd(d)))) dias++;
+  // concluídas por dia (semana e mês) ou por mês (ano)
+  const barras = [];
+  if (per === 'ano') { for (let m = 0; m <= new Date().getMonth(); m++) { const k = `${fim.slice(0, 4)}-${String(m + 1).padStart(2, '0')}`; barras.push({ k: ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][m], v: feitas.filter(n => ymd(new Date(n.decided_at)).startsWith(k)).length }); } }
+  else for (let d = new Date(ini + 'T12:00:00'); ymd(d) <= fim; d.setDate(d.getDate() + 1)) { const k = ymd(d); if (semFds && fds(k)) continue; barras.push({ k: per === 'semana' ? ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()] : String(d.getDate()), v: feitas.filter(n => ymd(new Date(n.decided_at)) === k).length }); }
+  return { ini, fim, dias, feitas: feitas.length, criadas: criadas.length, atrasadas: atrasadas.length, noPrazo: noPrazo.length, comPrazoFeitas: noPrazo.length + atrasadas.filter(n => n.status === 'done').length, adiadas, adiamentos, media: dias ? feitas.length / dias : 0, barras };
+}
+function todoRelatorioHTML(all) {
+  const per = db.setting('todoRelPer', 'semana'), semFds = !!db.setting('todoRelSemFds', false);
+  const r = todoRelatorio(all, per, semFds);
+  const max = Math.max(1, ...r.barras.map(b => b.v));
+  const pct = r.comPrazoFeitas ? Math.round(r.noPrazo / r.comPrazoFeitas * 100) : null;
+  const card = (rot, val, dica) => `<div class="todo-kpi" data-tip="${esc(dica)}"><span class="small muted">${rot}</span><b>${val}</b></div>`;
+  const media = r.media.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+  return `<div class="panel todo-rel"><div class="panel-b" style="padding:16px">
+    <div class="row between"><b>Relatório</b><span class="small muted">${fmtDate(r.ini)} a ${fmtDate(r.fim)}</span></div>
+    <div class="seg" style="margin-top:10px">${[['semana', 'Semana'], ['mes', 'Mês'], ['ano', 'Ano']].map(([v, l]) => `<button class="${per === v ? 'on' : ''}" data-act="todo-rel-per" data-v="${v}">${l}</button>`).join('')}</div>
+    <label class="check small" style="margin-top:8px"><input type="checkbox" data-act="todo-rel-fds" ${semFds ? 'checked' : ''}> Não contar fim de semana</label>
+    <div class="todo-kpis">
+      ${card('Concluídas', r.feitas, 'Tarefas marcadas como feitas no período')}
+      ${card('Média por dia', media, `Concluídas ÷ ${r.dias} dia(s)${semFds ? ' úteis' : ''} do período`)}
+      ${card('Atrasadas', r.atrasadas, 'Tarefas com dia no período que passaram da hora: feitas depois ou ainda abertas')}
+      ${card('Adiadas', r.adiadas ? `${r.adiadas} <span class="small muted">(${r.adiamentos}x)</span>` : '0', 'Tarefas com dia no período que você empurrou depois de vencidas, e quantas vezes no total')}
+      ${card('Criadas', r.criadas, 'Tarefas novas no período')}
+      ${card('No prazo', pct === null ? '—' : pct + '%', 'Das tarefas com dia que você concluiu, quantas foram feitas até a hora marcada')}
+    </div>
+    <div class="small muted" style="margin:14px 0 6px">Concluídas por ${per === 'ano' ? 'mês' : 'dia'}</div>
+    <div class="todo-bars">${r.barras.map(b => `<div class="todo-bar" data-tip="${esc(`${b.k}: ${b.v} concluída(s)`)}"><span style="height:${Math.round(b.v / max * 100)}%"></span><i>${esc(b.k)}</i></div>`).join('')}</div>
+  </div></div>`;
+}
+ACTIONS['todo-rel-per'] = (el) => { db.setSetting('todoRelPer', el.dataset.v); render(); };
+ACTIONS['todo-rel-fds'] = (el) => { db.setSetting('todoRelSemFds', !!el.checked); render(); };

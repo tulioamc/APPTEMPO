@@ -1183,3 +1183,16 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .rb-file { cursor: pointer; }
 .rb-file .ico { width: 13px; height: 13px; flex: none; }
 .rb-file:hover { filter: brightness(.96); }
+/* To-do: lista à esquerda, relatório à direita (empilha em tela estreita) */
+.todo-grid { display: grid; grid-template-columns: minmax(0, 760px) minmax(280px, 380px); gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .todo-grid { grid-template-columns: 1fr; } }
+.todo-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.todo-kpi { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.todo-kpi b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.todo-bars { display: flex; align-items: flex-end; gap: 3px; height: 90px; }
+.todo-bar { flex: 1; min-width: 6px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.todo-bar span { width: 100%; min-height: 2px; background: var(--accent, #6d4ae0); opacity: .55; border-radius: 3px 3px 0 0; }
+.todo-bar i { font-style: normal; font-size: 10px; color: var(--fg-3); line-height: 1; }
+.todo-lig { cursor: pointer; }
+.todo-lig:hover { text-decoration: underline dotted; }
+.todo-dayh .late { color: var(--danger); }

@@ -660,3 +660,9 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Contatos: botão "Analisar N sugestões" abre uma lista com Aceitar e Negar em cada uma e "Aplicar". Negada não volta (setting `waSugNegadas`, por contato).
 - "Responder [contato]" desligado a pedido do Tulio (não funcionou bem: muitos números sem nome). As tarefas já criadas ficam para apagar.
 - Link da Anotação vira caixinha igual às outras tags, com ícone de documento.
+
+**V2.04.12 — To-do**
+- Clicar no to-do (ou no chip do projeto/cliente) abre a janela "Editar to-do": tarefa, dia, hora, fim, "é prazo", projeto ou cliente, estimativa, alarme e anotação; Excluir. A ligação escolhida ali não é refeita pelo texto (`data.link_manual`).
+- Concluídas hoje ficam no fim da lista, riscadas, no painel da tela inicial e na aba Hoje; no dia seguinte saem do painel (continuam no To-do).
+- Aba "Todas": por dia (dia marcado ou, sem dia, o da criação), com "X abertas · Y concluídas · Z atrasadas"; abre e fecha com um clique; hoje começa aberto.
+- Relatório à direita da página To-do: Semana / Mês / Ano até hoje, "Não contar fim de semana"; concluídas, média por dia, atrasadas, adiadas (e quantas vezes), criadas, % no prazo e barras de concluídas por dia (ou por mês no ano).
