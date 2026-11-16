@@ -91,6 +91,18 @@ function entryMs(e, at = Date.now()) {
 /* Lacuna "fora" = tempo que não é deste lançamento (trecho movido para outro projeto, ou tempo em outros programas no destino). Não é pausa nem entra no bruto. */
 const isForaWhy = (w) => w === 'moved' || w === 'fora';
 function entryGaps(e) { const segs = e.segments || []; const out = []; for (let i = 0; i < segs.length - 1; i++) { const a = segs[i].e, b = segs[i + 1].s; if (a && b && new Date(b) > new Date(a) && !isForaWhy(segs[i].why)) out.push({ s: a, e: b, why: segs[i].why || null }); } return out; }
+/* Trecho apagado da sessão: a lacuna que ele deixa não é pausa nem entra no bruto ("fora").
+   Marca o segmento que vem logo antes da lacuna onde [a,b] cai (ex.: computador fechado a noite inteira). */
+function segsMarkFora(segs, a, b) {
+  const T = (x) => new Date(x).getTime();
+  const list = segs || [];
+  return list.map((s, i) => {
+    const prox = list[i + 1];
+    if (!s.e || !prox || !prox.s || isForaWhy(s.why)) return s;
+    const cabe = T(s.e) <= a + 1000 && T(prox.s) >= b - 1000 && T(prox.s) > T(s.e);
+    return cabe ? { ...s, why: 'fora' } : s;
+  });
+}
 /* Lacunas de trecho movido: saem do bruto da sessão de origem (o tempo já está no projeto de destino). */
 /* Intervalos do bruto de uma sessão (início→fim, sem as lacunas movidas). */
 function entryBruIntervals(e, at = Date.now()) {

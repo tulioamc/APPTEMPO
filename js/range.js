@@ -91,7 +91,8 @@ function actDeleteRange(entryId, a, b) {
   const e = db.get('tempo_time_entries', entryId); if (!e) return false;
   const list = actList(entryId);
   const inRange = list.filter(r => new Date(r.to) > new Date(a) && new Date(r.from) < new Date(b));
-  const rest = actSubtract(e.segments || [], [{ a, b }]);
+  // apagar um trecho vazio (lacuna) também vale: ele deixa de ser desta sessão, então sai do bruto e das pausas
+  const rest = segsMarkFora(actSubtract(e.segments || [], [{ a, b }]), a, b);
   if (!inRange.length && JSON.stringify(rest) === JSON.stringify(e.segments || [])) return false;
   const intervalo = `${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}`;
   inRange.forEach(r => logTomb(r.rid, r));   // apagar na sessão também apaga no log (o último a mexer vale)

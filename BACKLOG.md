@@ -476,3 +476,7 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - A nota da Raquel (foto, não PDF) não entrava: o leitor exigia a chave de 44 dígitos colada e a linha de competência, que o reconhecimento de texto quebra em grupos. Agora a chave é remontada mesmo com espaços e pontos; sem a chave, a nota ainda entra pelo identificador do arquivo (sha), com o valor em cinza e aviso "Nota de … (foto)" que só vale depois da confirmação dele.
 - Foto de nota e de comprovante também ganham cópia no iCloud (antes só PDF e PNG).
 - Registro de arquivos lidos (`~/Library/Application Support/Tempo/wa_notas_v2.json`): o que já foi marcado como lido nunca é relido. Apagar esse arquivo faz os 60 dias serem lidos de novo sem duplicar nada (o site reconhece pela chave da nota e pelo sha do arquivo).
+
+**V2.04.03 — excluir um intervalo vazio (lacuna)**
+- "Excluir" dizia "Nada para excluir" quando o trecho selecionado não tinha nenhum registro, que é o caso da noite com o computador fechado. Agora a lacuna é marcada como "fora" no segmento anterior (`segsMarkFora` em `js/domain.js`): sai do bruto e das pausas, como já acontecia com trecho movido para outro projeto.
+- Sessão de APP PROMPT de 14/11 arrumada no banco do mesmo jeito (a noite de 14 para 15 deixou de contar como ociosidade; ela mostrava "Ocioso 24h 40").

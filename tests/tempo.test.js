@@ -3,7 +3,7 @@ const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 const H = 3600e3, M = 60e3;
 const setup = (entries) => {
-  const m = load(['js/store.js', 'js/domain.js'], ['db', 'entryMs', 'entryBrutoMs', 'entryBruIntervals', 'pauseGapsOf', 'entryGaps']);
+  const m = load(['js/store.js', 'js/domain.js'], ['db', 'entryMs', 'entryBrutoMs', 'entryBruIntervals', 'pauseGapsOf', 'entryGaps', 'segsMarkFora']);
   m.db.data = m.db.empty(); m.db.data.tempo_time_entries = entries; return m;
 };
 const seg = (s, e, why) => ({ s: `2026-11-16T${s}:00-03:00`, e: e ? `2026-11-16T${e}:00-03:00` : null, ...(why ? { why } : {}) });
@@ -46,4 +46,29 @@ test('sessão com Mac fechado: lacuna longa vira pausa, não trabalho', () => {
   const m = setup([e]);
   assert.equal(m.entryMs(e), (3 * 60 + 38 + 105) * M);
   assert.equal(total(m.pauseGapsOf([e])), 56 * M);
+});
+
+test('lacuna apagada sai do bruto e das pausas (computador fechado)', () => {
+  const m = setup([]);
+  const segs = [seg('08:00', '09:00'), seg('18:00', '18:30')];
+  const e = { id: 'x', segments: segs };
+  m.db.data.tempo_time_entries = [e];
+  assert.equal(m.entryBrutoMs(e), 10.5 * H);            // antes: a lacuna de 9h conta no bruto
+  assert.equal(total(m.pauseGapsOf([e])), 9 * H);        // e conta como pausa
+
+  const a = new Date('2026-11-16T12:00:00-03:00').getTime(), b = new Date('2026-11-16T15:00:00-03:00').getTime();
+  const fora = { id: 'x', segments: m.segsMarkFora(segs, a, b) };
+  m.db.data.tempo_time_entries = [fora];
+  assert.equal(m.entryBrutoMs(fora), 1.5 * H);           // depois: só os dois trechos de trabalho
+  assert.equal(total(m.pauseGapsOf([fora])), 0);
+});
+
+test('marcar fora só mexe na lacuna que contém o trecho apagado', () => {
+  const m = setup([]);
+  const segs = [seg('08:00', '09:00'), seg('09:30', '10:00'), seg('18:00', '18:30')];
+  const a = new Date('2026-11-16T12:00:00-03:00').getTime(), b = new Date('2026-11-16T15:00:00-03:00').getTime();
+  const out = m.segsMarkFora(segs, a, b);
+  assert.equal(out[0].why, undefined);                   // pausa de 30min continua pausa
+  assert.equal(out[1].why, 'fora');
+  assert.equal(out[2].why, undefined);
 });
