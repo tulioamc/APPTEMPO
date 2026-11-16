@@ -431,3 +431,31 @@ Plano: levar tudo para o app antigo (Swift), sem tirar nada dele.
 - iCloud, feedback e lembretes: mesmas funções do `main.py`, chamadas pelo site via `messageHandlers.tempo` (o site hoje chama `window.pywebview.api`; aceitar os dois).
 - Segurança: se a compilação falhar, o `update.sh` para antes de trocar o app (o instalado continua funcionando). Testar cada parte no Mac antes de desligar o app novo.
 - Ao final: aposentar o app Python e a pasta `~/tempo-build`.
+
+
+## Passagem para a conversa APP TEMPO [V2.04.00] (16/11/2026)
+Estado ao fim da conversa V2.03 (site em V2.03.17):
+
+**Como as coisas estão**
+- Site: `tulioamc/APPTEMPO` (main publica na Vercel, https://apptempo-abon.vercel.app). Testes em `tests/` rodam no GitHub a cada envio (`node --test tests/*.test.js`).
+- Banco: Supabase `bhupkabvbblcrmdlaukb`. Novidades de hoje: colunas `tempo_reimb_rows.suggested_amount` e `req_on`; gatilho `tempo_touch` (carimba updated_at) e função `tempo_sync_state()` (sincronização leve).
+- Dois apps do Mac abertos ao mesmo tempo (ver "Juntar os dois apps do Mac num só"): o **antigo (Swift, ~/Applications)** é o principal — atividade, pausas, cronômetro na barra de menu; o **novo (Python, /Applications, repositório `tulioamc/tempo-mac`, pasta ~/tempo-build)** faz WhatsApp, notas/comprovantes e iCloud e se atualiza sozinho quando o VERSION da pasta muda (atualizar.sh, certificado "Tempo Local").
+- Gravação: fila no aparelho (`tempo-outbox-v1`) que reenvia até o banco confirmar. Tela: `js/morph.js` atualiza só o que mudou (preserva foco e digitação); `window.TEMPO_NO_MORPH = true` volta ao jeito antigo se algo estranhar.
+
+**Feito nesta conversa (V2.03.05 → V2.03.17)**
+- Reembolsos: "Não se aplica" repete no mês novo; valor do mês anterior vira sugestão cinza; colunas na ordem Despesa, Pagar até, Pagamento, Pago em, Requerimento, Req em, Valor, Reembolso, Reembolsado em, Anotação; datas automáticas ao marcar Pago/Feito/Feito!; "Pagar até" mostra atraso; extrato marca reembolso como Feito! e avisa.
+- Notas fiscais e comprovantes do WhatsApp (contatos de terapia), com janela de datas 20→19, cópia no iCloud e links na Anotação; valor só vira real com confirmação (comprovante marca Pago sozinho se o valor bater).
+- To-dos: automático apagado não volta; página inicial só com abertos; "adiou" conta só quando a data vencida é trocada.
+- Revisão geral (V2.03.15): fila de gravação, backup seguro, carga em paralelo, sincronização leve, atualização da tela sem redesenho, testes, finanças dividido em três arquivos. Corrigiu: agenda do Rafa e "Reembolsado em" não eram salvos.
+- Resumo: selecionar na barra abre o mesmo menu da Sessão atual (Zoom, Transferir, Alterar tipo, Excluir). Testado na barra Por programa; na barra Arquivo / site falta conferir com dados reais.
+
+**Pendências, por ordem**
+1. Juntar os dois apps do Mac no antigo (plano acima).
+2. Conferir se notas/comprovantes do WhatsApp chegam (avisos "Nota de …" na página inicial; tabela `tempo_notices` com key `nfse:`/`comp:`).
+3. Cortar a sessão de APP PROMPT de 14/11 (08h04–11h42, 20h02 "Não especificado"): falta o Tulio dizer a hora em que fechou o Mac.
+4. Pausa ao abrir o app quando o cronômetro ficou rodando sem atividade (ex.: Mac fechado).
+5. Supabase: ligar proteção contra senha vazada (só o Tulio); decidir se apaga as tabelas antigas (backup_* e gpt_old_*).
+6. Limpeza do código das telas (seção acima).
+7. Itens antigos ainda abertos: OFX do Nubank e fatura em PDF (aguardando arquivos), travar mês fechado?, transferências PJ a confirmar, data de volta da viagem (modo viagem), categoria da compra "May" (R$ 36, 03/10), tela de Contatos do WhatsApp (classificar cliente/amigo/grupo).
+
+**Lição desta conversa:** antes de apagar ou trocar qualquer app/arquivo do Mac, conferir o que ele faz (o app "1.0" parecia velho e era o principal).
