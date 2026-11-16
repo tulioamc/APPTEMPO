@@ -95,7 +95,7 @@ VIEWS.timesheet = () => {
       ${corridoOn() ? corridoHTML() : entries.length ? entryHeadHTML() + groupedRowsHTML(entries) : `<div class="empty">${icon('clock')}<b>Nenhum registro em ${isToday(day) ? 'hoje' : fmtDate(S.tsDay)}</b><span>Inicie o cronômetro ou lance um apontamento manual se esqueceu de registrar.</span></div>`}
     </div>
   </div>`;
-  return { title: 'Time Sheet', actions: '', html: `<div class="home-grid"><div class="home-main">${html}</div>${sidePanelHTML()}</div>` };
+  return { title: 'Time Sheet', actions: `${focoBtnHTML()}${a ? '' : `<button class="btn primary" data-act="ts-start">${icon('play')} Iniciar registro</button>`}`, html: `<div class="home-grid"><div class="home-main">${html}</div>${sidePanelHTML()}</div>` };
 };
 
 function dayStrip(entries, day) {

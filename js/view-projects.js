@@ -26,12 +26,14 @@ const PCOLS = {
   remaining:{ label: 'Valor restante', ico: 'hash', w: 140, money: true, sort: p => remainingOf(p) || 0, val: p => remainingOf(p) || 0, cell: p => { const r = remainingOf(p); return r ? fmtMoney(r) : ''; }, edit: projEdit.remaining },
   paid:     { label: 'Valor pago', ico: 'hash', w: 140, money: true, sort: p => paidOf(p), val: p => paidOf(p), cell: p => { const v = paidOf(p); return v ? fmtMoney(v) : ''; } },
   hours:    { label: 'Horas', ico: 'clock', w: 100, money: true, sort: p => projectMs(p.id), val: p => projectMs(p.id), cell: p => { const ms = projectMs(p.id); return ms ? fmtH(ms) : ''; }, fmt: v => fmtH(v) },
+  wa:       { label: 'WhatsApp', ico: 'clock', w: 110, money: true, sort: p => waMsDoProjeto(p.id), val: p => waMsDoProjeto(p.id), cell: p => { const ms = waMsDoProjeto(p.id); return ms ? `<span data-tip="Conversas com contatos de trabalho deste projeto fora do cronômetro">${fmtH(ms)}</span>` : ''; }, fmt: v => fmtH(v) },
   est:      { label: 'Horas estimadas', ico: 'clock', w: 120, money: true, sort: p => Number(p.estimated_hours) || 0, val: p => (Number(p.estimated_hours) || 0) * 3600000, cell: p => p.estimated_hours ? fmtH(p.estimated_hours * 3600000) : '', fmt: v => fmtH(v), edit: projEdit.est },
   rate:     { label: 'R$/hora efetivo', ico: 'hash', w: 130, money: true, sort: p => effectiveRate(p) || 0, cell: p => { const r = effectiveRate(p); return r ? fmtMoney(r) : ''; } },
+  ratewa:   { label: 'R$/hora c/ WhatsApp', ico: 'hash', w: 150, money: true, sort: p => effectiveRateComWa(p) || 0, cell: p => { const r = effectiveRateComWa(p); return r ? `<span data-tip="Orçamento ÷ (horas + WhatsApp fora do cronômetro)">${fmtMoney(r)}</span>` : ''; } },
   notes:    { label: 'Observação', ico: 'text', w: 260, sort: p => p.notes || '', cell: p => esc(p.notes || ''), cls: 'obs', edit: projEdit.notes },
   created:  { label: 'Criado em', ico: 'cal', w: 110, sort: p => p.created_at, cell: p => fmtDate(p.created_at) }
 };
-const DEFAULT_PHIDDEN = ['hours','est','rate','created'];
+const DEFAULT_PHIDDEN = ['hours','wa','est','rate','ratewa','created'];
 function deadlineCell(p) {
   if (!p.deadline) return '';
   const done = ['done', 'cancelled'].includes(statusCat(p.status_id));

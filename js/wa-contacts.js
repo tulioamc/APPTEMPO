@@ -127,25 +127,6 @@ function waMinutosUteis(deMs, ateMs) {
   }
   return total;
 }
-/* (Desligado em 16/11 a pedido do Tulio: não funcionou bem na prática. Fica a função, sem ser chamada.)
-   "Responder [contato]" no To-Do: mensagem de contato de trabalho sem resposta há 1 h (cliente) ou 2 h (colega, fornecedor,
-   administrativo, agência), contando só o horário de trabalho. Some sozinha quando você responde. Grupos não geram tarefa. */
-function waPrazoResposta(c) { const t = waTipoNome(c); return (t === 'Cliente' || t === 'Misto (mais cliente)') ? 60 : 120; }
-function waResponder(agora = Date.now()) {
-  const todos = db.all('tempo_notices') || [];
-  (db.all('tempo_wa_contacts') || []).forEach(c => {
-    const tIn = c.last_in ? new Date(c.last_in).getTime() : 0, tOut = c.last_out ? new Date(c.last_out).getTime() : 0;
-    // respondeu: fecha as tarefas abertas desse contato
-    todos.filter(n => n.kind === 'todo' && n.status !== 'done' && n.data?.wa === c.jid && tOut >= (n.data.wa_in || 0))
-      .forEach(n => db.update('tempo_notices', n.id, { status: 'done', decision: 'Respondido no WhatsApp', decided_at: nowISO() }, true));
-    if (c.tipo === 'grupo' || !waEhTrabalho(c) || !tIn || tOut >= tIn) return;
-    if (waMinutosUteis(tIn, agora) < waPrazoResposta(c)) return;
-    if (todos.some(n => n.kind === 'todo' && n.data?.wa === c.jid && n.data?.wa_in === tIn)) return;
-    db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: `Responder ${c.name}`, body: '', data: { auto: true, wa: c.jid, wa_in: tIn }, decision: '', decided_at: null, snooze_until: null }, true);
-  });
-  db.emit();
-}
-
 /* Tempo de hoje no WhatsApp com quem não é de trabalho (registro de atividade). */
 function waAmigosHojeMs(dia = ymd(new Date())) {
   return (db.setting('actlog:' + dia, null) || []).filter(r => /whatsapp/i.test(String(r.app || '')) && !waEhTrabalho(waContato(r.doc)))

@@ -45,8 +45,6 @@ function logEdit(rid, kind, campo, antes, depois) {
 function logTomb(rid, rec) {
   logEdit(rid, 'apagar', null, rec ? { from: rec.from, to: rec.to, app: rec.app, doc: rec.doc || null } : null, null);
 }
-/* Editar um campo (from, to, app, doc, folder) de um registro: vale nos dois lados. */
-function logEditField(rid, campo, antes, depois) { logEdit(rid, 'editar', campo, antes, depois); }
 
 function logReconcile() {
   const edits = logEditsOf(); if (!edits.length) return;

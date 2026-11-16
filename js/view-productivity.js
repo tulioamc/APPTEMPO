@@ -65,13 +65,6 @@ function prodSpread(s, e, cb) {
     t = end;
   }
 }
-/* Dias de cada dia da semana no período (para média por dia). */
-function prodDowDays(a, b) {
-  const cnt = [0, 0, 0, 0, 0, 0, 0];
-  const d = new Date(a); d.setHours(0, 0, 0, 0);
-  while (d.getTime() < b) { cnt[d.getDay()]++; d.setDate(d.getDate() + 1); }
-  return cnt;
-}
 function prodZero() { return { prod: 0, dist: 0, ocio: 0 }; }
 function prodStats(C) {
   const hours = Array.from({ length: 24 }, prodZero);

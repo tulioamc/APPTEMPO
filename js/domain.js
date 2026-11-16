@@ -25,7 +25,6 @@ function fmtDateTime(iso) { if (!iso) return ''; return `${fmtDate(iso)} ${fmtTi
 function toLocalInput(iso) { if (!iso) return ''; const d = new Date(iso); return `${ymd(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 function fromLocalInput(v) { return v ? new Date(v).toISOString() : null; }
 function daysBetween(a, b) { if (!a || !b) return null; const A = typeof a === 'string' && a.length === 10 ? parseYmd(a) : new Date(a); const B = typeof b === 'string' && b.length === 10 ? parseYmd(b) : new Date(b); return Math.round((B - A) / 86400000); }
-function longDate(d) { d = new Date(d); return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} de ${MONTHS[d.getMonth()]}`; }
 const isToday = (d) => ymd(d) === ymd(new Date());
 const num = (v) => { if (v === '' || v === null || v === undefined) return null; const n = Number(String(v).replace(/\./g, '').replace(',', '.')); return isNaN(n) ? null : n; };
 const numIn = (v) => { if (v === '' || v === null || v === undefined) return null; const n = Number(v); return isNaN(n) ? null : n; };
@@ -422,21 +421,6 @@ function actBursts(e) {
   const out = [];
   iv.forEach(([a, b]) => { const l = out[out.length - 1]; if (l && a <= l[1] + 60e3) l[1] = Math.max(l[1], b); else out.push([a, b]); });
   return out;
-}
-/* Corte do fim: procura, de trás para frente, a última parada longa (>15 min) que tem menos de 5 min de atividade depois dela
-   (inclui a parada até o fim). A sessão termina onde essa parada começou. Ex.: trabalho até 18h, ocioso até 19h, mexo 2 min e paro → 18h. */
-function stopCutAt(e, end, last) {
-  const startMs = new Date(last.s).getTime(), endMs = new Date(end).getTime();
-  const bs = actBursts(e).filter(([a, b]) => b > startMs && a < endMs).map(([a, b]) => [Math.max(a, startMs), Math.min(b, endMs)]);
-  if (!bs.length) return end;
-  let depois = 0;
-  for (let k = bs.length - 1; k >= 0; k--) {
-    const gapFim = k === bs.length - 1 ? endMs : bs[k + 1][0];
-    const gap = gapFim - bs[k][1];
-    if (gap > STOP_IDLE_MS && depois < STOP_SHORT_MS) return new Date(bs[k][1]).toISOString();
-    depois += bs[k][1] - bs[k][0];
-  }
-  return end;
 }
 /* Corte do início: se a primeira atividade vem depois de mais de 15 min do play, a sessão começa nela. Ex.: play 8h30, primeiro sinal 9h05 → 9h05. */
 function stopTrimStart(e, segs) {

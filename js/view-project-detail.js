@@ -26,11 +26,13 @@ function projectDrawer(id, st) {
 
 function pdOverview(p) {
   const ms = projectMs(p.id), est = (Number(p.estimated_hours) || 0) * 3600000, rate = effectiveRate(p);
+  const waMs = waMsDoProjeto(p.id), rateWa = effectiveRateComWa(p);
   const changes = deadlineChanges(p.id); const del = deliveryInfo(p);
   const revs = db.where('tempo_revisions', r => r.project_id === p.id).length;
   return `<div class="kpis">
     <div class="kpi"><span class="k">Horas reais</span><span class="v">${fmtH(ms)}</span><span class="s">${est ? `de ${fmtH(est)} estimadas · ${Math.round(ms / est * 100)}%` : 'sem estimativa'}</span></div>
-    <div class="kpi"><span class="k">R$/hora efetivo</span><span class="v">${rate ? fmtMoney(rate) : '—'}</span><span class="s">orçamento ÷ horas reais</span></div>
+    <div class="kpi" data-tip="Conversas com contatos de trabalho deste projeto fora do cronômetro (dentro dele já estão nas horas)"><span class="k">WhatsApp</span><span class="v">${waMs ? fmtH(waMs) : '—'}</span><span class="s">${waMs ? `total com horas: ${fmtH(ms + waMs)}` : 'nada fora do cronômetro'}</span></div>
+    <div class="kpi"><span class="k">R$/hora efetivo</span><span class="v">${rate ? fmtMoney(rate) : '—'}</span><span class="s">${waMs && rateWa ? `com WhatsApp: ${fmtMoney(rateWa)}` : 'orçamento ÷ horas reais'}</span></div>
     <div class="kpi"><span class="k">Recebido</span><span class="v">${fmtMoney0(paidOf(p))}</span><span class="s">${p.budget ? 'de ' + fmtMoney(p.budget) : 'sem orçamento'}</span></div>
     <div class="kpi"><span class="k">Revisões</span><span class="v">${revs}</span><span class="s">${p.revisions_included ?? 0} incluídas${revs > (p.revisions_included ?? 0) ? ` · <b style="color:var(--warn)">${revs - (p.revisions_included ?? 0)} extra</b>` : ''}</span></div>
   </div>

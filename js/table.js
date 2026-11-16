@@ -21,7 +21,6 @@ const saveTables = () => db.setSetting('tables', clone(S.tables));
 
 /* ---------- valores em R$ ---------- */
 function moneyVal(el) { const d = (el.value || '').replace(/\D/g, ''); return d ? Number(d) / 100 : null; }
-const valOf = (el) => el.dataset.money !== undefined ? moneyVal(el) : el.value;
 const moneyAttrs = (v) => `type="text" inputmode="numeric" autocomplete="off" data-money value="${v !== null && v !== undefined && v !== '' ? esc(fmtMoney(v)) : ''}"`;
 document.addEventListener('input', (e) => {
   const el = e.target; if (!el.matches?.('[data-money]')) return;

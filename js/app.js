@@ -206,11 +206,11 @@ function suggestPause(fromMs, toMs, source, app) {
   if (toMs - fromMs < minMs) return;
   if (pausesOf(a.id).some(n => Math.abs(new Date(n.data.from) - fromMs) < (source === 'app' ? 5000 : 60000))) return;
   const from = new Date(fromMs).toISOString(), to = new Date(toMs).toISOString();
-  addNotice({ kind: 'pause', key: `pause:${a.id}:${from}`, title: `Pausa sugerida: ${fmtDur(toMs - fromMs)}`, body: `Parado entre ${fmtTime(from)} e ${fmtTime(to)}; voltou às ${fmtTime(to)}.`, entity: 'entry', entity_id: a.id, project_id: a.project_id, data: { entry_id: a.id, from, to, source, app: app || null } });
+  addNotice({ kind: 'pause', key: `pause:${a.id}:${from}`, title: `Pausa sugerida: ${fmtDur(toMs - fromMs)}`, body: `Parado entre ${fmtTime(from)} e ${fmtTime(to)}; voltou às ${fmtTime(to)}.`, entity: 'entry', entity_id: a.id, project_id: a.project_id, data: { entry_id: a.id, from, to, source, app: app || null } }, true);   // calado: entra já aplicada, sem piscar o cartão de "pausa sugerida"
   // inatividade vira pausa sozinha (sem aprovação): o aviso fica só para registro
   const auto = db.all('tempo_notices').find(x => x.key === `pause:${a.id}:${from}`);
   // espiada curta (menos de 1 min) entra calada; só pausa maior mostra o aviso
-  if (auto) { applyPause(a, auto, 'insert'); if (toMs - fromMs >= 60000) toast(`${icon('alert', 'ico')} Pausa aplicada: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`); return; }
+  if (auto) { applyPause(a, auto, 'insert'); db.emit(); if (toMs - fromMs >= 60000) toast(`${icon('alert', 'ico')} Pausa aplicada: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`); return; }
   toast(`${icon('alert', 'ico')} Pausa sugerida: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`, { actions: [{ label: 'Revisar', run: () => go('timesheet') }] });
   notifyNative('Pausa sugerida', `${fmtDur(toMs - fromMs)} parado (${fmtTime(from)}–${fmtTime(to)})`);
 }
@@ -238,21 +238,6 @@ window.TempoBridge = {
 /* Atividade em primeiro plano vinda do app de Mac: { from, to, app, doc?, folder? }.
    Grava sozinha (sem Aceitar) se houver sessão rodando e a atividade tiver ao menos 10 segundos. */
 const pathNorm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-/* Sugere o cliente pelo caminho da pasta: procura nomes de cliente e de projeto nos pedaços do caminho,
-   do mais profundo para o mais raso. Só sugere; nunca grava sozinho. */
-function clientFromPath(folder) {
-  const parts = String(folder || '').split('/').map(pathNorm).filter(p => p.length >= 3).reverse();
-  const clients = db.all('tempo_clients'), projects = db.all('tempo_projects');
-  for (const part of parts) {
-    const c = clients.find(x => pathNorm(x.name) === part) || projects.map(p => ({ p, c: clients.find(x => x.id === p.client_id) })).find(o => o.c && pathNorm(o.p.name) === part)?.c;
-    if (c) return c;
-  }
-  for (const part of parts) {
-    const c = clients.find(x => { const n = pathNorm(x.name); return n.length >= 4 && part.includes(n); });
-    if (c) return c;
-  }
-  return null;
-}
 const FOLDER_STOP = new Set(['projetos', 'projeto', 'arquivos', 'arquivo', 'desktop', 'documentos', 'documents', 'downloads', 'pasta', 'library', 'volumes', 'icloud', 'drive', 'mobile documents', 'com apple cloud docs', 'final', 'finais', 'sources', 'assets', 'trabalho']);
 /* Pedaços da pasta que servem de chave: sem /Users/<nome>, do mais fundo para o mais raso. */
 function folderParts(folder) {

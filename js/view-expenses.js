@@ -122,8 +122,6 @@ CHANGES['ex-import'] = async (el) => {
   render();
 };
 
-const exCatOptions = (cur) => `<option value="">Sem categoria</option>` + Object.entries(EX_CATS).map(([main, subs]) =>
-  `<optgroup label="${main}">${subs.map(s => { const v = main + '/' + s; return `<option value="${v}" ${v === cur ? 'selected' : ''}>${s}</option>`; }).join('')}</optgroup>`).join('');
 
 const exMesCurto = (ym) => { const [y, m] = ym.split('-').map(Number); return `${RB_MONTHS[m - 1]} ${y}`; };
 /* resumo de um mês: previsto e realizado */

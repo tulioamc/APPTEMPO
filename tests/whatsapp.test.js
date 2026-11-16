@@ -4,7 +4,7 @@ const { load } = require('./helpers');
 
 const setup = () => {
   const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/wa-contacts.js'],
-    ['db', 'waSugestao', 'waAceitarSugestao', 'waResponder', 'waRotularPausas', 'waMinutosUteis', 'waAmigosHojeMs']);
+    ['db', 'waSugestao', 'waAceitarSugestao', 'waRotularPausas', 'waMinutosUteis', 'waAmigosHojeMs']);
   m.db.data = m.db.empty();
   m.db.data.tempo_status_options = [
     { id: 'cli', kind: 'wa_tipo', name: 'Cliente', color: 'green', category: 'trabalho', order: 0 },
@@ -39,26 +39,6 @@ test('horário de trabalho: só seg a sex, das 9h às 19h', () => {
   assert.equal(m.waMinutosUteis(t('2026-11-16T08:00:00'), t('2026-11-16T10:00:00')), 60);   // segunda
   assert.equal(m.waMinutosUteis(t('2026-11-14T10:00:00'), t('2026-11-14T12:00:00')), 0);    // sábado
   assert.equal(m.waMinutosUteis(t('2026-11-16T18:30:00'), t('2026-11-17T09:30:00')), 60);   // vira a noite
-});
-
-test('"Responder [contato]": cliente após 1 h útil, some quando responde; amigo e grupo não', () => {
-  const m = setup();
-  const t = (s) => new Date(s).toISOString();
-  m.db.data.tempo_wa_contacts = [
-    { id: 'a', jid: 'a@x', name: 'Carla', tipo: 'amigo', tipo_id: 'cli', last_in: t('2026-11-16T10:00:00'), last_out: t('2026-11-16T09:00:00') },
-    { id: 'b', jid: 'b@x', name: 'Amigo', tipo: 'amigo', tipo_id: 'ami', last_in: t('2026-11-16T10:00:00'), last_out: null },
-    { id: 'c', jid: 'c@x', name: 'Grupo', tipo: 'grupo', tipo_id: 'cli', last_in: t('2026-11-16T10:00:00'), last_out: null },
-    { id: 'd', jid: 'd@x', name: 'Colega', tipo: 'amigo', tipo_id: 'col', last_in: t('2026-11-16T10:00:00'), last_out: null },
-  ];
-  m.waResponder(new Date('2026-11-16T10:30:00').getTime());
-  assert.equal(m.db.data.tempo_notices.length, 0, 'meia hora ainda não');
-  m.waResponder(new Date('2026-11-16T11:05:00').getTime());
-  assert.deepEqual(m.db.data.tempo_notices.map(n => n.title), ['Responder Carla'], 'só o cliente após 1 h; colega espera 2 h');
-  m.waResponder(new Date('2026-11-16T11:10:00').getTime());
-  assert.equal(m.db.data.tempo_notices.length, 1, 'não duplica');
-  m.db.data.tempo_wa_contacts[0].last_out = t('2026-11-16T11:20:00');
-  m.waResponder(new Date('2026-11-16T11:21:00').getTime());
-  assert.equal(m.db.data.tempo_notices[0].status, 'done', 'respondeu: a tarefa fecha');
 });
 
 test('celular só dá nome a pausa que já existe, e só com mensagem a quem não é de trabalho', () => {
