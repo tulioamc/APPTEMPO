@@ -407,3 +407,15 @@ Adendo ao item de reembolsos acima. Tudo que o app lê ou sugere vai para a fila
 - V2.01.60 (ajuste 7): relatório com uma visualização por vez (abas Categoria, Meio, PF/PJ, Onde foi); rosca centralizada; legenda em chips claros com as cores das categorias.
 - Ideias para os relatórios (a escolher): evolução mensal empilhada por categoria; comparação com o mês anterior (variação por categoria); média móvel de 3 meses; top 10 maiores gastos do mês; frequência (quantas vezes por semana/mês foi a cada lugar); gasto por dia da semana e por horário; parcelas futuras do cartão; assinaturas ativas e total anual; gastos sem categoria para revisar.
 - Ideias de filtros: período (últimos 30/90 dias, ano); valor acima de X; só itens sem categoria; só PJ ou só PF; só cartão ou só Pix; por nome de estabelecimento; só reembolsáveis; só vinculados ou não vinculados a gasto.
+
+## Limpeza do código das telas (revisão de 16/11/2026, deixado para depois pelo Tulio)
+A revisão V2.03.15 cuidou de segurança e funcionamento (fila de gravação, sincronização, testes). A limpeza das telas ficou para depois:
+- Telas com linhas muito longas e HTML montado dentro do JavaScript: separar em funções menores, uma por bloco da tela.
+- Muitas funções e variáveis soltas que todo arquivo enxerga: agrupar por tela, para uma mudança não quebrar outra.
+- A divisão de Finanças (view-finance-reports.js, finance-bank.js, finance-links.js) foi mecânica: falta reorganizar por assunto dentro dos arquivos.
+- Fazer uma tela por vez, com testes antes de mexer. Começar pelo Time Sheet ou pelo Financeiro (os mais complexos).
+
+## Pendências da revisão de 16/11/2026
+- App do Mac: aplicar a correção da leitura de notas (o app marcava o arquivo como lido antes de o site receber; nova versão guarda a fila até o site confirmar) e gerar o app de novo.
+- Supabase: ligar a proteção contra senha vazada (Authentication, no painel). Só o Tulio consegue.
+- Banco: decidir se apaga as tabelas antigas (4 de backup de 17/10 e 25/10, 11 gpt_old_*).
