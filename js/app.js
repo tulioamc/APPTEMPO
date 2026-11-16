@@ -11,6 +11,7 @@ const S = {
   fin: { agency: '', client: '', status: '', pay: '', year: '', month: '', from: '', to: '' },
   rep: { period: 'month', from: '', to: '', agency: '', client: '', group: 'client' },
   reg: { tab: 'agencies', q: '' },
+  contacts: { q: '' },
   pref: 'appearance',
   imp: null,
   navOpen: false
@@ -38,6 +39,7 @@ const NAV = [
   { id: 'usage', label: 'Uso de programas', icon: 'chart' },
   { group: 'PJ' },
   { id: 'registry', label: 'Agências e clientes', icon: 'users' },
+  { id: 'contacts', label: 'Contatos', icon: 'users' },
   { id: 'projects', label: 'Projetos', icon: 'folder' },
   { id: 'tasks', label: 'Tarefas', icon: 'check' },
   { id: 'quotes', label: 'Orçamentos', icon: 'doc' },

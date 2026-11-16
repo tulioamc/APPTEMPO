@@ -509,3 +509,9 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Site mais resistente: uma tabela que falhar fica de fora e é lida de novo na próxima vez, sem travar as outras (`fetchTables` em `js/auth.js`, `sigLidas` em `js/store.js`).
 - Teste novo (`tests/tabelas.test.js`): toda tabela carregada tem `id` e `created_at`, e está no `tempo_sync_state()` do schema.
 - **Lição:** ao incluir tabela no carregamento do site, conferir se ela segue o formato das outras (id, created_at, updated_at, gatilho e sincronização). O teste agora pega isso.
+
+**V2.04.09 — tela Contatos (fora de Agências e clientes)**
+- Item "Contatos" no menu, logo abaixo de Agências e clientes (`js/view-contacts.js`). Três blocos: Não classificados (com "Marcar N como Amigo"), Trabalho (todos que não são amigo) e Outros (pausa). Em cada bloco, a ordem do WhatsApp.
+- Contato de trabalho liga a um cliente; contato do tipo Agência liga a uma agência (coluna "Cliente / agência"). O bloco Trabalho mostra quantos estão sem ligação.
+- "Tempo no WhatsApp" por contato, somado do registro de atividade (o app do Mac manda o nome da conversa desde a V2.04.04). Coluna "WhatsApp" em Agências e em Clientes soma o tempo dos contatos ligados a cada um.
+- O aviso de contatos sem classificar abre esta tela.

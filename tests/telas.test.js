@@ -2,47 +2,51 @@
 const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 
-const ARQS = ['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/table.js', 'js/wa-contacts.js', 'js/view-registry.js'];
-const setup = (tab) => {
-  const m = load(ARQS, ['db', 'VIEWS'], { VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: { reg: { tab, q: '', arch: false } } });
+const ARQS = ['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/table.js', 'js/wa-contacts.js', 'js/view-registry.js', 'js/view-contacts.js'];
+const setup = (tab = 'agencies') => {
+  const m = load(ARQS, ['db', 'VIEWS', 'waTempoDoCliente'], { VIEWS: {}, ACTIONS: {}, CHANGES: {}, openBtn: () => '', S: { reg: { tab, q: '', arch: false }, contacts: { q: '' } } });
   m.db.data = m.db.empty();
   return m;
 };
+const TIPOS = [
+  { id: 'cli', kind: 'wa_tipo', name: 'Cliente', color: 'green', category: 'trabalho', order: 0 },
+  { id: 'age', kind: 'wa_tipo', name: 'Agência', color: 'blue', category: 'trabalho', order: 1 },
+  { id: 'ami', kind: 'wa_tipo', name: 'Amigo', color: 'red', category: 'pausa', order: 7 },
+];
 
-test('Agências e clientes abre em cada aba, com o banco vazio', () => {
-  ['agencies', 'clients', 'wa'].forEach(tab => {
-    const html = setup(tab).VIEWS.registry().html;
-    assert.ok(html.includes('Contatos WhatsApp'), `aba ${tab} sem o botão de contatos`);
-  });
+test('Agências e clientes e Contatos abrem com o banco vazio', () => {
+  ['agencies', 'clients'].forEach(tab => assert.ok(setup(tab).VIEWS.registry().html.includes('Clientes')));
+  const html = setup().VIEWS.contacts().html;
+  assert.ok(html.includes('Não classificados') && html.includes('Trabalho') && html.includes('Outros'));
 });
 
-test('Contatos do WhatsApp: tipo manda em "Conta como"', () => {
-  const m = setup('wa');
-  m.db.data.tempo_status_options = [
-    { id: 'cli', kind: 'wa_tipo', name: 'Cliente', color: 'green', category: 'trabalho', order: 0 },
-    { id: 'ami', kind: 'wa_tipo', name: 'Amigo', color: 'red', category: 'pausa', order: 7 },
-  ];
+test('Contatos: três blocos na ordem certa, cada um na ordem do WhatsApp', () => {
+  const m = setup();
+  m.db.data.tempo_status_options = TIPOS;
   m.db.data.tempo_wa_contacts = [
-    { id: 'c1', jid: '1@x', name: 'Fulano Cliente', tipo: 'amigo', tipo_id: 'cli' },
-    { id: 'c2', jid: '2@x', name: 'Beltrano', tipo: 'amigo', tipo_id: 'ami' },
-    { id: 'c3', jid: '3@x', name: 'Sem marcar', tipo: 'amigo', tipo_id: null },
+    { id: 'a', jid: 'a@x', name: 'Amiga Antiga', tipo_id: 'ami', last_at: '2026-11-16T10:00:00Z' },
+    { id: 'b', jid: 'b@x', name: 'Cliente Velho', tipo_id: 'cli', last_at: '2026-11-10T12:00:00Z' },
+    { id: 'c', jid: 'c@x', name: 'Cliente Hoje', tipo_id: 'cli', last_at: '2026-11-16T14:00:00Z' },
+    { id: 'd', jid: 'd@x', name: 'Novo Sem Tipo', tipo_id: null, last_at: '2026-11-16T09:00:00Z' },
   ];
-  const html = m.VIEWS.registry().html;
-  assert.ok(html.includes('Fulano Cliente') && html.includes('Sem marcar'));
-  assert.equal((html.match(/Trabalho/g) || []).length, 1);   // só o cliente conta como trabalho
+  const html = m.VIEWS.contacts().html;
+  const pos = (t) => html.indexOf(t);
+  assert.ok(pos('Novo Sem Tipo') < pos('Cliente Hoje'), 'não classificados vêm primeiro');
+  assert.ok(pos('Cliente Hoje') < pos('Cliente Velho'), 'dentro do bloco, a última mensagem primeiro');
+  assert.ok(pos('Cliente Velho') < pos('Amiga Antiga'), 'outros por último');
+  assert.ok(html.includes('Marcar 1 como Amigo'));
+  assert.ok(html.includes('2 sem cliente ou agência'));
 });
 
-test('Contatos do WhatsApp: ordem do WhatsApp e filtro de novos', () => {
-  const m = setup('wa');
-  m.db.data.tempo_wa_contacts = [
-    { id: 'a', jid: 'a@x', name: 'Antigo', tipo_id: 'cli', last_at: '2026-11-10T12:00:00Z' },
-    { id: 'b', jid: 'b@x', name: 'De hoje', tipo_id: null, last_at: '2026-11-16T14:00:00Z' },
-    { id: 'c', jid: 'c@x', name: 'Sem hora', tipo_id: null, last_at: null },
-  ];
-  const html = m.VIEWS.registry().html;
-  assert.ok(html.indexOf('De hoje') < html.indexOf('Antigo') && html.indexOf('Antigo') < html.indexOf('Sem hora'));
-  assert.ok(html.includes('2 novos') && html.includes('Marcar 2 sem tipo como Amigo'));
-  m.ctx.S.reg.waNovos = true;
-  const so = m.VIEWS.registry().html;
-  assert.ok(!so.includes('Antigo') && so.includes('De hoje'));
+test('Tempo de WhatsApp soma no cliente ligado ao contato', () => {
+  const m = setup('clients');
+  m.db.data.tempo_status_options = TIPOS;
+  m.db.data.tempo_clients = [{ id: 'k1', name: 'Cliente X', agency_id: null }];
+  m.db.data.tempo_wa_contacts = [{ id: 'c', jid: 'c@x', name: 'Fulana', tipo_id: 'cli', client_id: 'k1' }];
+  m.db.data.tempo_settings = [{ key: 'actlog:2026-11-16', value: [
+    { from: '2026-11-16T10:00:00Z', to: '2026-11-16T10:30:00Z', app: 'WhatsApp', doc: 'Fulana' },
+    { from: '2026-11-16T11:00:00Z', to: '2026-11-16T11:10:00Z', app: 'WhatsApp', doc: 'Outra pessoa' },
+  ] }];
+  assert.equal(m.waTempoDoCliente('k1'), 30 * 60e3);
+  assert.ok(m.VIEWS.registry().html.includes('WhatsApp'));
 });
