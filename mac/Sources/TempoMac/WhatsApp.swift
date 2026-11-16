@@ -50,7 +50,34 @@ enum ICloudTerapias {
                 let destino = mes.appendingPathComponent(novo)
                 if !fm.fileExists(atPath: destino.path) { try? fm.moveItem(at: a, to: destino) }
             }
+            // todo PDF ganha uma cópia em JPG ao lado (a primeira página), inclusive os que já estavam lá
+            for a in (try? fm.contentsOfDirectory(at: mes, includingPropertiesForKeys: nil)) ?? [] where a.pathExtension.lowercased() == "pdf" {
+                garantirJPG(a)
+            }
         }
+    }
+
+    /// Cópia em JPG de um PDF, com o mesmo nome (Aloma_2026_11_Nota.pdf → Aloma_2026_11_Nota.jpg). Não refaz se já existir.
+    /// Nota com várias páginas: só a primeira vira JPG (a nota fiscal costuma ter uma página).
+    @discardableResult
+    static func garantirJPG(_ pdf: URL) -> URL? {
+        let jpg = pdf.deletingPathExtension().appendingPathExtension("jpg")
+        if FileManager.default.fileExists(atPath: jpg.path) { return jpg }
+        guard let doc = PDFDocument(url: pdf), let pagina = doc.page(at: 0) else { return nil }
+        let b = pagina.bounds(for: .mediaBox)
+        let escala: CGFloat = 2.5   // ~180 dpi: legível para conferir valores
+        let w = Int(b.width * escala), h = Int(b.height * escala)
+        guard w > 0, h > 0, w < 12000, h < 12000,
+              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        ctx.scaleBy(x: escala, y: escala)
+        pagina.draw(with: .mediaBox, to: ctx)
+        guard let img = ctx.makeImage(),
+              let dest = CGImageDestinationCreateWithURL(jpg as CFURL, "public.jpeg" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dest, img, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
+        return CGImageDestinationFinalize(dest) ? jpg : nil
     }
 
     static func pasta(_ anoMes: String) -> URL { root.appendingPathComponent("Terapias").appendingPathComponent(anoMes) }
@@ -78,6 +105,7 @@ enum ICloudTerapias {
             n += 1
         }
         try dados.write(to: destino)
+        if destino.pathExtension.lowercased() == "pdf" { garantirJPG(destino) }   // PDF sempre ganha a cópia em JPG ao lado
         return destino
     }
 }

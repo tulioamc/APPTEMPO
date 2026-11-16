@@ -685,8 +685,11 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Arquivos em iCloud/Terapias/AAAA_MM passam a se chamar NomeDaTerapia_AAAA_MM_Nota.ext ou NomeDaTerapia_AAAA_MM_Comprovante.ext (extensão do arquivo original). O app do Mac renomeia os antigos (NotaFiscal_…/Comprovante_…) ao abrir, sem sobrescrever; as Anotações dos reembolsos foram atualizadas no banco.
 - O link na Anotação abre o Finder com o arquivo selecionado (antes abria o arquivo). Link antigo ainda funciona; se o arquivo sumiu, abre a pasta do mês.
 
+**V2.04.16 — nota em PDF ganha cópia em JPG**
+- Todo PDF salvo em iCloud/Terapias ganha ao lado uma cópia em JPG com o mesmo nome (primeira página, ~180 dpi). O app do Mac também cria o JPG dos PDFs que já estavam lá. O link continua abrindo o Finder na pasta, com os dois arquivos.
+
 ## Passagem para a conversa APP TEMPO [V2.05.00] (16/11/2026)
-Estado ao fim da conversa V2.04 (site em V2.04.15). Detalhes de cada versão nas seções "V2.04.xx" acima.
+Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas seções "V2.04.xx" acima.
 
 **Como as coisas estão**
 - Um app do Mac só: o Swift (`~/Applications/Tempo.app`, código em `mac/`), com WhatsApp, notas/comprovantes, iCloud, lembretes e atualização sozinha (ao abrir e a cada 15 min se ele estiver parado há 5 min). O GitHub compila o app a cada mudança em `mac/`. O app em Python (`/Applications/Tempo.app`, pasta `~/tempo-build`) ainda existe, fechado; aposentar depois de conferir os itens abaixo.
@@ -697,7 +700,7 @@ Estado ao fim da conversa V2.04 (site em V2.04.15). Detalhes de cada versão nas
 
 **Pendências, por ordem**
 1. Apagar as 28 tarefas "Responder …" que ficaram de quando a função estava ligada (precisa da aprovação do Tulio no aviso do banco).
-2. Conferir no Mac: arquivos renomeados e link abrindo o Finder; nota da Raquel (foto) entrando; comprovante da dentista (confirmar o nome exato da conversa "Cristiana da Fonte (Dentista Rafa)"); um alarme de to-do virando lembrete. Depois: aposentar o app em Python e a pasta `~/tempo-build`.
+2. Conferir no Mac: arquivos renomeados, cópia em JPG das notas em PDF e link abrindo o Finder; nota da Raquel (foto) entrando; comprovante da dentista (confirmar o nome exato da conversa "Cristiana da Fonte (Dentista Rafa)"); um alarme de to-do virando lembrete. Depois: aposentar o app em Python e a pasta `~/tempo-build`.
 3. Pausa ao abrir o app quando o cronômetro ficou rodando sem atividade (Mac fechado).
 4. Modo foco (ligado por ele, botão na tela inicial e na barra do Mac; WhatsApp e apps/sites de distração escondidos com pergunta; Não perturbe do Mac e foco do iPhone; cliente avisa mesmo no foco).
 5. Tempo de WhatsApp com cada cliente somado às horas do projeto.
