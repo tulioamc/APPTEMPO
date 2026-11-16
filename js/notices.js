@@ -5,7 +5,7 @@
    são registradas para sempre e aparecem na aba Avisos, ordenadas por data.
    ===================================================================== */
 
-const NOTICE_KINDS = { sessao: ['Sessão aberta', 'clock'], conta: ['Conta a pagar', 'money'], pause: ['Pausa', 'alert'], prazo: ['Prazo', 'clock'], cobranca: ['Cobrança', 'money'], orcamento: ['Orçamento', 'doc'], reminder: ['Lembrete', 'bell'], todo: ['To-do', 'check'] };
+const NOTICE_KINDS = { sessao: ['Sessão aberta', 'clock'], conta: ['Conta a pagar', 'money'], pause: ['Pausa', 'alert'], prazo: ['Prazo', 'clock'], cobranca: ['Cobrança', 'money'], orcamento: ['Orçamento', 'doc'], reminder: ['Lembrete', 'bell'], todo: ['To-do', 'check'], reembolso: ['Reembolso', 'money'] };
 const noticeKind = (k) => NOTICE_KINDS[k] || [k, 'bell'];
 
 /* Cria um aviso pendente. A chave evita duplicar o mesmo aviso (ex.: mesmo prazo no mesmo dia). */

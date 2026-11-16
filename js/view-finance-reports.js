@@ -1521,8 +1521,10 @@ ACTIONS['bank-reimb'] = async (el) => {
   const m = el.dataset.month;
   const { error } = await db.adapter.client.from('tempo_bank_txns').update({ category: REEMB_TER, updated_at: new Date().toISOString() }).eq('id', t.id);
   if (error) return toast('Erro: ' + error.message);
-  db.all('tempo_reimb_rows').filter(r => r.month === m && !r.refunded_on && Number(r.amount) > 0)
-    .forEach(r => db.update('tempo_reimb_rows', r.id, { refunded_on: t.posted_on }, true));
+  const lote = db.all('tempo_reimb_rows').filter(r => r.month === m && !r.refunded_on && Number(r.amount) > 0);
+  const feito = rbStatusId('reimb_refund', 'Feito!');
+  lote.forEach(r => db.update('tempo_reimb_rows', r.id, { refunded_on: t.posted_on, ...(feito ? { refund_id: feito } : {}) }, true));
+  if (lote.length) addNotice({ kind: 'reembolso', key: `reemb-lote:${m}:${t.id}`, title: `Reembolso de ${rbLabel(m)} marcado como Feito!`, body: `${lote.length} linha(s) · ${fmtMoney(lote.reduce((a, r) => a + Number(r.amount), 0))} · data do extrato: ${fmtDate(t.posted_on)}. Confira na aba Reembolsos.`, entity: 'reimb', data: { month: m, txn_id: t.id } });
   db.emit(); t.reimb_linked = true; await bankLoadTxns(); toast('Lote ' + m + ' marcado como reembolsado em ' + fmtDate(t.posted_on)); render();
 };
 ACTIONS['bank-biz'] = async (el) => {
