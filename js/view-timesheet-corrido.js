@@ -110,6 +110,8 @@ function openResumo(title, ids) {
     onMount: (l) => {
       if (l.box._resBound) return; l.box._resBound = true;
       const reabrir = () => { l.close(); openResumo(title, allIds); };
+      // depois de transferir, alterar o tipo ou excluir um trecho selecionado na barra, o resumo se refaz
+      window.actRedrawHook = () => { if (layers.includes(l)) reabrir(); };
       const menuPrograma = (gid, label, seg) => openProgChoice(allIds, gid, label, { seg, redraw: () => l.refresh(), done: reabrir });
       l.box.addEventListener('click', (ev) => {
         const modo = ev.target.closest('[data-rmode]');
@@ -173,8 +175,10 @@ function resumoHTML(title, es) {
   /* Faixa cronológica dos arquivos/sites (mesma régua da de programas). */
   const fileCron = () => {
     let off = 0, parts = '';
+    const fslices = [];
     sess.forEach((x, i) => {
       const base = off, wS = x.span / totalSpan * 100;
+      fslices.push({ e: x.e.id, l: base, w: wS, st: x.st, span: x.span });
       const pos = (a, b) => ({ l: base + Math.max(0, a - x.st) / x.span * wS, w: Math.max(.3, (Math.min(x.span, b - x.st) - Math.max(0, a - x.st)) / x.span * wS) });
       fileAn.records.filter(r => r._i === i).forEach(r => { const g = fileAn.groups.find(z => z.id === r.gid); const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}"${fParentOf[r.gid] ? ` data-par="${esc(fParentOf[r.gid])}" data-tbc="${esc(fColorOf[r.gid])}"` : ''}${fParentOf[r.gid] === 'outros' ? fOthAttr : ''} data-tip="${esc(g ? actTip(g) : r.app)}" style="--tb:${fParentOf[r.gid] ? '#94A3B8' : (fColorOf[r.gid] || 'var(--accent)')};left:${q.l}%;width:${q.w}%"></span>`; });
       actUnspecOf(x.e).forEach(([a, b]) => { const q = pos(a, b); parts += actUnspecSpanHTML(a, b, q.l, q.w); });
@@ -182,7 +186,7 @@ function resumoHTML(title, es) {
       if (i > 0) parts += `<span class="act-sep" style="left:${base}%"></span>`;
       off += wS;
     });
-    return `<div class="act-strip res-fstrip" style="height:26px">${parts}</div>`;
+    return `<div class="act-strip res-fstrip" data-slices="${esc(JSON.stringify(fslices))}" style="height:26px">${parts}</div>`;
   };
   /* Por tarefa: cada sessão pinta sua fatia com a cor da tarefa; passar o mouse numa tarefa acende só ela. */
   const tasks = [];
