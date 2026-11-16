@@ -211,5 +211,10 @@ const WACOLS = {
     edit: { type: 'combo', kind: 'wa_tipo', allowEmpty: true, emptyLabel: 'Amigo (padrão)', get: c => c.tipo_id, set: (c, v) => db.update('tempo_wa_contacts', c.id, { tipo_id: v || null }) } },
   conta: { label: 'Conta como', ico: 'clock', w: 120, sort: c => waEhTrabalho(c) ? 0 : 1, cell: c => waEhTrabalho(c) ? tag('Trabalho', 'green', { pill: true }) : tag('Pausa', 'gray', { pill: true }) },
   grupo: { label: 'Grupo', ico: 'users', w: 90, sort: c => c.tipo === 'grupo' ? 0 : 1, cell: c => c.tipo === 'grupo' ? 'Sim' : '' },
-  msgs: { label: 'Mensagens', ico: 'hash', w: 110, money: true, sort: c => waMsgs(c.jid), cell: c => waMsgs(c.jid) || '' },
+  msgs: { label: 'Mensagens enviadas', ico: 'hash', w: 160, money: true, sort: c => waMsgs(c.jid), cell: c => {
+    const n = waMsgs(c.jid); if (!n) return '';
+    const dias = (db.all('tempo_wa_daily') || []).filter(d => d.jid === c.jid).map(d => d.day).sort();
+    const periodo = dias.length > 1 ? `${fmtDate(dias[0])} a ${fmtDate(dias[dias.length - 1])}` : dias.length ? fmtDate(dias[0]) : '';
+    return `<span data-tip="${esc(`Mensagens que você mandou${periodo ? `\n${periodo}` : ''}\nAs recebidas não entram na conta.`)}">${n}</span>`;
+  } },
 };

@@ -9,7 +9,9 @@ async function waReport(linhas) {
     if (!user) return;
     const contatos = new Map();
     linhas.forEach(l => contatos.set(l.jid, { user_id: user.id, jid: l.jid, name: l.name || l.jid, tipo: l.grupo ? 'grupo' : 'amigo' }));
-    await c.from('tempo_wa_contacts').upsert([...contatos.values()], { onConflict: 'user_id,jid', ignoreDuplicates: true });
+    // sem ignoreDuplicates: se você renomear o contato no WhatsApp, o nome aqui acompanha.
+    // A classificação (tipo_id) fica presa à conversa, então não se perde na troca de nome.
+    await c.from('tempo_wa_contacts').upsert([...contatos.values()], { onConflict: 'user_id,jid' });
     const diario = linhas.map(l => ({ user_id: user.id, jid: l.jid, day: l.dia, sent: l.enviadas }));
     await c.from('tempo_wa_daily').upsert(diario, { onConflict: 'user_id,jid,day' });
   } catch (e) { console.warn('waReport', e); }

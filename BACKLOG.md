@@ -491,3 +491,8 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 **V2.04.05 — a aba Contatos WhatsApp não abria**
 - A contagem de mensagens lia `tempo_wa_daily`, que o site não carregava: a tela quebrava e o botão da aba parecia morto. Agora a tabela entra no carregamento (e no `tempo_sync_state()`), e as leituras dessas duas tabelas são defensivas.
 - Teste novo (`tests/telas.test.js`): a tela de Agências e clientes abre nas três abas com o banco vazio, e o tipo do contato manda no "Conta como". Era o tipo de erro que só aparecia clicando.
+
+**V2.04.06 — contatos do WhatsApp mais completos**
+- Coluna "Mensagens enviadas", com dica do período ao passar o mouse (as recebidas não entram na conta).
+- Conversa em que ele só recebeu mensagem também entra na lista (com zero enviadas): antes um cliente novo que escreveu primeiro não aparecia para ser classificado. Muda o app do Mac (precisa de ⌘U).
+- Renomear o contato no WhatsApp atualiza o nome no Tempo; a classificação continua, porque fica presa à conversa (jid), não ao nome.

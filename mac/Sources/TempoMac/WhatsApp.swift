@@ -140,16 +140,18 @@ final class WhatsAppMonitor {
         return String(cString: c)
     }
 
-    /// Mensagens enviadas por conversa e dia, entre `desde` e `ate` (Unix). nil = não conseguiu ler o banco.
+    /// Conversas com mensagem entre `desde` e `ate` (Unix), com quantas foram enviadas por você.
+    /// Conversa em que você só recebeu também entra (com zero), senão não dá para classificá-la no site.
+    /// nil = não conseguiu ler o banco.
     private func lerContagens(desde: Double, ate: Double) -> [[String: Any]]? {
         guard let db = abrir() else { return nil }
         defer { sqlite3_close(db) }
         let sql = """
         select s.ZCONTACTJID, s.ZPARTNERNAME, s.ZSESSIONTYPE,
                date(m.ZMESSAGEDATE + ?, 'unixepoch', 'localtime') as dia,
-               count(*) as enviadas
+               sum(case when m.ZISFROMME = 1 then 1 else 0 end) as enviadas
         from ZWAMESSAGE m join ZWACHATSESSION s on m.ZCHATSESSION = s.Z_PK
-        where m.ZISFROMME = 1 and s.ZSESSIONTYPE != ?
+        where s.ZSESSIONTYPE != ?
           and m.ZMESSAGEDATE + ? between ? and ?
         group by s.ZCONTACTJID, dia
         """
