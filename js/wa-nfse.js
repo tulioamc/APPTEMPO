@@ -110,7 +110,12 @@ function nfseReport(itens) {
       }
 
       const n = nfseParse(it.texto);
-      if (!n) { recebidos.push(it.id); return; }
+      if (!n) {
+        // nota que não deu para ler: avisa em vez de sumir calada
+        const erro = 'nfse-erro:' + it.id;
+        if (!visto(erro)) addNotice({ kind: 'reembolso', key: erro, title: `Nota de ${nome}: não consegui ler`, body: `${rbLabel(ym)} · chegou pelo WhatsApp, mas o valor não foi lido. Lance na mão em Reembolsos.`, entity: 'reimb', data: { ...base } });
+        recebidos.push(it.id); return;
+      }
       const chave = 'nfse:' + n.chave;
       if (!visto(chave)) {
         const d = { ...base, valor: n.valor, chave: n.chave };

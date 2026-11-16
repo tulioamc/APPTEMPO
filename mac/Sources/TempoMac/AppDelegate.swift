@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var timerSyncedAt = Date()
     private var barTicker: Timer?
     private let monitor = ActivityMonitor()
+    private let whatsapp = WhatsAppMonitor()
     private let defaults = UserDefaults.standard
     private let isoFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]; return f
@@ -64,6 +65,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.runUpdate(manual: false) }
         barTicker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshBar() }
         monitor.start()
+        setupWhatsApp()
+    }
+
+    // MARK: - WhatsApp, notas, lembretes e iCloud (antes ficavam no app em Python)
+
+    private func jsonString(_ obj: Any) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: obj) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func setupWhatsApp() {
+        whatsapp.sendCounts = { [weak self] linhas in
+            guard let self = self, let json = self.jsonString(linhas) else { return }
+            self.web.evaluateJavaScript("window.TempoBridge && window.TempoBridge.reportWhatsApp && window.TempoBridge.reportWhatsApp(\(json)); true", completionHandler: nil)
+        }
+        whatsapp.sendNotes = { [weak self] itens, done in
+            guard let self = self, let json = self.jsonString(itens) else { done([]); return }
+            let js = "(function(){ var b = window.TempoBridge; if (!b || typeof b.reportNfse !== 'function') return '[]'; return JSON.stringify(b.reportNfse(\(json)) || []); })()"
+            self.web.evaluateJavaScript(js) { result, _ in
+                var ids: [String] = []
+                if let s = result as? String, let d = s.data(using: .utf8),
+                   let arr = (try? JSONSerialization.jsonObject(with: d)) as? [String] { ids = arr }
+                done(ids)
+            }
+        }
+        whatsapp.onNoAccess = { [weak self] in
+            self?.showNotice("Tempo: WhatsApp", "Não consegui ler o WhatsApp. Ative Acesso Total ao Disco para o Tempo nos Ajustes do Sistema.")
+        }
+        whatsapp.start()
+    }
+
+    @objc private func readWhatsAppNow() { whatsapp.runNow() }
+
+    /// Cria um lembrete com alarme no app Lembretes (lista "Tempo"); sincroniza com o iPhone.
+    /// quando: "AAAA-MM-DDTHH:MM" (hora local). Avisa o site se deu certo (TempoBridge.reminderDone).
+    private func handleReminder(_ d: [String: Any]) {
+        guard let id = d["id"] as? String, let titulo = d["title"] as? String, let quando = d["when"] as? String else { return }
+        let responder: (Bool) -> Void = { [weak self] ok in
+            DispatchQueue.main.async {
+                guard let self = self, let arg = self.jsonString([id]) else { return }
+                let js = "window.TempoBridge && window.TempoBridge.reminderDone && window.TempoBridge.reminderDone(\(arg)[0], \(ok ? "true" : "false")); true"
+                self.web.evaluateJavaScript(js, completionHandler: nil)
+            }
+        }
+        let partes = quando.split(separator: "T")
+        let dia = (partes.first ?? "").split(separator: "-").compactMap { Int($0) }
+        let hora = partes.count > 1 ? partes[1].prefix(5).split(separator: ":").compactMap { Int($0) } : []
+        guard dia.count == 3, hora.count == 2 else { responder(false); return }
+        let t = titulo.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let linhas = [
+            "tell application \"Reminders\"",
+            "  if not (exists list \"Tempo\") then make new list with properties {name:\"Tempo\"}",
+            "  set d to current date",
+            "  set day of d to 1",
+            "  set year of d to \(dia[0])",
+            "  set month of d to \(dia[1])",
+            "  set day of d to \(dia[2])",
+            "  set hours of d to \(hora[0])",
+            "  set minutes of d to \(hora[1])",
+            "  set seconds of d to 0",
+            "  tell list \"Tempo\" to make new reminder with properties {name:\"\(t)\", remind me date:d}",
+            "end tell",
+        ]
+        let script = linhas.joined(separator: "\n")
+        DispatchQueue.global().async {
+            let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript"); p.arguments = ["-e", script]
+            p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
+            do { try p.run(); p.waitUntilExit(); responder(p.terminationStatus == 0) } catch { responder(false) }
+        }
+    }
+
+    /// Grava nota fiscal (PDF) ou comprovante (PNG) em iCloud/Terapias/<Ano_Mes>, a pedido do site.
+    private func handleTerapia(_ d: [String: Any]) {
+        guard let tipo = d["tipo"] as? String, let anoMes = d["anoMes"] as? String, let terapeuta = d["terapeuta"] as? String,
+              let b64 = d["base64"] as? String, let dados = Data(base64Encoded: b64), ICloudTerapias.disponivel,
+              let nome = ICloudTerapias.nomeArquivo(tipo: tipo, anoMes: anoMes, terapeuta: terapeuta),
+              (try? ICloudTerapias.salvar(anoMes: anoMes, nome: nome, dados: dados)) != nil else {
+            showNotice("Tempo", "Não consegui gravar o arquivo no iCloud."); return
+        }
     }
 
     /// Notificação do macOS vinda do site. Usa osascript, que funciona sem empacotar o app em .app.
@@ -80,7 +160,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let d = message.body as? [String: Any] else { return }
-        if (d["type"] as? String) == "timer" { handleTimer(d); return }
+        switch d["type"] as? String {
+        case "timer": handleTimer(d); return
+        case "reminder": handleReminder(d); return
+        case "terapia": handleTerapia(d); return
+        case "update": runUpdate(manual: true); return
+        default: break
+        }
         guard let title = d["title"] as? String, let body = d["body"] as? String else { return }
         showNotice(title, body)
     }
@@ -211,6 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         m.addItem(withTitle: "Mostrar Tempo", action: #selector(showWindow), keyEquivalent: "")
         m.addItem(withTitle: "Recarregar", action: #selector(reload), keyEquivalent: "r")
         m.addItem(withTitle: "Atualizar app", action: #selector(updateNow), keyEquivalent: "u")
+        m.addItem(withTitle: "Ler WhatsApp agora", action: #selector(readWhatsAppNow), keyEquivalent: "")
         m.addItem(.separator())
         m.addItem(toggleItem("Guardar pasta da janela ativa", key: "captureFolders", defaultOn: true, action: #selector(toggleFolders)))
         m.addItem(toggleItem("Guardar nome do arquivo", key: "captureFileNames", defaultOn: true, action: #selector(toggleFiles)))

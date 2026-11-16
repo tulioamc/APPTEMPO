@@ -223,6 +223,8 @@ window.TempoBridge = {
   },
   reportActivity: (seg) => suggestActivity(seg),
   reportWhatsApp: (linhas) => waReport(linhas),
+  // o app do Mac avisa se criou o lembrete (alarme de to-do) no app Lembretes
+  reminderDone: (id, ok) => todoAlarmDone(id, ok),
   version: 3,
 };
 
@@ -488,6 +490,8 @@ async function checkAppVersion() {
   } catch (e) { /* sem internet: não mostra nada */ }
 }
 ACTIONS['mac-update'] = async () => {
+  // app do Mac (Swift): ele mesmo baixa, compila e reabre
+  if (isMacApp()) { window.webkit.messageHandlers.tempo.postMessage({ type: 'update' }); return toast('Procurando atualização do app do Mac. Se houver, ele fecha e abre sozinho.', { ms: 8000 }); }
   const api = window.pywebview && window.pywebview.api;
   if (!api || !api.atualizar_app) return toast('Abra o Tempo no Mac para atualizar o app.');
   try { await api.atualizar_app(); toast('Atualizando o app do Mac. Ele fecha e abre sozinho em cerca de 1 minuto.', { ms: 8000 }); }
@@ -541,4 +545,5 @@ async function boot() {
   render();
   checkAppVersion();
   setInterval(checkAppVersion, 30 * 60 * 1000);
+  todoAlarmSync();   // alarmes de to-do ainda não criados no app Lembretes (app do Mac)
 }

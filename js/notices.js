@@ -645,16 +645,26 @@ document.addEventListener('pointercancel', (e) => { if (e.pointerType === 'touch
 document.addEventListener('touchmove', (e) => { if (tActive) e.preventDefault(); }, { passive: false });
 
 /* Alarme no Mac: o app de Mac cria um lembrete no app Lembretes (sincroniza com o iPhone).
-   Só roda dentro do app de Mac (window.pywebview); marca cada item como criado para não repetir. */
+   Só roda dentro do app de Mac; marca cada item como criado para não repetir.
+   App atual (Swift): pede por mensagem e recebe a resposta em TempoBridge.reminderDone. App em Python: window.pywebview. */
+const todoAlarmSent = new Set();   // pedidos já enviados ao app do Mac nesta abertura
+function todoAlarmDone(id, ok) {
+  if (!ok) { todoAlarmSent.delete(id); return; }   // tenta de novo na próxima vez
+  const r = db.get('tempo_notices', id); if (!r) return;
+  db.update('tempo_notices', id, { data: { ...r.data, alarm_criado: true } }, true);
+}
 function todoAlarmSync() {
+  const mac = window.webkit?.messageHandlers?.tempo;
   const api = window.pywebview && window.pywebview.api;
-  if (!api || !api.criar_lembrete) return;
+  if (!mac && !(api && api.criar_lembrete)) return;
   db.where('tempo_notices', n => n.kind === 'todo' && n.status !== 'done' && n.data && n.data.alarm && n.data.due && !n.data.alarm_criado).forEach(n => {
-    Promise.resolve(api.criar_lembrete(n.title, n.data.due)).then(ok => {
-      if (!ok) return;
-      const r = db.get('tempo_notices', n.id); if (!r) return;
-      db.update('tempo_notices', n.id, { data: { ...r.data, alarm_criado: true } }, true);
-    }).catch(() => { /* tenta de novo na próxima vez */ });
+    if (mac) {
+      if (todoAlarmSent.has(n.id)) return;
+      todoAlarmSent.add(n.id);
+      try { mac.postMessage({ type: 'reminder', id: n.id, title: n.title, when: n.data.due }); } catch (e) { todoAlarmSent.delete(n.id); }
+      return;
+    }
+    Promise.resolve(api.criar_lembrete(n.title, n.data.due)).then(ok => todoAlarmDone(n.id, !!ok)).catch(() => { /* tenta de novo na próxima vez */ });
   });
 }
 window.addEventListener('pywebviewready', todoAlarmSync);

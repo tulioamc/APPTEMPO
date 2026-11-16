@@ -1,0 +1,17 @@
+name: App do Mac (compila)
+
+# Confere se o app do Mac (Swift) compila antes de chegar no seu computador.
+on:
+  push:
+    paths:
+      - 'mac/**'
+      - '.github/workflows/mac.yml'
+  workflow_dispatch:
+
+jobs:
+  compilar:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compilar
+        run: cd mac && swift build -c release

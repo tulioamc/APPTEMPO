@@ -23,8 +23,15 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>NSAppleEventsUsageDescription</key><string>O Tempo cria lembretes no app Lembretes e mostra avisos.</string>
+<key>NSRemindersUsageDescription</key><string>O Tempo cria lembretes com alarme para as suas to-dos.</string>
 </dict></plist>
 PLIST
+# versão do app = versão do site (APP_VERSION em js/config.js), para dar para ver qual está instalada
+V="$(sed -n "s/.*APP_VERSION = '\(V[0-9.]*\)'.*/\1/p" "$ROOT/js/config.js" | head -1)"
+if [ -n "$V" ]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" "$APP/Contents/Info.plist" >/dev/null 2>&1 || true
+fi
 SRC="$ROOT/icons/icon-mac-512.png"
 TMP="$(mktemp -d)"
 ICONSET="$TMP/AppIcon.iconset"
