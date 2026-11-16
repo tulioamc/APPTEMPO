@@ -456,7 +456,7 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 4. Pausa ao abrir o app quando o cronômetro ficou rodando sem atividade (ex.: Mac fechado).
 5. Supabase: ligar proteção contra senha vazada (só o Tulio); decidir se apaga as tabelas antigas (backup_* e gpt_old_*).
 6. Limpeza do código das telas (seção acima).
-7. Itens antigos ainda abertos: OFX do Nubank e fatura em PDF (aguardando arquivos); recebimentos antigos da BRENDA sem categoria (ver 16/11 abaixo).
+7. Itens antigos ainda abertos: OFX do Nubank e fatura em PDF (aguardando arquivos); Pix de R$ 200 dele mesmo em 11/09/2026 marcado como externo (interna?).
 
 **Lição desta conversa:** antes de apagar ou trocar qualquer app/arquivo do Mac, conferir o que ele faz (o app "1.0" parecia velho e era o principal).
 
@@ -526,3 +526,4 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 **16/11, 11h45 — "Não consegui salvar (inserir em status_options)" ao abrir**
 - O banco só aceitava os kinds work, payment, quote e reimb_*: os tipos de contato (`wa_tipo`) eram recusados a cada abertura. Check ampliado no banco e no schema; os 8 tipos criados no banco reaproveitando os ids que o site já tinha usado (Agência e Amigo), para as classificações feitas não se perderem.
 - Teste novo: todo kind de `DEFAULT_STATUS` precisa estar no check do schema.
+- 16/11, 11h50: os 28 recebimentos antigos da BRENDA (09/2024 a 01/2026) eram freelas de projetos que ele não sabe separar: categoria "Freelas", marcados como revisados.
