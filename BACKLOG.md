@@ -684,3 +684,26 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 **V2.04.15 — notas e comprovantes: nome novo e link abre o Finder**
 - Arquivos em iCloud/Terapias/AAAA_MM passam a se chamar NomeDaTerapia_AAAA_MM_Nota.ext ou NomeDaTerapia_AAAA_MM_Comprovante.ext (extensão do arquivo original). O app do Mac renomeia os antigos (NotaFiscal_…/Comprovante_…) ao abrir, sem sobrescrever; as Anotações dos reembolsos foram atualizadas no banco.
 - O link na Anotação abre o Finder com o arquivo selecionado (antes abria o arquivo). Link antigo ainda funciona; se o arquivo sumiu, abre a pasta do mês.
+
+## Passagem para a conversa APP TEMPO [V2.05.00] (16/11/2026)
+Estado ao fim da conversa V2.04 (site em V2.04.15). Detalhes de cada versão nas seções "V2.04.xx" acima.
+
+**Como as coisas estão**
+- Um app do Mac só: o Swift (`~/Applications/Tempo.app`, código em `mac/`), com WhatsApp, notas/comprovantes, iCloud, lembretes e atualização sozinha (ao abrir e a cada 15 min se ele estiver parado há 5 min). O GitHub compila o app a cada mudança em `mac/`. O app em Python (`/Applications/Tempo.app`, pasta `~/tempo-build`) ainda existe, fechado; aposentar depois de conferir os itens abaixo.
+- Banco: `tempo_wa_contacts` (tipo, cliente/agência/projeto, última msg, recebida/enviada, resposta média) e `tempo_wa_daily` entram no carregamento do site e no `tempo_sync_state()`. Toda tabela carregada precisa de id, created_at e updated_at (teste `tests/tabelas.test.js`); todo kind de status precisa estar no check do banco.
+- Testes: 45, em `tests/` (rodar `node --test tests/*.test.js`).
+
+**Feito na V2.04** WhatsApp (tela Contatos com blocos, tipos, sugestão pelo nome com Aceitar/Negar, ligação a cliente/agência/projeto, tempo por contato e por cliente, celular rotulando pausas, resposta média, alerta de amigos); encerrar corta o ócio do fim; To-do (janela de edição, Todas por dia, relatório, concluídas riscadas); Comparações e gráficos de produtividade; notas em foto; dentista; nomes Terapia_AAAA_MM_Tipo.ext e link que abre o Finder; correção da atualização do site que travava.
+
+**Pendências, por ordem**
+1. Apagar as 28 tarefas "Responder …" que ficaram de quando a função estava ligada (precisa da aprovação do Tulio no aviso do banco).
+2. Conferir no Mac: arquivos renomeados e link abrindo o Finder; nota da Raquel (foto) entrando; comprovante da dentista (confirmar o nome exato da conversa "Cristiana da Fonte (Dentista Rafa)"); um alarme de to-do virando lembrete. Depois: aposentar o app em Python e a pasta `~/tempo-build`.
+3. Pausa ao abrir o app quando o cronômetro ficou rodando sem atividade (Mac fechado).
+4. Modo foco (ligado por ele, botão na tela inicial e na barra do Mac; WhatsApp e apps/sites de distração escondidos com pergunta; Não perturbe do Mac e foco do iPhone; cliente avisa mesmo no foco).
+5. Tempo de WhatsApp com cada cliente somado às horas do projeto.
+6. Supabase: proteção contra senha vazada (só o Tulio) e decidir sobre as tabelas antigas (backup_* e gpt_old_*).
+7. Limpeza do código das telas.
+8. OFX do Nubank de novembro em diante e PDF da fatura (aguardando arquivos).
+9. Doc "APP TEMPO — Ideias organizadas": a seção "Próxima conversa" está desatualizada (vários itens feitos na V2.04).
+
+**Lição desta conversa:** mudança no banco (tabela nova, coluna, tipo de status) precisa ir junto no schema, no carregamento do site e na sincronização; uma tabela fora do formato travou a atualização do site inteiro sem aviso.
