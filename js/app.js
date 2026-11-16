@@ -96,6 +96,7 @@ function sidebarHTML() {
   <div class="sidebar-foot">
     ${a ? `<button class="mini-timer" data-act="go" data-route="timesheet"><span class="row small"><span class="dot ${a.state === 'running' ? 'live' : 'paused'}"></span>${a.state === 'running' ? 'Registrando' : 'Pausado'}</span><span class="t" data-tick="${a.id}">${fmtClock(entryMs(a))}</span><span class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(entryTitle(a))}</span>${pausesOf(a.id).length ? `<span class="small" style="color:var(--warn);font-weight:600">${pausesOf(a.id).length} pausa(s) para revisar</span>` : ''}</button>` : ''}
     <div class="data-mode"><span class="dot ${db.adapter.persistent ? 'live' : 'mem'}"></span>${db.adapter.waiting ? `Sem conexão · ${db.unsent()} alteraç${db.unsent() === 1 ? 'ão' : 'ões'} aguardando envio` : db.syncError ? 'Falha de sincronização' : db.adapter.persistent ? 'Sincronizado' : 'Em memória · some ao recarregar'} · ${APP_VERSION}${` · <a href="#" class="btn sm ghost" data-act="app-update" title="${window.TEMPO_NEW_VERSION ? 'Nova versão ' + esc(window.TEMPO_NEW_VERSION) + ' disponível' : 'Recarregar com a versão mais nova'}" ${window.TEMPO_NEW_VERSION ? 'style="color:var(--accent);font-weight:600"' : ''}>Atualizar</a>`}${db.adapter.persistent ? ` · <a href="#" class="btn sm ghost" data-act="signout">Sair</a>` : ''}</div>
+    ${window.TEMPO_MAC_UPDATE ? `<button class="btn sm primary" data-act="mac-update" style="margin-top:6px;width:100%" title="O app do Mac fecha e abre sozinho em cerca de 1 minuto">Atualizar app do Mac (${esc(window.TEMPO_MAC_UPDATE)})</button>` : ''}
   </div>`;
 }
 
@@ -214,6 +215,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 /* Ponte do app de Mac. O app guarda os eventos numa fila e só tira da fila quando esta função roda. */
 window.TempoBridge = {
   reportNfse: (itens) => nfseReport(itens),
+  // o app do Mac avisa que há versão nova dele mesmo: mostra o botão "Atualizar app do Mac"
+  macUpdate: (v) => { if (window.TEMPO_MAC_UPDATE !== v) { window.TEMPO_MAC_UPDATE = v; render(); } },
   reportIdle: async (fromISO, toISO, app) => {
     try { await db.refresh(); suggestPause(new Date(fromISO).getTime(), new Date(toISO).getTime(), 'mac', app); }
     catch (e) { console.warn('reportIdle', e); }
@@ -484,6 +487,12 @@ async function checkAppVersion() {
     if (m && m[1] !== APP_VERSION) { window.TEMPO_NEW_VERSION = m[1]; render(); }
   } catch (e) { /* sem internet: não mostra nada */ }
 }
+ACTIONS['mac-update'] = async () => {
+  const api = window.pywebview && window.pywebview.api;
+  if (!api || !api.atualizar_app) return toast('Abra o Tempo no Mac para atualizar o app.');
+  try { await api.atualizar_app(); toast('Atualizando o app do Mac. Ele fecha e abre sozinho em cerca de 1 minuto.', { ms: 8000 }); }
+  catch (e) { toast('Não consegui iniciar a atualização do app do Mac.'); }
+};
 ACTIONS['app-update'] = async () => {
   try {
     const regs = await navigator.serviceWorker?.getRegistrations?.() || [];
