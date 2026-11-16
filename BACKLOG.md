@@ -419,3 +419,15 @@ A revisão V2.03.15 cuidou de segurança e funcionamento (fila de gravação, si
 - App do Mac: aplicar a correção da leitura de notas (o app marcava o arquivo como lido antes de o site receber; nova versão guarda a fila até o site confirmar) e gerar o app de novo.
 - Supabase: ligar a proteção contra senha vazada (Authentication, no painel). Só o Tulio consegue.
 - Banco: decidir se apaga as tabelas antigas (4 de backup de 17/10 e 25/10, 11 gpt_old_*).
+
+## Juntar os dois apps do Mac num só (pedido do Tulio, 16/11/2026)
+Hoje rodam dois apps, os dois abrindo o site:
+- **App antigo (Swift, `~/Applications/Tempo.app`, código em `mac/` deste repositório)** — o principal. Programa e arquivo em uso (reportActivity), pausas por ociosidade e por sono (reportIdle), cronômetro na barra de menu, notificações, ⌃⌥T to-do rápido, atualização sozinha via `~/APPTEMPO/mac/update.sh`. O site só aceita pausas e atividade dele (`isMacApp()` = `window.webkit.messageHandlers.tempo`).
+- **App novo (Python/pywebview, `/Applications/Tempo.app`, repositório `tulioamc/tempo-mac`, pasta `~/tempo-build`)** — WhatsApp (contagem de mensagens enviadas), notas fiscais e comprovantes das conversas de terapia (PDF, PDF escaneado, fotos), cópia no iCloud `Terapias/AAAA_MM`, print de feedback (Cmd+J), lembretes no app Lembretes, atualização sozinha.
+
+Plano: levar tudo para o app antigo (Swift), sem tirar nada dele.
+- WhatsApp: ler `ChatStorage.sqlite` com SQLite3 (somente leitura, nunca ZTEXT), mesma consulta do `wa.py`.
+- Notas: PDFKit para texto do PDF; Vision (VNRecognizeTextRequest) para foto e PDF escaneado; fila até o site confirmar (`reportNfse` devolve os ids).
+- iCloud, feedback e lembretes: mesmas funções do `main.py`, chamadas pelo site via `messageHandlers.tempo` (o site hoje chama `window.pywebview.api`; aceitar os dois).
+- Segurança: se a compilação falhar, o `update.sh` para antes de trocar o app (o instalado continua funcionando). Testar cada parte no Mac antes de desligar o app novo.
+- Ao final: aposentar o app Python e a pasta `~/tempo-build`.
