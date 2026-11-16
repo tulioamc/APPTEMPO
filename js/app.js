@@ -95,7 +95,7 @@ function sidebarHTML() {
   ${sidebarNavHTML()}
   <div class="sidebar-foot">
     ${a ? `<button class="mini-timer" data-act="go" data-route="timesheet"><span class="row small"><span class="dot ${a.state === 'running' ? 'live' : 'paused'}"></span>${a.state === 'running' ? 'Registrando' : 'Pausado'}</span><span class="t" data-tick="${a.id}">${fmtClock(entryMs(a))}</span><span class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(entryTitle(a))}</span>${pausesOf(a.id).length ? `<span class="small" style="color:var(--warn);font-weight:600">${pausesOf(a.id).length} pausa(s) para revisar</span>` : ''}</button>` : ''}
-    <div class="data-mode"><span class="dot ${db.adapter.persistent ? 'live' : 'mem'}"></span>${db.syncError ? 'Falha de sincronização' : db.adapter.persistent ? 'Sincronizado' : 'Em memória · some ao recarregar'} · ${APP_VERSION}${` · <a href="#" class="btn sm ghost" data-act="app-update" title="${window.TEMPO_NEW_VERSION ? 'Nova versão ' + esc(window.TEMPO_NEW_VERSION) + ' disponível' : 'Recarregar com a versão mais nova'}" ${window.TEMPO_NEW_VERSION ? 'style="color:var(--accent);font-weight:600"' : ''}>Atualizar</a>`}${db.adapter.persistent ? ` · <a href="#" class="btn sm ghost" data-act="signout">Sair</a>` : ''}</div>
+    <div class="data-mode"><span class="dot ${db.adapter.persistent ? 'live' : 'mem'}"></span>${db.adapter.waiting ? `Sem conexão · ${db.unsent()} alteraç${db.unsent() === 1 ? 'ão' : 'ões'} aguardando envio` : db.syncError ? 'Falha de sincronização' : db.adapter.persistent ? 'Sincronizado' : 'Em memória · some ao recarregar'} · ${APP_VERSION}${` · <a href="#" class="btn sm ghost" data-act="app-update" title="${window.TEMPO_NEW_VERSION ? 'Nova versão ' + esc(window.TEMPO_NEW_VERSION) + ' disponível' : 'Recarregar com a versão mais nova'}" ${window.TEMPO_NEW_VERSION ? 'style="color:var(--accent);font-weight:600"' : ''}>Atualizar</a>`}${db.adapter.persistent ? ` · <a href="#" class="btn sm ghost" data-act="signout">Sair</a>` : ''}</div>
   </div>`;
 }
 
@@ -115,7 +115,7 @@ function mobileTimerHTML() {
     <button class="btn icon danger" data-act="ts-stop" aria-label="Encerrar">${icon('stop')}</button>`;
 }
 
-let lastHTML = '';
+let lastRoute = null;
 /* Guarda a rolagem da página e das áreas com rolagem própria, para a tela não "subir" ao redesenhar. */
 function keepScroll() {
   const content = $('.content');
@@ -135,14 +135,15 @@ function render() {
   const scrollKeep = keepScroll();
   // preserva foco/cursor quando a tela é redesenhada durante a digitação
   const ae = document.activeElement; const fid = ae && ae.id && $('.content')?.contains(ae) ? ae.id : null; const sel = fid && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null; const fval = fid ? ae.value : null;
-  $('.sidebar').innerHTML = sidebarHTML();
+  const fresh = lastRoute !== S.route; lastRoute = S.route;   // tela nova: monta do zero; mesma tela: mexe só no que mudou
+  paint($('.sidebar'), sidebarHTML());
   $('.page-title').textContent = v.title;
   $('.crumb').textContent = NAV.find(n => n.id === S.route) ? (['registry', 'import', 'prefs'].includes(S.route) ? 'Cadastros' : 'Workspace') : '';
-  $('.top-actions').innerHTML = (v.actions || '') + topTimerHTML();
+  paint($('.top-actions'), (v.actions || '') + topTimerHTML(), fresh);
   const demo = db.setting('demo', false);
   const banner = demo ? `<div class="banner info">${icon('db', 'ico')}<span class="grow"><b>Dados fictícios</b> para testar as telas. Nada é salvo: ao recarregar, o app volta a este exemplo.</span><button class="btn sm" data-act="demo-clear">Começar vazio</button></div>` : '';
-  $('.content').innerHTML = banner + v.html;
-  $('.mobile-timer').innerHTML = mobileTimerHTML();
+  paint($('.content'), banner + v.html, fresh);
+  paint($('.mobile-timer'), mobileTimerHTML());
   restoreScroll(scrollKeep);
   document.title = 'Tempo';
   v.after && v.after();
@@ -471,7 +472,7 @@ function applyAppearance() {
 /* ---------- inicialização ---------- */
 ACTIONS.signout = async () => {
   try { await window.tempoClient?.auth.signOut(); } catch (e) { /* segue mesmo assim */ }
-  try { localStorage.removeItem('tempo-cache-v1'); } catch (e) { /* sem armazenamento */ }
+  try { localStorage.removeItem('tempo-cache-v1'); localStorage.removeItem('tempo-outbox-v1'); } catch (e) { /* sem armazenamento */ }
   location.reload();
 };
 

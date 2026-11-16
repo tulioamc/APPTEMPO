@@ -1,0 +1,18 @@
+name: Testes
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Conferir a sintaxe de todos os arquivos
+        run: for f in js/*.js api/gmail/*.js lib/*.js sw.js; do node --check "$f" || exit 1; done
+      - name: Rodar os testes
+        run: node --test tests/*.test.js

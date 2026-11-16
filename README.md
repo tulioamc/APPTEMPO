@@ -12,22 +12,30 @@ Funciona no navegador do Mac e no iPhone (instalado na Tela de Início). Depois 
 ```
 index.html              página única do app
 css/styles.css          visual (tema claro/escuro, celular)
-js/                     código, carregado nesta ordem:
-  store.js              camada de dados (MemoryAdapter agora, HttpAdapter depois)
-  colors.js             cores das etiquetas e siglas das agências
+js/                     código, carregado na ordem do index.html:
+  store.js              camada de dados: cache no aparelho, desfazer, sincronização
+  auth.js               login e banco online (Supabase), com fila de gravação
+  db-columns.js         colunas de cada tabela (o que não está aqui não é salvo)
   domain.js             regras de negócio, cálculos e dados fictícios
-  ui.js · combo.js · table.js   componentes (dropdown com busca, tabela estilo Notion)
+  ui.js · combo.js · table.js   componentes (camadas, dropdown com busca, tabela)
+  morph.js              atualiza a tela mexendo só no que mudou (preserva foco e digitação)
   app.js                navegação, cronômetro, inatividade, lembretes
+  notices.js            avisos e to-dos
+  wa-contacts.js · wa-nfse.js   dados enviados pelo app do Mac (WhatsApp, notas e comprovantes)
   view-*.js             telas
+  finance-bank.js · finance-links.js   extrato bancário e vínculos (continuação de view-finance-reports.js)
+api/ · lib/             funções do servidor (Gmail → extrato)
+tests/                  testes automáticos dos cálculos e da camada de dados
 manifest.webmanifest    instalação no iPhone/Mac (PWA)
 sw.js                   funciona offline e sempre busca a versão mais nova
-icons/                  ícones do app
-db/schema.sql           banco planejado (ainda não usado)
+db/schema.sql           estrutura do banco
 BACKLOG.md              ajustes pedidos e próximas etapas
 vercel.json             configuração de publicação
 ```
 
 Não tem build: são arquivos estáticos. Editou, subiu, publicou.
+
+Testes: `node --test tests/*.test.js` (rodam sozinhos no GitHub a cada envio).
 
 ## Publicar (GitHub → Vercel)
 

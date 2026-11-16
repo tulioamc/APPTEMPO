@@ -5,7 +5,7 @@
    são registradas para sempre e aparecem na aba Avisos, ordenadas por data.
    ===================================================================== */
 
-const NOTICE_KINDS = { sessao: ['Sessão aberta', 'clock'], conta: ['Conta a pagar', 'money'], pause: ['Pausa', 'alert'], prazo: ['Prazo', 'clock'], cobranca: ['Cobrança', 'money'], orcamento: ['Orçamento', 'doc'], reminder: ['Lembrete', 'bell'], todo: ['To-do', 'check'], reembolso: ['Reembolso', 'money'] };
+const NOTICE_KINDS = { sessao: ['Sessão aberta', 'clock'], conta: ['Conta a pagar', 'money'], pause: ['Pausa', 'alert'], prazo: ['Prazo', 'clock'], cobranca: ['Cobrança', 'money'], orcamento: ['Orçamento', 'doc'], reminder: ['Lembrete', 'bell'], todo: ['To-do', 'check'], reembolso: ['Reembolso', 'money'], nfse: ['Nota ou comprovante', 'money'] };
 const noticeKind = (k) => NOTICE_KINDS[k] || [k, 'bell'];
 
 /* Cria um aviso pendente. A chave evita duplicar o mesmo aviso (ex.: mesmo prazo no mesmo dia). */
@@ -36,7 +36,7 @@ function decideNotice(n, status, decision, extra) {
 const noticeButtons = (n) => {
   let base = noticeBtnsBase(n);
   // "Resolver": leva até onde o aviso se resolve (projeto, orçamento, despesa ou a sessão da pausa)
-  const temDestino = (n.entity === 'project' && n.entity_id) || n.entity === 'quote' || n.entity === 'expense';
+  const temDestino = (n.entity === 'project' && n.entity_id) || n.entity === 'quote' || n.entity === 'expense' || n.entity === 'reimb';
   if (base && temDestino) base = base.replace('<div class="row gap-s">', `<div class="row gap-s"><button class="btn sm primary" data-act="notice-open" data-id="${n.id}" title="Ir até o item para resolver">Resolver</button>`);
   if (!base || !n.data?.project_id) return base;
   return base.replace(/<\/div>$/, `<button class="btn sm icon ghost" data-act="notice-play" data-id="${n.id}" title="Começar registro" aria-label="Começar registro">${icon('play')}</button></div>`);
@@ -52,6 +52,7 @@ const noticeBtnsBase = (n) => {
   if (n.kind === 'pause') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Aceitar</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'activity') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Adicionar à nota</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'todo') return '';
+  if (n.kind === 'nfse') return `<div class="row gap-s"><button class="btn sm primary" data-act="nfse-usar" data-id="${n.id}">${n.data?.tipo === 'comprovante' ? 'Marcar como Pago' : 'Usar valor da nota'}</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'sessao') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Manter aberta</button></div>`;
   if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm" data-act="notice-pick" data-id="${n.id}">Escolher projeto, tarefa ou subtarefa</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
   return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Virar to-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
@@ -120,6 +121,7 @@ function noticeGoto(n) {
   }
   if (n.entity === 'project' && n.entity_id) return openProject(n.entity_id);
   if (n.entity === 'quote') return go('quotes');
+  if (n.entity === 'reimb') { if (n.data?.month || n.data?.ym) S.rbMonth = n.data.month || n.data.ym; return go('reimb'); }
   if (n.entity === 'expense') {
     const r = db.get('tempo_expenses', n.entity_id);
     if (r && r.month) { S.exFrom = r.month; S.exTo = r.month; }
@@ -319,7 +321,7 @@ function scanAlerts() {
     /* projeto pago sem nota fiscal: vira to-do para emitir */
     if (pay === 'Pago' && !p.invoice_at) todoOnce('Emitir nota ' + p.name);
   });
-  /* Orçamento enviado sem resposta: aviso aos 7 e aos 15 dias, e To-Do para cobrar. */
+  /* Orçamento enviado sem resposta: aviso aos 7 e aos 15 dias, e um único To-Do para cobrar (regra única; não recria se você já resolveu ou dispensou). */
   db.all('tempo_quotes').filter(q => q.sent_at && !['Aprovado', 'Recusado', 'Vencido'].includes(statusName(q.status_id))).forEach(q => {
     const d = daysBetween(q.sent_at, today); if (d === null || d < 7) return;
     const etapa = d >= 15 ? 15 : 7;
@@ -329,12 +331,6 @@ function scanAlerts() {
   db.all('tempo_quotes').filter(q => q.valid_until && !['Aprovado', 'Recusado', 'Vencido'].includes(statusName(q.status_id))).forEach(q => {
     const d = daysBetween(today, q.valid_until); if (d === null || d < 0 || d > 3) return;
     addNotice({ kind: 'orcamento', key: `orc:${q.id}:${q.valid_until}`, title: `Orçamento vence em ${d === 0 ? 'hoje' : d + ' dia(s)'}: ${q.name}`, body: 'Faça o follow-up com o cliente.', entity: 'quote', entity_id: q.id, data: {} }, true);
-  });
-  /* orçamento enviado sem resposta: cobrar aos 7 e aos 15 dias corridos (vira to-do, uma vez por marco) */
-  db.all('tempo_quotes').filter(q => q.sent_at && !['Aprovado', 'Recusado', 'Vencido'].includes(statusName(q.status_id))).forEach(q => {
-    const dias = daysBetween(ymd(new Date(q.sent_at)), today);
-    if (dias !== 7 && dias !== 15) return;
-    todoOnce(`Cobrar resposta do orçamento: ${q.name} · ${dias} dias`);
   });
   /* despesas com vencimento passado e ainda não pagas/recebidas */
   db.all('tempo_expenses').filter(r => r.month === today.slice(0, 7) && r.due_date && r.due_date < today && !['Pago', 'Recebido', 'Não teve'].includes(r.status)).forEach(r => {
