@@ -158,6 +158,8 @@ final class WhatsAppMonitor {
     /// Fila separada: a consulta de "com quem eu estava falando" não pode esperar a leitura das notas.
     private let lookupQueue = DispatchQueue(label: "tempo.whatsapp.lookup")
     private var avisado = false
+    /// No modo foco lê a cada minuto (para a mensagem de cliente avisar logo).
+    var rapido = false
 
     func start() {
         queue.async { ICloudTerapias.renomearAntigos() }
@@ -181,7 +183,7 @@ final class WhatsAppMonitor {
     private func cycle() {
         run()
         // enquanto o site não confirmou tudo (página ainda carregando), tenta de novo em 30 s
-        let espera: TimeInterval = pendentes().isEmpty ? 300 : 30
+        let espera: TimeInterval = pendentes().isEmpty ? (rapido ? 60 : 300) : 30
         queue.asyncAfter(deadline: .now() + espera) { [weak self] in self?.cycle() }
     }
 

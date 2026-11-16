@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var barTicker: Timer?
     private let monitor = ActivityMonitor()
     private let whatsapp = WhatsAppMonitor()
+    private let foco = FocoController()
+    private var focoItem: NSMenuItem?
     private let defaults = UserDefaults.standard
     private let isoFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]; return f
@@ -84,6 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         barTicker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshBar() }
         monitor.start()
         setupWhatsApp()
+        foco.onAbriu = { [weak self] nome in self?.enqueue("focoAbriu", [nome]) }
+        foco.aviso = { [weak self] t, b in self?.showNotice(t, b) }
+        foco.start()
     }
 
     // MARK: - WhatsApp, notas, lembretes e iCloud (antes ficavam no app em Python)
@@ -184,6 +189,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
+    /// Modo foco: o site manda até quando (ou nada para desligar) e as listas de apps e sites de distração.
+    private func handleFoco(_ d: [String: Any]) {
+        var ate: Date?
+        if let s = d["ate"] as? String {
+            let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            ate = f.date(from: s) ?? isoFormatter.date(from: s)
+        }
+        foco.atualizar(ate: ate, apps: (d["apps"] as? [String]) ?? [], sites: (d["sites"] as? [String]) ?? [])
+        whatsapp.rapido = foco.ativo
+        atualizarMenuFoco()
+        refreshBar()
+    }
+
+    private func atualizarMenuFoco() {
+        guard let item = focoItem else { return }
+        item.title = foco.ativo ? "Foco: faltam \(foco.minutosRestantes) min" : "Ativar foco"
+        let sub = NSMenu()
+        if foco.ativo {
+            sub.addItem(withTitle: "Encerrar foco", action: #selector(focoEncerrar), keyEquivalent: "").target = self
+        } else {
+            for m in [30, 60, 90, 120] {
+                let it = NSMenuItem(title: "\(m) min", action: #selector(focoLigar(_:)), keyEquivalent: "")
+                it.tag = m; it.target = self
+                sub.addItem(it)
+            }
+        }
+        item.submenu = sub
+    }
+    @objc private func focoLigar(_ sender: NSMenuItem) { enqueue("focoMenu", [sender.tag]) }
+    @objc private func focoEncerrar() { enqueue("focoMenu", [0]) }
+
     /// Relatório da aba Análises em PDF: o site manda o HTML pronto; salva em iCloud/Tempo/Análises e abre.
     private func handlePDF(_ d: [String: Any]) {
         guard let html = d["html"] as? String, !html.isEmpty else { return }
@@ -227,6 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         case "update": runUpdate(manual: true); return
         case "open": handleOpen(d); return
         case "pdf": handlePDF(d); return
+        case "foco": handleFoco(d); return
         default: break
         }
         guard let title = d["title"] as? String, let body = d["body"] as? String else { return }
@@ -283,13 +320,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     private func refreshBar() {
         guard let button = statusItem?.button else { return }
-        guard timerRunning || timerPaused else { button.title = ""; return }
+        let focoTxt = foco.ativo ? " ◎ \(foco.minutosRestantes)m" : ""
+        // o título do item do menu só muda quando o minuto muda (ou quando o foco acaba)
+        let tituloFoco = foco.ativo ? "Foco: faltam \(foco.minutosRestantes) min" : "Ativar foco"
+        if let it = focoItem, it.title != tituloFoco { atualizarMenuFoco() }
+        guard timerRunning || timerPaused else { button.title = focoTxt; return }
         let elapsed = timerMs / 1000 + (timerRunning ? Date().timeIntervalSince(timerSyncedAt) : 0)
         let s = Int(elapsed)
         let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
         // até 59:59 mostra minutos:segundos; a partir de 1 hora mostra horas:minutos
         let txt = h > 0 ? String(format: "%d:%02d", h, m) : String(format: "%02d:%02d", m, sec)
-        button.title = (timerPaused ? " ⏸ " : " ") + txt
+        button.title = (timerPaused ? " ⏸ " : " ") + txt + focoTxt
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -357,6 +398,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         let m = NSMenu()
         m.addItem(withTitle: "Mostrar Tempo", action: #selector(showWindow), keyEquivalent: "")
+        let fi = NSMenuItem(title: "Ativar foco", action: nil, keyEquivalent: "")
+        m.addItem(fi)
+        focoItem = fi
+        atualizarMenuFoco()
+        m.addItem(.separator())
         m.addItem(withTitle: "Recarregar", action: #selector(reload), keyEquivalent: "r")
         m.addItem(withTitle: "Atualizar app", action: #selector(updateNow), keyEquivalent: "u")
         m.addItem(withTitle: "Ler WhatsApp agora", action: #selector(readWhatsAppNow), keyEquivalent: "")

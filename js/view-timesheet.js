@@ -78,6 +78,7 @@ VIEWS.timesheet = () => {
   const strip = dayStrip(entries, day);
   const html = `
   <div class="ts-hero">
+    ${typeof focoCardHTML === 'function' ? focoCardHTML() : ''}
     ${timer}
     ${reportPanelHTML(day)}
   </div>
