@@ -192,6 +192,7 @@ create table if not exists tempo_reimb_rows (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   month text not null,                  -- YYYY-MM (uma tabela por mês)
   name text, note text, date date, amount numeric(14,2), suggested_amount numeric(14,2), paid_on date, req_on date, refunded_on date,
+  files jsonb not null default '[]'::jsonb,   -- [{ "tipo": "nota" | "comprovante", "path": "/Users/…" }] (coluna Arquivos)
   pay_id uuid references tempo_status_options(id) on delete set null,
   refund_id uuid references tempo_status_options(id) on delete set null,
   req_id uuid references tempo_status_options(id) on delete set null,
@@ -199,6 +200,8 @@ create table if not exists tempo_reimb_rows (
   created_at timestamptz not null default now(), updated_at timestamptz
 );
 -- migração: alter table tempo_reimb_rows add column if not exists suggested_amount numeric(14,2), add column if not exists req_on date;
+-- migração V2.05.02: alter table tempo_reimb_rows add column if not exists files jsonb not null default '[]'::jsonb;
+--   (os [LINK NF]/[LINK PAGAMENTO] que estavam na anotação foram para files)
 create index if not exists tempo_reimb_rows_month on tempo_reimb_rows (user_id, month, "order");
 
 create table if not exists tempo_expenses (

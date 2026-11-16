@@ -53,9 +53,10 @@ function nfseJanelaMes(iso) {
 function nfseNota(rowId, rotulo, caminho) {
   if (!caminho) return;
   const r = db.get('tempo_reimb_rows', rowId); if (!r) return;
-  const atual = r.note || '';
-  if (atual.includes(caminho)) return;
-  db.update('tempo_reimb_rows', rowId, { note: (atual ? atual + '\n' : '') + `[${rotulo}] ${caminho}` }, true);
+  const atual = Array.isArray(r.files) ? r.files : [];
+  if (atual.some(f => f.path === caminho)) return;
+  const tipo = rotulo === 'LINK NF' ? 'nota' : 'comprovante';
+  db.update('tempo_reimb_rows', rowId, { files: [...atual, { tipo, path: caminho }] }, true);
 }
 const nfseIsoBR = (txt) => { const m = String(txt || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
 const nfseValorBR = (txt) => { const v = [...String(txt || '').matchAll(/R\$\s?([\d.]+,\d{2})/g)].map(m => Number(m[1].replace(/\./g, '').replace(',', '.'))); return v.length ? v[0] : null; };

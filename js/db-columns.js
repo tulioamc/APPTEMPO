@@ -250,6 +250,7 @@ window.DB_COLUMNS = {
   "month",
   "name",
   "note",
+  "files",
   "date",
   "amount",
   "suggested_amount",

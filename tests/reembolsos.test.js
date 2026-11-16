@@ -56,7 +56,7 @@ test('nota fiscal: entra como sugestão e só vira valor real quando você confi
   assert.deepEqual([...t.nfseReport([item])], ['sha1']);
   const [row] = t.rows('2026-11');
   assert.equal(row.name, 'AT'); assert.equal(row.amount, null); assert.equal(row.suggested_amount, 9000);
-  assert.match(row.note, /\[LINK NF\] \/iCloud/);
+  assert.deepEqual(row.files.map(f => [f.tipo, f.path]), [['nota', item.arquivo]]); assert.ok(!row.note, 'a anotação fica livre');
   const aviso = t.db.all('tempo_notices').find(n => n.kind === 'nfse');
   assert.ok(aviso && aviso.status === 'pending');
   t.nfseReport([item]);
@@ -71,7 +71,7 @@ test('comprovante: marca Pago sozinho só quando o valor bate com a linha', () =
   t.db.insert('tempo_reimb_rows', { month: '2026-11', name: 'Aloma', amount: 1960, note: '', order: 1, pay_id: t.st('reimb_pay', 'a Pagar') }, true);
   t.nfseReport([{ id: 'c1', contato: 'Homero Futebol/ Bicicleta/ Skate', tipo: 'comprovante', texto: 'Comprovante de Pix R$ 1.250,00 em 05/11/2026', data: '2026-11-05', arquivo: '/x/Comprovante.png' }]);
   const homero = t.rows('2026-11')[0];
-  assert.equal(t.rbName('reimb_pay', homero.pay_id), 'Pago'); assert.equal(homero.paid_on, '2026-11-05'); assert.match(homero.note, /LINK PAGAMENTO/);
+  assert.equal(t.rbName('reimb_pay', homero.pay_id), 'Pago'); assert.equal(homero.paid_on, '2026-11-05'); assert.equal(homero.files[0].tipo, 'comprovante'); assert.equal(homero.note, '');
   // valor diferente da linha: não mexe, pede confirmação
   t.nfseReport([{ id: 'c2', contato: 'Aloma Consultório', tipo: 'comprovante', texto: 'Pix enviado R$ 50,00 em 06/11/2026', data: '2026-11-06', arquivo: null }]);
   const aloma = t.rows('2026-11')[1];
@@ -132,4 +132,17 @@ test('dentista: comprovante das duas conversas vai para a linha Dentista (sem no
   t.nfseReport([{ id: 'd2', contato: '‎Cristiana da Fonte (Dentista Rafa)', tipo: 'comprovante', texto: 'Pix enviado R$ 200,00 05/11/2026', data: '2026-11-05', arquivo: null }]);
   const avisos = t.db.all('tempo_notices').filter(n => /Dentista/.test(n.title));
   assert.equal(avisos.length, 2);
+});
+
+test('reler nota já lançada: não avisa de novo, só põe o arquivo na coluna Arquivos', () => {
+  const t = setup();
+  const item = { id: 'sha9', contato: 'Carol AT', tipo: 'nota', texto: NOTA, data: '2026-11-03', arquivo: null };
+  t.nfseReport([item]);
+  t.db.update('tempo_reimb_rows', t.rows('2026-11')[0].id, { note: '3176255643 - Req em 16/11' }, true);
+  t.nfseReport([{ ...item, arquivo: '/iCloud/Terapias/2026_11/AT_2026_11_Nota.pdf' }]);
+  const [row] = t.rows('2026-11');
+  assert.equal(t.db.all('tempo_notices').length, 1, 'sem aviso novo');
+  assert.equal(row.files.length, 1); assert.equal(row.note, '3176255643 - Req em 16/11', 'anotação intacta');
+  t.nfseReport([{ ...item, arquivo: '/iCloud/Terapias/2026_11/AT_2026_11_Nota.pdf' }]);
+  assert.equal(t.rows('2026-11')[0].files.length, 1, 'o mesmo arquivo não entra duas vezes');
 });
