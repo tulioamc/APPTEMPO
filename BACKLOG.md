@@ -666,3 +666,7 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Concluídas hoje ficam no fim da lista, riscadas, no painel da tela inicial e na aba Hoje; no dia seguinte saem do painel (continuam no To-do).
 - Aba "Todas": por dia (dia marcado ou, sem dia, o da criação), com "X abertas · Y concluídas · Z atrasadas"; abre e fecha com um clique; hoje começa aberto.
 - Relatório à direita da página To-do: Semana / Mês / Ano até hoje, "Não contar fim de semana"; concluídas, média por dia, atrasadas, adiadas (e quantas vezes), criadas, % no prazo e barras de concluídas por dia (ou por mês no ano).
+
+**V2.04.13 — Produtividade: gráfico e Comparações**
+- Gráficos de produtividade menos arredondados (cantos de 2–4 px, como as outras barras) e em tons pastel (verde #9FD6AE, vermelho #EFAFAF, amarelo #EED9A0), nas colunas do relatório e na barrinha da sessão e do Resumo.
+- Comparações refeitas: primeiro um resumo em palavras (quanto trabalhou, contra o mesmo ponto da semana e do mês passados, % de trabalho de verdade e o que mudou); depois dois cartões, Semana e Mês, com linhas "▲ mais / ▼ menos" contra o mesmo ponto do período passado, o período passado inteiro, a média e o mesmo mês do ano passado; e o mês a mês em barras. Médias não contam os dias de férias. Saíram a tabela de trimestres e os textos técnicos (pp, Δ).

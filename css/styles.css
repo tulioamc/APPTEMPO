@@ -1196,3 +1196,29 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .todo-lig { cursor: pointer; }
 .todo-lig:hover { text-decoration: underline dotted; }
 .todo-dayh .late { color: var(--danger); }
+/* Produtividade (16/11): menos arredondado e cores pastel, no padrão das outras barras */
+.prod-stack { border: 0; border-radius: 4px; background: var(--surface-2); padding: 0; gap: 1px; }
+.prod-seg { border-radius: 2px; }
+.prod-p { background: #9FD6AE; }
+.prod-d { background: #EFAFAF; }
+.prod-y { background: #EED9A0; }
+.pm-bar { height: 10px; border-radius: 3px; gap: 1px; }
+.pm-seg:first-child { border-radius: 3px 0 0 3px; }
+.pm-seg:last-child { border-radius: 0 3px 3px 0; }
+/* Comparações: resumo em palavras, cartões e mês a mês */
+.cmp-resumo { background: var(--surface-2); border-radius: 8px; padding: 12px 14px; }
+.cmp-resumo p { margin: 0 0 6px; line-height: 1.5; }
+.cmp-resumo p:last-child { margin: 0; }
+.cmp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.cmp-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.cmp-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.cmp-head b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.cmp-row { display: grid; grid-template-columns: minmax(0, 1fr) 80px 150px; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.cmp-d { font-size: 12px; white-space: nowrap; }
+.cmp-d.up { color: #2f8a52; }
+.cmp-d.down { color: #c0504d; }
+.cmp-sub { font-weight: 600; font-size: 13px; }
+.cmp-meses { display: flex; gap: 10px; align-items: flex-end; overflow-x: auto; padding-bottom: 4px; }
+.cmp-mes { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 52px; }
+.cmp-mes-bar { width: 28px; height: 90px; display: flex; align-items: flex-end; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.cmp-mes-bar span { width: 100%; display: block; border-radius: 2px 2px 0 0; }

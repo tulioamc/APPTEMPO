@@ -9,7 +9,7 @@ const PROD_GAP = 60e3; /* blocos de foco: pausas de até 1 min não quebram o fo
 const PROD_DOW = [1, 2, 3, 4, 5, 6, 0]; /* segunda primeiro */
 const PROD_DOW_LBL = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const PROD_NAME = { prod: "Produtivo", dist: "Distração", ocio: "Ocioso" };
-const PROD_COLOR = { prod: "#4ADE80", dist: "#F87171", ocio: "#FACC15" };
+const PROD_COLOR = { prod: "#9FD6AE", dist: "#EFAFAF", ocio: "#EED9A0" };   /* tons pastel */
 const PROD_CLS = { prod: "prod-p", dist: "prod-d", ocio: "prod-y" };
 const PROD_KEYS = ["prod", "dist", "ocio"];
 const PROD_TYPE = { dist: "Distração", ocio: "Ocioso" };
@@ -411,70 +411,68 @@ function prodMetrics(a, b) {
   } finally { PROD.period = oldP; PROD.range = oldR; }
 }
 function prodComparacoesHTML() {
-  const now = new Date();
+  const now = new Date(), nowT = now.getTime();
   const first = (() => { let t = Infinity; db.all('tempo_time_entries').forEach(e => (e.segments || []).forEach(s => { if (s.s) t = Math.min(t, new Date(s.s).getTime()); })); return t === Infinity ? null : new Date(t); })();
   if (!first) return '<div class="panel"><div class="panel-b muted small">Comparações aparecem quando houver registro de trabalho.</div></div>';
   const Y = now.getFullYear(), M = now.getMonth();
-  const semIni = prodPeriodRange('semana').a, semPrev = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7) - 7).getTime();
+  const semIni = prodPeriodRange('semana').a, SEM = 7 * 864e5;
+  const semPrevIni = semIni - SEM, decSem = nowT - semIni;
   const mesIni = new Date(Y, M, 1).getTime(), mesPrevIni = new Date(Y, M - 1, 1).getTime();
-  const mesAnoPassadoIni = new Date(Y - 1, M, 1).getTime(), mesAnoPassadoFim = new Date(Y - 1, M + 1, 1).getTime();
-  const anoIni = new Date(Y, 0, 1).getTime();
-  const SEM = 7 * 864e5, nowT = now.getTime();
-  const semana = prodMetrics(semIni, nowT), semanaPrev = prodMetrics(semPrev, semIni);
-  const mes = prodMetrics(mesIni, nowT), mesPrev = prodMetrics(mesPrevIni, mesIni), mesAA = prodMetrics(mesAnoPassadoIni, mesAnoPassadoFim);
-  const ano = prodMetrics(anoIni, nowT);
+  // mesmo ponto do mês passado: mesmo dia e hora (limitado ao fim daquele mês)
+  const mesPrevPonto = Math.min(mesPrevIni + (nowT - mesIni), mesIni);
+  const semana = prodMetrics(semIni, nowT), semPonto = prodMetrics(semPrevIni, semPrevIni + decSem), semInteira = prodMetrics(semPrevIni, semIni);
+  const mes = prodMetrics(mesIni, nowT), mesPonto = prodMetrics(mesPrevIni, mesPrevPonto), mesInteiro = prodMetrics(mesPrevIni, mesIni);
+  const mesAA = prodMetrics(new Date(Y - 1, M, 1).getTime(), new Date(Y - 1, M + 1, 1).getTime());
   const tudo = prodMetrics(first.getTime(), nowT);
-  const semanasNoMes = Math.max(1, Math.ceil((nowT - mesIni) / SEM));
-  const semanasNoAno = Math.max(1, Math.ceil((nowT - anoIni) / SEM));
-  const semanasDesdeInicio = Math.max(1, Math.ceil((nowT - first.getTime()) / SEM));
-  const mesesDesdeInicio = Math.max(1, (Y - first.getFullYear()) * 12 + (M - first.getMonth()) + 1);
-  const H = (ms) => (ms == null ? 'sem dados' : fmtDur(ms));
-  const P = (v) => (v == null ? 'sem dados' : Math.round(v) + '%');
-  const dH = (cur, ref) => (cur == null || ref == null ? '—' : `${cur - ref >= 0 ? '+' : '−'}${fmtDur(Math.abs(cur - ref))}`);
-  const dP = (cur, ref) => (cur == null || ref == null ? '—' : `${cur - ref >= 0 ? '+' : '−'}${Math.abs(Math.round(cur - ref))} pp`);
-  const row = (lab, val, pct, ref, dh, dp) => `<tr><td>${lab}</td><td class="mono">${val}</td><td class="mono">${pct}</td><td class="mono">${ref}</td><td class="mono">${dh}</td><td class="mono">${dp}</td></tr>`;
-  const cabec = '<thead><tr><th>Comparação</th><th>Horas líquidas</th><th>% produtivo</th><th>Referência (horas)</th><th>Δ horas</th><th>Δ % produtivo</th></tr></thead>';
-  const semanaMedMes = mes ? mes.prod / semanasNoMes : null, semanaMedAno = ano ? ano.prod / semanasNoAno : null, semanaMedTudo = tudo ? tudo.prod / semanasDesdeInicio : null;
-  const semTab = `<table class="tbl">${cabec}<tbody>
-    ${row('<b>Semana</b> até agora', H(semana?.prod), P(semana?.pct), '', '', '')}
-    ${row('↳ contra a semana anterior', H(semanaPrev?.prod), P(semanaPrev?.pct), H(semanaPrev?.prod), dH(semana?.prod, semanaPrev?.prod), dP(semana?.pct, semanaPrev?.pct))}
-    ${row('↳ contra a média semanal do mês', H(semanaMedMes), '', H(semanaMedMes), dH(semana?.prod, semanaMedMes), '—')}
-    ${row('↳ contra a média semanal do ano', H(semanaMedAno), '', H(semanaMedAno), dH(semana?.prod, semanaMedAno), '—')}
-    ${row('↳ contra a média semanal de sempre', H(semanaMedTudo), '', H(semanaMedTudo), dH(semana?.prod, semanaMedTudo), '—')}
-  </tbody></table>`;
-  const mesTab = `<table class="tbl">${cabec}<tbody>
-    ${row('<b>Mês</b> até agora', H(mes?.prod), P(mes?.pct), '', '', '')}
-    ${row('↳ contra o mês passado', H(mesPrev?.prod), P(mesPrev?.pct), H(mesPrev?.prod), dH(mes?.prod, mesPrev?.prod), dP(mes?.pct, mesPrev?.pct))}
-    ${row('↳ contra o mesmo mês do ano passado', H(mesAA?.prod), P(mesAA?.pct), H(mesAA?.prod), dH(mes?.prod, mesAA?.prod), dP(mes?.pct, mesAA?.pct))}
-    ${row('↳ contra a média mensal de sempre', H(tudo ? tudo.prod / mesesDesdeInicio : null), P(tudo?.pct), H(tudo ? tudo.prod / mesesDesdeInicio : null), dH(mes?.prod, tudo ? tudo.prod / mesesDesdeInicio : null), '—')}
-  </tbody></table>`;
-  // meses entre si (últimos 12, só os com dados)
-  const meses = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(Y, M - i, 1); const r = prodMetrics(d.getTime(), new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime());
-    if (r) meses.push({ d, r });
-  }
-  const mesesTab = meses.length ? `<table class="tbl"><thead><tr><th>Mês</th><th>Horas líquidas</th><th>% produtivo</th><th>Distração</th></tr></thead><tbody>${meses.map(x => `<tr><td>${x.d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</td><td class="mono">${fmtDur(x.r.prod)}</td><td class="mono">${Math.round(x.r.pct)}%</td><td class="mono">${fmtDur(x.r.dist)}</td></tr>`).join('')}</tbody></table>` : '<span class="muted small">Sem meses com dados.</span>';
-  // trimestres: este ano e o mesmo trimestre do ano passado
-  const tri = (ano0, q) => { const a = new Date(ano0, q * 3, 1).getTime(), b = new Date(ano0, q * 3 + 3, 1).getTime(); return prodMetrics(a, Math.min(b, nowT) > a ? Math.min(b, nowT) : b); };
-  const trimLinhas = [0, 1, 2, 3].map(q => {
-    const at = tri(Y, q), pa = tri(Y - 1, q);
-    if (!at && !pa) return null;
-    return `<tr><td>T${q + 1} ${Y}</td><td class="mono">${H(at?.prod)}</td><td class="mono">${P(at?.pct)}</td><td class="mono">T${q + 1} ${Y - 1}: ${H(pa?.prod)} · ${P(pa?.pct)}</td><td class="mono">${at && pa ? dH(at.prod, pa.prod) : '—'}</td></tr>`;
-  }).filter(Boolean).join('');
-  const trimTab = trimLinhas ? `<table class="tbl"><thead><tr><th>Trimestre</th><th>Horas líquidas</th><th>% produtivo</th><th>Mesmo trimestre do ano passado</th><th>Δ horas</th></tr></thead><tbody>${trimLinhas}</tbody></table>` : '<span class="muted small">Sem trimestres com dados.</span>';
-  // análise geral (texto automático, com os números)
+  // médias sem contar os dias de férias (não entram nas médias)
+  let diasAtivos = 0; for (let d = new Date(first); d.getTime() <= nowT; d.setDate(d.getDate() + 1)) if (!(typeof emFerias === 'function' && emFerias(ymd(d)))) diasAtivos++;
+  const semMedia = tudo && diasAtivos >= 7 ? tudo.prod / (diasAtivos / 7) : null;
+  const mesMedia = tudo && diasAtivos >= 28 ? tudo.prod / (diasAtivos / 30.44) : null;
+  const H = (ms) => (ms == null ? '—' : fmtDur(ms));
+  const delta = (cur, ref, tipo = 'h') => {
+    if (cur == null || ref == null) return '<span class="cmp-d muted">sem dados</span>';
+    const d = cur - ref; if (tipo === 'h' && Math.abs(d) < 60e3 || tipo === 'p' && Math.abs(d) < 1) return '<span class="cmp-d">igual</span>';
+    const txt = tipo === 'h' ? fmtDur(Math.abs(d)) : `${Math.abs(Math.round(d))} pontos`;
+    return `<span class="cmp-d ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'} ${d > 0 ? 'mais' : 'menos'} ${txt}</span>`;
+  };
+  const linha = (rot, ref, dica) => `<div class="cmp-row" data-tip="${esc(dica)}"><span>${rot}</span><span class="mono">${H(ref?.prod ?? ref)}</span>${delta(cardCur, ref?.prod ?? ref)}</div>`;
+  let cardCur = null;
+  const card = (titulo, cur, linhas) => { cardCur = cur?.prod ?? null;
+    return `<div class="cmp-card"><div class="cmp-head"><span class="small muted">${titulo}</span><b>${H(cur?.prod)}</b><span class="small" data-tip="Do tempo com sessão aberta, quanto foi trabalho no computador. O resto foi pausa, ócio ou distração.">${cur ? Math.round(cur.pct) + '% produtivo' : ''}</span></div>${linhas.map(l => linha(...l)).join('')}</div>`; };
+  const semCard = card('Esta semana, até agora', semana, [
+    ['Semana passada, até o mesmo ponto', semPonto, 'Mesmo dia da semana e mesma hora: comparação justa com uma semana que ainda não acabou'],
+    ['Semana passada inteira', semInteira, 'De segunda a domingo'],
+    ['Sua semana média', semMedia, `Total trabalhado ÷ semanas desde ${fmtDate(ymd(first))}, sem contar férias`],
+  ]);
+  const mesCard = card('Este mês, até agora', mes, [
+    ['Mês passado, até o mesmo dia', mesPonto, 'Do dia 1 até o mesmo dia e hora do mês passado'],
+    ['Mês passado inteiro', mesInteiro, 'O mês passado completo'],
+    ['Seu mês médio', mesMedia, `Total trabalhado ÷ meses desde ${fmtDate(ymd(first))}, sem contar férias`],
+    ['Mesmo mês do ano passado', mesAA, 'Mesmo mês, um ano antes'],
+  ]);
+  // em palavras, para ler rápido
   const frases = [];
-  if (semana && semanaPrev) frases.push(`Semana: ${fmtDur(semana.prod)} líquidas, ${dP(semana.pct, semanaPrev.pct)} de % produtivo contra a semana anterior.`);
-  if (mes && mesPrev) frases.push(`Mês: ${fmtDur(mes.prod)} líquidas até agora, ${dP(mes.pct, mesPrev.pct)} de % produtivo contra o mês passado.`);
-  if (mes && mesAA) frases.push(`Contra o mesmo mês do ano passado: ${dH(mes.prod, mesAA.prod)} de horas líquidas.`);
-  else frases.push('Mesmo mês do ano passado: sem dados ainda (o histórico começa em 17/10/2026).');
-  return `<section class="panel"><div class="panel-h"><h3>Comparações</h3><span class="small muted">média = total ÷ períodos decorridos desde o primeiro registro</span></div><div class="panel-b stack">
-    <span class="lbl">Semana</span>${semTab}
-    <span class="lbl">Mês</span>${mesTab}
-    <span class="lbl">Meses entre si (últimos 12)</span>${mesesTab}
-    <span class="lbl">Trimestres (este ano e ano passado)</span>${trimTab}
-    <span class="lbl">Análise geral</span><div class="small">${frases.map(f => `<div>${esc(f)}</div>`).join('')}</div>
+  const comp = (a, b) => a == null || b == null ? null : (Math.abs(a - b) < 60e3 ? 'o mesmo que' : `${fmtDur(Math.abs(a - b))} ${a > b ? 'a mais que' : 'a menos que'}`);
+  if (semana) {
+    const c = comp(semana.prod, semPonto?.prod);
+    frases.push(c ? `Esta semana você trabalhou <b>${fmtDur(semana.prod)}</b>, ${c} no mesmo ponto da semana passada (${fmtDur(semPonto.prod)}).` : `Esta semana você trabalhou <b>${fmtDur(semana.prod)}</b>. Ainda não há semana passada para comparar.`);
+    if (semPonto && semPonto.base > 0) {
+      const d = semana.pct - semPonto.pct;
+      frases.push(`Do tempo com sessão aberta, <b>${Math.round(semana.pct)}%</b> foi trabalho de verdade (semana passada: ${Math.round(semPonto.pct)}%). ${d <= -5 ? 'Teve mais pausa e distração que na semana passada.' : d >= 5 ? 'Teve menos pausa e distração que na semana passada.' : 'Parecido com a semana passada.'}`);
+    }
+  }
+  if (mes) { const c = comp(mes.prod, mesPonto?.prod); frases.push(c ? `No mês, <b>${fmtDur(mes.prod)}</b> até agora: ${c} no mesmo dia do mês passado.` : `No mês, <b>${fmtDur(mes.prod)}</b> até agora.`); }
+  if (semMedia != null && semana) frases.push(`Uma semana sua costuma ter <b>${fmtDur(semMedia)}</b> de trabalho (sem contar férias).`);
+  if (!mesAA) { const um = new Date(first.getFullYear() + 1, first.getMonth(), 1); frases.push(`A comparação com o ano passado começa em ${um.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}, quando houver um ano de histórico.`); }
+  // meses lado a lado (últimos 12 com dados)
+  const meses = [];
+  for (let i = 11; i >= 0; i--) { const d = new Date(Y, M - i, 1); const r = prodMetrics(d.getTime(), Math.min(new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime(), nowT)); if (r) meses.push({ d, r, atual: i === 0 }); }
+  const maxM = Math.max(1, ...meses.map(x => x.r.prod));
+  const mesesHTML = meses.length > 1 ? `<div class="cmp-sub">Mês a mês</div><div class="cmp-meses">${meses.map(x => `<div class="cmp-mes" data-tip="${esc(`${x.d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}${x.atual ? ' (até agora)' : ''}\n${fmtDur(x.r.prod)} de trabalho · ${Math.round(x.r.pct)}% produtivo\nDistração ${fmtDur(x.r.dist)}`)}"><span class="mono small">${fmtDur(x.r.prod)}</span><div class="cmp-mes-bar"><span style="height:${Math.round(x.r.prod / maxM * 100)}%;background:${PROD_COLOR.prod}${x.atual ? ';opacity:.6' : ''}"></span></div><span class="small muted">${x.d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}</span><span class="small">${Math.round(x.r.pct)}%</span></div>`).join('')}</div>` : '';
+  return `<section class="panel"><div class="panel-h"><h3>Comparações</h3><span class="small muted">horas = trabalho no computador, sem pausas</span></div><div class="panel-b stack" style="gap:16px">
+    <div class="cmp-resumo">${frases.map(f => `<p>${f}</p>`).join('')}</div>
+    <div class="cmp-grid">${semCard}${mesCard}</div>
+    ${mesesHTML}
   </div></section>`;
 }
 
