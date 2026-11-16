@@ -53,6 +53,7 @@ const noticeBtnsBase = (n) => {
   if (n.kind === 'activity') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Adicionar à nota</button><button class="btn sm" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'todo') return '';
   if (n.kind === 'nfse') return `<div class="row gap-s"><button class="btn sm primary" data-act="nfse-usar" data-id="${n.id}">${n.data?.tipo === 'comprovante' ? 'Marcar como Pago' : 'Usar valor da nota'}</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
+  if (n.kind === 'wa') return `<div class="row gap-s"><button class="btn sm primary" data-act="wa-abrir">Classificar agora</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button></div>`;
   if (n.kind === 'sessao') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Manter aberta</button></div>`;
   if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm" data-act="notice-pick" data-id="${n.id}">Escolher projeto, tarefa ou subtarefa</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
   return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Virar to-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
@@ -337,13 +338,17 @@ function scanAlerts() {
     const inc = r.kind === 'in';
     addNotice({ kind: inc ? 'cobranca' : 'conta', key: `ex:${r.id}`, title: `${inc ? 'Recebimento atrasado' : 'Conta vencida'}: ${r.name || 'sem nome'}`, body: `Venceu em ${fmtDate(r.due_date)}${r.amount ? ` · ${fmtMoney(r.amount)}` : ''}.`, entity: 'expense', entity_id: r.id, data: {} }, true);
   });
+  /* Contatos do WhatsApp sem classificar há mais de 3 dias: um aviso, que some quando você classifica todos. */
+  const waVelhos = (db.all('tempo_wa_contacts') || []).filter(c => !c.tipo_id && c.created_at && daysBetween(ymd(new Date(c.created_at)), today) >= 3)
+    .sort((x, y) => String(x.created_at).localeCompare(String(y.created_at)));
+  if (waVelhos.length) addNotice({ kind: 'wa', key: `wa-novos:${waVelhos[0].id}`, title: `${waVelhos.length} contato(s) do WhatsApp sem classificar`, body: 'Sem tipo, o tempo com eles conta como pausa. Marque quem é cliente, agência, colega ou fornecedor.', entity: 'wa', data: { n: waVelhos.length } });
   /* avisos automáticos (prazo, cobrança, orçamento, conta) saem sozinhos quando a situação deixa de valer:
      se a varredura não gerou mais a chave do aviso, a condição acabou (paga, entregue, data trocada, apagada...). */
-  const AUTO_KINDS = ['prazo', 'cobranca', 'orcamento', 'conta'];
-  const SRC_TABLE = { expense: 'tempo_expenses', project: 'tempo_projects', quote: 'tempo_quotes' };
+  const AUTO_KINDS = ['prazo', 'cobranca', 'orcamento', 'conta', 'wa'];
+  const SRC_TABLE = { expense: 'tempo_expenses', project: 'tempo_projects', quote: 'tempo_quotes', wa: 'tempo_wa_contacts' };
   db.all('tempo_notices').filter(n => !FERIAS_HOJE && AUTO_KINDS.includes(n.kind) && ['pending', 'snoozed'].includes(n.status) && n.key && !SCAN_SEEN.has(n.key)).forEach(n => {
     const src = SRC_TABLE[n.entity];
-    if (src && !db.all(src).length) return; // dados ainda não carregados: não resolve nada
+    if (src && !(db.all(src) || []).length) return; // dados ainda não carregados: não resolve nada
     decideNotice(n, 'accepted', 'Resolvido: a situação mudou'); SCAN_CHANGED = true;
   });
   scanSessoesAbertas(today);

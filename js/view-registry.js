@@ -16,8 +16,8 @@ VIEWS.registry = () => {
     : `<div class="empty">${icon('users')}<b>${q ? 'Nada encontrado' : 'Nenhum contato ainda'}</b><span>Os contatos chegam pelo app do Mac. Marque quem é cliente, agência, colega, fornecedor ou administrativo: o tempo de WhatsApp com eles conta como trabalho, e o resto vira pausa.</span></div>`;
   else body = cls.length ? gridTable({ id: 'clients', cols: CLCOLS, rows: cls, rowAttrs: c => `data-act="party-open" data-kind="client" data-id="${c.id}"`, rowById: (id) => db.get('tempo_clients', id) })
     : `<div class="empty">${icon('users')}<b>${q ? 'Nada encontrado' : 'Nenhum cliente cadastrado'}</b><button class="btn primary" data-act="party-new" data-kind="client">${icon('plus')} Novo cliente</button></div>`;
-  const html = `<div class="panel"><div class="panel-h"><div class="seg">${[['agencies', `Agências (${db.all('tempo_agencies').filter(a => !a.archived).length})`], ['clients', `Clientes (${clients().length})`], ['wa', `Contatos WhatsApp (${(db.all('tempo_wa_contacts') || []).length})`]].map(([k, l]) => `<button class="${r.tab === k ? 'on' : ''}" data-act="reg-tab" data-v="${k}">${l}</button>`).join('')}</div><span class="grow"></span>${colsBtn(r.tab)}<label class="check small"><input type="checkbox" data-on="reg-arch" ${r.arch ? 'checked' : ''}> Mostrar arquivados</label></div>
-    <div class="filters"><input id="rg-q" class="input search" placeholder="Buscar por nome, CNPJ ou contato" value="${esc(r.q)}" data-input="reg-q"></div>
+  const html = `<div class="panel"><div class="panel-h"><div class="seg">${[['agencies', `Agências (${db.all('tempo_agencies').filter(a => !a.archived).length})`], ['clients', `Clientes (${clients().length})`], ['wa', `Contatos WhatsApp (${(db.all('tempo_wa_contacts') || []).length}${waNovos().length ? ` · ${waNovos().length} novos` : ''})`]].map(([k, l]) => `<button class="${r.tab === k ? 'on' : ''}" data-act="reg-tab" data-v="${k}">${l}</button>`).join('')}</div><span class="grow"></span>${colsBtn(r.tab)}<label class="check small"><input type="checkbox" data-on="reg-arch" ${r.arch ? 'checked' : ''}> Mostrar arquivados</label></div>
+    <div class="filters"><input id="rg-q" class="input search" placeholder="Buscar por nome, CNPJ ou contato" value="${esc(r.q)}" data-input="reg-q">${r.tab === 'wa' ? waFiltrosHTML() : ''}</div>
     <div class="panel-b tight">${body}</div></div>`;
   return { title: 'Agências e clientes', actions: `<button class="btn" data-act="party-new" data-kind="agency">${icon('plus')} Agência</button><button class="btn primary" data-act="party-new" data-kind="client">${icon('plus')} Cliente</button>`, html };
 };
@@ -201,14 +201,20 @@ CHANGES['fee-hours'] = (el) => {
    Quem é de trabalho (cliente, agência, colega, fornecedor, administrativo) faz o tempo de WhatsApp
    contar como trabalho. Quem não está marcado conta como amigo, e o tempo vira pausa.
    ===================================================================== */
+/* Ordem padrão = a do WhatsApp: conversa com mensagem mais recente primeiro (quem aparece hoje fica no topo).
+   Clicar no cabeçalho de uma coluna troca a ordem; "Limpar ordem" volta para esta. */
 const waRows = (q) => (db.all('tempo_wa_contacts') || [])
   .filter(c => !q || String(c.name || '').toLowerCase().includes(q))
-  .sort((a, b) => waMsgs(b.jid) - waMsgs(a.jid) || String(a.name || '').localeCompare(String(b.name || '')));
+  .filter(c => !S.reg.waNovos || !c.tipo_id)
+  .sort((a, b) => String(b.last_at || '').localeCompare(String(a.last_at || '')) || waMsgs(b.jid) - waMsgs(a.jid) || String(a.name || '').localeCompare(String(b.name || '')));
+const waNovos = () => (db.all('tempo_wa_contacts') || []).filter(c => !c.tipo_id);
+const waUltima = (c) => { if (!c.last_at) return ''; const d = new Date(c.last_at); const hoje = ymd(new Date()) === ymd(d); return hoje ? `hoje ${fmtTime(c.last_at)}` : `${fmtDate(ymd(d))} ${fmtTime(c.last_at)}`; };
 const waMsgs = (jid) => (db.all('tempo_wa_daily') || []).filter(d => d.jid === jid).reduce((t, d) => t + (d.sent || 0), 0);
 const WACOLS = {
   name: { label: 'Contato', ico: 'text', cls: 'name', w: 260, sort: c => String(c.name || ''), cell: c => esc(c.name || '') },
   tipo: { label: 'Tipo', ico: 'spin', w: 190, sort: c => waTipoNome(c), cell: c => { const o = c.tipo_id ? db.get('tempo_status_options', c.tipo_id) : null; return o ? tag(o.name, o.color, { pill: true }) : '<span class="faint">Amigo (padrão)</span>'; },
     edit: { type: 'combo', kind: 'wa_tipo', allowEmpty: true, emptyLabel: 'Amigo (padrão)', get: c => c.tipo_id, set: (c, v) => db.update('tempo_wa_contacts', c.id, { tipo_id: v || null }) } },
+  last: { label: 'Última mensagem', ico: 'clock', w: 150, sort: c => c.last_at || '', cell: c => waUltima(c) ? `<span data-tip="Última mensagem na conversa, enviada ou recebida">${esc(waUltima(c))}</span>` : '<span class="faint">—</span>' },
   conta: { label: 'Conta como', ico: 'clock', w: 120, sort: c => waEhTrabalho(c) ? 0 : 1, cell: c => waEhTrabalho(c) ? tag('Trabalho', 'green', { pill: true }) : tag('Pausa', 'gray', { pill: true }) },
   grupo: { label: 'Grupo', ico: 'users', w: 90, sort: c => c.tipo === 'grupo' ? 0 : 1, cell: c => c.tipo === 'grupo' ? 'Sim' : '' },
   msgs: { label: 'Mensagens enviadas', ico: 'hash', w: 160, money: true, sort: c => waMsgs(c.jid), cell: c => {
@@ -218,3 +224,19 @@ const WACOLS = {
     return `<span data-tip="${esc(`Mensagens que você mandou${periodo ? `\n${periodo}` : ''}\nAs recebidas não entram na conta.`)}">${n}</span>`;
   } },
 };
+/* Filtro "só novos" (nunca classificados) e botão para marcar todos os que sobraram como Amigo. */
+function waFiltrosHTML() {
+  const n = waNovos().length;
+  return `<label class="check small" data-tip="Contatos que você ainda não classificou"><input type="checkbox" data-on="wa-novos" ${S.reg.waNovos ? 'checked' : ''}> Só novos (${n})</label>`
+    + (n ? `<button class="btn sm" data-act="wa-amigos" data-tip="Os ${n} contatos sem tipo passam a ser Amigo (o tempo com eles continua sendo pausa)">Marcar ${n} sem tipo como Amigo</button>` : '');
+}
+CHANGES['wa-novos'] = (el) => { S.reg.waNovos = el.checked; render(); };
+ACTIONS['wa-amigos'] = async () => {
+  const lista = waNovos(); if (!lista.length) return;
+  const amigo = statuses('wa_tipo').find(s => s.name === 'Amigo'); if (!amigo) return toast('Tipo Amigo não encontrado.');
+  if (!await confirmBox({ title: `Marcar ${lista.length} contatos como Amigo?`, body: 'Todos os contatos ainda sem tipo viram Amigo. Você pode mudar qualquer um depois.', ok: 'Marcar como Amigo' })) return;
+  lista.forEach(c => db.update('tempo_wa_contacts', c.id, { tipo_id: amigo.id }, true));
+  db.emit(); toast(`${lista.length} contatos marcados como Amigo`);
+};
+/* Aviso "contatos sem classificar": abre a aba já filtrada. */
+ACTIONS['wa-abrir'] = () => { S.reg.tab = 'wa'; S.reg.waNovos = true; go('registry'); };

@@ -31,3 +31,18 @@ test('Contatos do WhatsApp: tipo manda em "Conta como"', () => {
   assert.ok(html.includes('Fulano Cliente') && html.includes('Sem marcar'));
   assert.equal((html.match(/Trabalho/g) || []).length, 1);   // só o cliente conta como trabalho
 });
+
+test('Contatos do WhatsApp: ordem do WhatsApp e filtro de novos', () => {
+  const m = setup('wa');
+  m.db.data.tempo_wa_contacts = [
+    { id: 'a', jid: 'a@x', name: 'Antigo', tipo_id: 'cli', last_at: '2026-11-10T12:00:00Z' },
+    { id: 'b', jid: 'b@x', name: 'De hoje', tipo_id: null, last_at: '2026-11-16T14:00:00Z' },
+    { id: 'c', jid: 'c@x', name: 'Sem hora', tipo_id: null, last_at: null },
+  ];
+  const html = m.VIEWS.registry().html;
+  assert.ok(html.indexOf('De hoje') < html.indexOf('Antigo') && html.indexOf('Antigo') < html.indexOf('Sem hora'));
+  assert.ok(html.includes('2 novos') && html.includes('Marcar 2 sem tipo como Amigo'));
+  m.ctx.S.reg.waNovos = true;
+  const so = m.VIEWS.registry().html;
+  assert.ok(!so.includes('Antigo') && so.includes('De hoje'));
+});

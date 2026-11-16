@@ -8,7 +8,13 @@ async function waReport(linhas) {
     const { data: { user } } = await c.auth.getUser();
     if (!user) return;
     const contatos = new Map();
-    linhas.forEach(l => contatos.set(l.jid, { user_id: user.id, jid: l.jid, name: l.name || l.jid, tipo: l.grupo ? 'grupo' : 'amigo' }));
+    // hora da última mensagem (enviada ou recebida): a lista do Tempo fica na mesma ordem do WhatsApp.
+    // Só vai quando todas as linhas trazem a hora (app do Mac antigo não manda; sem isso, não apaga a que já existe).
+    const comHora = linhas.every(l => Number(l.ultima) > 0);
+    const ultima = {};
+    linhas.forEach(l => { if (comHora && (!ultima[l.jid] || l.ultima > ultima[l.jid])) ultima[l.jid] = Number(l.ultima); });
+    linhas.forEach(l => contatos.set(l.jid, { user_id: user.id, jid: l.jid, name: l.name || l.jid, tipo: l.grupo ? 'grupo' : 'amigo',
+      ...(comHora ? { last_at: new Date(ultima[l.jid] * 1000).toISOString() } : {}) }));
     // sem ignoreDuplicates: se você renomear o contato no WhatsApp, o nome aqui acompanha.
     // A classificação (tipo_id) fica presa à conversa, então não se perde na troca de nome.
     await c.from('tempo_wa_contacts').upsert([...contatos.values()], { onConflict: 'user_id,jid' });

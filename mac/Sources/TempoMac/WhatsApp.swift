@@ -149,7 +149,8 @@ final class WhatsAppMonitor {
         let sql = """
         select s.ZCONTACTJID, s.ZPARTNERNAME, s.ZSESSIONTYPE,
                date(m.ZMESSAGEDATE + ?, 'unixepoch', 'localtime') as dia,
-               sum(case when m.ZISFROMME = 1 then 1 else 0 end) as enviadas
+               sum(case when m.ZISFROMME = 1 then 1 else 0 end) as enviadas,
+               max(m.ZMESSAGEDATE) as ultima
         from ZWAMESSAGE m join ZWACHATSESSION s on m.ZCHATSESSION = s.Z_PK
         where s.ZSESSIONTYPE != ?
           and m.ZMESSAGEDATE + ? between ? and ?
@@ -171,6 +172,8 @@ final class WhatsAppMonitor {
                 "jid": jid, "name": nome.isEmpty ? jid : nome,
                 "grupo": sqlite3_column_int(stmt, 2) == 1,
                 "dia": dia, "enviadas": Int(sqlite3_column_int64(stmt, 4)),
+                // hora da última mensagem (Unix): o site ordena os contatos como o WhatsApp
+                "ultima": sqlite3_column_double(stmt, 5) + WhatsAppMonitor.epocaCoreData,
             ])
         }
         return out

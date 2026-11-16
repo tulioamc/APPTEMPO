@@ -496,3 +496,9 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Coluna "Mensagens enviadas", com dica do período ao passar o mouse (as recebidas não entram na conta).
 - Conversa em que ele só recebeu mensagem também entra na lista (com zero enviadas): antes um cliente novo que escreveu primeiro não aparecia para ser classificado. Muda o app do Mac (precisa de ⌘U).
 - Renomear o contato no WhatsApp atualiza o nome no Tempo; a classificação continua, porque fica presa à conversa (jid), não ao nome.
+
+**V2.04.07 — Contatos WhatsApp: ordem do WhatsApp, novos e atualização sozinha do app do Mac**
+- O app do Mac ainda estava na versão antiga às 11h20 (nenhuma conversa só recebida tinha entrado): o ⌘U não foi feito ou não pegou. Agora o app procura atualização sozinho a cada 15 min, quando o Tulio está parado há 5 min (a troca fecha e reabre o app).
+- Ordem padrão da lista = a do WhatsApp: última mensagem (enviada ou recebida) primeiro. Coluna "Última mensagem". Banco: `tempo_wa_contacts.last_at`, que só é gravado quando o app do Mac manda a hora (versão antiga não apaga).
+- "Só novos (N)": filtra quem nunca foi classificado. Botão "Marcar N sem tipo como Amigo".
+- Aviso "N contato(s) do WhatsApp sem classificar" quando algum fica 3 dias ou mais sem tipo, com botão "Classificar agora" (abre a aba já filtrada). Some sozinho quando todos estiverem classificados.

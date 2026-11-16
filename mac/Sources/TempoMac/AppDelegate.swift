@@ -72,6 +72,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         // ao abrir, procura atualização em segundo plano (sem fazer nada se não houver mudança)
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.runUpdate(manual: false) }
+        // e de 15 em 15 minutos, mas só quando você está longe do Mac há 5 min (a troca fecha e reabre o app)
+        Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
+            let parado = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+            if parado >= 300 { self?.runUpdate(manual: false) }
+        }
         barTicker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshBar() }
         monitor.start()
         setupWhatsApp()
