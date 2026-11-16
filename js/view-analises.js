@@ -39,6 +39,12 @@ function anFmt(n, u) {
   return u === '%' ? t + '%' : u ? `${t} ${u}` : t;
 }
 
+/* Nos gráficos, reais ficam curtos: R$ 32,8 mil. */
+function anFmtC(n, u) {
+  if (u !== 'R$' || n === null || n === undefined || isNaN(n) || Math.abs(n) < 1000) return anFmt(n, u);
+  const x = Number(n) / 1000;
+  return 'R$ ' + x.toLocaleString('pt-BR', { maximumFractionDigits: Math.abs(x) < 100 ? 1 : 0 }) + ' mil';
+}
 /* Gráficos em SVG com cores fixas: o mesmo desenho serve na tela e no PDF. */
 function anChartSVG(g) {
   const rot = Array.isArray(g.rotulos) ? g.rotulos.map(String) : [];
@@ -53,15 +59,15 @@ function anChartSVG(g) {
   const head = `<div class="an-chart"><div class="an-chart-t">${esc(g.titulo || '')}</div>`;
   const foot = `${legenda}${g.nota ? `<div class="an-note">${esc(g.nota)}</div>` : ''}</div>`;
   if (g.tipo === 'barras') {
-    const lh = 26, W = 640, lab = 150, valW = 90;
+    const lh = 26, W = 640, lab = 190, valW = 90;
     const bh = Math.max(8, (lh - 8) / series.length);
     let y = 4, out = '';
     rot.forEach((r, i) => {
-      out += `<text x="0" y="${y + (lh - 6) / 2 + 4}" font-size="12" fill="#495057">${esc(r.length > 22 ? r.slice(0, 21) + '…' : r)}</text>`;
+      out += `<text x="0" y="${y + (lh - 6) / 2 + 4}" font-size="12" fill="#495057">${esc(r.length > 28 ? r.slice(0, 27) + '…' : r)}</text>`;
       series.forEach((s, k) => {
         const v = Number(s.valores[i]) || 0, w = Math.max(v > 0 ? 2 : 0, (W - lab - valW) * v / max);
         out += `<rect x="${lab}" y="${y + k * bh}" width="${w.toFixed(1)}" height="${bh - 2}" rx="3" fill="${AN_CORES[k]}"/>`;
-        if (series.length === 1 || k === series.length - 1) out += `<text x="${lab + w + 6}" y="${y + k * bh + bh - 4}" font-size="11" fill="#212529">${esc(anFmt(s.valores[i], u))}</text>`;
+        if (series.length === 1 || k === series.length - 1) out += `<text x="${lab + w + 6}" y="${y + k * bh + bh - 4}" font-size="11" fill="#212529">${esc(anFmtC(s.valores[i], u))}</text>`;
       });
       y += Math.max(lh, bh * series.length + 6);
     });
@@ -69,7 +75,7 @@ function anChartSVG(g) {
   }
   // colunas e linha: eixo com 4 linhas de grade
   const W = 640, H = 220, L = 54, B = 28, T = 10, R = 10, pw = W - L - R, ph = H - B - T;
-  const grid = [0, 0.25, 0.5, 0.75, 1].map(f => { const yy = T + ph - ph * f; return `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#E9ECEF"/><text x="${L - 6}" y="${yy + 4}" font-size="10" text-anchor="end" fill="#868E96">${esc(anFmt(max * f, u))}</text>`; }).join('');
+  const grid = [0, 0.25, 0.5, 0.75, 1].map(f => { const yy = T + ph - ph * f; return `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#E9ECEF"/><text x="${L - 6}" y="${yy + 4}" font-size="10" text-anchor="end" fill="#868E96">${esc(anFmtC(max * f, u))}</text>`; }).join('');
   const step = pw / rot.length;
   const xl = rot.map((r, i) => `<text x="${L + step * i + step / 2}" y="${H - 8}" font-size="10" text-anchor="middle" fill="#495057">${esc(r.length > 10 ? r.slice(0, 9) + '…' : r)}</text>`).join('');
   let marks = '';
@@ -78,14 +84,14 @@ function anChartSVG(g) {
       const pts = rot.map((_, i) => { const v = Number(s.valores[i]); return isNaN(v) ? null : [L + step * i + step / 2, T + ph - ph * v / max]; });
       const d = pts.filter(Boolean).map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
       marks += `<path d="${d}" fill="none" stroke="${AN_CORES[k]}" stroke-width="2.5" stroke-linejoin="round"/>`;
-      pts.forEach((p, i) => { if (p) marks += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="#fff" stroke="${AN_CORES[k]}" stroke-width="2"><title>${esc(rot[i])}: ${esc(anFmt(s.valores[i], u))}</title></circle>`; });
+      pts.forEach((p, i) => { if (p) marks += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="#fff" stroke="${AN_CORES[k]}" stroke-width="2"><title>${esc(rot[i])}: ${esc(anFmtC(s.valores[i], u))}</title></circle>`; });
     });
   } else {
     const gw = step * 0.7, bw = gw / series.length;
     series.forEach((s, k) => rot.forEach((r, i) => {
       const v = Number(s.valores[i]) || 0, h = ph * v / max, x = L + step * i + (step - gw) / 2 + bw * k;
-      marks += `<rect x="${x.toFixed(1)}" y="${(T + ph - h).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${AN_CORES[k]}"><title>${esc(r)}: ${esc(anFmt(s.valores[i], u))}</title></rect>`;
-      if (series.length === 1 && rot.length <= 14 && v > 0) marks += `<text x="${(x + (bw - 2) / 2).toFixed(1)}" y="${(T + ph - h - 4).toFixed(1)}" font-size="10" text-anchor="middle" fill="#212529">${esc(anFmt(v, u))}</text>`;
+      marks += `<rect x="${x.toFixed(1)}" y="${(T + ph - h).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${AN_CORES[k]}"><title>${esc(r)}: ${esc(anFmtC(s.valores[i], u))}</title></rect>`;
+      if (series.length === 1 && rot.length <= 14 && v > 0) marks += `<text x="${(x + (bw - 2) / 2).toFixed(1)}" y="${(T + ph - h - 4).toFixed(1)}" font-size="10" text-anchor="middle" fill="#212529">${esc(anFmtC(v, u))}</text>`;
     }));
   }
   return `${head}<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(g.titulo || '')}" font-family="inherit">${grid}${marks}${xl}</svg>${foot}`;
