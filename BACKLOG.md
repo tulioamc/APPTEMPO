@@ -606,6 +606,16 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Definir permissões por intenção: consultas não alteram dados; comandos que iniciam/encerram sessões ou criam registros exigem validação do contexto e confirmação quando necessário.
 - Avaliar disponibilidade regional/idioma da Alexa, requisitos de publicação da Skill e dependência de conexão com a internet. Não presumir suporte a todos os dispositivos ou idiomas.
 
+
+#### To-do por voz: criar, organizar e consultar tarefas (Siri e Alexa)
+- Criar tarefas por comando de voz, com título e, quando informado, prazo, horário, prioridade, observação e vínculo com projeto, cliente ou agência.
+- Exemplos: "Adicionar tarefa: enviar orçamento para Brenda"; "Criar tarefa para amanhã às 10h: finalizar animação"; "Cobrar pagamento do projeto X".
+- Interpretar a frase e extrair os campos automaticamente. Se houver ambiguidade relevante, como mais de um projeto com nome parecido, perguntar antes de salvar.
+- Consultar tarefas: listar as de hoje, atrasadas, próximas tarefas e tarefas de um projeto específico.
+- Atualizar tarefas por voz: marcar como concluída, alterar prazo, prioridade ou descrição; confirmar quando a identificação da tarefa não for inequívoca.
+- Usar a lista To-do já existente no Tempo como fonte única. Siri e Alexa não devem criar listas paralelas nem duplicar tarefas.
+- Permitir captura rápida sem abrir o app, respeitando autenticação, permissões e confirmação para alterações ambíguas.
+
 ### 7. Arquitetura da IA e segurança
 - Usar **API oficial da OpenAI (GPT)** para o Tempo Intelligence; não usar API da Anthropic/Claude para esse recurso.
 - A assinatura do ChatGPT não inclui créditos da API: prever faturamento, limites e monitoramento próprios da API OpenAI.
