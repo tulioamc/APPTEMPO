@@ -670,3 +670,9 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 **V2.04.13 — Produtividade: gráfico e Comparações**
 - Gráficos de produtividade menos arredondados (cantos de 2–4 px, como as outras barras) e em tons pastel (verde #9FD6AE, vermelho #EFAFAF, amarelo #EED9A0), nas colunas do relatório e na barrinha da sessão e do Resumo.
 - Comparações refeitas: primeiro um resumo em palavras (quanto trabalhou, contra o mesmo ponto da semana e do mês passados, % de trabalho de verdade e o que mudou); depois dois cartões, Semana e Mês, com linhas "▲ mais / ▼ menos" contra o mesmo ponto do período passado, o período passado inteiro, a média e o mesmo mês do ano passado; e o mês a mês em barras. Médias não contam os dias de férias. Saíram a tabela de trimestres e os textos técnicos (pp, Δ).
+
+**Para fazer (combinado por voz em 16/11)**
+- Modo foco (pedido por voz, 16/11): é o Tulio quem liga, quando quiser, num botão "Ativar foco" na tela inicial e na barra de menu do Mac; escolhe 90 min ou outro tempo. Durante o foco o Tempo esconde o WhatsApp no Mac e, se ele abrir, pergunta "Você está no foco, abrir mesmo assim?" (não tira o acesso). Mensagem de cliente avisa mesmo no foco.
+  - Mesma pergunta para os outros apps e sites de distração (Telegram, Mensagens e os sites que já contam como pausa, ex.: Instagram e YouTube no Chrome).
+  - Ao ligar o foco, ativar o "Não perturbe" do Mac e, por um atalho, o foco do iPhone. O resto dos avisos do Tempo continua normal.
+- Cruzar contatos com projetos: somar o tempo de WhatsApp com cada cliente às horas do projeto, para ver quanto custa atender cada um e se o preço cobre.
