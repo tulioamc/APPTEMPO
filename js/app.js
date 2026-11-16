@@ -212,6 +212,7 @@ setInterval(() => db.refresh(), 60000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') db.refresh(); });
 /* Ponte do app de Mac. O app guarda os eventos numa fila e só tira da fila quando esta função roda. */
 window.TempoBridge = {
+  reportNfse: (itens) => nfseReport(itens),
   reportIdle: async (fromISO, toISO, app) => {
     try { await db.refresh(); suggestPause(new Date(fromISO).getTime(), new Date(toISO).getTime(), 'mac', app); }
     catch (e) { console.warn('reportIdle', e); }
