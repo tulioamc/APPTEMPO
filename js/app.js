@@ -197,18 +197,20 @@ function uncoveredGap(a, fromMs, toMs) {
 }
 function suggestPause(fromMs, toMs, source, app) {
   if (!isMacApp()) return;   // navegador e celular não criam pausa sozinhos
-  const minMs = source === 'app' ? 60000 : idleLimit() * 60000;
+  // app de distração (WhatsApp de amigo, Instagram…): conta a partir de 10 s, que é o mínimo que o Mac registra
+  const minMs = source === 'app' ? 10000 : idleLimit() * 60000;
   const a = activeEntry(); if (!a || toMs - fromMs < minMs) return;
   const segStart = new Date(a.segments[a.segments.length - 1].s).getTime(); fromMs = Math.max(fromMs, segStart);
   // inatividade não pode cobrir uso de app: a pausa vai só para o maior trecho sem atividade registrada
   if (source !== 'app') [fromMs, toMs] = uncoveredGap(a, fromMs, toMs);
   if (toMs - fromMs < minMs) return;
-  if (pausesOf(a.id).some(n => Math.abs(new Date(n.data.from) - fromMs) < 60000)) return;
+  if (pausesOf(a.id).some(n => Math.abs(new Date(n.data.from) - fromMs) < (source === 'app' ? 5000 : 60000))) return;
   const from = new Date(fromMs).toISOString(), to = new Date(toMs).toISOString();
   addNotice({ kind: 'pause', key: `pause:${a.id}:${from}`, title: `Pausa sugerida: ${fmtDur(toMs - fromMs)}`, body: `Parado entre ${fmtTime(from)} e ${fmtTime(to)}; voltou às ${fmtTime(to)}.`, entity: 'entry', entity_id: a.id, project_id: a.project_id, data: { entry_id: a.id, from, to, source, app: app || null } });
   // inatividade vira pausa sozinha (sem aprovação): o aviso fica só para registro
   const auto = db.all('tempo_notices').find(x => x.key === `pause:${a.id}:${from}`);
-  if (auto) { applyPause(a, auto, 'insert'); toast(`${icon('alert', 'ico')} Pausa aplicada: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`); return; }
+  // espiada curta (menos de 1 min) entra calada; só pausa maior mostra o aviso
+  if (auto) { applyPause(a, auto, 'insert'); if (toMs - fromMs >= 60000) toast(`${icon('alert', 'ico')} Pausa aplicada: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`); return; }
   toast(`${icon('alert', 'ico')} Pausa sugerida: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`, { actions: [{ label: 'Revisar', run: () => go('timesheet') }] });
   notifyNative('Pausa sugerida', `${fmtDur(toMs - fromMs)} parado (${fmtTime(from)}–${fmtTime(to)})`);
 }
