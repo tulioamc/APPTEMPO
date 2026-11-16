@@ -61,7 +61,7 @@ ACTIONS['notice-pick'] = (el) => { const n = db.get('tempo_notices', el.dataset.
 /* Cria um to-do só se nunca tiver existido outro com o mesmo texto (feito ou aberto): a varredura não recria o que você já resolveu. */
 function todoOnce(raw) {
   if (db.all('tempo_notices').some(n => n.kind === 'todo' && String(n.title || '').trim() === raw.trim())) return;
-  todoAddRaw(raw);
+  todoAddRaw(raw, false, true);
 }
 ACTIONS['notice-accept'] = (el) => {
   const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
@@ -218,7 +218,7 @@ function todoAlarmPeek(inp, wrapId = 'todo-alarm-wrap', boxId = 'todo-alarm') {
 }
 const TODO_ALARM_RE = /\s!alarme\s*$/i;
 /* Cria um to-do a partir do texto: "!seg,qua" = fixo; "[1h]" ou "[30min]" = tempo estimado. */
-function todoAddRaw(raw, alarm = false) {
+function todoAddRaw(raw, alarm = false, auto = false) {
   const fm = raw.match(/\s!([a-zçã,]+)\s*$/i);
   if (fm) {
     const words = fm[1].toLowerCase().split(',').map(x => x.trim());
@@ -236,7 +236,7 @@ function todoAddRaw(raw, alarm = false) {
   const est = em ? Number(em[1]) * (em[2].toLowerCase() === 'h' ? 60 : 1) : (p.dur || null);
   const withAlarm = !!(alarm && p.due);
   const lig = todoFindLink(p.title);
-  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: { ...(p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {}), ...(est ? { est } : {}), ...lig, ...(withAlarm ? { alarm: true, alarm_criado: false } : {}) }, decision: '', decided_at: null, snooze_until: null }, true);
+  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: { ...(auto ? { auto: true } : {}), ...(p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {}), ...(est ? { est } : {}), ...lig, ...(withAlarm ? { alarm: true, alarm_criado: false } : {}) }, decision: '', decided_at: null, snooze_until: null }, true);
   db.emit(); todoAlarmSync(); return true;
 }
 /* To-do ligado sozinho: se o texto cita um projeto aberto (ou, sem projeto, um cliente), guarda o vínculo.
@@ -269,7 +269,13 @@ ACTIONS['todo-toggle'] = (el) => {
   const done = n.status !== 'done';
   db.update('tempo_notices', n.id, { status: done ? 'done' : 'open', decided_at: done ? nowISO() : null }, true); db.emit();
 };
-ACTIONS['todo-del'] = (el) => { db.remove('tempo_notices', el.dataset.id, true); db.emit(); };
+ACTIONS['todo-del'] = (el) => {
+  const n = db.get('tempo_notices', el.dataset.id);
+  // to-do criado pelo app (ex.: "Cobrar ...") não volta: fica como dispensado, para o app não recriar
+  if (n && (n.data?.auto || /^Cobrar /.test(n.title || ''))) db.update('tempo_notices', n.id, { status: 'done', decision: 'Dispensado', decided_at: nowISO() }, true);
+  else db.remove('tempo_notices', el.dataset.id, true);
+  db.emit();
+};
 
 /* Varredura automática: prazos, cobranças e orçamentos com validade próxima. */
 let SCAN_SEEN = null; // chaves geradas nesta varredura
@@ -541,7 +547,7 @@ function sidePanelHTML() {
     ${pixSideHTML()}
     <div class="card"><div class="row between"><b>To-do</b><span class="row gap-s"><span class="faint small">${todos.filter(t => t.status !== 'done').length} abertas</span><button class="btn sm ghost" data-act="go" data-route="todo">Ver todos</button></span></div>
       <form class="row gap-s" onsubmit="event.preventDefault();ACTIONS['todo-add']()"><input id="todo-new" class="input grow" placeholder="Ex.: Pegar Rafa às 16h" autocomplete="off" oninput="todoAlarmPeek(this)"><label id="todo-alarm-wrap" class="row gap-s small" style="display:none;align-items:center;white-space:nowrap"><input type="checkbox" id="todo-alarm"> Alarme</label><button class="btn sm" data-act="todo-add">Adicionar</button></form>
-      <div class="todo-list">${todoGroupsHTML(todos, 7)}</div>
+      <div class="todo-list">${todoGroupsHTML(todos.filter(t => t.status !== 'done'))}</div>
     </div>
     <div class="card"><div class="row between"><b>Avisos</b><button class="btn sm ghost" data-act="go" data-route="notices">Ver todos</button></div>
       ${pend.length ? pend.map(n => `<div class="side-notice" data-act="notice-open" data-id="${n.id}" style="cursor:pointer" title="Ir até o item para resolver"><div class="small"><b>${esc(n.title)}</b>${n.kind === 'pause' ? '' : `<div class="faint">${esc(n.body || '')}</div>`}</div>${noticeButtons(n)}</div>`).join('') : '<span class="faint small">Sem avisos pendentes.</span>'}
