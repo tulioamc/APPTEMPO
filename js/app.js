@@ -36,6 +36,7 @@ const NAV = [
   { id: 'todo', label: 'To-do', icon: 'check' },
   { id: 'productivity', label: 'Relatório Produtividade', icon: 'chart' },
   { id: 'metas', label: 'Metas', icon: 'check' },
+  { id: 'analises', label: 'Análises', icon: 'chart' },
   { id: 'usage', label: 'Uso de programas', icon: 'chart' },
   { group: 'PJ' },
   { id: 'registry', label: 'Agências e clientes', icon: 'users' },

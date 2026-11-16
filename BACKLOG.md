@@ -458,6 +458,12 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 6. Limpeza do código das telas (seção acima).
 7. Item antigo ainda aberto: OFX do Nubank (novembro em diante) e PDF da fatura do cartão (aguardando arquivos).
 
+**V2.05.03 — Análises (relatórios com gráficos e PDF)**
+- Aba "Análises" (menu, depois de Metas; `js/view-analises.js`): abas Semana, Mês, 3 meses, 6 meses e Ano, com histórico. Lê `tempo_settings`: prodSemanal:AAAA-MM-DD, prodMensal:AAAA-MM, relTrimestral:AAAA-Tn, relSemestral:AAAA-Sn, relAnual:AAAA. Formato documentado no topo do arquivo (resumo, kpis, graficos colunas/linha/barras em SVG, secoes, comparacoes, sugestoes, acompanhamento, metas, ideias_tempo). Análises antigas (só "numeros") continuam aparecendo.
+- PDF: botão gera A4 com capa; no app do Mac (`mac/Sources/TempoMac/PDFExport.swift`, mensagem `pdf`) salva em iCloud Drive/Tempo/Análises e abre; no navegador abre a janela de imprimir.
+- Tarefas agendadas (Opus, só leitura no banco, gravam uma chave): semanal (seg 7h13), mensal (dia 1 7h20), trimestral (1/jan, abr, jul, out 7h27), semestral (1/jan e 1/jul 7h34), anual (1/jan 7h41). Juntam produtividade com as áreas do épico Tempo Intelligence (negócio, inadimplência, finanças PJ/PF separadas, reembolsos, WhatsApp, acompanhamento das sugestões anteriores). O épico deixa de usar API da OpenAI: análise fica nas tarefas agendadas do Claude.
+- Reembolsos: links com acento (Patrícia) não duplicam mais (compara em NFC).
+
 **Lição desta conversa:** antes de apagar ou trocar qualquer app/arquivo do Mac, conferir o que ele faz (o app "1.0" parecia velho e era o principal).
 
 
@@ -710,5 +716,11 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 7. Limpeza do código das telas.
 8. OFX do Nubank de novembro em diante e PDF da fatura (aguardando arquivos).
 9. Doc "APP TEMPO — Ideias organizadas": a seção "Próxima conversa" está desatualizada (vários itens feitos na V2.04).
+
+**V2.05.03 — Análises (relatórios com gráficos e PDF)**
+- Aba "Análises" (menu, depois de Metas; `js/view-analises.js`): abas Semana, Mês, 3 meses, 6 meses e Ano, com histórico. Lê `tempo_settings`: prodSemanal:AAAA-MM-DD, prodMensal:AAAA-MM, relTrimestral:AAAA-Tn, relSemestral:AAAA-Sn, relAnual:AAAA. Formato documentado no topo do arquivo (resumo, kpis, graficos colunas/linha/barras em SVG, secoes, comparacoes, sugestoes, acompanhamento, metas, ideias_tempo). Análises antigas (só "numeros") continuam aparecendo.
+- PDF: botão gera A4 com capa; no app do Mac (`mac/Sources/TempoMac/PDFExport.swift`, mensagem `pdf`) salva em iCloud Drive/Tempo/Análises e abre; no navegador abre a janela de imprimir.
+- Tarefas agendadas (Opus, só leitura no banco, gravam uma chave): semanal (seg 7h13), mensal (dia 1 7h20), trimestral (1/jan, abr, jul, out 7h27), semestral (1/jan e 1/jul 7h34), anual (1/jan 7h41). Juntam produtividade com as áreas do épico Tempo Intelligence (negócio, inadimplência, finanças PJ/PF separadas, reembolsos, WhatsApp, acompanhamento das sugestões anteriores). O épico deixa de usar API da OpenAI: análise fica nas tarefas agendadas do Claude.
+- Reembolsos: links com acento (Patrícia) não duplicam mais (compara em NFC).
 
 **Lição desta conversa:** mudança no banco (tabela nova, coluna, tipo de status) precisa ir junto no schema, no carregamento do site e na sincronização; uma tabela fora do formato travou a atualização do site inteiro sem aviso.

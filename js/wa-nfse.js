@@ -54,7 +54,10 @@ function nfseNota(rowId, rotulo, caminho) {
   if (!caminho) return;
   const r = db.get('tempo_reimb_rows', rowId); if (!r) return;
   const atual = Array.isArray(r.files) ? r.files : [];
-  if (atual.some(f => f.path === caminho)) return;
+  // o Mac escreve acentos de outro jeito (í em duas partes): compara pela forma normalizada
+  const nfc = (x) => String(x || '').normalize('NFC');
+  caminho = nfc(caminho);
+  if (atual.some(f => nfc(f.path) === caminho)) return;
   const tipo = rotulo === 'LINK NF' ? 'nota' : 'comprovante';
   db.update('tempo_reimb_rows', rowId, { files: [...atual, { tipo, path: caminho }] }, true);
 }

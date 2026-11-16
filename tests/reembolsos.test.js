@@ -145,4 +145,7 @@ test('reler nota já lançada: não avisa de novo, só põe o arquivo na coluna 
   assert.equal(row.files.length, 1); assert.equal(row.note, '3176255643 - Req em 16/11', 'anotação intacta');
   t.nfseReport([{ ...item, arquivo: '/iCloud/Terapias/2026_11/AT_2026_11_Nota.pdf' }]);
   assert.equal(t.rows('2026-11')[0].files.length, 1, 'o mesmo arquivo não entra duas vezes');
+  t.nfseReport([{ ...item, id: 'sha10', arquivo: '/iCloud/Patrícia_2026_11_Nota.pdf'.normalize('NFD') }]);
+  t.nfseReport([{ ...item, id: 'sha10', arquivo: '/iCloud/Patrícia_2026_11_Nota.pdf'.normalize('NFC') }]);
+  assert.equal(t.rows('2026-11')[0].files.length, 2, 'acento escrito de outro jeito não duplica');
 });

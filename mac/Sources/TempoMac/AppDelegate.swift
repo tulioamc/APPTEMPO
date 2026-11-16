@@ -184,6 +184,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
+    /// Relatório da aba Análises em PDF: o site manda o HTML pronto; salva em iCloud/Tempo/Análises e abre.
+    private func handlePDF(_ d: [String: Any]) {
+        guard let html = d["html"] as? String, !html.isEmpty else { return }
+        let nome = (d["nome"] as? String) ?? "Analise"
+        PDFExport.gerar(html: html, nome: nome) { [weak self] url in
+            if let url = url { NSWorkspace.shared.open(url) }
+            else { self?.showNotice("Tempo", "Não consegui gerar o PDF da análise.") }
+            let ok = url != nil
+            self?.web.evaluateJavaScript("window.TempoBridge && window.TempoBridge.pdfDone && window.TempoBridge.pdfDone(\(ok))", completionHandler: nil)
+        }
+    }
+
     /// Grava nota fiscal (PDF) ou comprovante (PNG) em iCloud/Terapias/<Ano_Mes>, a pedido do site.
     private func handleTerapia(_ d: [String: Any]) {
         guard let tipo = d["tipo"] as? String, let anoMes = d["anoMes"] as? String, let terapeuta = d["terapeuta"] as? String,
@@ -214,6 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         case "terapia": handleTerapia(d); return
         case "update": runUpdate(manual: true); return
         case "open": handleOpen(d); return
+        case "pdf": handlePDF(d); return
         default: break
         }
         guard let title = d["title"] as? String, let body = d["body"] as? String else { return }
