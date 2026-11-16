@@ -464,7 +464,8 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Tarefas agendadas (Opus, só leitura no banco, gravam uma chave): semanal (seg 7h13), mensal (dia 1 7h20), trimestral (1/jan, abr, jul, out 7h27), semestral (1/jan e 1/jul 7h34), anual (1/jan 7h41). Juntam produtividade com as áreas do épico Tempo Intelligence (negócio, inadimplência, finanças PJ/PF separadas, reembolsos, WhatsApp, acompanhamento das sugestões anteriores). O épico deixa de usar API da OpenAI: análise fica nas tarefas agendadas do Claude.
 - Reembolsos: links com acento (Patrícia) não duplicam mais (compara em NFC).
 - Regras comuns das análises ficam no banco: `tempo_settings` chave `analiseGuia` (value.texto). Cada tarefa agendada só tem período, chave e foco, e lê o guia primeiro. Para corrigir uma regra, atualize só essa linha. Atenção: classificação do WhatsApp é `tempo_wa_contacts.tipo_id` (a coluna `tipo` é antiga); no extrato, PJ/PF é `entity`/`biz_entity` e `scope` é externa/interna/cartao.
-- V2.05.04 (pronto, não publicado): gráficos com reais curtos ("R$ 32,8 mil") e rótulos de barra mais largos.
+- V2.05.05: Reembolsos, "Falta você requerer" só conta requerimento "a Fazer"/"Falta Nota" ("Refeito…" é requerido); "Não se aplica" só passa pela etapa de pagar.
+- V2.05.04: gráficos com reais curtos ("R$ 32,8 mil") e rótulos de barra mais largos.
 
 **Lição desta conversa:** antes de apagar ou trocar qualquer app/arquivo do Mac, conferir o que ele faz (o app "1.0" parecia velho e era o principal).
 
@@ -725,6 +726,7 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - Tarefas agendadas (Opus, só leitura no banco, gravam uma chave): semanal (seg 7h13), mensal (dia 1 7h20), trimestral (1/jan, abr, jul, out 7h27), semestral (1/jan e 1/jul 7h34), anual (1/jan 7h41). Juntam produtividade com as áreas do épico Tempo Intelligence (negócio, inadimplência, finanças PJ/PF separadas, reembolsos, WhatsApp, acompanhamento das sugestões anteriores). O épico deixa de usar API da OpenAI: análise fica nas tarefas agendadas do Claude.
 - Reembolsos: links com acento (Patrícia) não duplicam mais (compara em NFC).
 - Regras comuns das análises ficam no banco: `tempo_settings` chave `analiseGuia` (value.texto). Cada tarefa agendada só tem período, chave e foco, e lê o guia primeiro. Para corrigir uma regra, atualize só essa linha. Atenção: classificação do WhatsApp é `tempo_wa_contacts.tipo_id` (a coluna `tipo` é antiga); no extrato, PJ/PF é `entity`/`biz_entity` e `scope` é externa/interna/cartao.
-- V2.05.04 (pronto, não publicado): gráficos com reais curtos ("R$ 32,8 mil") e rótulos de barra mais largos.
+- V2.05.05: Reembolsos, "Falta você requerer" só conta requerimento "a Fazer"/"Falta Nota" ("Refeito…" é requerido); "Não se aplica" só passa pela etapa de pagar.
+- V2.05.04: gráficos com reais curtos ("R$ 32,8 mil") e rótulos de barra mais largos.
 
 **Lição desta conversa:** mudança no banco (tabela nova, coluna, tipo de status) precisa ir junto no schema, no carregamento do site e na sincronização; uma tabela fora do formato travou a atualização do site inteiro sem aviso.

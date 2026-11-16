@@ -115,10 +115,12 @@ VIEWS.reimb = () => {
   /* Filtros de pendência (clicáveis): filtram as linhas das tabelas */
   const now = ymd(new Date()).slice(0, 7);
   /* Três etapas, cada linha em uma só: pagar -> requerer -> receber (depois do Feito!/Negado, sai da lista) */
+  /* "Refeito…" conta como requerido; "Não se aplica" (requerimento ou reembolso) só passa pela etapa de pagar */
   const etapa = (r) => {
     if (amt(r) <= 0) return null;
     if (payOf(r) !== 'Pago') return 'pagar';
-    if (reqOf(r) !== 'Feito') return 'requerer';
+    if (isNA(r)) return null;
+    if (['a Fazer', 'Falta Nota'].includes(reqOf(r))) return 'requerer';
     if (!['Feito!', 'Negado'].includes(refOf(r))) return 'receber';
     return null;
   };
