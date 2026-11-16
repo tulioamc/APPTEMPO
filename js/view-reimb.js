@@ -3,7 +3,7 @@
    Tabela separada dos custos fixos. Uma tabela por mês: no dia 1 o mês
    seguinte é criado sozinho, repetindo as linhas do mês anterior com
    Pagamento "a Pagar", Reembolso "a Pagar", Requerimento "a Fazer" e
-   data no dia 10.
+   data no dia 10. "Não se aplica" se repete. O valor vira sugestão cinza, sem contar.
    ===================================================================== */
 
 const RB_MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -26,10 +26,18 @@ function rbCreateNextMonth() {
   const months = rbMonths(); if (!months.length) return null;
   const src = months[0], target = rbAddMonth(src, 1);
   if (db.all('tempo_reimb_rows').some(r => r.month === target)) return null;
-  rbRows(src).forEach(r => db.insert('tempo_reimb_rows', {
-    month: target, name: r.name, note: r.note || '', amount: r.amount ?? null, order: r.order ?? 0,
-    date: `${target}-10`, pay_id: rbStatusId('reimb_pay', 'a Pagar'), refund_id: rbStatusId('reimb_refund', 'a Pagar'), req_id: rbStatusId('reimb_req', 'a Fazer')
-  }, true));
+  rbRows(src).forEach(r => {
+    // "Não se aplica" se repete no mês novo; o resto volta ao status inicial.
+    const na = (kind, id) => rbName(kind, id) === 'Não se aplica';
+    db.insert('tempo_reimb_rows', {
+      month: target, name: r.name, note: r.note || '', order: r.order ?? 0,
+      // valor do mês anterior vira só sugestão (cinza), não entra nos totais
+      amount: null, suggested_amount: r.amount ?? r.suggested_amount ?? null,
+      date: `${target}-10`, pay_id: rbStatusId('reimb_pay', 'a Pagar'),
+      refund_id: na('reimb_refund', r.refund_id) ? r.refund_id : rbStatusId('reimb_refund', 'a Pagar'),
+      req_id: na('reimb_req', r.req_id) ? r.req_id : rbStatusId('reimb_req', 'a Fazer')
+    }, true);
+  });
   db.emit();
   return target;
 }
@@ -180,7 +188,7 @@ const RB_COLS = {
   date: { label: 'Data', ico: 'cal', w: 110, cell: r => r.date ? fmtDate(r.date) : '<span class="faint">—</span>', sort: r => r.date || '', edit: { type: 'date', get: r => r.date, set: (r, v) => db.update('tempo_reimb_rows', r.id, { date: v || null }) } },
   pay: { label: 'Pagamento', ico: 'spin', w: 130, cell: r => rbTagOf('reimb_pay', r.pay_id), edit: { type: 'combo', kind: 'reimb_pay', get: r => r.pay_id, set: (r, v) => db.update('tempo_reimb_rows', r.id, { pay_id: v }) } },
   req: { label: 'Requerimento', ico: 'spin', w: 170, cell: r => rbTagOf('reimb_req', r.req_id), edit: { type: 'combo', kind: 'reimb_req', get: r => r.req_id, set: (r, v) => db.update('tempo_reimb_rows', r.id, { req_id: v }) } },
-  amount: { label: 'Valor', ico: 'money', money: true, w: 120, cell: r => r.amount ? fmtMoney(r.amount) : '<span class="faint">—</span>', val: r => r.amount || 0, edit: { type: 'money', get: r => r.amount, set: (r, v) => db.update('tempo_reimb_rows', r.id, { amount: v ?? null }) } },
+  amount: { label: 'Valor', ico: 'money', money: true, w: 120, cell: r => r.amount ? fmtMoney(r.amount) : r.suggested_amount ? `<span class="faint" title="Sugestão do mês anterior (não conta até você digitar)">${fmtMoney(r.suggested_amount)}</span>` : '<span class="faint">—</span>', val: r => r.amount || 0, edit: { type: 'money', get: r => r.amount, set: (r, v) => db.update('tempo_reimb_rows', r.id, { amount: v ?? null, suggested_amount: null }) } },
   refund: { label: 'Reembolso', ico: 'spin', w: 150, cell: r => rbTagOf('reimb_refund', r.refund_id), edit: { type: 'combo', kind: 'reimb_refund', get: r => r.refund_id, set: (r, v) => { const done = statuses('reimb_refund').find(x => x.id === v)?.name === 'Feito!'; db.update('tempo_reimb_rows', r.id, { refund_id: v, ...(done && !r.refunded_on ? { refunded_on: ymd(new Date()) } : {}) }); } } },
   paid: { label: 'Pago em', ico: 'cal', w: 110, cell: r => r.paid_on ? fmtDate(r.paid_on) : '<span class="faint">—</span>', sort: r => r.paid_on || '', edit: { type: 'date', get: r => r.paid_on, set: (r, v) => db.update('tempo_reimb_rows', r.id, { paid_on: v || null }) } },
   refunded: { label: 'Reembolsado em', ico: 'cal', w: 130, cell: r => r.refunded_on ? fmtDate(r.refunded_on) : '<span class="faint">—</span>', sort: r => r.refunded_on || '', edit: { type: 'date', get: r => r.refunded_on, set: (r, v) => db.update('tempo_reimb_rows', r.id, { refunded_on: v || null }) } },
