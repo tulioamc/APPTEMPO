@@ -105,7 +105,7 @@ function sidebarHTML() {
 
 function topTimerHTML() {
   const a = activeEntry();
-  if (!a) return `<button class="btn icon" data-act="ts-start" aria-label="Iniciar registro" title="Iniciar registro">${icon('play')}</button>`;
+  if (!a) return '';   // sem sessão: iniciar fica só na tela inicial ("Iniciar registro"), sem o botão de setinha aqui
   const trocar = `<button class="btn icon" data-act="ts-switch" aria-label="Trocar de projeto" title="Trocar de projeto sem pausar">${icon('switchplay')}</button>`;
   return (a.state === 'running'
     ? `<button class="btn icon" data-act="ts-pause" aria-label="Pausar" title="Pausar">${icon('pause')}</button>`

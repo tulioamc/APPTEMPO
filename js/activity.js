@@ -23,7 +23,7 @@ const PROG_DEFAULTS = [
   { match: 'cinema 4d', name: 'Cinema 4D', color: '#0891B2' }, { match: 'audition', name: 'Audition', color: '#00A58C' },
   { match: 'acrobat', name: 'Acrobat', color: '#B91C1C' }, { match: 'claude', name: 'Claude', color: '#C8A02A' },
   { match: 'chatgpt', name: 'ChatGPT', color: '#10A37F' }, { match: 'gpt', name: 'ChatGPT', color: '#10A37F' },
-  { match: 'magnific', name: 'Magnific', color: '#111827' }, { match: 'whatsapp', name: 'WhatsApp', color: '#25D366' },
+  { match: 'magnific', name: 'Magnific', color: '#111827' }, { match: 'whatsapp', name: 'WhatsApp', color: '#47BD86' },
   { match: 'telegram', name: 'Telegram', color: '#229ED9' }, { match: 'tempo', name: 'Tempo', color: '#2563EB' },
   { match: 'ajustes', name: 'Ajustes do Sistema', color: '#64748B' }, { match: 'figma', name: 'Figma', color: '#A259FF' },
   { match: 'chrome', name: 'Google Chrome', color: '#EA4335' }, { match: 'docs', name: 'Google Docs', color: '#4285F4' },
@@ -34,7 +34,11 @@ const programas = () => { const v = db.setting('programas', null); return Array.
 const programFor = (app) => { const a = String(app || '').toLowerCase(); return programas().find(p => p.match && a.includes(String(p.match).toLowerCase())) || null; };
 const shortProgram = (app) => { const p = programFor(app); return p ? p.name : toolAlias(app); };
 const isChromeSite = (app, doc) => !!doc && /chrome/i.test(String(app || '')) && CHROME_SITE_NAMES.includes(doc);
-const toolName = (r) => (isChromeSite(r.app, r.doc) ? r.doc : toolAlias(r.app));
+/* WhatsApp se divide pela conversa: contato de trabalho = "WhatsApp Cliente" (verde pastel, liso);
+   o resto = "WhatsApp Distração" (verde claro, a mesma cor da listra de pausa). */
+const WA_CLIENTE = 'WhatsApp Cliente', WA_DISTRACAO = 'WhatsApp Distração';
+const waToolName = (doc) => (typeof waContato === 'function' && waEhTrabalho(waContato(doc)) ? WA_CLIENTE : WA_DISTRACAO);
+const toolName = (r) => (/whatsapp/i.test(String(r.app || '')) ? waToolName(r.doc) : isChromeSite(r.app, r.doc) ? r.doc : toolAlias(r.app));
 /* cor padrão estável por nome (o mesmo nome sempre tem a mesma cor padrão, em qualquer sessão) */
 /* cor padrão de cada programa/site (a mesma em todos os gráficos); o que não estiver aqui ganha uma cor pelo nome */
 const actDefaultColor = (name) => {
@@ -49,7 +53,7 @@ const colorKeyOf = (gid) => {
   }
   return gid;
 };
-const toolColor = (name) => actColorMap()['n:' + name] || programFor(name)?.color || actDefaultColor(name);
+const toolColor = (name) => actColorMap()['n:' + name] || (name === WA_DISTRACAO ? PAUSE_HATCH.whatsapp : null) || programFor(name)?.color || actDefaultColor(name);
 /* Cor de um grupo na faixa:
    - programa e site do Chrome: a cor da ferramenta (global, 'n:<nome>');
    - arquivo de um programa: herda a cor do programa (a não ser que a cor do próprio arquivo tenha sido escolhida);
@@ -57,7 +61,12 @@ const toolColor = (name) => actColorMap()['n:' + name] || programFor(name)?.colo
 function groupColor(gid, i) {
   const ck = colorKeyOf(gid);
   if (ck.startsWith('n:')) return toolColor(ck.slice(2));
-  if (gid.startsWith('a:')) return actColorMap()[gid] || toolColor(gid.slice(2).split('|')[0]);
+  if (gid.startsWith('a:')) {
+    const parts = gid.slice(2).split('|');
+    // conversa do WhatsApp: verde de cliente ou verde de distração, pelo contato
+    if (/whatsapp/i.test(parts[0])) return actColorMap()[gid] || toolColor(waToolName(parts[parts.length - 1]));
+    return actColorMap()[gid] || toolColor(parts[0]);
+  }
   if (gid.startsWith('app:')) return actColorMap()[gid] || toolColor(gid.slice(4));
   return actColorMap()[gid] || ACT_COLORS[i % ACT_COLORS.length];
 }
@@ -171,7 +180,7 @@ const list = list0.filter(x => mode === "site" ? ACT_BROWSER_RE.test(String(x.ap
   const links = db.setting('actLinks', {}) || {};
   const gidOf = (x) => {
     if (mode === "site") return "site:" + (String(x.doc || "").trim() || "(sem título)");
-    if (mode === "program") return "p:" + toolAlias(x.app);
+    if (mode === "program") return "p:" + (/whatsapp/i.test(String(x.app || '')) ? waToolName(x.doc) : toolAlias(x.app));
     const k = actKeyOf(x);
     if (links[k]) return links[k];
     const fam = appFamily(x.app);
@@ -207,7 +216,7 @@ const list = list0.filter(x => mode === "site" ? ACT_BROWSER_RE.test(String(x.ap
     const nameOf = (it) => (/^terminal$/i.test(String(it.app || '')) ? 'Terminal' : (it.doc || it.app));
     const names = [...new Set(items.map(nameOf))];
     let label;
-    if (mode === 'program') label = shortProgram(items[0].app);
+    if (mode === 'program') label = /whatsapp/i.test(String(items[0].app || '')) ? String(g.id).slice(2) : shortProgram(items[0].app);
     else if (String(g.id).startsWith('app:')) label = shortProgram(items[0].app);
     else if (String(g.id).startsWith('pre:')) {
       const exts = [...new Set(items.map(it => (String(it.doc || '').match(/\.[^.]+$/) || [''])[0]))];
@@ -349,7 +358,7 @@ function actItemName(i) {
 /* Uma faixa só, com 100% da largura = todo o tempo da sessão. Cada trecho ocupa a parte proporcional ao seu tempo;
    o que não tem registro fica cinza. Os pausas saem da conta (a faixa mostra só o tempo trabalhado). */
 /* Motivo de uma pausa (o campo "why" fica no trabalho que vem antes da pausa; ver entryGaps). */
-const PAUSE_WHY = { mac: 'Ocioso (mouse e teclado parados) ou computador dormiu', app: 'WhatsApp / Telegram', suspenso: 'Página parada (computador dormiu)', ocioso: 'Ociosidade (navegador)' };
+const PAUSE_WHY = { mac: 'Ocioso (mouse e teclado parados) ou computador dormiu', app: 'WhatsApp / Telegram', WhatsApp: 'WhatsApp Distração', suspenso: 'Página parada (computador dormiu)', ocioso: 'Ociosidade (navegador)' };
 const pauseWhy = (why) => PAUSE_WHY[why] || why || 'Intervalo manual';
 /* pausa de app (WhatsApp, Telegram…) aparece em verde claro; ociosidade fica cinza */
 const isAppPause = (why) => !!why && (why === 'app' || (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).some(x => String(x).trim().toLowerCase() === String(why).trim().toLowerCase()));

@@ -54,7 +54,7 @@ setInterval(() => {
   if (f && f.ate && new Date(f.ate).getTime() <= Date.now()) focoDesligar('fim');
   else focoSyncMac(false);
   const g = focoAtual();
-  if (g) document.querySelectorAll('[data-foco-resta]').forEach(el => { el.textContent = `faltam ${Math.ceil((new Date(g.ate).getTime() - Date.now()) / 6e4)} min`; });
+  if (g) document.querySelectorAll('[data-foco-resta]').forEach(el => { el.textContent = `Foco · ${Math.ceil((new Date(g.ate).getTime() - Date.now()) / 6e4)} min`; });
 }, 15000);
 
 /* Abriu um app ou site de distração mesmo no foco (o Mac avisa). */
@@ -88,18 +88,30 @@ if (window.TempoBridge) {
 
 ACTIONS['foco-ligar'] = (el) => focoLigar(Number(el.dataset.min) || FOCO_PADRAO);
 ACTIONS['foco-desligar'] = () => focoDesligar('manual');
-
-/* Cartão da tela inicial. */
-function focoCardHTML() {
+/* Botão da tela inicial, do mesmo tamanho do "Iniciar registro". */
+function focoBtnHTML() {
   const f = focoAtual();
-  if (!f) {
-    return `<div class="foco-card"><div class="foco-t">${icon('target', 'ico')} <b>Modo foco</b><span class="small muted">WhatsApp e distrações escondidos; cliente ainda avisa</span></div>
-      <div class="foco-bts">${FOCO_OPCOES.map(m => `<button class="btn sm ${m === FOCO_PADRAO ? 'primary' : ''}" data-act="foco-ligar" data-min="${m}" data-tip="Ativar foco por ${m} minutos">${m} min</button>`).join('')}</div></div>`;
-  }
-  const restaMs = Math.max(0, new Date(f.ate).getTime() - Date.now());
-  const pct = Math.min(100, Math.round((1 - restaMs / (f.minutos * 6e4)) * 100));
-  const ab = (f.aberturas || []).length;
-  return `<div class="foco-card on"><div class="foco-t">${icon('target', 'ico')} <b>Foco até ${fmtTime(f.ate)}</b><span class="small muted" data-foco-resta>faltam ${Math.ceil(restaMs / 6e4)} min</span>${ab ? `<span class="small muted" data-tip="Vezes que abriu um app ou site de distração neste foco">· ${ab} ${ab === 1 ? 'abertura' : 'aberturas'}</span>` : ''}</div>
-    <div class="foco-bar"><span style="width:${pct}%"></span></div>
-    <button class="btn sm" data-act="foco-desligar">Encerrar foco</button></div>`;
+  if (!f) return `<button class="btn" data-act="foco-abrir" data-tip="WhatsApp e distrações escondidos; cliente ainda avisa">${icon('target')} Modo foco</button>`;
+  const resta = Math.ceil((new Date(f.ate).getTime() - Date.now()) / 6e4);
+  return `<button class="btn foco-on" data-act="foco-abrir" data-tip="Foco até ${fmtTime(f.ate)}. Clique para encerrar.">${icon('target')} <span data-foco-resta>Foco · ${resta} min</span></button>`;
 }
+/* Clique: sem foco, pergunta o tempo (30/60/90/120 ou outro); com foco, oferece encerrar. */
+ACTIONS['foco-abrir'] = async () => {
+  const f = focoAtual();
+  if (f) {
+    const ab = (f.aberturas || []).length;
+    if (await confirmBox({ title: 'Encerrar o foco?', body: `Foco até ${fmtTime(f.ate)}${ab ? ` · ${ab} ${ab === 1 ? 'abertura' : 'aberturas'} de distração` : ''}.`, ok: 'Encerrar foco', no: 'Continuar' })) focoDesligar('manual');
+    return;
+  }
+  const l = openLayer({ html: `<div class="dh">${icon('target')}<h2>Modo foco</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db stack"><div class="small muted">Por quanto tempo? WhatsApp e distrações ficam escondidos; mensagem de cliente ainda avisa.</div>
+      <div class="row" style="gap:6px;flex-wrap:wrap">${FOCO_OPCOES.map(m => `<button class="btn ${m === FOCO_PADRAO ? 'primary' : ''}" data-x="min" data-min="${m}">${m} min</button>`).join('')}</div>
+      <div class="row" style="gap:6px;align-items:center"><label for="foco-outro" class="small">Outro</label><input id="foco-outro" class="input sm" type="number" min="5" max="480" step="5" placeholder="minutos" style="width:110px"><button class="btn" data-x="outro">Ativar</button></div></div>` });
+  l.box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-x]'); if (!b) return;
+    const min = b.dataset.x === 'outro' ? Number(l.box.querySelector('#foco-outro').value) : Number(b.dataset.min);
+    if (!(min >= 5)) { toast('Digite os minutos (5 ou mais).'); return; }
+    l.close(); focoLigar(min);
+  });
+  l.box.querySelector('#foco-outro').addEventListener('keydown', (e) => { if (e.key === 'Enter') l.box.querySelector('[data-x="outro"]').click(); });
+};

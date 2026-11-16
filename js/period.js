@@ -3,7 +3,7 @@
 
 const TS_PERIODS = [['dia', 'Dia'], ['semana', 'Semana'], ['q15', '15 dias'], ['mes', 'Mês']];
 const TS_VIEWS = [['tudo', 'Tudo'], ['pausas', 'Pausas'], ['programas', 'Programas'], ['arquivos', 'Arquivos']];
-const PAUSE_LABEL = { mac: 'Ocioso (mouse e teclado)', sono: 'Computador fechado / dormiu', suspenso: 'Página parada', ocioso: 'Ociosidade (navegador)', app: 'WhatsApp / Telegram', manual: 'Intervalo manual' };
+const PAUSE_LABEL = { mac: 'Ocioso (mouse e teclado)', sono: 'Computador fechado / dormiu', suspenso: 'Página parada', ocioso: 'Ociosidade (navegador)', app: 'WhatsApp / Telegram', WhatsApp: 'WhatsApp Distração', manual: 'Intervalo manual' };
 const pauseLabel = (k) => PAUSE_LABEL[k] || k;
 
 /* Início e fim (inclusive) do período que contém o dia. */
@@ -78,7 +78,7 @@ function dayAggHTML(d) {
 
 /* Pausas agrupadas: WhatsApp (verde), Instagram (rosa) e todas as outras num chip cinza "Pausa +N". */
 function pauseBucketsOf(items) {
-  const B = { whatsapp: { label: 'WhatsApp', color: PAUSE_HATCH.whatsapp, ms: 0 }, instagram: { label: 'Instagram', color: PAUSE_HATCH.instagram, ms: 0 }, other: { label: 'Pausa', color: '#A1A1AA', ms: 0, n: 0, detail: [] } };
+  const B = { whatsapp: { label: 'WhatsApp Distração', color: PAUSE_HATCH.whatsapp, ms: 0 }, instagram: { label: 'Instagram', color: PAUSE_HATCH.instagram, ms: 0 }, other: { label: 'Pausa', color: '#A1A1AA', ms: 0, n: 0, detail: [] } };
   items.forEach(it => {
     const k = pauseKind(it.key); const b = (k === 'whatsapp' || k === 'instagram') ? B[k] : B.other;
     b.ms += it.ms;

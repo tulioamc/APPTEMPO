@@ -59,6 +59,7 @@ VIEWS.timesheet = () => {
         ${a.state === 'running' ? `<button class="btn" data-act="ts-pause">${icon('pause')} Pausar</button>` : `<button class="btn primary" data-act="ts-resume">${icon('play')} Retomar</button>`}
         <button class="btn" data-act="ts-switch">Trocar de projeto</button>
         <button class="btn danger" data-act="ts-stop">${icon('stop')} Encerrar</button>
+        ${focoBtnHTML()}
         <button class="btn" data-act="ts-log-start" data-id="${a.id}">Início pelo log</button>
         <button class="btn" data-act="ts-edit" data-id="${a.id}">${icon('edit')} Abrir sessão atual</button>
       </div>
@@ -70,7 +71,7 @@ VIEWS.timesheet = () => {
     timer = `<div class="timer-card">
       <span class="timer-state"><span class="dot"></span>Sem sessão ativa</span>
       <div class="timer-digits faint">00:00<span class="sec">:00</span></div>
-      <div class="timer-actions"><button class="btn primary" data-act="ts-start">${icon('play')} Iniciar registro</button><button class="btn" data-act="ts-forgot">${icon('plus')} Esqueci de iniciar</button></div>
+      <div class="timer-actions"><button class="btn primary" data-act="ts-start">${icon('play')} Iniciar registro</button>${focoBtnHTML()}<button class="btn" data-act="ts-forgot">${icon('plus')} Esqueci de iniciar</button></div>
       ${rec.length ? `<div class="stack" style="gap:6px"><span class="lbl">Continuar de onde parou</span><div class="recent">${rec.map((r, i) => `<button class="btn sm" data-act="ts-quick" data-i="${i}" title="${esc(selPath(r.sel).join(' › '))}">${icon('play')} ${esc(r.label)}</button>`).join('')}</div></div>` : ''}
     </div>`;
   }
@@ -78,7 +79,6 @@ VIEWS.timesheet = () => {
   const strip = dayStrip(entries, day);
   const html = `
   <div class="ts-hero">
-    ${typeof focoCardHTML === 'function' ? focoCardHTML() : ''}
     ${timer}
     ${reportPanelHTML(day)}
   </div>
@@ -95,7 +95,7 @@ VIEWS.timesheet = () => {
       ${corridoOn() ? corridoHTML() : entries.length ? entryHeadHTML() + groupedRowsHTML(entries) : `<div class="empty">${icon('clock')}<b>Nenhum registro em ${isToday(day) ? 'hoje' : fmtDate(S.tsDay)}</b><span>Inicie o cronômetro ou lance um apontamento manual se esqueceu de registrar.</span></div>`}
     </div>
   </div>`;
-  return { title: 'Time Sheet', actions: a ? '' : `<button class="btn primary" data-act="ts-start">${icon('play')} Iniciar registro</button>`, html: `<div class="home-grid"><div class="home-main">${html}</div>${sidePanelHTML()}</div>` };
+  return { title: 'Time Sheet', actions: '', html: `<div class="home-grid"><div class="home-main">${html}</div>${sidePanelHTML()}</div>` };
 };
 
 function dayStrip(entries, day) {

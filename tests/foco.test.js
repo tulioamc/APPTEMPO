@@ -4,7 +4,7 @@ const { load } = require('./helpers');
 
 function setup() {
   const avisos = [], msgs = [];
-  const m = load(['js/store.js', 'js/domain.js', 'js/foco.js'], ['db', 'focoLigar', 'focoDesligar', 'focoAtual', 'focoAbriu', 'focoAvisarClientes', 'focoCardHTML'],
+  const m = load(['js/store.js', 'js/domain.js', 'js/foco.js'], ['db', 'focoLigar', 'focoDesligar', 'focoAtual', 'focoAbriu', 'focoAvisarClientes', 'focoBtnHTML'],
     { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '', isMacApp: () => true,
       DEFAULT_PAUSE_APPS: ['WhatsApp'], DEFAULT_PAUSE_SITES: ['instagram'], notifyNative: (t, b) => avisos.push(t),
       waContato: () => null, waTipoNome: (c) => (c && c.tipo) || 'Amigo' });
@@ -20,13 +20,13 @@ test('ligar e encerrar: estado, aviso ao Mac e registro do foco', () => {
   assert.equal(t.msgs.at(-1).type, 'foco'); assert.ok(t.msgs.at(-1).ate); assert.deepEqual([...t.msgs.at(-1).apps], ['WhatsApp']);
   t.focoAbriu('WhatsApp');
   assert.equal(t.focoAtual().aberturas.length, 1);
-  assert.match(t.focoCardHTML(), /Encerrar foco/);
+  assert.match(t.focoBtnHTML(), /Foco · \d+ min/);
   t.focoDesligar('manual');
   assert.equal(t.focoAtual(), null);
   assert.equal(t.msgs.at(-1).ate, null, 'Mac recebe o desligar');
   const log = t.db.setting('focoLog', []);
   assert.equal(log.length, 1); assert.equal(log[0].motivo, 'manual'); assert.equal(log[0].aberturas.length, 1);
-  assert.match(t.focoCardHTML(), /90 min/);
+  assert.match(t.focoBtnHTML(), /Modo foco/);
 });
 test('mensagem de cliente avisa uma vez; amigo e mensagem já respondida não avisam', () => {
   const t = setup();
