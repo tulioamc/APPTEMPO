@@ -16,6 +16,11 @@ Na primeira vez, o macOS pede permissão de **Acessibilidade** (Ajustes → Priv
 
 Se estiver rodando pelo Terminal, a permissão vai para o Terminal. Para um app próprio com ícone, o próximo passo é empacotar como `.app` (Xcode), o que deixa a permissão associada ao Tempo.
 
+## WhatsApp, notas e lembretes
+- Conta as mensagens que você mandou no WhatsApp (por contato e dia) e lê notas fiscais e comprovantes das conversas de terapia. O texto das mensagens nunca é lido. Precisa de **Acesso Total ao Disco** para o Tempo (Ajustes → Privacidade e Segurança).
+- Cópia das notas e comprovantes em iCloud Drive → Terapias → Ano_Mes.
+- Alarme de to-do vira lembrete no app Lembretes (lista "Tempo"). Na primeira vez o macOS pede permissão.
+
 ## Privacidade
 - Nome do arquivo: **desligado por padrão**. Ative no menu da barra (⏱) só se quiser.
 - Pasta: ligada por padrão, desligável no menu.

@@ -459,3 +459,15 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 7. Itens antigos ainda abertos: OFX do Nubank e fatura em PDF (aguardando arquivos), travar mês fechado?, transferências PJ a confirmar, data de volta da viagem (modo viagem), categoria da compra "May" (R$ 36, 03/10), tela de Contatos do WhatsApp (classificar cliente/amigo/grupo).
 
 **Lição desta conversa:** antes de apagar ou trocar qualquer app/arquivo do Mac, conferir o que ele faz (o app "1.0" parecia velho e era o principal).
+
+
+## Conversa APP TEMPO [V2.04.00] (16/11/2026)
+**V2.04.01 — os dois apps do Mac juntos no antigo (Swift)**
+- `mac/Sources/TempoMac/WhatsApp.swift`: contagem de mensagens enviadas (SQLite somente leitura, nunca ZTEXT), notas e comprovantes das conversas de terapia (PDFKit; Vision para foto e PDF escaneado), cópia no iCloud `Terapias/AAAA_MM`, fila até o site confirmar. Usa o mesmo registro do app em Python (`~/Library/Application Support/Tempo/wa_notas_v2.json`), então nada é lido duas vezes.
+- Lembretes (alarme de to-do no app Lembretes): o site manda `{type:'reminder'}` por `messageHandlers.tempo` e recebe `TempoBridge.reminderDone`. O caminho `window.pywebview` continua aceito.
+- Botão "Atualizar app do Mac" do site funciona no app Swift (`{type:'update'}`). Menu da barra ganhou "Ler WhatsApp agora". A versão do app instalado passa a ser a do site (antes era sempre "1.0").
+- Nota do WhatsApp que não der para ler vira aviso "Nota de …: não consegui ler" (antes sumia calada).
+- O GitHub compila o app do Mac a cada mudança em `mac/` (workflow "App do Mac (compila)"): erro de compilação aparece lá antes de chegar no Mac.
+- Não levado: print de feedback (Cmd+J), que o Tulio já tinha desistido de usar e o site não chama mais.
+- **Falta no Mac do Tulio:** atualizar o app (⌘U), dar Acesso Total ao Disco ao Tempo de `~/Applications`, fechar o app em Python e conferir a próxima nota/comprovante. O texto do PDF agora vem do PDFKit (antes pypdf): se uma nota não for lida, aparece o aviso acima. Só depois de conferido: apagar `/Applications/Tempo.app` e `~/tempo-build`.
+- Sessão de APP PROMPT de 14/11: removidas 19h12 de "Não especificado" (14:23 de 14/11 a 09:36 de 15/11), direto no banco, com o estado anterior no histórico de edições. Pendência 3 resolvida; a 4 (pausa quando o cronômetro roda com o Mac fechado) continua.
