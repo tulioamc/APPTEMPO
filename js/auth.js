@@ -142,8 +142,11 @@ class SupabaseAdapter {
   }
   /* Tabelas em paralelo: a abertura não espera uma por uma. */
   async fetchTables(list) {
-    const out = {}; const got = await Promise.all(list.map(t => this.fetchAll(t)));
-    list.forEach((t, i) => { out[t] = got[i]; });
+    // uma tabela com problema não pode travar a leitura das outras: fica de fora e é tentada de novo na próxima vez
+    const out = {};
+    const got = await Promise.all(list.map(t => this.fetchAll(t).catch(e => { console.warn('ler', t, e.message); return undefined; })));
+    list.forEach((t, i) => { if (got[i] !== undefined) out[t] = got[i]; });
+    if (list.length && !Object.keys(out).length) throw new Error('Não consegui ler nenhuma tabela.');
     return out;
   }
   loadAll() { return this.fetchTables(TABLES); }

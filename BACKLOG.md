@@ -502,3 +502,10 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Ordem padrão da lista = a do WhatsApp: última mensagem (enviada ou recebida) primeiro. Coluna "Última mensagem". Banco: `tempo_wa_contacts.last_at`, que só é gravado quando o app do Mac manda a hora (versão antiga não apaga).
 - "Só novos (N)": filtra quem nunca foi classificado. Botão "Marcar N sem tipo como Amigo".
 - Aviso "N contato(s) do WhatsApp sem classificar" quando algum fica 3 dias ou mais sem tipo, com botão "Classificar agora" (abre a aba já filtrada). Some sozinho quando todos estiverem classificados.
+
+**V2.04.08 — a atualização do site estava travada desde a V2.04.05 (erro meu)**
+- `tempo_wa_daily` entrou no carregamento sem `id` e `created_at`, e a leitura do site ordena toda tabela por esses dois campos. A leitura dela falhava e derrubava a atualização inteira: com dados salvos no aparelho, o site seguia mostrando o retrato antigo, sem aviso. Gravações não foram afetadas (a fila de envio é separada).
+- Banco: `tempo_wa_daily` ganhou `id`, `created_at`, `updated_at` e o gatilho `tempo_touch`; as duas tabelas do WhatsApp entraram no `tempo_sync_state()` com a fórmula padrão.
+- Site mais resistente: uma tabela que falhar fica de fora e é lida de novo na próxima vez, sem travar as outras (`fetchTables` em `js/auth.js`, `sigLidas` em `js/store.js`).
+- Teste novo (`tests/tabelas.test.js`): toda tabela carregada tem `id` e `created_at`, e está no `tempo_sync_state()` do schema.
+- **Lição:** ao incluir tabela no carregamento do site, conferir se ela segue o formato das outras (id, created_at, updated_at, gatilho e sincronização). O teste agora pega isso.

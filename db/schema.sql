@@ -334,7 +334,7 @@ end $$;
 create or replace function public.tempo_sync_state() returns jsonb language plpgsql stable security invoker set search_path = public as $$
 declare t text; res jsonb := '{}'::jsonb; n bigint; m timestamptz;
 begin
-  foreach t in array array['tempo_agencies','tempo_clients','tempo_projects','tempo_tasks','tempo_time_entries','tempo_revisions','tempo_quotes','tempo_payments','tempo_deadline_changes','tempo_work_types','tempo_status_options','tempo_reminders','tempo_status_history','tempo_settings','tempo_notices','tempo_reimb_rows','tempo_expenses','tempo_rafa_days'] loop
+  foreach t in array array['tempo_agencies','tempo_clients','tempo_projects','tempo_tasks','tempo_time_entries','tempo_revisions','tempo_quotes','tempo_payments','tempo_deadline_changes','tempo_work_types','tempo_status_options','tempo_reminders','tempo_status_history','tempo_settings','tempo_notices','tempo_reimb_rows','tempo_expenses','tempo_rafa_days','tempo_wa_contacts','tempo_wa_daily'] loop
     execute format('select count(*), max(greatest(created_at, coalesce(updated_at, created_at))) from public.%I', t) into n, m;
     res := res || jsonb_build_object(t, n::text || '|' || coalesce(extract(epoch from m)::text, ''));
   end loop;
@@ -364,9 +364,18 @@ create table if not exists tempo_wa_contacts (
 
 -- Mensagens enviadas por conversa e por dia (só a contagem).
 create table if not exists tempo_wa_daily (
+  id uuid not null unique default gen_random_uuid(),   -- o site lê toda tabela ordenando por created_at e id
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   jid text not null,
   day date not null,
   sent int not null default 0,
+  created_at timestamptz not null default now(), updated_at timestamptz,
   primary key (user_id, jid, day)
 );
+-- migração: alter table tempo_wa_daily add column if not exists id uuid not null default gen_random_uuid(), add column if not exists created_at timestamptz not null default now(), add column if not exists updated_at timestamptz;
+
+-- WhatsApp entra na sincronização leve (carimbo de updated_at em toda alteração).
+drop trigger if exists tempo_touch on public.tempo_wa_contacts;
+create trigger tempo_touch before update on public.tempo_wa_contacts for each row execute function public.tempo_touch();
+drop trigger if exists tempo_touch on public.tempo_wa_daily;
+create trigger tempo_touch before update on public.tempo_wa_daily for each row execute function public.tempo_touch();

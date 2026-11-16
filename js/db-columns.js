@@ -1,9 +1,12 @@
 window.DB_COLUMNS = {
  "tempo_wa_daily": [
+  "id",
   "user_id",
   "jid",
   "day",
-  "sent"
+  "sent",
+  "created_at",
+  "updated_at"
  ],
  "tempo_wa_contacts": [
   "id",

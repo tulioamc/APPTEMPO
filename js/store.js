@@ -18,6 +18,14 @@ const TABLES = [
   'tempo_reminders', 'tempo_status_history', 'tempo_settings', 'tempo_notices', 'tempo_reimb_rows', 'tempo_expenses', 'tempo_rafa_days', 'tempo_wa_contacts', 'tempo_wa_daily'
 ];
 
+/* Retrato do banco só das tabelas que vieram: a que falhou fica sem assinatura e é lida de novo na próxima atualização. */
+function sigLidas(sig, snap) {
+  if (!sig) return sig;
+  const out = { ...sig };
+  Object.keys(out).forEach(t => { if (TABLES.includes(t) && !snap[t]) delete out[t]; });
+  return out;
+}
+
 class MemoryAdapter {
   constructor() { this.name = 'memory'; this.label = 'Em memória'; this.persistent = false; }
   async loadAll() { return null; }            // nada salvo: começa do zero
@@ -60,7 +68,7 @@ const db = {
       const snap = await this.adapter.loadAll();
       if (snap) {
         // ainda há alterações sem enviar: o retrato deste aparelho é o mais novo, fica com ele
-        if (!(cached && this.unsent())) { TABLES.forEach(t => this.data[t] = snap[t] || []); this.sig = sig; this.saveCache(); }
+        if (!(cached && this.unsent())) { TABLES.forEach(t => { if (snap[t]) this.data[t] = snap[t]; }); this.sig = sigLidas(sig, snap); this.saveCache(); }
         this.loaded = true;
       }
     } catch (e) { if (!cached) this.syncError = e.message; }
@@ -94,7 +102,7 @@ const db = {
       const snap = this.adapter.fetchTables ? await this.adapter.fetchTables(tables) : await this.adapter.loadAll(); if (!snap) return;
       // se alguém gravou durante a busca, o retrato do servidor pode ser antigo: descarta e deixa para a próxima
       if ((this.writes || 0) !== seq || this.pending > 0 || this.unsent()) return;
-      tables.forEach(t => this.data[t] = snap[t] || []); if (sig) this.sig = sig; this.loaded = true; this.saveCache(); this.emit();
+      tables.forEach(t => { if (snap[t]) this.data[t] = snap[t]; }); if (sig) this.sig = sigLidas(sig, snap); this.loaded = true; this.saveCache(); this.emit();
     } catch (e) { /* sem rede: tenta de novo na próxima vez */ }
   },
   subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
