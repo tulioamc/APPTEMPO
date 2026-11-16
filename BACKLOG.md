@@ -699,9 +699,10 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 **Feito na V2.04** WhatsApp (tela Contatos com blocos, tipos, sugestão pelo nome com Aceitar/Negar, ligação a cliente/agência/projeto, tempo por contato e por cliente, celular rotulando pausas, resposta média, alerta de amigos); encerrar corta o ócio do fim; To-do (janela de edição, Todas por dia, relatório, concluídas riscadas); Comparações e gráficos de produtividade; notas em foto; dentista; nomes Terapia_AAAA_MM_Tipo.ext e link que abre o Finder; correção da atualização do site que travava.
 
 **Pendências, por ordem**
-1. Apagar as 28 tarefas "Responder …" que ficaram de quando a função estava ligada (precisa da aprovação do Tulio no aviso do banco).
-2. Conferir no Mac: arquivos renomeados, cópia em JPG das notas em PDF e link abrindo o Finder; nota da Raquel (foto) entrando; comprovante da dentista (confirmar o nome exato da conversa "Cristiana da Fonte (Dentista Rafa)"); um alarme de to-do virando lembrete. Depois: aposentar o app em Python e a pasta `~/tempo-build`.
-3. Pausa ao abrir o app quando o cronômetro ficou rodando sem atividade (Mac fechado).
+1. ~~Apagar as 28 tarefas "Responder …"~~ (feito em 16/11, V2.05).
+2. ~~Conferir no Mac~~ (16/11, V2.05: o ~/APPTEMPO estava parado na V2.04.10; depois de rodar o update.sh, arquivos renomeados, JPG das notas, nota da Raquel e comprovante da dentista ok; app em Python aposentado, `~/tempo-build` esvaziada). Falta o Tulio confirmar o link que abre o Finder e o alarme de to-do virando lembrete.
+3. ~~Pausa ao abrir o app quando o cronômetro ficou rodando sem atividade~~ (V2.05.01: o app grava o último uso uma vez por minuto e, ao abrir, manda o intervalo parado como pausa; "sono" se o Mac dormiu ou foi ligado nesse meio-tempo).
+   - Também na V2.05.01: menu "Reler notas dos últimos 3 meses" na barra do Mac (relê mesmo o que está no registro e salva no iCloud o que faltar; no site, item já lançado não gera aviso, só ganha o link na linha de Reembolsos).
 4. Modo foco (ligado por ele, botão na tela inicial e na barra do Mac; WhatsApp e apps/sites de distração escondidos com pergunta; Não perturbe do Mac e foco do iPhone; cliente avisa mesmo no foco).
 5. Tempo de WhatsApp com cada cliente somado às horas do projeto.
 6. Supabase: proteção contra senha vazada (só o Tulio) e decidir sobre as tabelas antigas (backup_* e gpt_old_*).

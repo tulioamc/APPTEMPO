@@ -16,6 +16,9 @@ final class ActivityMonitor {
     var onIdle: ((Date, Date) -> Void)?
     /// Tempo com o computador dormindo (tampa fechada): é um motivo de pausa próprio.
     var onSleepEnd: ((Date, Date) -> Void)?
+    /// Ao abrir o app: intervalo entre o último uso registrado (app fechado, Mac desligado ou dormindo sem o app)
+    /// e agora. O Bool diz se o Mac dormiu ou foi ligado nesse meio-tempo (vira "sono"; senão é ociosidade).
+    var onGapAtLaunch: ((Date, Date, Bool) -> Void)?
 
     private let defaults = UserDefaults.standard
     private var current: Context?
@@ -32,7 +35,31 @@ final class ActivityMonitor {
 
     private var sleptAt: Date?
 
+    /// Último sinal de uso de verdade (mouse/teclado), gravado uma vez por minuto para sobreviver ao app fechado.
+    private let lastActiveKey = "lastActiveAt"
+    private var lastSaved = Date.distantPast
+
+    /// Horário em que o Mac foi ligado ou acordou pela última vez (sysctl kern.boottime / kern.waketime).
+    private static func sysctlTime(_ name: String) -> Date? {
+        var tv = timeval(), size = MemoryLayout<timeval>.size
+        guard sysctlbyname(name, &tv, &size, nil, 0) == 0, tv.tv_sec > 0 else { return nil }
+        return Date(timeIntervalSince1970: Double(tv.tv_sec) + Double(tv.tv_usec) / 1_000_000)
+    }
+
+    /// Ao abrir: o tempo parado desde o último uso vira pausa (o site só aplica se houver cronômetro rodando
+    /// e nunca por cima de atividade já registrada).
+    private func reportLaunchGap() {
+        let last = defaults.double(forKey: lastActiveKey)
+        guard last > 0 else { return }
+        let from = Date(timeIntervalSince1970: last)
+        let to = Date().addingTimeInterval(-idleSeconds())
+        guard to.timeIntervalSince(from) >= idleLimit else { return }
+        let dormiu = [Self.sysctlTime("kern.boottime"), Self.sysctlTime("kern.waketime")].contains { ($0 ?? .distantPast) > from }
+        onGapAtLaunch?(from, max(to, from), dormiu)
+    }
+
     func start() {
+        reportLaunchGap()
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             self?.tick()
         }
@@ -58,6 +85,10 @@ final class ActivityMonitor {
     func tick() {
         let now = Date()
         let idle = idleSeconds()
+        if now.timeIntervalSince(lastSaved) >= 60 {   // grava o último uso no máximo uma vez por minuto
+            lastSaved = now
+            defaults.set(now.addingTimeInterval(-idle).timeIntervalSince1970, forKey: lastActiveKey)
+        }
         if idle >= idleLimit {
             if idleStart == nil {
                 let start = now.addingTimeInterval(-idle)

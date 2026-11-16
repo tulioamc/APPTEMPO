@@ -101,11 +101,14 @@ function nfseReport(itens) {
       const ym = nfseJanelaMes(it.data);
       if (!nome || !ym) { recebidos.push(it.id); return; }
       const visto = (chave) => db.all('tempo_notices').some(x => x.key === chave);
+      // já lançado antes (ex.: "Reler notas" no Mac): não avisa de novo, só põe o link do arquivo na linha que existir
+      const soLink = (rotulo) => { const r = nfseLinha(nome, ym, false); if (r) nfseNota(r.id, rotulo, it.arquivo); };
       const base = { tipo: it.tipo, nome, ym, arquivo: it.arquivo || null };
 
       if (it.tipo === 'comprovante') {
         const chave = 'comp:' + it.id;
-        if (!visto(chave)) {
+        if (visto(chave)) soLink('LINK PAGAMENTO');
+        else {
           const valor = nfseValorBR(it.texto);
           const d = { ...base, valor, pagoEm: nfseIsoBR(it.texto) || it.data };
           const row = nfseLinha(nome, ym, false);
@@ -131,7 +134,8 @@ function nfseReport(itens) {
       }
       // nota lida de foto não tem a chave: a identidade do arquivo (sha) faz as vezes dela, então também não duplica
       const chave = n.chave ? 'nfse:' + n.chave : 'nfse-foto:' + it.id;
-      if (!visto(chave)) {
+      if (visto(chave)) soLink('LINK NF');
+      else {
         const d = { ...base, valor: n.valor, chave: n.chave };
         const row = nfseLinha(nome, ym, true);
         nfseNota(row.id, 'LINK NF', it.arquivo);

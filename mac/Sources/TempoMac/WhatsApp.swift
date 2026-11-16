@@ -167,6 +167,17 @@ final class WhatsAppMonitor {
     /// Menu "Ler WhatsApp agora".
     func runNow() { queue.async { [weak self] in self?.run() } }
 
+    /// Menu "Reler notas dos últimos 3 meses": lê de novo as notas e comprovantes, mesmo os que já estão no registro,
+    /// para salvar no iCloud o que faltar. O site não duplica: o que já foi lançado só ganha o link do arquivo.
+    func relerNotas(done: @escaping (Int) -> Void) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            let n = self.lerNotas(desde: Date().addingTimeInterval(-90 * 86400).timeIntervalSince1970, reler: true)
+            self.run()
+            DispatchQueue.main.async { done(n) }
+        }
+    }
+
     private func cycle() {
         run()
         // enquanto o site não confirmou tudo (página ainda carregando), tenta de novo em 30 s
@@ -451,9 +462,11 @@ final class WhatsAppMonitor {
 
     /// Procura notas (PDF/foto) e comprovantes (PNG/JPG) novos nas conversas de terapia. Cada arquivo é lido uma vez:
     /// guarda uma cópia no iCloud (Terapias/Ano_Mes) e deixa o item na fila até o site confirmar o recebimento.
-    private func lerNotas(desde: Double) {
+    @discardableResult
+    private func lerNotas(desde: Double, reler: Bool = false) -> Int {
         let linhas = lerMidia(desde: desde)
-        guard !linhas.isEmpty else { return }
+        guard !linhas.isEmpty else { return 0 }
+        var lidos = 0
         var reg = carregarRegistro()
         var mudou = false
         let fm = FileManager.default
@@ -467,7 +480,10 @@ final class WhatsAppMonitor {
             guard let arquivo = candidatos.first(where: { fm.fileExists(atPath: $0.path) }),   // apagado ou ainda não baixado
                   let dados = try? Data(contentsOf: arquivo) else { continue }
             let sha = WhatsAppMonitor.sha256(dados)
-            if reg[sha] != nil { continue }
+            if let r = reg[sha] as? [String: Any] {
+                // já lido: só volta a ler no "Reler", e nunca o que ainda está na fila para o site
+                if !reler || (r["enviado"] as? Bool) != true { continue }
+            }
             guard let texto = textoDoArquivo(arquivo, dados) else { continue }
             guard let tipo = tipoDoDocumento(texto) else {
                 reg[sha] = ["enviado": true]   // foto ou PDF que não é nota nem comprovante: não lê de novo
@@ -492,7 +508,9 @@ final class WhatsAppMonitor {
             ]
             reg[sha] = ["enviado": false, "item": item]
             mudou = true
+            lidos += 1
         }
         if mudou { salvarRegistro(reg) }
+        return lidos
     }
 }

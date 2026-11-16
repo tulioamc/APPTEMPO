@@ -70,6 +70,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         monitor.onSleepEnd = { [weak self] from, to in
             self?.enqueue("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", "sono"])
         }
+        monitor.onGapAtLaunch = { [weak self] from, to, dormiu in
+            let motivo: Any = dormiu ? ("sono" as Any) : (NSNull() as Any)
+            self?.enqueue("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", motivo])
+        }
         // ao abrir, procura atualização em segundo plano (sem fazer nada se não houver mudança)
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.runUpdate(manual: false) }
         // e de 15 em 15 minutos, mas só quando você está longe do Mac há 5 min (a troca fecha e reabre o app)
@@ -115,6 +119,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     @objc private func readWhatsAppNow() { whatsapp.runNow() }
+    @objc private func rereadNotes() {
+        showNotice("Tempo", "Relendo notas e comprovantes dos últimos 3 meses…")
+        whatsapp.relerNotas { [weak self] n in
+            self?.showNotice("Tempo", n == 0 ? "Nenhuma nota ou comprovante encontrado nas conversas." : "\(n) notas e comprovantes lidos e salvos no iCloud.")
+        }
+    }
 
     /// Cria um lembrete com alarme no app Lembretes (lista "Tempo"); sincroniza com o iPhone.
     /// quando: "AAAA-MM-DDTHH:MM" (hora local). Avisa o site se deu certo (TempoBridge.reminderDone).
@@ -337,6 +347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         m.addItem(withTitle: "Recarregar", action: #selector(reload), keyEquivalent: "r")
         m.addItem(withTitle: "Atualizar app", action: #selector(updateNow), keyEquivalent: "u")
         m.addItem(withTitle: "Ler WhatsApp agora", action: #selector(readWhatsAppNow), keyEquivalent: "")
+        m.addItem(withTitle: "Reler notas dos últimos 3 meses", action: #selector(rereadNotes), keyEquivalent: "")
         m.addItem(.separator())
         m.addItem(toggleItem("Guardar pasta da janela ativa", key: "captureFolders", defaultOn: true, action: #selector(toggleFolders)))
         m.addItem(toggleItem("Guardar nome do arquivo", key: "captureFileNames", defaultOn: true, action: #selector(toggleFiles)))
