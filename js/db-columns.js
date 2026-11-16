@@ -225,6 +225,8 @@ window.DB_COLUMNS = {
   "note",
   "date",
   "amount",
+  "suggested_amount",
+  "req_on",
   "paid_on",
   "pay_id",
   "refund_id",
