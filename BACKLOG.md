@@ -471,3 +471,8 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Não levado: print de feedback (Cmd+J), que o Tulio já tinha desistido de usar e o site não chama mais.
 - **Falta no Mac do Tulio:** atualizar o app (⌘U), dar Acesso Total ao Disco ao Tempo de `~/Applications`, fechar o app em Python e conferir a próxima nota/comprovante. O texto do PDF agora vem do PDFKit (antes pypdf): se uma nota não for lida, aparece o aviso acima. Só depois de conferido: apagar `/Applications/Tempo.app` e `~/tempo-build`.
 - Sessão de APP PROMPT de 14/11: removidas 19h12 de "Não especificado" (14:23 de 14/11 a 09:36 de 15/11), direto no banco, com o estado anterior no histórico de edições. Pendência 3 resolvida; a 4 (pausa quando o cronômetro roda com o Mac fechado) continua.
+
+**V2.04.02 — nota fiscal que chega como foto**
+- A nota da Raquel (foto, não PDF) não entrava: o leitor exigia a chave de 44 dígitos colada e a linha de competência, que o reconhecimento de texto quebra em grupos. Agora a chave é remontada mesmo com espaços e pontos; sem a chave, a nota ainda entra pelo identificador do arquivo (sha), com o valor em cinza e aviso "Nota de … (foto)" que só vale depois da confirmação dele.
+- Foto de nota e de comprovante também ganham cópia no iCloud (antes só PDF e PNG).
+- Registro de arquivos lidos (`~/Library/Application Support/Tempo/wa_notas_v2.json`): o que já foi marcado como lido nunca é relido. Apagar esse arquivo faz os 60 dias serem lidos de novo sem duplicar nada (o site reconhece pela chave da nota e pelo sha do arquivo).

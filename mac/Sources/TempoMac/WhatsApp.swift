@@ -17,12 +17,13 @@ enum ICloudTerapias {
         String(texto.filter { $0.isLetter || $0.isNumber || $0 == "_" })
     }
 
-    /// tipo: "nota" ou "comprovante". anoMes: "AAAA_MM".
-    static func nomeArquivo(tipo: String, anoMes: String, terapeuta: String) -> String? {
+    /// tipo: "nota" ou "comprovante". anoMes: "AAAA_MM". ext: extensão do arquivo que chegou (nota em foto vale).
+    static func nomeArquivo(tipo: String, anoMes: String, terapeuta: String, ext: String) -> String? {
         let nome = nomeTerapeuta(terapeuta)
-        guard !nome.isEmpty, anoMes.range(of: "^\\d{4}_\\d{2}$", options: .regularExpression) != nil else { return nil }
-        if tipo == "nota" { return "NotaFiscal_\(anoMes)_\(nome).pdf" }
-        if tipo == "comprovante" { return "Comprovante_\(anoMes)_\(nome).png" }
+        let extensao = ["pdf", "png", "jpg", "jpeg"].contains(ext) ? ext : ""
+        guard !nome.isEmpty, !extensao.isEmpty, anoMes.range(of: "^\\d{4}_\\d{2}$", options: .regularExpression) != nil else { return nil }
+        if tipo == "nota" { return "NotaFiscal_\(anoMes)_\(nome).\(extensao)" }
+        if tipo == "comprovante" { return "Comprovante_\(anoMes)_\(nome).\(extensao)" }
         return nil
     }
 
@@ -320,10 +321,9 @@ final class WhatsAppMonitor {
             let data = Date(timeIntervalSince1970: coreData + WhatsAppMonitor.epocaCoreData)
             let anoMes = janelaMes(data)
             var salvo: String?
-            let ext = arquivo.pathExtension.lowercased()
-            let extOk = (tipo == "nota" && ext == "pdf") || (tipo == "comprovante" && ext == "png")
-            if extOk, ICloudTerapias.disponivel,
-               let nomeFinal = ICloudTerapias.nomeArquivo(tipo: tipo, anoMes: anoMes, terapeuta: linha) {
+            // nota ou comprovante em foto também ganha cópia no iCloud, com a extensão que chegou
+            if ICloudTerapias.disponivel,
+               let nomeFinal = ICloudTerapias.nomeArquivo(tipo: tipo, anoMes: anoMes, terapeuta: linha, ext: arquivo.pathExtension.lowercased()) {
                 if let existente = ICloudTerapias.jaSalvo(anoMes: anoMes, nome: nomeFinal, sha: sha) {
                     salvo = existente.path
                 } else {

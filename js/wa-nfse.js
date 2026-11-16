@@ -16,16 +16,23 @@ const NFSE_CONTATO_LINHA = {
 /* Lê os campos da nota a partir do texto do PDF. Retorna null se não for NFS-e. */
 function nfseParse(texto) {
   const t = String(texto || '');
-  const chave = (t.match(/CHAVE DE ACESSO DA NFS-e\s+(\d{44})/i) || [])[1];
-  if (!chave) return null;
-  const comp = t.match(/COMPET[ÊE]NCIA DA NFS-e[\s\S]*?(\d{2})\/(\d{2})\/(\d{4})/i);
-  if (!comp) return null;
+  // A chave tem 44 dígitos. No PDF vem colada; na foto, o leitor de texto quebra em grupos com espaços e pontos.
+  const bruta = (t.match(/CHAVE DE ACESSO[^\n]*?NFS-?e[\s\S]{0,20}?((?:\d[\s.]{0,3}){44})/i) || [])[1];
+  const chave = bruta ? bruta.replace(/\D/g, '') : null;
+  const comp = t.match(/COMPET[ÊE]NCIA DA NFS-?e[\s\S]{0,120}?(\d{2})\/(\d{2})\/(\d{4})/i);
+  // Foto de nota: sem a chave inteira, ainda vale se o documento se identificar como NFS-e (o mês vem da data da mensagem).
+  const ehNota = /NFS-?e|NOTA FISCAL DE SERVI/i.test(t);
+  if ((!chave || chave.length !== 44) && !(ehNota && comp)) {
+    if (!ehNota) return null;
+  }
   const antes = t.split(/INFORMAÇÕES COMPLEMENTARES/i)[0];
   const valores = [...antes.matchAll(/R\$\s?([\d.]+,\d{2})/g)].map(m => Number(m[1].replace(/\./g, '').replace(',', '.')));
   const valor = valores.length ? Math.max(...valores) : null;
   const linhas = t.split('\n'); const i = linhas.findIndex(l => /Nome \/ Nome Empresarial/i.test(l));
   const prest = i >= 0 ? ((linhas.slice(i + 1).find(l => l.trim()) || '').trim().split(/\s{2,}/)[0] || '') : '';
-  return { chave, prestador: prest.trim(), valor, ym: `${comp[3]}-${comp[2]}`, day: `${comp[3]}-${comp[2]}-${comp[1]}` };
+  if (valor === null) return null;   // sem valor não há o que lançar
+  return { chave: chave && chave.length === 44 ? chave : null, prestador: prest.trim(), valor,
+           ym: comp ? `${comp[3]}-${comp[2]}` : null, day: comp ? `${comp[3]}-${comp[2]}-${comp[1]}` : null };
 }
 
 /* Mês da linha pela janela: nota/comprovante de 20 do mês anterior a 19 do mês atual entra no mês atual. */
@@ -116,12 +123,17 @@ function nfseReport(itens) {
         if (!visto(erro)) addNotice({ kind: 'reembolso', key: erro, title: `Nota de ${nome}: não consegui ler`, body: `${rbLabel(ym)} · chegou pelo WhatsApp, mas o valor não foi lido. Lance na mão em Reembolsos.`, entity: 'reimb', data: { ...base } });
         recebidos.push(it.id); return;
       }
-      const chave = 'nfse:' + n.chave;
+      // nota lida de foto não tem a chave: a identidade do arquivo (sha) faz as vezes dela, então também não duplica
+      const chave = n.chave ? 'nfse:' + n.chave : 'nfse-foto:' + it.id;
       if (!visto(chave)) {
         const d = { ...base, valor: n.valor, chave: n.chave };
         const row = nfseLinha(nome, ym, true);
         nfseNota(row.id, 'LINK NF', it.arquivo);
-        if (nfseIgual(row.amount, n.valor)) {
+        if (!n.chave) {
+          // veio de foto: o valor pode ter sido lido errado, então nunca entra sozinho
+          if (!row.amount) db.update('tempo_reimb_rows', row.id, { suggested_amount: n.valor }, true);
+          addNotice({ kind: 'nfse', key: chave, title: `Nota de ${nome} (foto): ${fmtMoney(n.valor)}`, body: `${rbLabel(ym)} · lida de uma foto, confira o valor antes de usar${row.amount ? ` · a linha tem ${fmtMoney(row.amount)}` : ''}.`, entity: 'reimb', data: d });
+        } else if (nfseIgual(row.amount, n.valor)) {
           addNotice({ kind: 'reembolso', key: chave, title: `Nota de ${nome} lida: ${fmtMoney(n.valor)}`, body: `${n.prestador || 'Prestador'} · ${rbLabel(ym)}. O valor já estava na linha.`, entity: 'reimb', data: d });
         } else {
           // sem valor real na linha: mostra o da nota em cinza até você confirmar

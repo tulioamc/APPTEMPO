@@ -88,3 +88,40 @@ test('contato fora da lista é ignorado (mas confirmado ao Mac)', () => {
   assert.deepEqual([...t.nfseReport([{ id: 'z', contato: 'Fulano', tipo: 'nota', texto: NOTA, data: '2026-11-03' }])], ['z']);
   assert.equal(t.db.all('tempo_reimb_rows').length, 0); assert.equal(t.db.all('tempo_notices').length, 0);
 });
+
+test('foto da nota: chave com espaços é recuperada e lança como nota normal', () => {
+  const t = setup();
+  const foto = ['Prefeitura do Recife', 'NFS-e', 'CHAVE DE ACESSO DA NFS-e',
+    '2611 6062 2335 0492 0001 4000 0000 0001 0862 6114 7654', 'COMPETENCIA DA NFS-e 01/11/2026',
+    'Nome / Nome Empresarial', 'RAQUEL BARRETO', 'VALOR R$ 800,00'].join('\n');
+  const n = t.nfseParse(foto);
+  assert.equal(n.valor, 800);
+  assert.equal(n.chave.length, 44);
+  assert.deepEqual([...t.nfseReport([{ id: 'f1', contato: 'Dra Raquel Barreto Psicopedagoga', tipo: 'nota', texto: foto, data: '2026-11-03', arquivo: null }])], ['f1']);
+  const linha = t.db.all('tempo_reimb_rows').find(r => r.name === 'Raquel' && r.month === '2026-11');
+  assert.equal(Number(linha.suggested_amount), 800);   // valor em cinza até ele confirmar
+});
+
+test('foto ruim: sem a chave, ainda lança com confirmação e não duplica', () => {
+  const t = setup();
+  const foto = ['NOTA FISCAL DE SERVICOS ELETRONICA', 'Nome / Nome Empresarial', 'RAQUEL BARRETO',
+    'VALOR TOTAL R$ 800,00'].join('\n');
+  const n = t.nfseParse(foto);
+  assert.equal(n.chave, null);
+  assert.equal(n.valor, 800);
+  const item = { id: 'foto1', contato: 'Dra Raquel Barreto Psicopedagoga', tipo: 'nota', texto: foto, data: '2026-11-03', arquivo: null };
+  assert.deepEqual([...t.nfseReport([item])], ['foto1']);
+  const aviso = t.db.all('tempo_notices').find(x => x.title.includes('(foto)'));
+  assert.equal(aviso.status, 'pending');               // nunca entra sozinho
+  const linha = t.db.all('tempo_reimb_rows').find(r => r.name === 'Raquel' && r.month === '2026-11');
+  assert.equal(linha.amount, null);
+  assert.equal(Number(linha.suggested_amount), 800);
+  t.nfseReport([item]);                                 // de novo: não duplica
+  assert.equal(t.db.all('tempo_notices').filter(x => x.title.includes('(foto)')).length, 1);
+});
+
+test('texto que não é nota continua sendo recusado', () => {
+  const t = setup();
+  assert.equal(t.nfseParse('um texto qualquer R$ 10,00'), null);
+  assert.equal(t.nfseParse('NFS-e sem valor nenhum'), null);
+});

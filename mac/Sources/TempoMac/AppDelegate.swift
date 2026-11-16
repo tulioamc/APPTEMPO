@@ -140,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private func handleTerapia(_ d: [String: Any]) {
         guard let tipo = d["tipo"] as? String, let anoMes = d["anoMes"] as? String, let terapeuta = d["terapeuta"] as? String,
               let b64 = d["base64"] as? String, let dados = Data(base64Encoded: b64), ICloudTerapias.disponivel,
-              let nome = ICloudTerapias.nomeArquivo(tipo: tipo, anoMes: anoMes, terapeuta: terapeuta),
+              let nome = ICloudTerapias.nomeArquivo(tipo: tipo, anoMes: anoMes, terapeuta: terapeuta, ext: (d["ext"] as? String) ?? (tipo == "nota" ? "pdf" : "png")),
               (try? ICloudTerapias.salvar(anoMes: anoMes, nome: nome, dados: dados)) != nil else {
             showNotice("Tempo", "Não consegui gravar o arquivo no iCloud."); return
         }
