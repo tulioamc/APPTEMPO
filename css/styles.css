@@ -611,6 +611,7 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 .rb-side { display: grid; gap: 6px; }
 .rb-mini { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 12px; font-size: .85em; }
 .rb-mini span { color: var(--fg-3); }
+.rb-late { color: var(--danger); font-weight: 600; }
 .rb-mini b { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
 .rb-filters { margin: 14px 0 4px; flex-wrap: wrap; }
 .rb-filters button .faint { font-size: .85em; }
