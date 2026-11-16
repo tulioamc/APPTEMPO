@@ -522,3 +522,7 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Viagem: conta como férias, de 23/10 a 15/11 (volta ao trabalho em 16/11). Ajustado em Férias e folgas (antes ia até 16/11, o que pausava os avisos de hoje).
 - Transferências PJ: as dele mesmo ("Tulio de Azevedo…") já estão como internas. Sobram 28 recebimentos da BRENDA de 09/2024 a 01/2026 sem categoria (R$ 184.600; desde 02/2026 estão como Fee) e um Pix de R$ 200 dele mesmo em 11/09/2026 marcado como externo. Aguardando ele confirmar.
 - Extratos já importados até o fim de outubro (conta d660 até 31/10). Falta o OFX de novembro em diante e um PDF de fatura do cartão.
+
+**16/11, 11h45 — "Não consegui salvar (inserir em status_options)" ao abrir**
+- O banco só aceitava os kinds work, payment, quote e reimb_*: os tipos de contato (`wa_tipo`) eram recusados a cada abertura. Check ampliado no banco e no schema; os 8 tipos criados no banco reaproveitando os ids que o site já tinha usado (Agência e Amigo), para as classificações feitas não se perderem.
+- Teste novo: todo kind de `DEFAULT_STATUS` precisa estar no check do schema.

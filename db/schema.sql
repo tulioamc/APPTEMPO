@@ -36,7 +36,7 @@ create table if not exists tempo_clients (
 create table if not exists tempo_status_options (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  kind text not null check (kind in ('work','payment','quote','reimb_pay','reimb_refund','reimb_req')),
+  kind text not null check (kind in ('work','payment','quote','reimb_pay','reimb_refund','reimb_req','wa_tipo')),
   name text not null,
   color text,
   category text not null,          -- work: todo/active/done/cancelled · payment: open/closed · quote: open/won/lost
@@ -379,3 +379,6 @@ drop trigger if exists tempo_touch on public.tempo_wa_contacts;
 create trigger tempo_touch before update on public.tempo_wa_contacts for each row execute function public.tempo_touch();
 drop trigger if exists tempo_touch on public.tempo_wa_daily;
 create trigger tempo_touch before update on public.tempo_wa_daily for each row execute function public.tempo_touch();
+-- migração (16/11): tipo de contato do WhatsApp em tempo_status_options
+-- alter table tempo_status_options drop constraint tempo_status_options_kind_check;
+-- alter table tempo_status_options add constraint tempo_status_options_kind_check check (kind = any (array['work','payment','quote','reimb_pay','reimb_refund','reimb_req','wa_tipo']));

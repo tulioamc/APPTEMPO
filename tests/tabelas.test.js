@@ -20,3 +20,11 @@ test('o tempo_sync_state do schema cobre toda tabela carregada', () => {
   const fn = schema.slice(schema.indexOf('tempo_sync_state'));
   m.TABLES.forEach(t => assert.ok(fn.includes(`'${t}'`), `${t} fora do tempo_sync_state`));
 });
+
+test('todo tipo de status que o app cria é aceito pelo banco', () => {
+  const m = load(['js/store.js', 'js/domain.js'], ['DEFAULT_STATUS']);
+  const schema = fs.readFileSync(path.join(ROOT, 'db/schema.sql'), 'utf8');
+  const linha = schema.split('\n').find(l => /kind text not null check \(kind in/.test(l));
+  assert.ok(linha, 'check de kind não encontrado no schema');
+  Object.keys(m.DEFAULT_STATUS).forEach(k => assert.ok(linha.includes(`'${k}'`), `kind ${k} fora do check do banco`));
+});
