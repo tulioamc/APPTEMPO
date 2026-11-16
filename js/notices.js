@@ -464,12 +464,16 @@ const todoSetSilent = (key, value) => { const st = db.data.tempo_settings.find(r
 const todoDueDay = (n) => n.data?.due ? n.data.due.slice(0, 10) : null;
 const todoIsLate = (n) => n.status !== 'done' && !!n.data?.due && new Date(n.data.end ? n.data.due.slice(0, 10) + 'T' + n.data.end : n.data.due) < new Date();
 
-/* Quem ficou aberto de um dia para o outro ganha +1 em "adiou". */
+/* "adiou" conta os dias em que um to-do com data passou dessa data e continua aberto.
+   Antes da data (ou sem data) o contador fica zerado. */
 function todoCarry() {
   const today = todoToday();
   if (db.setting('todoCarryDay', '') === today) return;
-  db.all('tempo_notices').filter(n => n.kind === 'todo' && n.status !== 'done' && ymd(new Date(n.created_at || Date.now())) < today)
-    .forEach(n => db.update('tempo_notices', n.id, { data: { ...(n.data || {}), adiou: (n.data?.adiou || 0) + 1 } }, true));
+  db.all('tempo_notices').filter(n => n.kind === 'todo' && n.status !== 'done').forEach(n => {
+    const due = todoDueDay(n);
+    if (due && due < today) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), adiou: (n.data?.adiou || 0) + 1 } }, true);
+    else if (n.data?.adiou) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), adiou: 0 } }, true);
+  });
   todoSetSilent('todoCarryDay', today);
 }
 /* Fixos: criam o to-do do dia nos dias da semana escolhidos. */
