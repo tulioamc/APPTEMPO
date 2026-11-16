@@ -456,7 +456,7 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 4. Pausa ao abrir o app quando o cronômetro ficou rodando sem atividade (ex.: Mac fechado).
 5. Supabase: ligar proteção contra senha vazada (só o Tulio); decidir se apaga as tabelas antigas (backup_* e gpt_old_*).
 6. Limpeza do código das telas (seção acima).
-7. Itens antigos ainda abertos: OFX do Nubank e fatura em PDF (aguardando arquivos), travar mês fechado?, transferências PJ a confirmar, data de volta da viagem (modo viagem), categoria da compra "May" (R$ 36, 03/10), tela de Contatos do WhatsApp (classificar cliente/amigo/grupo).
+7. Itens antigos ainda abertos: OFX do Nubank e fatura em PDF (aguardando arquivos); recebimentos antigos da BRENDA sem categoria (ver 16/11 abaixo).
 
 **Lição desta conversa:** antes de apagar ou trocar qualquer app/arquivo do Mac, conferir o que ele faz (o app "1.0" parecia velho e era o principal).
 
@@ -515,3 +515,10 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Contato de trabalho liga a um cliente; contato do tipo Agência liga a uma agência (coluna "Cliente / agência"). O bloco Trabalho mostra quantos estão sem ligação.
 - "Tempo no WhatsApp" por contato, somado do registro de atividade (o app do Mac manda o nome da conversa desde a V2.04.04). Coluna "WhatsApp" em Agências e em Clientes soma o tempo dos contatos ligados a cada um.
 - O aviso de contatos sem classificar abre esta tela.
+
+**Decisões do Tulio (16/11, 11h40)**
+- Travar mês financeiro fechado: não quer. Item encerrado.
+- Compra "May" (R$ 36, 03/10): ignorar. Item encerrado.
+- Viagem: conta como férias, de 23/10 a 15/11 (volta ao trabalho em 16/11). Ajustado em Férias e folgas (antes ia até 16/11, o que pausava os avisos de hoje).
+- Transferências PJ: as dele mesmo ("Tulio de Azevedo…") já estão como internas. Sobram 28 recebimentos da BRENDA de 09/2024 a 01/2026 sem categoria (R$ 184.600; desde 02/2026 estão como Fee) e um Pix de R$ 200 dele mesmo em 11/09/2026 marcado como externo. Aguardando ele confirmar.
+- Extratos já importados até o fim de outubro (conta d660 até 31/10). Falta o OFX de novembro em diante e um PDF de fatura do cartão.
