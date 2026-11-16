@@ -227,6 +227,7 @@ window.DB_COLUMNS = {
   "amount",
   "suggested_amount",
   "req_on",
+  "refunded_on",
   "paid_on",
   "pay_id",
   "refund_id",
@@ -294,6 +295,16 @@ window.DB_COLUMNS = {
   "txn_id",
   "payment_id",
   "amount",
+  "created_at",
+  "updated_at"
+ ],
+ "tempo_rafa_days": [
+  "id",
+  "user_id",
+  "day",
+  "who",
+  "note",
+  "horario",
   "created_at",
   "updated_at"
  ]

@@ -4,9 +4,8 @@
    O app nunca fala direto com um banco. Ele usa o `db` abaixo, que guarda
    um cache em memória e repassa cada operação para um "adapter".
 
-   - MemoryAdapter  → versão atual: não persiste nada (some ao recarregar).
-   - HttpAdapter    → esqueleto para a próxima etapa: chama rotas /api/*
-                      (Vercel Functions + Postgres/Neon ou Supabase).
+   - MemoryAdapter   → sem login: não persiste nada (dados de exemplo).
+   - SupabaseAdapter → banco online (js/auth.js), com fila de gravação.
 
    As tabelas têm os mesmos nomes do schema planejado (tempo_*), então trocar
    o adapter não muda nenhuma tela.
@@ -26,26 +25,6 @@ class MemoryAdapter {
   async update(table, id, patch) { return patch; }
   async remove(table, id) { return true; }
   async replaceAll(snapshot) { return true; }
-}
-
-/* Próxima etapa (não ativo). Exemplo de contrato esperado na Vercel:
-   GET    /api/data            → { tempo_projects:[...], ... }
-   POST   /api/:table          → cria linha
-   PATCH  /api/:table/:id      → atualiza
-   DELETE /api/:table/:id      → remove
-   Cada rota valida o usuário (auth) e filtra por user_id. */
-class HttpAdapter {
-  constructor(base = '/api') { this.base = base; this.name = 'http'; this.label = 'Banco online'; this.persistent = true; }
-  async req(method, path, body) {
-    const r = await fetch(this.base + path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, credentials: 'include' });
-    if (!r.ok) throw new Error(`Falha ${r.status} em ${method} ${path}`);
-    return r.status === 204 ? null : r.json();
-  }
-  loadAll() { return this.req('GET', '/data'); }
-  insert(t, row) { return this.req('POST', `/${t}`, row); }
-  update(t, id, patch) { return this.req('PATCH', `/${t}/${id}`, patch); }
-  remove(t, id) { return this.req('DELETE', `/${t}/${id}`); }
-  replaceAll(snap) { return this.req('PUT', '/data', snap); }
 }
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
@@ -75,8 +54,15 @@ const db = {
     const cached = this.loadCache();
     if (cached && this.onCache) { try { this.onCache(); } catch (e) { /* segue: a tela completa vem depois */ } }
     try {
+      // alterações que ficaram na fila da última vez vão primeiro, para o retrato do banco já vir com elas
+      if (this.adapter.flush) await this.adapter.flush();
+      const sig = this.adapter.syncState ? await this.adapter.syncState() : null;
       const snap = await this.adapter.loadAll();
-      if (snap) { TABLES.forEach(t => this.data[t] = snap[t] || []); this.saveCache(); this.loaded = true; }
+      if (snap) {
+        // ainda há alterações sem enviar: o retrato deste aparelho é o mais novo, fica com ele
+        if (!(cached && this.unsent())) { TABLES.forEach(t => this.data[t] = snap[t] || []); this.sig = sig; this.saveCache(); }
+        this.loaded = true;
+      }
     } catch (e) { if (!cached) this.syncError = e.message; }
   },
   loadCache() {
@@ -90,23 +76,32 @@ const db = {
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(this.data)); }
     catch (e) { try { localStorage.removeItem(CACHE_KEY); } catch (e2) { /* sem armazenamento: segue sem cache */ } }
   },
-  /* Busca do servidor de novo (sessões iniciadas em outro lugar, ex.: Chrome). Espera as gravações pendentes. */
+  /* Depois de cada alteração, guarda o retrato no aparelho (com folga, para agrupar várias seguidas). */
+  saveCacheSoon() { clearTimeout(this.cacheT); this.cacheT = setTimeout(() => this.saveCache(), 1500); },
+  /* Quantas alterações ainda não chegaram ao banco. */
+  unsent() { return (this.adapter && this.adapter.outbox && this.adapter.outbox.length) || 0; },
+  /* Busca do servidor de novo (mudanças feitas em outro aparelho). Espera as gravações pendentes.
+     Pergunta primeiro o que mudou (um pedido leve) e baixa só as tabelas alteradas. */
   async refresh() {
     if (!this.adapter || !this.adapter.loadAll) return;
     try {
       const seq = this.writes || 0;
       if (this.adapter.queue) await this.adapter.queue;
-      const snap = await this.adapter.loadAll(); if (!snap) return;
+      if (this.unsent()) return;   // há alterações sem enviar: não troca o retrato local por um mais antigo
+      const sig = this.adapter.syncState ? await this.adapter.syncState() : null;
+      const tables = sig && this.sig ? TABLES.filter(t => sig[t] !== this.sig[t]) : TABLES;
+      if (!tables.length) { this.loaded = true; return; }
+      const snap = this.adapter.fetchTables ? await this.adapter.fetchTables(tables) : await this.adapter.loadAll(); if (!snap) return;
       // se alguém gravou durante a busca, o retrato do servidor pode ser antigo: descarta e deixa para a próxima
-      if ((this.writes || 0) !== seq || this.pending > 0) return;
-      TABLES.forEach(t => this.data[t] = snap[t] || []); this.saveCache(); this.emit();
+      if ((this.writes || 0) !== seq || this.pending > 0 || this.unsent()) return;
+      tables.forEach(t => this.data[t] = snap[t] || []); if (sig) this.sig = sig; this.loaded = true; this.saveCache(); this.emit();
     } catch (e) { /* sem rede: tenta de novo na próxima vez */ }
   },
   subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
   emit() { this.listeners.forEach(fn => fn()); },
   /* Envia ao adapter sem travar a interface; falhas aparecem na barra lateral. */
   push(p) {
-    this.writes = (this.writes || 0) + 1; this.pending = (this.pending || 0) + 1;
+    this.writes = (this.writes || 0) + 1; this.pending = (this.pending || 0) + 1; this.saveCacheSoon();
     Promise.resolve(p).then(() => { if (this.syncError) { this.syncError = null; this.emit(); } }).catch(e => { this.syncError = e.message; this.emit(); }).finally(() => { this.pending--; });
   },
 

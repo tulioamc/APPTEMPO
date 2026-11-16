@@ -191,7 +191,7 @@ create table if not exists tempo_reimb_rows (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   month text not null,                  -- YYYY-MM (uma tabela por mês)
-  name text, note text, date date, amount numeric(14,2), suggested_amount numeric(14,2), paid_on date, req_on date,
+  name text, note text, date date, amount numeric(14,2), suggested_amount numeric(14,2), paid_on date, req_on date, refunded_on date,
   pay_id uuid references tempo_status_options(id) on delete set null,
   refund_id uuid references tempo_status_options(id) on delete set null,
   req_id uuid references tempo_status_options(id) on delete set null,
@@ -302,3 +302,43 @@ create trigger tempo_claims_sync after insert or update of segments on tempo_tim
 
 -- V2.03.02: valor sugerido (copiado do mês anterior) até ser confirmado; não entra nas somas
 alter table public.tempo_expenses add column if not exists amount_sug numeric(12,2);
+
+-- Agenda do Rafa: com quem ele fica em cada dia.
+create table if not exists tempo_rafa_days (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  day date not null, who text, note text, horario text,
+  created_at timestamptz not null default now(), updated_at timestamptz
+);
+
+-- =====================================================================
+-- SINCRONIZAÇÃO (16/11/2026)
+-- updated_at é carimbado pelo banco em toda alteração; tempo_sync_state()
+-- devolve, por tabela, "quantidade|última alteração" das linhas da conta.
+-- O app chama essa função a cada minuto e baixa só as tabelas que mudaram.
+-- =====================================================================
+create or replace function public.tempo_touch() returns trigger language plpgsql set search_path = public as $$
+begin new.updated_at := now(); return new; end $$;
+revoke execute on function public.tempo_touch() from public, anon, authenticated;
+revoke execute on function public.tempo_claims_sync() from public, anon, authenticated;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['tempo_agencies','tempo_clients','tempo_projects','tempo_tasks','tempo_time_entries','tempo_revisions','tempo_quotes','tempo_payments','tempo_deadline_changes','tempo_work_types','tempo_status_options','tempo_reminders','tempo_status_history','tempo_settings','tempo_notices','tempo_reimb_rows','tempo_expenses','tempo_rafa_days'] loop
+    execute format('drop trigger if exists tempo_touch on public.%I', t);
+    execute format('create trigger tempo_touch before update on public.%I for each row execute function public.tempo_touch()', t);
+  end loop;
+end $$;
+
+create or replace function public.tempo_sync_state() returns jsonb language plpgsql stable security invoker set search_path = public as $$
+declare t text; res jsonb := '{}'::jsonb; n bigint; m timestamptz;
+begin
+  foreach t in array array['tempo_agencies','tempo_clients','tempo_projects','tempo_tasks','tempo_time_entries','tempo_revisions','tempo_quotes','tempo_payments','tempo_deadline_changes','tempo_work_types','tempo_status_options','tempo_reminders','tempo_status_history','tempo_settings','tempo_notices','tempo_reimb_rows','tempo_expenses','tempo_rafa_days'] loop
+    execute format('select count(*), max(greatest(created_at, coalesce(updated_at, created_at))) from public.%I', t) into n, m;
+    res := res || jsonb_build_object(t, n::text || '|' || coalesce(extract(epoch from m)::text, ''));
+  end loop;
+  return res;
+end $$;
+revoke execute on function public.tempo_sync_state() from public, anon;
+grant execute on function public.tempo_sync_state() to authenticated;

@@ -1,7 +1,7 @@
 /* NOTAS FISCAIS (NFS-e) RECEBIDAS PELO WHATSAPP → TABELA DE REEMBOLSOS
    O app do Mac envia só o nome do contato e o texto do PDF (window.TempoBridge.reportNfse).
-   Mês da linha = mês da competência da nota (ex.: nota de 03/11 vai para Novembro).
-   Cada nota vira um aviso com chave pela chave de acesso, então não duplica. */
+   Mês da linha = janela de datas (20 do mês anterior a 19 do mês atual).
+   Cada arquivo vira um aviso (chave única), então não duplica. Valor real só entra com a sua confirmação. */
 
 /* Contato do WhatsApp → nome da linha na tabela de reembolsos. */
 const NFSE_CONTATO_LINHA = {
@@ -42,47 +42,91 @@ function nfseNota(rowId, rotulo, caminho) {
   const r = db.get('tempo_reimb_rows', rowId); if (!r) return;
   const atual = r.note || '';
   if (atual.includes(caminho)) return;
-  db.update('tempo_reimb_rows', rowId, { note: (atual ? atual + '\n' : '') + `[${rotulo}] ${caminho}` });
+  db.update('tempo_reimb_rows', rowId, { note: (atual ? atual + '\n' : '') + `[${rotulo}] ${caminho}` }, true);
 }
 const nfseIsoBR = (txt) => { const m = String(txt || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
 const nfseValorBR = (txt) => { const v = [...String(txt || '').matchAll(/R\$\s?([\d.]+,\d{2})/g)].map(m => Number(m[1].replace(/\./g, '').replace(',', '.'))); return v.length ? v[0] : null; };
 
-/* Chamado pelo app do Mac: [{ id, contato, tipo: 'nota' | 'comprovante', texto, data, arquivo }] */
+/* Linha do contato no mês (cria se não existir, sem valor real). */
+function nfseLinha(nome, ym, criar) {
+  const achar = () => db.all('tempo_reimb_rows').find(r => r.month === ym && r.name === nome);
+  const r = achar(); if (r || !criar) return r || null;
+  db.insert('tempo_reimb_rows', { month: ym, name: nome, note: '', date: `${ym}-10`, order: db.all('tempo_reimb_rows').filter(x => x.month === ym).length, amount: null,
+    pay_id: rbStatusId('reimb_pay', 'a Pagar'), refund_id: rbStatusId('reimb_refund', 'a Pagar'), req_id: rbStatusId('reimb_req', 'a Fazer') }, true);
+  return achar();
+}
+const nfseIgual = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && Math.abs(Number(a) - Number(b)) < 0.005;
+
+/* Aplica o que o aviso propõe (botão "Usar" do aviso, ou direto quando o valor já bate). */
+function nfseAplicar(d) {
+  const row = nfseLinha(d.nome, d.ym, true); if (!row) return false;
+  if (d.tipo === 'comprovante') {
+    const pago = rbStatusId('reimb_pay', 'Pago');
+    db.update('tempo_reimb_rows', row.id, { pay_id: pago || row.pay_id, paid_on: d.pagoEm || row.paid_on || null, ...(!row.amount && d.valor ? { amount: d.valor, suggested_amount: null } : {}) }, true);
+    nfseNota(row.id, 'LINK PAGAMENTO', d.arquivo);
+  } else {
+    db.update('tempo_reimb_rows', row.id, { amount: d.valor, suggested_amount: null }, true);
+    nfseNota(row.id, 'LINK NF', d.arquivo);
+  }
+  return true;
+}
+ACTIONS['nfse-usar'] = (el) => {
+  const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
+  if (nfseAplicar(n.data || {})) { decideNotice(n, 'accepted', n.data.tipo === 'comprovante' ? 'Marcado como Pago' : 'Valor da nota usado'); toast('Lançado em Reembolsos'); }
+  db.emit();
+};
+
+/* Chamado pelo app do Mac: [{ id, contato, tipo: 'nota' | 'comprovante', texto, data, arquivo }].
+   Devolve os ids recebidos, para o Mac não reenviar. Nada entra como valor real sem confirmação,
+   exceto quando só confirma o que já está na linha (mesmo valor). */
 function nfseReport(itens) {
-  if (!Array.isArray(itens)) return;
+  if (!Array.isArray(itens) || !db.loaded) return [];
+  const recebidos = [];
   itens.forEach(it => {
     try {
       const nome = NFSE_CONTATO_LINHA[it.contato] || null;
-      if (!nome) return;
       const ym = nfseJanelaMes(it.data);
-      if (!ym) return;
-      const base = { pay_id: rbStatusId('reimb_pay', 'a Pagar'), refund_id: rbStatusId('reimb_refund', 'a Pagar'), req_id: rbStatusId('reimb_req', 'a Fazer') };
-      const achar = () => db.all('tempo_reimb_rows').find(r => r.month === ym && r.name === nome);
-      const criar = (amount) => { db.insert('tempo_reimb_rows', { month: ym, name: nome, note: '', date: `${ym}-10`, order: db.all('tempo_reimb_rows').filter(r => r.month === ym).length, amount, ...base }); return achar(); };
+      if (!nome || !ym) { recebidos.push(it.id); return; }
+      const visto = (chave) => db.all('tempo_notices').some(x => x.key === chave);
+      const base = { tipo: it.tipo, nome, ym, arquivo: it.arquivo || null };
 
       if (it.tipo === 'comprovante') {
         const chave = 'comp:' + it.id;
-        if (db.all('tempo_notices').some(x => x.key === chave)) return;
-        const valor = nfseValorBR(it.texto);
-        const pagoEm = nfseIsoBR(it.texto) || it.data;
-        const row = achar() || criar(valor);
-        const pago = rbStatusId('reimb_pay', 'Pago');
-        db.update('tempo_reimb_rows', row.id, { pay_id: pago || row.pay_id, paid_on: pagoEm, ...(!row.amount && valor ? { amount: valor, suggested_amount: null } : {}) });
-        nfseNota(row.id, 'LINK PAGAMENTO', it.arquivo);
-        addNotice({ kind: 'reembolso', key: chave, title: `Comprovante de ${nome} lido: ${fmtMoney(valor) || 'sem valor'}`, body: `Pago em ${fmtDate(pagoEm)} · lançado em ${rbLabel(ym)} como Pago. Confira na aba Reembolsos.`, entity: 'reimb', data: { month: ym } });
-        db.emit();
-        return;
+        if (!visto(chave)) {
+          const valor = nfseValorBR(it.texto);
+          const d = { ...base, valor, pagoEm: nfseIsoBR(it.texto) || it.data };
+          const row = nfseLinha(nome, ym, false);
+          const jaPago = row && rbName('reimb_pay', row.pay_id) === 'Pago';
+          if (row && !jaPago && nfseIgual(row.amount, valor)) {
+            // mesmo valor da linha: é o pagamento dela
+            nfseAplicar(d);
+            addNotice({ kind: 'reembolso', key: chave, title: `Comprovante de ${nome}: ${fmtMoney(valor)} · marcado como Pago`, body: `Pago em ${fmtDate(d.pagoEm)} · ${rbLabel(ym)}. O valor bateu com a linha.`, entity: 'reimb', data: d });
+          } else {
+            const motivo = !row ? 'não há linha desse contato no mês' : jaPago ? 'a linha já está como Pago' : `a linha tem ${fmtMoney(row.amount) || 'valor vazio'}`;
+            addNotice({ kind: 'nfse', key: chave, title: `Comprovante de ${nome}: ${fmtMoney(valor) || 'valor não lido'}`, body: `${rbLabel(ym)} · ${motivo}. Confirme para marcar como Pago em ${fmtDate(d.pagoEm)}.`, entity: 'reimb', data: d });
+          }
+        }
+        recebidos.push(it.id); return;
       }
 
-      const n = nfseParse(it.texto); if (!n) return;
-      if (db.all('tempo_notices').some(x => x.key === 'nfse:' + n.chave)) return;
-      const existente = achar();
-      if (existente) {
-        if (Math.abs(Number(existente.amount) - n.valor) > 0.005) db.update('tempo_reimb_rows', existente.id, { amount: n.valor, suggested_amount: null });
-      } else criar(n.valor);
-      nfseNota(achar().id, 'LINK NF', it.arquivo);
-      addNotice({ kind: 'reembolso', key: 'nfse:' + n.chave, title: `Nota de ${nome} lida: ${fmtMoney(n.valor)}`, body: `${n.prestador || 'Prestador'} · competência ${fmtDate(n.day)} · lançado em ${rbLabel(ym)}. Confira na aba Reembolsos.`, entity: 'reimb', data: { month: ym, chave: n.chave } });
-      db.emit();
+      const n = nfseParse(it.texto);
+      if (!n) { recebidos.push(it.id); return; }
+      const chave = 'nfse:' + n.chave;
+      if (!visto(chave)) {
+        const d = { ...base, valor: n.valor, chave: n.chave };
+        const row = nfseLinha(nome, ym, true);
+        nfseNota(row.id, 'LINK NF', it.arquivo);
+        if (nfseIgual(row.amount, n.valor)) {
+          addNotice({ kind: 'reembolso', key: chave, title: `Nota de ${nome} lida: ${fmtMoney(n.valor)}`, body: `${n.prestador || 'Prestador'} · ${rbLabel(ym)}. O valor já estava na linha.`, entity: 'reimb', data: d });
+        } else {
+          // sem valor real na linha: mostra o da nota em cinza até você confirmar
+          if (!row.amount) db.update('tempo_reimb_rows', row.id, { suggested_amount: n.valor }, true);
+          addNotice({ kind: 'nfse', key: chave, title: `Nota de ${nome}: ${fmtMoney(n.valor)}`, body: `${n.prestador || 'Prestador'} · ${rbLabel(ym)}${row.amount ? ` · a linha tem ${fmtMoney(row.amount)}` : ''}. Confirme para usar o valor da nota.`, entity: 'reimb', data: d });
+        }
+      }
+      recebidos.push(it.id);
     } catch (e) { console.warn('nfseReport', e); }
   });
+  db.emit();
+  return recebidos;
 }
