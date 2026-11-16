@@ -6,7 +6,7 @@
 /* Contato do WhatsApp → nome da linha na tabela de reembolsos. */
 const NFSE_CONTATO_LINHA = {
   'Carol AT': 'AT',
-  'Raquel': 'Raquel',
+  'Dra Raquel Barreto Psicopedagoga': 'Raquel',
   'Aloma Consultório': 'Aloma',
   'Erika Gomes (Clau/Aconchego)': 'Claudiane',
   'Homero Futebol/ Bicicleta/ Skate': 'Homero',
