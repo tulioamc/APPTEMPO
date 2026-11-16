@@ -42,6 +42,8 @@ const DEFAULT_STATUS = {
   quote: [['Rascunho','gray','open'],['Enviado','blue','open'],['Em negociação','yellow','open'],['Aprovado','green','won'],['Recusado','red','lost'],['Vencido','brown','lost']],
   reimb_pay: [['a Pagar','red','open'],['Pago','green','closed']],
   reimb_refund: [['a Pagar','yellow','open'],['Feito!','blue','closed'],['Negado','red','open'],['Parcial (Errado)','purple','open']],
+  // contato do WhatsApp: 'trabalho' conta como trabalho na sessão; 'pausa' vira pausa (distração)
+  wa_tipo: [['Cliente','green','trabalho'],['Agência','blue','trabalho'],['Colega','purple','trabalho'],['Fornecedor','brown','trabalho'],['Administrativo','gray','trabalho'],['Misto (mais cliente)','yellow','trabalho'],['Misto (mais amigo)','orange','pausa'],['Amigo','red','pausa']],
   reimb_req: [['a Fazer','red','open'],['Feito','green','closed'],['Falta Nota','gray','open'],['Refeito (Negado da primeira vez)','purple','open'],['Refeito - Pagaram Menos na primeira','blue','open']]
 };
 const DEFAULT_REMINDERS = [

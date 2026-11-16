@@ -12,9 +12,11 @@ VIEWS.registry = () => {
   let body;
   if (r.tab === 'agencies') body = ags.length ? gridTable({ id: 'agencies', cols: AGCOLS, rows: ags, rowAttrs: a => `data-act="party-open" data-kind="agency" data-id="${a.id}"`, rowById: (id) => db.get('tempo_agencies', id) })
     : `<div class="empty">${icon('users')}<b>${q ? 'Nada encontrado' : 'Nenhuma agência cadastrada'}</b><span>Agência contratante é quem contrata ou intermedeia o trabalho. Um cliente pode existir sem agência.</span><button class="btn primary" data-act="party-new" data-kind="agency">${icon('plus')} Nova agência</button></div>`;
+  else if (r.tab === 'wa') body = waRows(q).length ? gridTable({ id: 'wacontacts', cols: WACOLS, rows: waRows(q), rowById: (id) => db.get('tempo_wa_contacts', id) })
+    : `<div class="empty">${icon('users')}<b>${q ? 'Nada encontrado' : 'Nenhum contato ainda'}</b><span>Os contatos chegam pelo app do Mac. Marque quem é cliente, agência, colega, fornecedor ou administrativo: o tempo de WhatsApp com eles conta como trabalho, e o resto vira pausa.</span></div>`;
   else body = cls.length ? gridTable({ id: 'clients', cols: CLCOLS, rows: cls, rowAttrs: c => `data-act="party-open" data-kind="client" data-id="${c.id}"`, rowById: (id) => db.get('tempo_clients', id) })
     : `<div class="empty">${icon('users')}<b>${q ? 'Nada encontrado' : 'Nenhum cliente cadastrado'}</b><button class="btn primary" data-act="party-new" data-kind="client">${icon('plus')} Novo cliente</button></div>`;
-  const html = `<div class="panel"><div class="panel-h"><div class="seg">${[['agencies', `Agências (${db.all('tempo_agencies').filter(a => !a.archived).length})`], ['clients', `Clientes (${clients().length})`]].map(([k, l]) => `<button class="${r.tab === k ? 'on' : ''}" data-act="reg-tab" data-v="${k}">${l}</button>`).join('')}</div><span class="grow"></span>${colsBtn(r.tab)}<label class="check small"><input type="checkbox" data-on="reg-arch" ${r.arch ? 'checked' : ''}> Mostrar arquivados</label></div>
+  const html = `<div class="panel"><div class="panel-h"><div class="seg">${[['agencies', `Agências (${db.all('tempo_agencies').filter(a => !a.archived).length})`], ['clients', `Clientes (${clients().length})`], ['wa', `Contatos WhatsApp (${db.all('tempo_wa_contacts').length})`]].map(([k, l]) => `<button class="${r.tab === k ? 'on' : ''}" data-act="reg-tab" data-v="${k}">${l}</button>`).join('')}</div><span class="grow"></span>${colsBtn(r.tab)}<label class="check small"><input type="checkbox" data-on="reg-arch" ${r.arch ? 'checked' : ''}> Mostrar arquivados</label></div>
     <div class="filters"><input id="rg-q" class="input search" placeholder="Buscar por nome, CNPJ ou contato" value="${esc(r.q)}" data-input="reg-q"></div>
     <div class="panel-b tight">${body}</div></div>`;
   return { title: 'Agências e clientes', actions: `<button class="btn" data-act="party-new" data-kind="agency">${icon('plus')} Agência</button><button class="btn primary" data-act="party-new" data-kind="client">${icon('plus')} Cliente</button>`, html };
@@ -192,4 +194,22 @@ CHANGES['fee-hours'] = (el) => {
   const v = Number(String(el.value).replace(',', '.'));
   if (v > 0) m[kk] = v; else delete m[kk];
   db.setSetting('feeByMonth', m); db.emit();
+};
+
+/* =====================================================================
+   CONTATOS DO WHATSAPP
+   Quem é de trabalho (cliente, agência, colega, fornecedor, administrativo) faz o tempo de WhatsApp
+   contar como trabalho. Quem não está marcado conta como amigo, e o tempo vira pausa.
+   ===================================================================== */
+const waRows = (q) => db.all('tempo_wa_contacts')
+  .filter(c => !q || String(c.name || '').toLowerCase().includes(q))
+  .sort((a, b) => waMsgs(b.jid) - waMsgs(a.jid) || String(a.name || '').localeCompare(String(b.name || '')));
+const waMsgs = (jid) => db.all('tempo_wa_daily').filter(d => d.jid === jid).reduce((t, d) => t + (d.sent || 0), 0);
+const WACOLS = {
+  name: { label: 'Contato', ico: 'text', cls: 'name', w: 260, sort: c => String(c.name || ''), cell: c => esc(c.name || '') },
+  tipo: { label: 'Tipo', ico: 'spin', w: 190, sort: c => waTipoNome(c), cell: c => { const o = c.tipo_id ? db.get('tempo_status_options', c.tipo_id) : null; return o ? tag(o.name, o.color, { pill: true }) : '<span class="faint">Amigo (padrão)</span>'; },
+    edit: { type: 'combo', kind: 'wa_tipo', allowEmpty: true, emptyLabel: 'Amigo (padrão)', get: c => c.tipo_id, set: (c, v) => db.update('tempo_wa_contacts', c.id, { tipo_id: v || null }) } },
+  conta: { label: 'Conta como', ico: 'clock', w: 120, sort: c => waEhTrabalho(c) ? 0 : 1, cell: c => waEhTrabalho(c) ? tag('Trabalho', 'green', { pill: true }) : tag('Pausa', 'gray', { pill: true }) },
+  grupo: { label: 'Grupo', ico: 'users', w: 90, sort: c => c.tipo === 'grupo' ? 0 : 1, cell: c => c.tipo === 'grupo' ? 'Sim' : '' },
+  msgs: { label: 'Mensagens', ico: 'hash', w: 110, money: true, sort: c => waMsgs(c.jid), cell: c => waMsgs(c.jid) || '' },
 };

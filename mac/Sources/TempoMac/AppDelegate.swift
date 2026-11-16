@@ -49,11 +49,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
 
         monitor.onSegment = { [weak self] from, to, ctx in
-            let payload: [String: Any] = [
-                "from": self?.iso(from) ?? "", "to": self?.iso(to) ?? "",
-                "app": ctx.app, "doc": ctx.doc ?? NSNull(), "folder": ctx.folder ?? NSNull()
-            ]
-            self?.enqueue("reportActivity", [payload])
+            guard let self = self else { return }
+            let enviar: (String?) -> Void = { conversa in
+                let payload: [String: Any] = [
+                    "from": self.iso(from), "to": self.iso(to),
+                    "app": ctx.app, "doc": conversa ?? ctx.doc ?? NSNull(), "folder": ctx.folder ?? NSNull()
+                ]
+                self.enqueue("reportActivity", [payload])
+            }
+            // WhatsApp: manda também com quem era a conversa, para o site saber se foi trabalho ou pausa
+            if ctx.bundle.lowercased().contains("whatsapp") {
+                self.whatsapp.conversaDoPeriodo(de: from, ate: to) { enviar($0) }
+            } else {
+                enviar(nil)
+            }
         }
         monitor.onIdle = { [weak self] from, to in
             self?.enqueue("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", NSNull()])
@@ -136,6 +145,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
+    /// Abre um arquivo a pedido do site (link da nota fiscal ou do comprovante na Anotação).
+    /// Só abre o que está dentro do iCloud Drive, onde o Tempo guarda esses arquivos.
+    private func handleOpen(_ d: [String: Any]) {
+        guard let caminho = (d["path"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !caminho.isEmpty else { return }
+        let url = URL(fileURLWithPath: (caminho as NSString).expandingTildeInPath).standardizedFileURL
+        guard url.path.hasPrefix(ICloudTerapias.root.standardizedFileURL.path), FileManager.default.fileExists(atPath: url.path) else {
+            showNotice("Tempo", "Não encontrei esse arquivo no iCloud."); return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
     /// Grava nota fiscal (PDF) ou comprovante (PNG) em iCloud/Terapias/<Ano_Mes>, a pedido do site.
     private func handleTerapia(_ d: [String: Any]) {
         guard let tipo = d["tipo"] as? String, let anoMes = d["anoMes"] as? String, let terapeuta = d["terapeuta"] as? String,
@@ -165,6 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         case "reminder": handleReminder(d); return
         case "terapia": handleTerapia(d); return
         case "update": runUpdate(manual: true); return
+        case "open": handleOpen(d); return
         default: break
         }
         guard let title = d["title"] as? String, let body = d["body"] as? String else { return }

@@ -88,6 +88,8 @@ final class WhatsAppMonitor {
     ]
 
     private let queue = DispatchQueue(label: "tempo.whatsapp")
+    /// Fila separada: a consulta de "com quem eu estava falando" não pode esperar a leitura das notas.
+    private let lookupQueue = DispatchQueue(label: "tempo.whatsapp.lookup")
     private var avisado = false
 
     func start() {
@@ -196,6 +198,37 @@ final class WhatsAppMonitor {
             out.append((nome, caminho, sqlite3_column_double(stmt, 2)))
         }
         return out
+    }
+
+    /// Com quem era a conversa neste período (a que teve mais mensagens, enviadas ou recebidas).
+    /// O site usa o nome para saber se o tempo no WhatsApp foi trabalho (cliente) ou pausa.
+    /// Só o nome da conversa; o texto das mensagens nunca é lido.
+    func conversaDoPeriodo(de: Date, ate: Date, done: @escaping (String?) -> Void) {
+        lookupQueue.async {
+            let margem: TimeInterval = 120   // mensagem logo antes ou logo depois ainda é a mesma conversa
+            let nome = self.conversaTop(desde: de.timeIntervalSince1970 - margem, ate: ate.timeIntervalSince1970 + margem)
+            DispatchQueue.main.async { done(nome) }
+        }
+    }
+
+    private func conversaTop(desde: Double, ate: Double) -> String? {
+        guard let db = abrir() else { return nil }
+        defer { sqlite3_close(db) }
+        let sql = """
+        select s.ZPARTNERNAME, count(*) as n
+        from ZWAMESSAGE m join ZWACHATSESSION s on m.ZCHATSESSION = s.Z_PK
+        where s.ZSESSIONTYPE != ? and m.ZMESSAGEDATE + ? between ? and ?
+        group by s.ZPARTNERNAME order by n desc limit 1
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int(stmt, 1, WhatsAppMonitor.tipoStatus)
+        sqlite3_bind_double(stmt, 2, WhatsAppMonitor.epocaCoreData)
+        sqlite3_bind_double(stmt, 3, desde)
+        sqlite3_bind_double(stmt, 4, ate)
+        guard sqlite3_step(stmt) == SQLITE_ROW, let nome = texto(stmt, 0), !nome.isEmpty else { return nil }
+        return nome
     }
 
     // MARK: - Registro (arquivos lidos e fila de envio)

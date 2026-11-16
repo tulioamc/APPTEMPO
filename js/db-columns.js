@@ -1,4 +1,16 @@
 window.DB_COLUMNS = {
+ "tempo_wa_contacts": [
+  "id",
+  "user_id",
+  "jid",
+  "name",
+  "tipo",
+  "tipo_id",
+  "client_id",
+  "agency_id",
+  "created_at",
+  "updated_at"
+ ],
  "tempo_agencies": [
   "id",
   "user_id",

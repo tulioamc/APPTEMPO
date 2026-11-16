@@ -14,3 +14,17 @@ async function waReport(linhas) {
     await c.from('tempo_wa_daily').upsert(diario, { onConflict: 'user_id,jid,day' });
   } catch (e) { console.warn('waReport', e); }
 }
+
+/* Contato da conversa aberta no WhatsApp (o app do Mac manda o nome junto da atividade). */
+function waContato(nome) {
+  const n = String(nome || '').trim().toLowerCase();
+  if (!n || n === 'whatsapp') return null;
+  return db.all('tempo_wa_contacts').find(c => String(c.name || '').trim().toLowerCase() === n) || null;
+}
+/* Conversa de trabalho? Cliente, agência, colega, fornecedor, administrativo e "misto mais cliente".
+   Sem classificação, o contato conta como amigo: o tempo vira pausa. */
+function waEhTrabalho(c) {
+  const o = c && c.tipo_id ? db.get('tempo_status_options', c.tipo_id) : null;
+  return !!o && o.category === 'trabalho';
+}
+const waTipoNome = (c) => { const o = c && c.tipo_id ? db.get('tempo_status_options', c.tipo_id) : null; return o ? o.name : 'Amigo'; };

@@ -320,9 +320,16 @@ async function suggestActivity(seg) {
   const ruleProject = rule ? db.get('tempo_projects', rule.project_id) : null;
   if (!a) { if (!isPauseApp && (ruleProject || DESIGN_APP_RE.test(seg.app))) suggestStart(ruleProject, seg); return; }
   if (a.state === 'running' && !isPauseApp) recordActivity(a, { ...seg, rid: logged?.rid || null });
-  // app que pausa: só marca no bruto (o cronômetro segue) e vira aviso para você conferir
-  // WhatsApp/Telegram não são atividade: viram pausa (a partir de 1 minuto, como as outras atividades)
-  if (isPauseApp) suggestPause(fromMs, toMs, 'app', siteHit ? siteHit.replace(/^./, c => c.toUpperCase()) : seg.app);
+  // WhatsApp de trabalho (cliente, agência, colega, fornecedor, administrativo) conta como trabalho, sem perguntar;
+  // qualquer outra conversa vira pausa sozinha, sem aprovação (ela entra como distração nos relatórios).
+  if (isPauseApp) {
+    const contato = waContato(seg.doc);
+    if (contato && waEhTrabalho(contato)) {
+      if (a.state === 'running') recordActivity(a, { ...seg, rid: logged?.rid || null });
+      return;
+    }
+    suggestPause(fromMs, toMs, 'app', siteHit ? siteHit.replace(/^./, c => c.toUpperCase()) : seg.app);
+  }
 }
 /* Arquivo sem salvar há muito tempo (programas de criação). "Nunca salvo" (Untitled, Sem título, sem caminho):
    avisa com 15 min de uso; alterações não salvas (título com "*"): com 30 min. Repete a cada novo bloco do mesmo tamanho.
@@ -496,6 +503,13 @@ ACTIONS['mac-update'] = async () => {
   if (!api || !api.atualizar_app) return toast('Abra o Tempo no Mac para atualizar o app.');
   try { await api.atualizar_app(); toast('Atualizando o app do Mac. Ele fecha e abre sozinho em cerca de 1 minuto.', { ms: 8000 }); }
   catch (e) { toast('Não consegui iniciar a atualização do app do Mac.'); }
+};
+/* Link de arquivo na Anotação (nota fiscal, comprovante): abre no Mac. No navegador, copia o caminho. */
+ACTIONS['file-open'] = async (el) => {
+  const path = el.dataset.path; if (!path) return;
+  if (isMacApp()) { try { window.webkit.messageHandlers.tempo.postMessage({ type: 'open', path }); } catch (e) { toast('Não consegui abrir o arquivo.'); } return; }
+  try { await navigator.clipboard.writeText(path); toast('Caminho copiado. No app do Mac, o link abre o arquivo direto.'); }
+  catch (e) { toast('Abra pelo app do Mac para o arquivo abrir com um clique.'); }
 };
 ACTIONS['app-update'] = async () => {
   try {

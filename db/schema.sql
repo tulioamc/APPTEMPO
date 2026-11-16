@@ -342,3 +342,29 @@ begin
 end $$;
 revoke execute on function public.tempo_sync_state() from public, anon;
 grant execute on function public.tempo_sync_state() to authenticated;
+
+-- Contatos do WhatsApp (o app do Mac manda nome, tipo e quantidade; nunca o texto das mensagens).
+-- tipo_id marca quem é de trabalho: o tempo de WhatsApp com esses contatos conta como trabalho, e não como pausa.
+create table if not exists tempo_wa_contacts (
+  id uuid not null unique default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  jid text not null,
+  name text,
+  tipo text,                            -- 'amigo' ou 'grupo', como veio do WhatsApp
+  tipo_id uuid references tempo_status_options(id) on delete set null,   -- Cliente, Agência, Colega, Fornecedor, Administrativo, Misto, Amigo
+  client_id uuid references tempo_clients(id) on delete set null,
+  agency_id uuid references tempo_agencies(id) on delete set null,
+  created_at timestamptz not null default now(), updated_at timestamptz,
+  primary key (user_id, jid)
+);
+-- migração: alter table tempo_wa_contacts add column if not exists id uuid not null default gen_random_uuid(), add column if not exists tipo_id uuid, add column if not exists updated_at timestamptz;
+-- migração: create unique index if not exists tempo_wa_contacts_id_key on tempo_wa_contacts(id);
+
+-- Mensagens enviadas por conversa e por dia (só a contagem).
+create table if not exists tempo_wa_daily (
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  jid text not null,
+  day date not null,
+  sent int not null default 0,
+  primary key (user_id, jid, day)
+);

@@ -4,6 +4,7 @@
 function comboItems(kind) {
   if (kind.startsWith('ex_')) return exComboItems(kind);
   if (['work', 'payment', 'quote'].includes(kind)) return statuses(kind).map(s => ({ id: s.id, name: s.name, color: s.color, html: tag(s.name, s.color, { pill: kind !== 'payment' }) }));
+  if (kind === 'wa_tipo') return statuses(kind).map(s => ({ id: s.id, name: s.name, color: s.color, html: tag(s.name, s.color, { pill: true }) }));
   if (kind.startsWith('reimb_')) return statuses(kind).map(s => ({ id: s.id, name: s.name, color: s.color, html: tag(s.name, s.color, { pill: true }) }));
   if (kind === 'wt') return workTypes().map(w => ({ id: w.id, name: w.name, color: w.color, html: tag(w.name, w.color) }));
   if (kind === 'agency') return agencies().map(a => ({ id: a.id, name: a.name, color: a.color, html: tag(a.name, a.color, { upper: true }) }));

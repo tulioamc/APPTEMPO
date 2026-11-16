@@ -182,6 +182,22 @@ VIEWS.reimb = () => {
 };
 
 /* colunas da tabela de reembolsos (mesmo componente da lista de Freelas) */
+/* Caminho de arquivo na Anotação vira botão: no app do Mac abre a nota ou o comprovante. */
+const RB_LINK_RE = /\[(LINK NF|LINK PAGAMENTO)\]\s*(\/[^\n]+)/g;
+function rbNoteCell(r) {
+  const txt = String(r.note || '');
+  if (!txt.trim()) return '<span class="faint">—</span>';
+  let out = '', fim = 0;
+  txt.replace(RB_LINK_RE, (m, rotulo, caminho, i) => {
+    out += esc(txt.slice(fim, i));
+    const p = caminho.trim();
+    out += `<button class="tag c-blue" data-act="file-open" data-path="${esc(p)}" title="${esc(p)}">${rotulo === 'LINK NF' ? 'Nota fiscal' : 'Comprovante'}</button>`;
+    fim = i + m.length;
+    return m;
+  });
+  out += esc(txt.slice(fim));
+  return out.trim() || '<span class="faint">—</span>';
+}
 const rbTagOf = (kind, id) => { const st = statuses(kind).find(x => x.id === id); return st ? tag(st.name, st.color, { pill: true }) : '<span class="faint">—</span>'; };
 const RB_COLS = {
   name: { label: 'Despesa', ico: 'text', cls: 'name', sort: r => r.name || '', w: 230, cell: r => esc(r.name || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.name, set: (r, v) => db.update('tempo_reimb_rows', r.id, { name: (v || '').trim() }) } },
@@ -193,6 +209,6 @@ const RB_COLS = {
   amount: { label: 'Valor', ico: 'money', money: true, w: 120, cell: r => r.amount ? fmtMoney(r.amount) : r.suggested_amount ? `<span class="faint" title="Sugestão do mês anterior (não conta até você digitar)">${fmtMoney(r.suggested_amount)}</span>` : '<span class="faint">—</span>', val: r => r.amount || 0, edit: { type: 'money', get: r => r.amount, set: (r, v) => db.update('tempo_reimb_rows', r.id, { amount: v ?? null, suggested_amount: null }) } },
   refund: { label: 'Reembolso', ico: 'spin', w: 150, cell: r => rbTagOf('reimb_refund', r.refund_id), edit: { type: 'combo', kind: 'reimb_refund', get: r => r.refund_id, set: (r, v) => { const done = statuses('reimb_refund').find(x => x.id === v)?.name === 'Feito!'; db.update('tempo_reimb_rows', r.id, { refund_id: v, ...(done && !r.refunded_on ? { refunded_on: ymd(new Date()) } : {}) }); } } },
   refunded: { label: 'Reembolsado em', ico: 'cal', w: 130, cell: r => r.refunded_on ? fmtDate(r.refunded_on) : '<span class="faint">—</span>', sort: r => r.refunded_on || '', edit: { type: 'date', get: r => r.refunded_on, set: (r, v) => db.update('tempo_reimb_rows', r.id, { refunded_on: v || null }) } },
-  note: { label: 'Anotação', ico: 'text', w: 240, cell: r => esc(r.note || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.note, set: (r, v) => db.update('tempo_reimb_rows', r.id, { note: (v || '').trim() }) } },
+  note: { label: 'Anotação', ico: 'text', w: 240, cell: r => rbNoteCell(r), edit: { type: 'text', get: r => r.note, set: (r, v) => db.update('tempo_reimb_rows', r.id, { note: (v || '').trim() }) } },
   del: { label: '', w: 44, cell: r => `<button class="icon-btn ghost" data-act="rb-del" data-id="${r.id}" title="Remover linha">×</button>` }
 };
