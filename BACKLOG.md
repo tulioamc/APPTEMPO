@@ -680,3 +680,7 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 **V2.04.14 — Dentista nos reembolsos**
 - Comprovantes da dentista do Rafa entram na linha "Dentista", vindos de "Cristiana da Fonte (Dentista Rafa)" ou de "CrescerOdonto Dentista" (app do Mac e site). Ela não passa nota nem tem reembolso: linhas Dentista de out e nov marcadas "Não se aplica" em Reembolso e Requerimento (repete nos meses novos).
 - Nome da conversa agora é comparado sem diferença de maiúsculas, acentos, espaços e marcas invisíveis do WhatsApp, no Mac e no site.
+
+**V2.04.15 — notas e comprovantes: nome novo e link abre o Finder**
+- Arquivos em iCloud/Terapias/AAAA_MM passam a se chamar NomeDaTerapia_AAAA_MM_Nota.ext ou NomeDaTerapia_AAAA_MM_Comprovante.ext (extensão do arquivo original). O app do Mac renomeia os antigos (NotaFiscal_…/Comprovante_…) ao abrir, sem sobrescrever; as Anotações dos reembolsos foram atualizadas no banco.
+- O link na Anotação abre o Finder com o arquivo selecionado (antes abria o arquivo). Link antigo ainda funciona; se o arquivo sumiu, abre a pasta do mês.

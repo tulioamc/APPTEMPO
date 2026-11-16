@@ -22,9 +22,35 @@ enum ICloudTerapias {
         let nome = nomeTerapeuta(terapeuta)
         let extensao = ["pdf", "png", "jpg", "jpeg"].contains(ext) ? ext : ""
         guard !nome.isEmpty, !extensao.isEmpty, anoMes.range(of: "^\\d{4}_\\d{2}$", options: .regularExpression) != nil else { return nil }
-        if tipo == "nota" { return "NotaFiscal_\(anoMes)_\(nome).\(extensao)" }
-        if tipo == "comprovante" { return "Comprovante_\(anoMes)_\(nome).\(extensao)" }
+        // Nome da terapia primeiro: Aloma_2026_11_Nota.pdf, Aloma_2026_11_Comprovante.png (extensão do arquivo original)
+        if tipo == "nota" { return "\(nome)_\(anoMes)_Nota.\(extensao)" }
+        if tipo == "comprovante" { return "\(nome)_\(anoMes)_Comprovante.\(extensao)" }
         return nil
+    }
+
+    /// Nome antigo (NotaFiscal_2026_11_Aloma.pdf) → novo (Aloma_2026_11_Nota.pdf). nil se não for do formato antigo.
+    static func nomeNovo(_ antigo: String) -> String? {
+        let re = try! NSRegularExpression(pattern: "^(NotaFiscal|Comprovante)_(\\d{4})_(\\d{2})_(.+?)(\\s\\(\\d+\\))?\\.([A-Za-z0-9]+)$")
+        let ns = antigo as NSString
+        guard let m = re.firstMatch(in: antigo, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        let g = { (i: Int) -> String in m.range(at: i).location == NSNotFound ? "" : ns.substring(with: m.range(at: i)) }
+        let tipo = g(1) == "NotaFiscal" ? "Nota" : "Comprovante"
+        return "\(g(4))_\(g(2))_\(g(3))_\(tipo)\(g(5)).\(g(6))"
+    }
+
+    /// Uma vez por abertura do app: renomeia para o formato novo os arquivos que ainda estão no antigo. Nunca sobrescreve.
+    static func renomearAntigos() {
+        let fm = FileManager.default
+        let base = root.appendingPathComponent("Terapias")
+        guard let meses = try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: nil) else { return }
+        for mes in meses {
+            guard let arqs = try? fm.contentsOfDirectory(at: mes, includingPropertiesForKeys: nil) else { continue }
+            for a in arqs {
+                guard let novo = nomeNovo(a.lastPathComponent) else { continue }
+                let destino = mes.appendingPathComponent(novo)
+                if !fm.fileExists(atPath: destino.path) { try? fm.moveItem(at: a, to: destino) }
+            }
+        }
     }
 
     static func pasta(_ anoMes: String) -> URL { root.appendingPathComponent("Terapias").appendingPathComponent(anoMes) }
@@ -106,6 +132,7 @@ final class WhatsAppMonitor {
     private var avisado = false
 
     func start() {
+        queue.async { ICloudTerapias.renomearAntigos() }
         queue.asyncAfter(deadline: .now() + 20) { [weak self] in self?.cycle() }   // deixa o site carregar
     }
 

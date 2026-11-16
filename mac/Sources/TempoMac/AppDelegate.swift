@@ -158,11 +158,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     /// Só abre o que está dentro do iCloud Drive, onde o Tempo guarda esses arquivos.
     private func handleOpen(_ d: [String: Any]) {
         guard let caminho = (d["path"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !caminho.isEmpty else { return }
-        let url = URL(fileURLWithPath: (caminho as NSString).expandingTildeInPath).standardizedFileURL
-        guard url.path.hasPrefix(ICloudTerapias.root.standardizedFileURL.path), FileManager.default.fileExists(atPath: url.path) else {
-            showNotice("Tempo", "Não encontrei esse arquivo no iCloud."); return
+        var url = URL(fileURLWithPath: (caminho as NSString).expandingTildeInPath).standardizedFileURL
+        guard url.path.hasPrefix(ICloudTerapias.root.standardizedFileURL.path) else { return }
+        let fm = FileManager.default
+        // link antigo de um arquivo que já foi renomeado para o formato novo
+        if !fm.fileExists(atPath: url.path), let novo = ICloudTerapias.nomeNovo(url.lastPathComponent) {
+            url = url.deletingLastPathComponent().appendingPathComponent(novo)
         }
-        NSWorkspace.shared.open(url)
+        if fm.fileExists(atPath: url.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])   // abre o Finder com o arquivo selecionado
+        } else if fm.fileExists(atPath: url.deletingLastPathComponent().path) {
+            NSWorkspace.shared.open(url.deletingLastPathComponent())   // o arquivo sumiu: abre ao menos a pasta do mês
+        } else {
+            showNotice("Tempo", "Não encontrei esse arquivo no iCloud.")
+        }
     }
 
     /// Grava nota fiscal (PDF) ou comprovante (PNG) em iCloud/Terapias/<Ano_Mes>, a pedido do site.
