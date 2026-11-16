@@ -36,3 +36,109 @@ function waEhTrabalho(c) {
   return !!o && o.category === 'trabalho';
 }
 const waTipoNome = (c) => { const o = c && c.tipo_id ? db.get('tempo_status_options', c.tipo_id) : null; return o ? o.name : 'Amigo'; };
+
+/* ---------- Sugestão de tipo pelo nome ----------
+   Contato cujo nome contém o nome de um cliente, de uma agência (ou da sigla dela) ou, nos grupos, de um projeto ativo
+   ganha uma sugestão. Ex.: "[BRENDA] OPEN TO WORKS" → Agência · Brenda; "Carla BB" → Cliente · BB. Nada entra sem você aceitar. */
+const waNorm = (t) => ' ' + String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+function waSugestao(c) {
+  const nome = waNorm(c.name); if (nome.trim().length < 2) return null;
+  const bate = (t, min = 3) => { const n = waNorm(t); return n.trim().length >= min && nome.includes(n); };
+  if (c.tipo === 'grupo') {
+    const p = (db.all('tempo_projects') || []).filter(x => !x.archived && bate(x.name, 4)).sort((a, b) => String(b.name).length - String(a.name).length)[0];
+    if (p) { const cl = db.get('tempo_clients', p.client_id); return { tipo: 'Cliente', client_id: p.client_id || null, project_id: p.id, label: `Projeto · ${p.name}${cl ? ` (${cl.name})` : ''}` }; }
+  }
+  const cl = (db.all('tempo_clients') || []).filter(x => !x.archived && bate(x.name)).sort((a, b) => String(b.name).length - String(a.name).length)[0];
+  if (cl) return { tipo: 'Cliente', client_id: cl.id, label: `Cliente · ${cl.name}` };
+  const ag = (db.all('tempo_agencies') || []).filter(x => !x.archived && (bate(x.name) || (x.abbr && bate(x.abbr, 2)))).sort((a, b) => String(b.name).length - String(a.name).length)[0];
+  if (ag) return { tipo: 'Agência', agency_id: ag.id, label: `Agência · ${ag.name}` };
+  return null;
+}
+/* Aplica a sugestão: tipo + cliente/agência/projeto. */
+function waAceitarSugestao(c) {
+  const s = waSugestao(c); if (!s) return false;
+  const tipo = statuses('wa_tipo').find(o => o.name === s.tipo); if (!tipo) return false;
+  const patch = { client_id: s.client_id || null, agency_id: s.agency_id || null, project_id: s.project_id || null };
+  if (!c.tipo_id || !waEhTrabalho(c)) patch.tipo_id = tipo.id;
+  db.update('tempo_wa_contacts', c.id, patch, true);
+  return true;
+}
+
+/* ---------- Conversas: última recebida/enviada, resposta média e mensagens do celular ----------
+   O app do Mac manda a cada 5 min: { conversas: [{ jid, name, grupo, lastIn, lastOut, respMed, respN }], enviadas: [{ name, t }] }
+   (horários em segundos Unix; enviadas = mensagens que você mandou nas últimas 24 h, de qualquer aparelho). Nunca o texto. */
+async function waReportConversas(d) {
+  const c = window.tempoClient;
+  if (!c || !d || !Array.isArray(d.conversas)) return;
+  try {
+    const { data: { user } } = await c.auth.getUser(); if (!user) return;
+    const iso = (t) => t > 0 ? new Date(t * 1000).toISOString() : null;
+    const linhas = d.conversas.filter(x => x.jid).map(x => ({ user_id: user.id, jid: x.jid, name: x.name || x.jid, tipo: x.grupo ? 'grupo' : 'amigo',
+      last_in: iso(x.lastIn), last_out: iso(x.lastOut), resp_med_s: x.respN > 0 ? Math.round(x.respMed) : null, resp_n: x.respN || 0 }));
+    if (linhas.length) await c.from('tempo_wa_contacts').upsert(linhas, { onConflict: 'user_id,jid' });
+    await db.refresh();
+  } catch (e) { console.warn('waReportConversas', e); }
+  try { waRotularPausas(d.enviadas || []); } catch (e) { console.warn('waRotularPausas', e); }
+  try { waResponder(); } catch (e) { console.warn('waResponder', e); }
+}
+
+/* Celular: o WhatsApp do celular nunca cria pausa, só dá nome a uma que já existe.
+   Pausa de parado (mouse e teclado, ou pausa sem motivo) com mensagem sua a quem não é de trabalho no mesmo horário → "WhatsApp".
+   Pausa de computador fechado, trecho movido e trabalho não mudam. */
+const WA_ROTULAVEL = (w) => !w || w === 'mac' || w === 'ocioso' || w === 'manual';
+function waRotularPausas(enviadas) {
+  const amigos = enviadas.filter(m => m && m.t > 0 && !waEhTrabalho(waContato(m.name))).map(m => m.t * 1000);
+  if (!amigos.length) return 0;
+  const desde = Date.now() - 48 * 36e5; let n = 0;
+  (db.all('tempo_time_entries') || []).forEach(e => {
+    const segs = e.segments || []; if (segs.length < 2) return;
+    let mudou = false; const novos = segs.map(x => ({ ...x }));
+    for (let i = 0; i < segs.length - 1; i++) {
+      const a = segs[i].e ? new Date(segs[i].e).getTime() : null, b = segs[i + 1].s ? new Date(segs[i + 1].s).getTime() : null;
+      if (!a || !b || b <= a || b < desde || !WA_ROTULAVEL(segs[i].why)) continue;
+      if (amigos.some(t => t >= a && t <= b)) { novos[i].why = 'WhatsApp'; mudou = true; n++; }
+    }
+    if (mudou) db.update('tempo_time_entries', e.id, { segments: novos, edits: [...(e.edits || []), { at: nowISO(), reason: 'Pausa rotulada como WhatsApp (mensagens pelo celular no mesmo horário)', before: segs }] }, true);
+  });
+  if (n) db.emit();
+  return n;
+}
+
+/* Minutos de horário de trabalho (seg a sex, 9h às 19h, fora das férias) entre dois instantes. */
+const WA_INICIO_H = 9, WA_FIM_H = 19;
+function waMinutosUteis(deMs, ateMs) {
+  let total = 0; const d = new Date(deMs); d.setHours(0, 0, 0, 0);
+  for (let guard = 0; d.getTime() < ateMs && guard < 60; guard++, d.setDate(d.getDate() + 1)) {
+    const dia = ymd(d), sem = d.getDay();
+    if (sem === 0 || sem === 6 || (typeof emFerias === 'function' && emFerias(dia))) continue;
+    const ini = new Date(d); ini.setHours(WA_INICIO_H, 0, 0, 0);
+    const fim = new Date(d); fim.setHours(WA_FIM_H, 0, 0, 0);
+    const a = Math.max(deMs, ini.getTime()), b = Math.min(ateMs, fim.getTime());
+    if (b > a) total += (b - a) / 60e3;
+  }
+  return total;
+}
+/* "Responder [contato]" no To-Do: mensagem de contato de trabalho sem resposta há 1 h (cliente) ou 2 h (colega, fornecedor,
+   administrativo, agência), contando só o horário de trabalho. Some sozinha quando você responde. Grupos não geram tarefa. */
+function waPrazoResposta(c) { const t = waTipoNome(c); return (t === 'Cliente' || t === 'Misto (mais cliente)') ? 60 : 120; }
+function waResponder(agora = Date.now()) {
+  const todos = db.all('tempo_notices') || [];
+  (db.all('tempo_wa_contacts') || []).forEach(c => {
+    const tIn = c.last_in ? new Date(c.last_in).getTime() : 0, tOut = c.last_out ? new Date(c.last_out).getTime() : 0;
+    // respondeu: fecha as tarefas abertas desse contato
+    todos.filter(n => n.kind === 'todo' && n.status !== 'done' && n.data?.wa === c.jid && tOut >= (n.data.wa_in || 0))
+      .forEach(n => db.update('tempo_notices', n.id, { status: 'done', decision: 'Respondido no WhatsApp', decided_at: nowISO() }, true));
+    if (c.tipo === 'grupo' || !waEhTrabalho(c) || !tIn || tOut >= tIn) return;
+    if (waMinutosUteis(tIn, agora) < waPrazoResposta(c)) return;
+    if (todos.some(n => n.kind === 'todo' && n.data?.wa === c.jid && n.data?.wa_in === tIn)) return;
+    db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: `Responder ${c.name}`, body: '', data: { auto: true, wa: c.jid, wa_in: tIn }, decision: '', decided_at: null, snooze_until: null }, true);
+  });
+  db.emit();
+}
+
+/* Tempo de hoje no WhatsApp com quem não é de trabalho (registro de atividade). */
+function waAmigosHojeMs(dia = ymd(new Date())) {
+  return (db.setting('actlog:' + dia, null) || []).filter(r => /whatsapp/i.test(String(r.app || '')) && !waEhTrabalho(waContato(r.doc)))
+    .reduce((t, r) => t + Math.max(0, new Date(r.to) - new Date(r.from)), 0);
+}
+const waAmigosLimiteMin = () => Number(db.setting('waAmigosMin', 30)) || 30;

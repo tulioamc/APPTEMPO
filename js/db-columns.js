@@ -17,7 +17,12 @@ window.DB_COLUMNS = {
   "tipo_id",
   "client_id",
   "agency_id",
+  "project_id",
   "last_at",
+  "last_in",
+  "last_out",
+  "resp_med_s",
+  "resp_n",
   "created_at",
   "updated_at"
  ],

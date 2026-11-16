@@ -338,6 +338,9 @@ function scanAlerts() {
     const inc = r.kind === 'in';
     addNotice({ kind: inc ? 'cobranca' : 'conta', key: `ex:${r.id}`, title: `${inc ? 'Recebimento atrasado' : 'Conta vencida'}: ${r.name || 'sem nome'}`, body: `Venceu em ${fmtDate(r.due_date)}${r.amount ? ` · ${fmtMoney(r.amount)}` : ''}.`, entity: 'expense', entity_id: r.id, data: {} }, true);
   });
+  /* Conversa longa com amigos no WhatsApp: um aviso por dia quando passa do limite que você definiu (Contatos). */
+  if (!FERIAS_HOJE) { const ms = waAmigosHojeMs(today), lim = waAmigosLimiteMin();
+    if (ms >= lim * 60e3) addNotice({ kind: 'wa-alerta', key: `wa-amigos:${today}`, title: `Hoje: ${fmtDur(ms)} no WhatsApp com amigos`, body: `Passou dos ${lim} min que você definiu. Contatos sem tipo contam como amigo.`, entity: 'wa', data: { ms } }); }
   /* Contatos do WhatsApp sem classificar há mais de 3 dias: um aviso, que some quando você classifica todos. */
   const waVelhos = (db.all('tempo_wa_contacts') || []).filter(c => !c.tipo_id && c.created_at && daysBetween(ymd(new Date(c.created_at)), today) >= 3)
     .sort((x, y) => String(x.created_at).localeCompare(String(y.created_at)));

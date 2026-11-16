@@ -94,6 +94,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             guard let self = self, let json = self.jsonString(linhas) else { return }
             self.web.evaluateJavaScript("window.TempoBridge && window.TempoBridge.reportWhatsApp && window.TempoBridge.reportWhatsApp(\(json)); true", completionHandler: nil)
         }
+        whatsapp.sendConversas = { [weak self] dados in
+            guard let self = self, let json = self.jsonString(dados) else { return }
+            self.web.evaluateJavaScript("window.TempoBridge && window.TempoBridge.reportWhatsAppConversas && window.TempoBridge.reportWhatsAppConversas(\(json)); true", completionHandler: nil)
+        }
         whatsapp.sendNotes = { [weak self] itens, done in
             guard let self = self, let json = self.jsonString(itens) else { done([]); return }
             let js = "(function(){ var b = window.TempoBridge; if (!b || typeof b.reportNfse !== 'function') return '[]'; return JSON.stringify(b.reportNfse(\(json)) || []); })()"

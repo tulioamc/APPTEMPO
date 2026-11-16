@@ -225,6 +225,8 @@ window.TempoBridge = {
   },
   reportActivity: (seg) => suggestActivity(seg),
   reportWhatsApp: (linhas) => waReport(linhas),
+  // conversas: última recebida/enviada, resposta média e mensagens enviadas (para o celular rotular pausas)
+  reportWhatsAppConversas: (d) => waReportConversas(d),
   // o app do Mac avisa se criou o lembrete (alarme de to-do) no app Lembretes
   reminderDone: (id, ok) => todoAlarmDone(id, ok),
   version: 3,

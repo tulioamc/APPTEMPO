@@ -528,3 +528,11 @@ Estado ao fim da conversa V2.03 (site em V2.03.17):
 - Teste novo: todo kind de `DEFAULT_STATUS` precisa estar no check do schema.
 - 16/11, 11h50: os 28 recebimentos antigos da BRENDA (09/2024 a 01/2026) eram freelas de projetos que ele não sabe separar: categoria "Freelas", marcados como revisados.
 - 16/11: Pix de R$ 200 dele mesmo (11/09/2026) marcado como interno. Transferências PJ encerradas.
+
+**V2.04.10 — WhatsApp: sugestões, celular, "Responder" e resposta média**
+- Sugestão pelo nome (`waSugestao`): contato cujo nome contém o de um cliente, agência (ou sigla) ou, nos grupos, de um projeto ativo ganha sugestão com botão Aceitar (e "Aceitar N sugestões"). Grupo aceito fica ligado ao projeto (`tempo_wa_contacts.project_id`) e ao cliente dele.
+- App do Mac manda a cada 5 min `reportWhatsAppConversas`: por conversa, última mensagem recebida e enviada e tempo médio de resposta (30 dias, até 72 h, sem grupos); e os horários das mensagens enviadas nas últimas 24 h. Só horários e nomes.
+- Celular rotula pausas (`waRotularPausas`): pausa de parado/sem motivo com mensagem sua a quem não é de trabalho no mesmo horário vira "WhatsApp". Nunca cria pausa; não mexe em computador fechado, trecho movido nem trabalho.
+- "Responder [contato]" no To-Do (`waResponder`): cliente e misto mais cliente após 1 h útil sem resposta, os outros de trabalho após 2 h; horário de trabalho = seg a sex, 9h às 19h, fora das férias. Fecha sozinha quando ele responde. Grupos não geram.
+- Colunas novas em Contatos: Sugestão, Resposta média, Esperando você. Aviso diário "Hoje: X no WhatsApp com amigos" ao passar do limite (padrão 30 min, ajustável no bloco Outros).
+- Pendente: silenciar o WhatsApp por 90 min no horário mais produtivo — falta o Tulio dizer o que "silenciar" deve fazer.

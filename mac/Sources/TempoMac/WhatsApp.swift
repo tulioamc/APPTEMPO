@@ -65,6 +65,9 @@ final class WhatsAppMonitor {
     var sendCounts: (([[String: Any]]) -> Void)?
     /// Notas pendentes -> window.TempoBridge.reportNfse; o site devolve os ids recebidos (thread principal).
     var sendNotes: (([[String: Any]], @escaping ([String]) -> Void) -> Void)?
+    /// Conversas (última recebida/enviada, resposta média) e horários das mensagens enviadas nas últimas 24 h
+    /// -> window.TempoBridge.reportWhatsAppConversas (thread principal).
+    var sendConversas: (([String: Any]) -> Void)?
     /// Não conseguiu abrir o banco do WhatsApp (avisa uma vez só).
     var onNoAccess: (() -> Void)?
 
@@ -114,6 +117,7 @@ final class WhatsAppMonitor {
             return
         }
         if !linhas.isEmpty { DispatchQueue.main.async { self.sendCounts?(linhas) } }
+        if let conv = lerConversas(agora: agora.timeIntervalSince1970) { DispatchQueue.main.async { self.sendConversas?(conv) } }
         lerNotas(desde: agora.addingTimeInterval(-60 * 86400).timeIntervalSince1970)
         let pend = pendentes()
         if !pend.isEmpty {
@@ -177,6 +181,55 @@ final class WhatsAppMonitor {
             ])
         }
         return out
+    }
+
+    /// Últimos 30 dias, por conversa: última mensagem recebida e enviada, tempo médio de resposta
+    /// (da primeira mensagem dele sem resposta até a sua próxima, ignorando mais de 72 h) e os horários
+    /// das mensagens que você mandou nas últimas 24 h, de qualquer aparelho (o celular sincroniza com o Mac).
+    /// Só horários e nomes; o texto nunca é lido.
+    private func lerConversas(agora: Double) -> [String: Any]? {
+        guard let db = abrir() else { return nil }
+        defer { sqlite3_close(db) }
+        let sql = """
+        select s.ZCONTACTJID, s.ZPARTNERNAME, s.ZSESSIONTYPE, m.ZMESSAGEDATE + ?, m.ZISFROMME
+        from ZWAMESSAGE m join ZWACHATSESSION s on m.ZCHATSESSION = s.Z_PK
+        where s.ZSESSIONTYPE != ? and m.ZMESSAGEDATE + ? >= ?
+        order by s.ZCONTACTJID, m.ZMESSAGEDATE
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_double(stmt, 1, WhatsAppMonitor.epocaCoreData)
+        sqlite3_bind_int(stmt, 2, WhatsAppMonitor.tipoStatus)
+        sqlite3_bind_double(stmt, 3, WhatsAppMonitor.epocaCoreData)
+        sqlite3_bind_double(stmt, 4, agora - 30 * 86400)
+        struct Conv { var name = ""; var grupo = false; var lastIn = 0.0; var lastOut = 0.0; var pend: Double? = nil; var soma = 0.0; var n = 0 }
+        var conv: [String: Conv] = [:]
+        var ordem: [String] = []
+        var enviadas: [[String: Any]] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let jid = texto(stmt, 0), !jid.isEmpty else { continue }
+            let t = sqlite3_column_double(stmt, 3)
+            let meu = sqlite3_column_int(stmt, 4) == 1
+            if conv[jid] == nil { conv[jid] = Conv(name: texto(stmt, 1) ?? jid, grupo: sqlite3_column_int(stmt, 2) == 1); ordem.append(jid) }
+            var c = conv[jid]!
+            if meu {
+                c.lastOut = max(c.lastOut, t)
+                if let p = c.pend, !c.grupo { let d = t - p; if d > 0 && d < 72 * 3600 { c.soma += d; c.n += 1 } }
+                c.pend = nil
+                if t >= agora - 86400 && enviadas.count < 500 { enviadas.append(["name": c.name, "t": t]) }
+            } else {
+                c.lastIn = max(c.lastIn, t)
+                if c.pend == nil { c.pend = t }
+            }
+            conv[jid] = c
+        }
+        let lista: [[String: Any]] = ordem.compactMap { jid in
+            guard let c = conv[jid] else { return nil }
+            return ["jid": jid, "name": c.name, "grupo": c.grupo, "lastIn": c.lastIn, "lastOut": c.lastOut,
+                    "respMed": c.n > 0 ? c.soma / Double(c.n) : 0, "respN": c.n]
+        }
+        return ["conversas": lista, "enviadas": enviadas]
     }
 
     /// (conversa, caminho do arquivo, data Core Data) dos PDFs e fotos desde `desde` (Unix).
