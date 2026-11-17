@@ -769,3 +769,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V2.06.33: pausa por falta de registro e bloqueio também leem a lixeira do log; correção retroativa desde 19/10 (só onde o log existe).
 - V2.06.34: setinha dos grupos abre a lista; caminho no Editar sessão com links (agência, cliente, projeto, tarefa).
 - V2.06.35: faixa do timesheet troca entre por tarefa, por projeto e por cliente.
+- V2.06.36: chaves "Mostrar alternância em outro projeto" e "Esconder pausas" (ambas desligadas por padrão).

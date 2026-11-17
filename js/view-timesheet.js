@@ -670,7 +670,8 @@ function openEntryModal(id, startIso = null, endIso = null) {
     }
     const b = ev.target.closest('[data-x]'); if (!b) return;
     const x = b.dataset.x;
-    if (x === 'act-fora-toggle') { db.setSetting('actShowFora', !db.setting('actShowFora', true)); return redraw(); }
+    if (x === 'act-pausa-toggle') { db.setSetting('actHidePausas', !actHidePausas()); return redraw(); }
+    if (x === 'act-fora-toggle') { db.setSetting('actShowAlt', !db.setting('actShowAlt', false)); return redraw(); }
     if (x === 'edit-seg') { const i = Number(b.dataset.i); openSeg = openSeg === i ? null : i; redraw(); return; }
     if (x === 'pick') { showPicker = true; redraw(); }
     if (x === "act-chip") { if ((b.dataset.mode !== "program")) openActGroup(e.id, b.dataset.g, redraw); else openProgChoice([e.id], b.dataset.g, b.dataset.label || 'Programa', { redraw }); return; }

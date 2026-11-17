@@ -426,9 +426,13 @@ function actUnspecChipHTML(ms) {
 }
 
 /* Checkbox "Mostrar trabalho em outros projetos": aparece só se houver espaços "fora" nas sessões. Igual na revisão e no resumo. */
+/* Chaves do timesheet: alternância em outro projeto (só se houver) e esconder pausas. As duas vêm desligadas. */
+const actHidePausas = () => !!db.setting('actHidePausas', false);
 function actForaToggleHTML(ents) {
-  if (!ents.some(e => (e.segments || []).some(x => x.why === 'moved'))) return '';
-  return `<label class="row small" style="gap:6px;cursor:pointer"><input type="checkbox" data-x="act-fora-toggle" ${db.setting('actShowFora', true) ? 'checked' : ''}> Mostrar trabalho em outros projetos</label>`;
+  const alt = ents.some(e => (e.segments || []).some(x => x.why === 'moved'))
+    ? `<label class="row small" style="gap:6px;cursor:pointer"><input type="checkbox" data-x="act-fora-toggle" ${db.setting('actShowAlt', false) ? 'checked' : ''}> Mostrar alternância em outro projeto</label>` : '';
+  const pz = `<label class="row small" style="gap:6px;cursor:pointer"><input type="checkbox" data-x="act-pausa-toggle" ${actHidePausas() ? 'checked' : ''}> Esconder pausas</label>`;
+  return `<div class="row" style="gap:18px;flex-wrap:wrap">${alt}${pz}</div>`;
 }
 function actStripHTML(e, A, mode = '') {
   const now = Date.now();
@@ -442,14 +446,14 @@ function actStripHTML(e, A, mode = '') {
   const hhmm = (t) => fmtTime(new Date(t).toISOString());
   const byId = Object.fromEntries(A.groups.map(g => [g.id, g]));
   let pauses = '';
-  for (let i = 1; i < segs.length; i++) {
+  for (let i = 1; i < segs.length && !actHidePausas(); i++) {
     const a = segs[i - 1].b, b = segs[i].a;
     if (b <= a || isForaWhy(segs[i - 1].why)) continue;
     pauses += `<span class="seg-b pausa act-pause" data-pk="${pauseKind(segs[i - 1].why || 'manual')}" style="--ph:${pauseHatch(segs[i - 1].why)};--pg:${pauseGapOf(pauseHatch(segs[i - 1].why))};left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%" data-tip="${esc(`Pausa ${hhmm(a)}–${hhmm(b)} · ${fmtDur(b - a)}\n${pauseWhy(segs[i - 1].why)}`)}"></span>`;
   }
   let bars = '';
   // trechos que saíram desta sessão para outro projeto: lacuna clicável com o destino
-  const mostrarFora = db.setting('actShowFora', true);
+  const mostrarFora = db.setting('actShowAlt', false);
   for (let i = 0; i < segs.length - 1 && mostrarFora; i++) {
     const a = e.segments[i].e, b = e.segments[i + 1].s;
     if (e.segments[i].why !== 'moved' || !a || !b || new Date(b) <= new Date(a)) continue;

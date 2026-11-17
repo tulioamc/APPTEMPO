@@ -126,7 +126,8 @@ function bindResumoClicks(box, getIds, { refresh, reabrir, close, selfProject = 
     if (modo) { db.setSetting('resMode', modo.dataset.rmode); ACT_SEL = null; refresh(); return; }
     const grp = ev.target.closest('[data-rgrupo]');
     if (grp) { db.setSetting('resGrupo', grp.dataset.rgrupo); refresh(); return; }
-    if (ev.target.closest('[data-x="act-fora-toggle"]')) { db.setSetting('actShowFora', !db.setting('actShowFora', true)); return refresh(); }
+    if (ev.target.closest('[data-x="act-pausa-toggle"]')) { db.setSetting('actHidePausas', !actHidePausas()); return refresh(); }
+    if (ev.target.closest('[data-x="act-fora-toggle"]')) { db.setSetting('actShowAlt', !db.setting('actShowAlt', false)); return refresh(); }
     const mv = ev.target.closest('.act-moved[data-pid]');
     if (mv && mv.dataset.pid) { close && close(); return openProject(mv.dataset.pid); }
     const all = ev.target.closest('[data-x="res-all"], [data-x="res-proj"]');
@@ -200,7 +201,7 @@ function resumoBodyHTML(es, opts = {}) {
       const pos = (a, b) => ({ l: base + Math.max(0, a - x.st) / x.span * wS, w: Math.max(.3, (Math.min(x.span, b - x.st) - Math.max(0, a - x.st)) / x.span * wS) });
       fileAn.records.filter(r => r._i === i).forEach(r => { const g = fileAn.groups.find(z => z.id === r.gid); const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}"${fParentOf[r.gid] ? ` data-par="${esc(fParentOf[r.gid])}" data-tbc="${esc(fColorOf[r.gid])}"` : ''}${fParentOf[r.gid] === 'outros' ? fOthAttr : ''} data-tip="${esc(g ? actTip(g) : r.app)}" style="--tb:${fParentOf[r.gid] ? '#94A3B8' : (fColorOf[r.gid] || 'var(--accent)')};left:${q.l}%;width:${q.w}%"></span>`; });
       actUnspecOf(x.e).forEach(([a, b]) => { const q = pos(a, b); parts += actUnspecSpanHTML(a, b, q.l, q.w); });
-      pauseGapsOf([x.e]).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" data-pk="${pauseKind(g.why || 'manual')}" data-tip="${esc(`Pausa · ${pauseLabel(g.why)}\n${fmtTime(g.s)}–${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
+      if (!actHidePausas()) pauseGapsOf([x.e]).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" data-pk="${pauseKind(g.why || 'manual')}" data-tip="${esc(`Pausa · ${pauseLabel(g.why)}\n${fmtTime(g.s)}–${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
       if (i > 0) parts += `<span class="act-sep" style="left:${base}%"></span>`;
       off += wS;
     });
@@ -238,22 +239,22 @@ function resumoBodyHTML(es, opts = {}) {
       slices.push({ e: x.e.id, l: base, w: wS, st: x.st, span: x.span });
       const pos = (a, b) => ({ l: base + Math.max(0, a - x.st) / x.span * wS, w: Math.max(.3, (Math.min(x.span, b - x.st) - Math.max(0, a - x.st)) / x.span * wS) });
       an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}"${parentOf[r.gid] ? ` data-par="${esc(parentOf[r.gid])}" data-tbc="${esc(colorOf[r.gid])}"` : ''}${parentOf[r.gid] === 'outros' ? othAttr : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" data-tip="${esc(`${shortProgram(r.app)} · ${fmtTime(r.from)}–${fmtTime(r.to)} · ${fmtDur(new Date(r.to) - new Date(r.from))}${r.doc ? '\n' + actItemName(r) : ''}`)}" style="--tb:${parentOf[r.gid] ? '#94A3B8' : (colorOf[r.gid] || 'var(--accent)')};left:${q.l}%;width:${q.w}%"></span>`; });
-      if (db.setting('actShowFora', true)) (x.e.segments || []).forEach((sg, k, arr) => {
+      if (db.setting('actShowAlt', false)) (x.e.segments || []).forEach((sg, k, arr) => {
         if (sg.why !== 'moved' || k >= arr.length - 1 || !sg.e || !arr[k + 1].s) return;
         const q = pos(new Date(sg.e).getTime(), new Date(arr[k + 1].s).getTime()); if (q.w > 0) parts += actMovedSpanHTML(sg, q.l, q.w, arr[k + 1].s);
       });
       actUnspecOf(x.e).forEach(([a, b]) => { const q = pos(a, b); parts += actUnspecSpanHTML(a, b, q.l, q.w); });
-      pauseGapsOf([x.e]).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" data-pk="${pauseKind(g.why || 'manual')}" data-tip="${esc(`Pausa · ${pauseLabel(g.why)}\n${fmtTime(g.s)}–${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
+      if (!actHidePausas()) pauseGapsOf([x.e]).forEach(g => { const q = pos(new Date(g.s).getTime(), new Date(g.e).getTime()); parts += `<span class="seg-b pausa" data-pk="${pauseKind(g.why || 'manual')}" data-tip="${esc(`Pausa · ${pauseLabel(g.why)}\n${fmtTime(g.s)}–${fmtTime(g.e)} · ${fmtDur(new Date(g.e) - new Date(g.s))}`)}" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${q.l}%;width:${q.w}%"></span>`; });
       if (i > 0) parts += `<span class="act-sep" style="left:${base}%"></span>`;
       off += wS;
     });
     bar = `<div class="act-strip res-strip" data-slices="${esc(JSON.stringify(slices))}" data-mode="program" data-ent="${esc(key)}" style="height:34px">${parts}${actSelOverlays(key, slices)}</div>`;
     note = 'Cada sessão ocupa uma fatia proporcional à sua duração, na ordem em que aconteceram.<br>Os programas e as pausas ficam no lugar em que aconteceram dentro de cada fatia.';
   } else {
-    const tot = Math.max(1, totalBruto);
+    const tot = Math.max(1, actHidePausas() ? totalBruto - totalPausa : totalBruto);
     let off = 0, parts = '';
     an.groups.filter(g => !g.hidden).forEach(g => { const w = g.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" data-g="${esc(g.id)}"${g.id === 'outros' ? ' data-par="outros" data-tbc="' + esc(g.color) + '"' + othAttr : ''} title="${esc(g.label)} · ${fmtDur(g.ms)}" style="--tb:${g.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
-    pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).forEach(bk => { const w = bk.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" data-pk="${bk.kind}" title="${esc(bk.label)} · ${fmtDur(bk.ms)}" style="--ph:${bk.color};--pg:${pauseGapOf(bk.color)};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
+    if (!actHidePausas()) pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).forEach(bk => { const w = bk.ms / tot * 100; if (w <= 0) return; parts += `<span class="seg-b pausa" data-pk="${bk.kind}" title="${esc(bk.label)} · ${fmtDur(bk.ms)}" style="--ph:${bk.color};--pg:${pauseGapOf(bk.color)};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
     const unMs = actUnspecMs(es);
     if (unMs > 0 && off < 100) { const w = Math.min(100 - off, unMs / tot * 100); parts += `<span class="seg-b unspec" style="left:${off}%;width:${Math.max(.3, w)}%" data-tip="${esc(ACT_UNSPEC_TIP + '\nTotal: ' + fmtDur(unMs))}"></span>`; off += w; }
     const restMs = Math.max(0, totalBruto - an.groups.reduce((t, g) => t + g.ms, 0) - totalPausa - unMs);
@@ -262,14 +263,14 @@ function resumoBodyHTML(es, opts = {}) {
     note = 'Tudo junto: cada programa soma o tempo de todas as sessões, e as pausas ficam por categoria. A barra inteira é o bruto.';
   }
   const legendChips = an.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="res-prog"${g.id === 'outros' ? ' data-hl="outros"' + actOthMembersAttr(an) : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-label="${esc(g.label)}" style="--tb:${g.color}"${g.id === 'outros' ? '' : ` data-tip="${esc(actTip(g) + '\nClique para mover, agrupar ou mudar a cor')}"`}><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('') + actUnspecChipHTML(actUnspecMs(es));
-  const pauseChips = pauseBucketChip ? pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).map(pauseBucketChip).join('') : '';
+  const pauseChips = pauseBucketChip && !actHidePausas() ? pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).map(pauseBucketChip).join('') : '';
   const fileMembers = (g) => {
     const arr = g.id === 'outros' ? fileAn.groups.filter(x => x.parent === 'outros').map(x => ({ l: x.label, ms: x.ms, c: x.color }))
       : (g.items || []).slice(0, 15).map(it => ({ l: it.doc || it.app, ms: it.ms, c: g.color }));
     return arr.length ? ` data-members="${esc(JSON.stringify(arr))}"` : '';
   };
   const fileChips = fileAn.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="res-file" data-g="${esc(g.id)}" style="--tb:${g.color}"${g.id === 'outros' ? fileMembers(g) : ` data-tip="${esc(actTip(g) + '\nClique para separar, agrupar, mudar a cor ou mover')}"`}><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('');
-  const legendHTML = `<div class="lbl" style="margin-top:14px">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Arquivo / site</div>${mode === 'cron' ? fileCron() : ''}<div class="act-chips">${fileChips || '<span class="muted small">Sem arquivos ou sites registrados.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || '<span class="muted small">Sem pausas.</span>'}</div>`;
+  const legendHTML = `<div class="lbl" style="margin-top:14px">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Arquivo / site</div>${mode === 'cron' ? fileCron() : ''}<div class="act-chips">${fileChips || '<span class="muted small">Sem arquivos ou sites registrados.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || `<span class="muted small">${actHidePausas() ? 'Pausas escondidas.' : 'Sem pausas.'}</span>`}</div>`;
   const sessions = resumoSessionsHTML(es, mode);
   const top = opts.embed ? `<div class="row between" style="gap:8px"><span class="lbl">Timesheet</span>${toggles}</div>` : '';
   return `${top}
