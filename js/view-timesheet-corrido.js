@@ -124,6 +124,8 @@ function bindResumoClicks(box, getIds, { refresh, reabrir, close, selfProject = 
   box.addEventListener('click', (ev) => {
     const modo = ev.target.closest('[data-rmode]');
     if (modo) { db.setSetting('resMode', modo.dataset.rmode); ACT_SEL = null; refresh(); return; }
+    const grp = ev.target.closest('[data-rgrupo]');
+    if (grp) { db.setSetting('resGrupo', grp.dataset.rgrupo); refresh(); return; }
     if (ev.target.closest('[data-x="act-fora-toggle"]')) { db.setSetting('actShowFora', !db.setting('actShowFora', true)); return refresh(); }
     const mv = ev.target.closest('.act-moved[data-pid]');
     if (mv && mv.dataset.pid) { close && close(); return openProject(mv.dataset.pid); }
@@ -206,16 +208,27 @@ function resumoBodyHTML(es, opts = {}) {
   };
   /* Por tarefa: cada sessão pinta sua fatia com a cor da tarefa; passar o mouse numa tarefa acende só ela. */
   const tasks = [];
-  const taskOf = (e) => { const t = db.get('tempo_tasks', e.task_id); const k = t ? t.id : '_'; let r = tasks.find(z => z.k === k); if (!r) { r = { k, name: t ? (t.parent_id ? (db.get('tempo_tasks', t.parent_id)?.name + ' › ' + t.name) : t.name) : 'Sem tarefa', ms: 0, n: 0 }; tasks.push(r); } return r; };
+  // agrupamento da faixa: por tarefa, por projeto ou por cliente
+  const GRUPOS = { tarefa: 'Por tarefa', projeto: 'Por projeto', cliente: 'Por cliente' };
+  const keyOf = {
+    tarefa: (e) => { const t = db.get('tempo_tasks', e.task_id); return t ? [t.id, t.parent_id ? (db.get('tempo_tasks', t.parent_id)?.name + ' › ' + t.name) : t.name] : ['_', 'Sem tarefa']; },
+    projeto: (e) => { const p = db.get('tempo_projects', e.project_id); return p ? [p.id, p.name] : ['_', 'Sem projeto']; },
+    cliente: (e) => { const p = db.get('tempo_projects', e.project_id); const c = p ? clientOf(p) : db.get('tempo_clients', e.client_id); return c ? [c.id, c.name] : ['_', 'Sem cliente']; },
+  };
+  const nGrupos = (g) => new Set(es.map(e => keyOf[g](e)[0])).size;
+  const disp = Object.keys(GRUPOS).filter(g => nGrupos(g) > 1);
+  let grupo = db.setting('resGrupo', 'tarefa'); if (!disp.includes(grupo)) grupo = disp[0] || 'tarefa';
+  const taskOf = (e) => { const [k, name] = keyOf[grupo](e); let r = tasks.find(z => z.k === k); if (!r) { r = { k, name, ms: 0, n: 0 }; tasks.push(r); } return r; };
   es.forEach(e => { const r = taskOf(e); r.ms += entryMs(e); r.n++; });
   tasks.sort((a, b) => b.ms - a.ms).forEach((t, i) => { t.color = t.k === '_' ? '#CBD5E1' : ACT_PALETTE[(i * 5 + 1) % ACT_PALETTE.length]; });
-  const taskTip = (t) => `${t.name}\n${fmtDur(t.ms)} de trabalho · ${usePctTxt(totalTrab ? t.ms / totalTrab * 100 : 0)} do projeto\n${t.n} ${t.n === 1 ? 'sessão' : 'sessões'}`;
+  const taskTip = (t) => `${t.name}\n${fmtDur(t.ms)} de trabalho · ${usePctTxt(totalTrab ? t.ms / totalTrab * 100 : 0)} do total\n${t.n} ${t.n === 1 ? 'sessão' : 'sessões'}`;
   let taskBar = '';
   if (tasks.length > 1) {
     let parts = '';
     if (mode === 'cron') { let off = 0; sess.forEach((x) => { const w = x.span / totalSpan * 100; const t = taskOf(x.e); parts += `<span class="seg-b fill res-task" data-hk="${esc(t.k)}" data-tip="${esc(`${t.name}\n${fmtTime(entryStart(x.e))}–${fmtTime(entryEnd(x.e))} · ${fmtDur(entryMs(x.e))}`)}" style="--tb:${t.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; }); }
     else { let off = 0; tasks.forEach(t => { const w = totalTrab ? t.ms / totalTrab * 100 : 0; parts += `<span class="seg-b fill res-task" data-hk="${esc(t.k)}" data-tip="${esc(taskTip(t))}" style="--tb:${t.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; }); }
-    taskBar = `<div class="act-sec" data-hkroot="1"><div class="lbl">Por tarefa</div><div class="act-strip" style="height:22px">${parts}</div><div class="act-chips">${tasks.map(t => `<span class="act-chip res-task" data-hk="${esc(t.k)}" data-tip="${esc(taskTip(t))}" style="--tb:${t.color}"><i></i>${esc(t.name)} <span class="faint">${fmtDur(t.ms)}</span></span>`).join('')}</div></div>`;
+    const grpBtns = disp.length > 1 ? `<div class="row" style="gap:6px">${disp.map(g => `<button type="button" class="btn sm ${g === grupo ? 'primary' : ''}" data-rgrupo="${g}">${GRUPOS[g]}</button>`).join('')}</div>` : '';
+    taskBar = `<div class="act-sec" data-hkroot="1"><div class="row between" style="gap:8px"><div class="lbl">${GRUPOS[grupo]}</div>${grpBtns}</div><div class="act-strip" style="height:22px">${parts}</div><div class="act-chips">${tasks.map(t => `<span class="act-chip res-task" data-hk="${esc(t.k)}" data-tip="${esc(taskTip(t))}" style="--tb:${t.color}"><i></i>${esc(t.name)} <span class="faint">${fmtDur(t.ms)}</span></span>`).join('')}</div></div>`;
   }
   if (mode === 'cron') {
     let off = 0, parts = '';
