@@ -95,7 +95,8 @@ function multEtapa(st, l) {
 /* Etapa em paralelo ou terceirizada não conta horas minhas (a terceirizada entra pelo valor, sem multiplicar). */
 /* Quantidade (ex.: 50 ícones): multiplica as horas e o valor do terceirizado da etapa; vazio = 1. */
 const qtdEtapa = (l) => Math.max(0, Number(l.qtd) > 0 ? Number(l.qtd) : 1);
-const horasEtapa = (st, l) => l.par || l.terc ? 0 : (Number(l.h) || 0) * qtdEtapa(l) * multEtapa(st, l);
+// horas sempre fechadas (sem fração): arredonda para cima
+const horasEtapa = (st, l) => l.par || l.terc ? 0 : Math.ceil((Number(l.h) || 0) * qtdEtapa(l) * multEtapa(st, l) - 1e-9);
 // aceita também valor salvo como texto ("R$ 1.200,00"), de versões anteriores
 const numBR = (v) => typeof v === 'number' ? v : (() => { const d = String(v ?? '').replace(/[^\d,.-]/g, ''); return d.includes(',') ? Number(d.replace(/\./g, '').replace(',', '.')) || 0 : Number(d) || 0; })();
 const valorTerc = (l) => l.terc ? numBR(l.valor) * qtdEtapa(l) : 0;   // terceirizado em paralelo também tem valor
@@ -140,15 +141,15 @@ function calcQuote(st, pb) {
   const hEtapas = hEt.reduce((s, v) => s + v, 0);
   const dur = 1, cx = cxMult(st.cx);
   // reuniões de aprovação somam horas (não multiplicam): quantidade × horas por reunião (padrão 1 h), divididas pelas entregas
-  const reun = Math.max(0, Number(st.aprov) || 0) * (st.hAprov === '' || st.hAprov == null ? 1 : Math.max(0, Number(st.hAprov) || 0));
-  const h = hEtapas * cx + reun;
+  const reun = Math.ceil(Math.max(0, Number(st.aprov) || 0) * (st.hAprov === '' || st.hAprov == null ? 1 : Math.max(0, Number(st.hAprov) || 0)) - 1e-9);
+  const h = Math.ceil(hEtapas * cx - 1e-9) + reun;
   const M = h * r;
   const pz = prazosEtapas(st, h); const fechado = pz.fechado;
   // por entrega: horas, prazo fechado, prazo pedido → urgência própria, e desconto próprio (R$ ou %)
   const G = gs.map(g => {
     const hg = st.lines.reduce((s, x, i) => s + (x.grp === g.id ? hEt[i] : 0), 0);
     const sh = hEtapas ? hg / hEtapas : (gs.length ? 1 / gs.length : 0);
-    const hgt = hg * cx + reun * sh; const Mg = hgt * r;
+    const hgt = Math.ceil(hg * cx - 1e-9) + reun * sh; const Mg = hgt * r;
     const temPz = st.lines.some(x => x.grp === g.id && !x.par && Number(x.prazo) > 0);
     const fg = temPz ? prazoGrupo(st, g.id) : (hgt ? Math.max(1, Math.ceil(hgt / HORAS_DIA)) : 0);
     const ped = pedidoGrupo(st, g, gs); const u = urgDe(fg, ped);
@@ -180,7 +181,7 @@ function calcQuote(st, pb) {
   const baseTot = Mf + B;
   const porGrupo = G.map(x => {
     const tg = st.lines.reduce((s, l) => s + (l.grp === x.g.id ? valorTerc(l) : 0), 0);
-    return { id: x.g.id, nome: x.g.nome, mod: x.g.mod, h: x.hg * cx, terc: tg, fechado: x.fechado, pedido: x.pedido, urg: x.urg, urgBruta: x.urgBruta, descG: x.descG,
+    return { id: x.g.id, nome: x.g.nome, mod: x.g.mod, h: Math.ceil(x.hg * cx - 1e-9), terc: tg, fechado: x.fechado, pedido: x.pedido, urg: x.urg, urgBruta: x.urgBruta, descG: x.descG,
       parte: baseTot ? (x.liq * escala + tg + Bext * x.sh) / baseTot : 0 };
   });
   return { r, hBruto, hEtapas, porGrupo, dur, cx, reun, Bext, Bterc, h, M, fechado, provavel: pz.provavel, prazoModelo: pz.doModelo, pedido, urgBruta, urg, U, Mu, desc, descEntregas, descGeral, Mf, B, C, D,
@@ -201,8 +202,8 @@ function redistribuiHoras(lines, total) {
   if (!soma) { lines.forEach((x, i) => { x.h = i ? '' : t; }); return lines; }
   let acc = 0;
   lines.forEach((x, i) => {
-    if (i === lines.length - 1) { x.h = Math.round((t - acc) * 2) / 2; return; }
-    const v = Math.round(t * (Number(x.h) || 0) / soma * 2) / 2; x.h = v; acc += v;
+    if (i === lines.length - 1) { x.h = Math.max(0, Math.round(t - acc)); return; }
+    const v = Math.round(t * (Number(x.h) || 0) / soma); x.h = v; acc += v;
   });
   return lines;
 }

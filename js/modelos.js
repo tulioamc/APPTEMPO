@@ -42,7 +42,7 @@ function openEditorModelo(chave, onSalvar) {
         <input class="input sm" data-mei="${i}" data-k="name" value="${esc(e.name)}" placeholder="Etapa" aria-label="Etapa">
         <select class="input sm" data-mei="${i}" data-k="wtId" aria-label="Tipo">${options(tipos, e.wtId, { empty: true, emptyLabel: 'Tipo' })}</select>
         <input type="number" min="1" class="input sm" data-mei="${i}" data-k="qtd" value="${e.qtd}" placeholder="1" aria-label="Quantidade">
-        ${e.terc ? `<input type="number" min="0" class="input sm mono" data-mei="${i}" data-k="valor" value="${e.valor ?? ''}" placeholder="R$" aria-label="Valor do terceirizado">` : `<input type="number" step="0.5" min="0" class="input sm" data-mei="${i}" data-k="h" value="${e.h}" placeholder="h" aria-label="Horas" ${e.par ? 'disabled' : ''}>`}
+        ${e.terc ? `<input type="number" min="0" class="input sm mono" data-mei="${i}" data-k="valor" value="${e.valor ?? ''}" placeholder="R$" aria-label="Valor do terceirizado">` : `<input type="number" step="1" min="0" class="input sm" data-mei="${i}" data-k="h" value="${e.h}" placeholder="h" aria-label="Horas" ${e.par ? 'disabled' : ''}>`}
         <input type="number" step="0.5" min="0" class="input sm" data-mei="${i}" data-k="prazo" value="${e.prazo}" placeholder="dias" aria-label="Dias úteis" ${e.par ? 'disabled' : ''}>
         ${['ap', 'par', 'terc'].map(c => `<label class="qf-par"><input type="checkbox" data-meck="${i}" data-k="${c}" ${e[c] ? 'checked' : ''} aria-label="${c}"></label>`).join('')}
         <button type="button" class="btn sm icon ghost" data-medel="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
