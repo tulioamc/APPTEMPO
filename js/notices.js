@@ -323,13 +323,13 @@ function scanAlerts() {
     if (pay === 'Pago' && !p.invoice_at) todoOnce('Emitir nota ' + p.name);
   });
   /* Orçamento enviado sem resposta: aviso aos 7 e aos 15 dias, e um único To-Do para cobrar (regra única; não recria se você já resolveu ou dispensou). */
-  db.all('tempo_quotes').filter(q => q.sent_at && !['Aprovado', 'Recusado', 'Vencido'].includes(statusName(q.status_id))).forEach(q => {
+  db.all('tempo_quotes').filter(q => q.sent_at && !['Aprovado', 'Recusado', 'Vencido', 'Rascunho'].includes(statusName(q.status_id))).forEach(q => {
     const d = daysBetween(q.sent_at, today); if (d === null || d < 7) return;
     const etapa = d >= 15 ? 15 : 7;
     addNotice({ kind: 'orcamento', key: `follow:${q.id}:${etapa}`, title: `Sem resposta há ${d} dias: ${q.name}`, body: `Enviado em ${fmtDate(q.sent_at)}. Cobre a resposta do cliente.`, entity: 'quote', entity_id: q.id, data: {} }, true);
-    todoOnce(`Cobrar orçamento ${q.name}`);
+    todoOnce(`Cobrar orçamento ${q.name}${etapa === 15 ? ' (2ª vez)' : ''}`);
   });
-  db.all('tempo_quotes').filter(q => q.valid_until && !['Aprovado', 'Recusado', 'Vencido'].includes(statusName(q.status_id))).forEach(q => {
+  db.all('tempo_quotes').filter(q => q.valid_until && !['Aprovado', 'Recusado', 'Vencido', 'Rascunho'].includes(statusName(q.status_id))).forEach(q => {
     const d = daysBetween(today, q.valid_until); if (d === null || d < 0 || d > 3) return;
     addNotice({ kind: 'orcamento', key: `orc:${q.id}:${q.valid_until}`, title: `Orçamento vence em ${d === 0 ? 'hoje' : d + ' dia(s)'}: ${q.name}`, body: 'Faça o follow-up com o cliente.', entity: 'quote', entity_id: q.id, data: {} }, true);
   });

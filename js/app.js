@@ -352,6 +352,7 @@ function trackUnsaved(seg, ms) {
   notifyNative(title, body);
 }
 CHANGES['pause-apps'] = (el) => { db.setSetting('pauseApps', el.value.split(',').map(x => x.trim()).filter(Boolean)); };
+CHANGES['ia-key'] = (el) => { db.setSetting('anthropicKey', el.value.trim()); toast('Chave salva'); };
 CHANGES['pause-sites'] = (el) => { db.setSetting('pauseSites', el.value.split(',').map(x => x.trim()).filter(Boolean)); };
 
 let idleDetector = null;

@@ -187,3 +187,18 @@ test('versões: alterar a proposta salva vira B e o original vira A', () => {
   m.db.update('tempo_quotes', 'q', { value: 7000 }, true);
   m.propVersionar('q'); assert.ok(msgs.at(-1).nome.startsWith('1021C_'));
 });
+
+test('quantidade multiplica horas e terceirizado; condições agrupam projetos iguais', () => {
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/orcamento.js', 'js/proposta.js'], ['db', 'calcQuote', 'precoBase', 'aplicaModelo', 'propCondicoes', 'propItens'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty();
+  const st = { porte: 'medio', mercado: 'local', cx: 'simples', nf: { on: false }, bv: { on: false }, ext: { on: false, items: [] },
+    grupos: [{ id: 'g', nome: 'Ícones' }], lines: [{ name: 'Ícone', h: 1, qtd: 50, grp: 'g' }, { name: 'Revisão', terc: true, valor: 10, qtd: 50, grp: 'g' }] };
+  const c = m.calcQuote(st, m.precoBase());
+  assert.equal(c.hEtapas, 50); assert.equal(c.Bterc, 500);
+  const it = m.propItens({ name: 'Ícones', value: 12000, calc: st });
+  assert.equal(it[0].qtd, '50und'); assert.ok(it[0].unit.endsWith('/und'));
+  const s2 = { porte: 'medio', mercado: 'local', lines: [{ name: '', h: '' }], cx: 'simples', nf: { on: false }, bv: { on: false }, ext: { on: false, items: [] } };
+  m.aplicaModelo(s2, 'motion2d', []); m.aplicaModelo(s2, 'motion2d', [], 'adiciona');
+  const cond = m.propCondicoes({ name: 'X', value: 1000, revisions_included: 2, calc: s2 });
+  assert.ok(cond.some(l => l.startsWith('Motion 2D (2 vídeos)')));
+});

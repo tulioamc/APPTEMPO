@@ -32,7 +32,7 @@ function pdOverview(p) {
   return `<div class="kpis">
     <div class="kpi"><span class="k">Horas reais</span><span class="v">${fmtH(ms)}</span><span class="s">${est ? `de ${fmtH(est)} estimadas · ${Math.round(ms / est * 100)}%` : 'sem estimativa'}</span></div>
     <div class="kpi" data-tip="Conversas com contatos de trabalho deste projeto fora do cronômetro (dentro dele já estão nas horas)"><span class="k">WhatsApp</span><span class="v">${waMs ? fmtH(waMs) : '—'}</span><span class="s">${waMs ? `total com horas: ${fmtH(ms + waMs)}` : 'nada fora do cronômetro'}</span></div>
-    <div class="kpi"><span class="k">R$/hora efetivo</span><span class="v">${rate ? fmtMoney(rate) : '—'}</span><span class="s">${waMs && rateWa ? `com WhatsApp: ${fmtMoney(rateWa)}` : 'orçamento ÷ horas reais'}</span></div>
+    <div class="kpi"><span class="k">R$/hora efetivo</span><span class="v">${rate ? fmtMoney(rate) : '—'}</span><span class="s">${margemAoVivoHTML(p, rate) || (waMs && rateWa ? `com WhatsApp: ${fmtMoney(rateWa)}` : 'orçamento ÷ horas reais')}</span></div>
     <div class="kpi"><span class="k">Recebido</span><span class="v">${fmtMoney0(paidOf(p))}</span><span class="s">${p.budget ? 'de ' + fmtMoney(p.budget) : 'sem orçamento'}</span></div>
     <div class="kpi"><span class="k">Revisões</span><span class="v">${revs}</span><span class="s">${p.revisions_included ?? 0} incluídas${revs > (p.revisions_included ?? 0) ? ` · <b style="color:var(--warn)">${revs - (p.revisions_included ?? 0)} extra</b>` : ''}</span></div>
   </div>
@@ -277,4 +277,14 @@ function orcadoRealizadoHTML(p) {
     ${linhas.map(x => { const pc = pct(x.real, x.est); return `<span>${esc(x.t.name)}</span><span class="v">${fh(x.est)}</span><span class="v">${fh(x.real)}</span><span class="v small" style="${cor(pc)}">${pc === null ? '—' : pc + '%'}</span>`; }).join('')}
     <span class="tot">Total</span><span class="v tot">${fh(totE)}</span><span class="v tot">${fh(totR)}</span><span class="v tot" style="${cor(pct(totR, totE))}">${pct(totR, totE) ?? '—'}${totE ? '%' : ''}</span></div>
   </div></div>`;
+}
+
+/* Margem ao vivo: a hora orçada na proposta × a hora real até agora (cai quando as horas estouram). */
+function margemAoVivoHTML(p, rate) {
+  const qt = p.quote_id ? db.get('tempo_quotes', p.quote_id) : null;
+  const orc = Number(qt?.calc?.horaEf) || Number(qt?.calc?.rate) || 0;
+  if (!orc || !rate) return '';
+  const dif = Math.round((rate / orc - 1) * 100);
+  const pct = Math.max(4, Math.min(100, rate / orc * 100));
+  return `<span data-tip="${esc(`Hora orçada na proposta: ${fmtMoney(orc)}\nHora real até agora: ${fmtMoney(rate)} (orçamento ÷ horas trabalhadas)`)}">orçada ${fmtMoney0(orc)} · <b style="${dif < 0 ? 'color:var(--warn)' : ''}">${dif > 0 ? '+' : ''}${dif}%</b></span><span class="pm-bar" style="display:block;margin-top:4px"><span style="width:${pct.toFixed(0)}%;${dif < -20 ? 'background:var(--danger)' : ''}"></span></span>`;
 }

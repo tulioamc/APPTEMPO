@@ -140,7 +140,7 @@ function aprovacaoHTML(all) {
   const med = (a) => a.length ? fmtMoney0(a.reduce((s, v) => s + v, 0) / a.length) : '—';
   const tabela = (titulo, gs) => gs.length ? `<div><div class="lbl" style="margin-bottom:6px">${titulo}</div><div class="calc-sum4"><span class="lbl"></span><span class="lbl v">Aprovação</span><span class="lbl v">Média aprovados</span><span class="lbl v">Média recusados</span>
     ${gs.map(g => `<span>${esc(g.nome)}</span><span class="v">${Math.round(g.won.length / (g.won.length + g.lost.length) * 100)}% <span class="faint small">(${g.won.length}/${g.won.length + g.lost.length})</span></span><span class="v">${med(g.won)}</span><span class="v">${med(g.lost)}</span>`).join('')}</div></div>` : '';
-  const tipoNome = (x) => x.calc?.modelo && MODELOS[x.calc.modelo] ? MODELOS[x.calc.modelo].nome : (db.get('tempo_work_types', x.work_type_id)?.name || null);
+  const tipoNome = (x) => x.calc?.modelo && todosModelos()[x.calc.modelo] ? todosModelos()[x.calc.modelo].nome : (db.get('tempo_work_types', x.work_type_id)?.name || null);
   const porTipo = grupo(tipoNome, tipoNome), porCli = grupo(x => x.client_id, x => db.get('tempo_clients', x.client_id)?.name || '—');
   if (!porTipo.length && !porCli.length) return '';
   return `<details class="panel" style="margin-bottom:14px"><summary class="panel-h" style="cursor:pointer"><h3>Taxa de aprovação</h3><span class="small muted">por tipo e por cliente</span></summary><div class="panel-b stack" style="gap:16px">${tabela('Por tipo', porTipo)}${tabela('Por cliente', porCli)}</div></details>`;
@@ -170,7 +170,7 @@ function linkedProject(x) {
 /* Proposta: abre com a calculadora (principal). "Orçamento simplificado" é o formulário curto de valor e horas.
    Aprovada (status de aprovação ou "Converter em projeto"), a calculadora vira projeto com uma tarefa por etapa. */
 const calcNovo = () => ({ cliente: '', porte: 'medio', mercado: 'local', outro: false, customRate: null, lines: [{ name: 'Criação', wt: '', h: '' }],
-  duracao: '', cx: 'simples', aprov: '', pedido: '', desc: '', descTipo: 'R$', alvo: null, revInc: 2, revExtra: null,
+  duracao: '', cx: 'simples', aprov: '', pedido: '', pagto: 'final', desc: '', descTipo: 'R$', alvo: null, revInc: 2, revExtra: null,
   nf: { on: true, pct: 9, inside: true }, bv: { on: false, pct: 10 }, ext: { on: false, items: [{ name: '', value: null }] } });
 // proposta antiga sem a calculadora nova (sem "lines" ou com contingência) abre no simplificado
 const calcDaProposta = (c) => c && Array.isArray(c.lines) && c.cx !== undefined ? { ...calcNovo(), ...clone(c) } : null;
@@ -180,7 +180,7 @@ function openQuote(id, preset = {}) {
   const perfis = db.setting('clientePreco', {}) || {};
   const st = calcDaProposta(v.calc) || calcNovo();
   // textos da proposta (vão para o PDF): só o que foi editado fica guardado; o resto sai do padrão
-  const pp = { ...((x?.calc?.proposta) || {}) };
+  const pp = { ...((v.calc?.proposta) || {}) };
   let modo = preset.modo || (x ? (calcDaProposta(x.calc) ? 'calc' : 'simples') : 'calc');
   const q = { name: v.name || '', client_id: v.client_id || '', status_id: v.status_id || statuses('quote')[0]?.id, sent_at: v.sent_at || ymd(new Date()), valid_until: v.valid_until || '',
     notes: v.notes || '', value: v.value ?? null, est_hours: v.est_hours ?? '', work_type_id: v.work_type_id || '', revisions_included: v.revisions_included ?? 2, extra_revision_price: v.extra_revision_price ?? null };
@@ -228,7 +228,7 @@ function openQuote(id, preset = {}) {
         ${q.client_id && !st.outro ? '<div class="small faint">Porte e mercado ficam guardados para este cliente.</div>' : ''}
       </div></div>
       <div class="panel"><div class="panel-h"><h3>Horas</h3></div><div class="panel-b stack">
-        <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="lbl">Modelo</span><div class="seg">${Object.entries(MODELOS).map(([k, mo]) => `<button type="button" class="${modelosDe(st).includes(k) ? 'on' : ''}" data-modelo="${k}">${mo.nome}</button>`).join('')}</div><span class="small faint">preenche as etapas com horas e prazos padrão; dá para juntar mais de um</span></div>
+        <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="lbl">Modelo</span><div class="seg">${Object.entries(todosModelos()).map(([k, mo]) => `<button type="button" class="${modelosDe(st).includes(k) ? 'on' : ''}" data-modelo="${k}">${esc(mo.nome)}${modelosProprios()[k] ? `<span class="faint" data-modelo-del="${k}" title="Apagar este modelo" aria-label="Apagar modelo"> ×</span>` : ''}</button>`).join('')}</div><span class="small faint">preenche as etapas com horas e prazos padrão; dá para juntar mais de um</span></div>
         <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
           <div class="field"><span class="lbl">Complexidade</span><div class="seg">${COMPLEXIDADES.map(([k, nome, m]) => `<button type="button" class="${st.cx === k ? 'on' : ''}" data-cx="${k}">${nome} <span class="faint">${fmtX(m)}</span></button>`).join('')}</div></div>
           <div class="field" style="max-width:260px"><label for="cc-ap">Reuniões de aprovação</label><div class="row" style="flex-wrap:nowrap;gap:6px;align-items:center"><input id="cc-ap" type="number" min="0" class="input" style="width:80px" data-st="aprov" value="${st.aprov}" placeholder="0" aria-label="Quantidade de reuniões"><span class="small muted">×</span><input type="number" min="0" step="0.5" class="input" style="width:80px" data-st="hAprov" value="${st.hAprov ?? 1}" aria-label="Horas por reunião"><span class="small muted">h</span></div></div>
@@ -236,11 +236,11 @@ function openQuote(id, preset = {}) {
         <span class="lbl">Projetos e etapas · cada projeto vira um projeto no app quando aprovado, e as etapas viram as tarefas${c.dur !== 1 ? ' · nos vídeos, horas e dias são por minuto' : ''}</span>
         ${gruposDe(st).map((g, gi) => { const pg = c.porGrupo.find(x => x.id === g.id); const linhas = st.lines.map((ln, i) => [ln, i]).filter(([ln]) => ln.grp === g.id); return `<div class="qf-grupo" data-grp="${g.id}">
           <div class="row" style="flex-wrap:nowrap;gap:8px;align-items:center"><input class="input sm grow qf-gnome" data-gnome="${g.id}" value="${esc(g.nome || '')}" placeholder="${gruposDe(st).length > 1 ? `Projeto ${gi + 1}` : 'Nome do projeto (opcional)'}" aria-label="Nome do projeto">${grupoVideo(g) ? `<label class="small muted" style="white-space:nowrap">Duração <input type="number" step="0.5" min="0.5" class="input sm" style="width:70px" data-gdur="${g.id}" value="${g.duracao ?? 1}" aria-label="Duração do vídeo em minutos" title="As horas e os dias deste vídeo são por minuto: 3 min = 3×; 30 s = metade (mínimo). Terceirizado não multiplica."> min</label>` : ''}<span class="small mono muted" data-gtot="${g.id}">${pg && (pg.h || pg.terc) ? `${fmtH(pg.h * 3600000)} · ${M$(c.total * pg.parte)}` : ''}</span>${gruposDe(st).length > 1 ? `<button type="button" class="btn sm icon ghost" data-gmov="${g.id}" data-d="-1" ${gi === 0 ? 'disabled' : ''} aria-label="Subir projeto" title="Passar para antes">${icon('chevU')}</button><button type="button" class="btn sm icon ghost" data-gmov="${g.id}" data-d="1" ${gi === gruposDe(st).length - 1 ? 'disabled' : ''} aria-label="Descer projeto" title="Passar para depois">${icon('chevD')}</button><button type="button" class="btn sm icon ghost" data-gdel="${g.id}" aria-label="Remover projeto" title="Remover este projeto">${icon('trash')}</button>` : ''}</div>
-          <div class="calc-line calc-head small faint"><span></span><span>Etapa</span><span>Tipo</span><span>Horas</span><span>Dias úteis</span><span title="Em paralelo: fica dentro do tempo da etapa de cima">Paral.</span><span title="Terceirizado: conta o prazo, não as suas horas; entra pelo valor que você paga">Terc.</span><span>Valor</span><span></span></div>
-          ${linhas.map(([ln, i]) => `<div class="calc-line${ln.par ? ' par' : ''}" data-row="${i}"><span class="qf-handle" data-handle="${i}" title="Arraste para reordenar" aria-label="Arrastar">${icon('grip')}</span><input class="input sm" data-line="${i}" data-k="name" value="${esc(ln.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), ln.wt, { empty: true, emptyLabel: 'Tipo' })}</select>${ln.par ? '<span class="small faint" style="grid-column:span 2">junto com a de cima</span>' : `${ln.terc ? `<input class="input sm mono" data-line="${i}" data-k="valor" ${moneyAttrs(ln.valor)} placeholder="R$ custo" aria-label="Valor pago ao terceirizado" title="Quanto você paga ao terceirizado (entra no total sem multiplicar)">` : `<input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${ln.h}" placeholder="Horas" aria-label="Horas">`}<input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="prazo" value="${ln.prazo ?? ''}" placeholder="dias" aria-label="Prazo em dias úteis" title="${ln.ap ? 'Termina com aprovação do cliente' : ''}">`}<label class="qf-par" title="Em paralelo: não conta horas nem prazo; fica dentro da etapa de cima"><input type="checkbox" data-par="${i}" ${ln.par ? 'checked' : ''} aria-label="Em paralelo"></label><label class="qf-par" title="Terceirizado: conta o prazo de entrega, não as suas horas; você informa o valor"><input type="checkbox" data-terc="${i}" ${ln.terc ? 'checked' : ''} aria-label="Terceirizado"></label><span class="small mono muted" data-etv="${i}" title="Valor da etapa">${ln.terc ? (Number(ln.valor) ? M$(ln.valor) : '') : c.porEtapa[i] ? M$(c.porEtapa[i]) : ''}</span><button type="button" class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
+          <div class="calc-line calc-head small faint"><span></span><span>Etapa</span><span>Tipo</span><span title="Quantidade (ex.: 50 ícones); horas e terceirizado são por unidade">Qtd</span><span>Horas</span><span>Dias úteis</span><span title="Em paralelo: fica dentro do tempo da etapa de cima">Paral.</span><span title="Terceirizado: conta o prazo, não as suas horas; entra pelo valor que você paga">Terc.</span><span>Valor</span><span></span></div>
+          ${linhas.map(([ln, i]) => `<div class="calc-line${ln.par ? ' par' : ''}" data-row="${i}"><span class="qf-handle" data-handle="${i}" title="Arraste para reordenar" aria-label="Arrastar">${icon('grip')}</span><input class="input sm" data-line="${i}" data-k="name" value="${esc(ln.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), ln.wt, { empty: true, emptyLabel: 'Tipo' })}</select>${ln.par ? '<span></span>' : `<input type="number" min="1" step="1" class="input sm" data-line="${i}" data-k="qtd" value="${ln.qtd ?? ''}" placeholder="1" aria-label="Quantidade">`}${ln.par ? '<span class="small faint" style="grid-column:span 2">junto com a de cima</span>' : `${ln.terc ? `<input class="input sm mono" data-line="${i}" data-k="valor" ${moneyAttrs(ln.valor)} placeholder="R$" aria-label="Valor pago ao terceirizado" title="Quanto você paga ao terceirizado (entra no total sem multiplicar)">` : `<span class="qf-hwrap">${(() => { const md = mediaDaEtapa(ln.name); return `<input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${ln.h}" placeholder="Horas" aria-label="Horas"${md ? ` title="Sua média real: ${String(Math.round(md.h * 10) / 10).replace('.', ',')} h (${md.n} projetos)"` : ''}>${md && Math.abs(md.h - (Number(ln.h) || 0)) >= 1 ? `<button type="button" class="qf-media" data-media="${i}" data-h="${Math.round(md.h * 2) / 2}" title="Sua média real: ${String(Math.round(md.h * 10) / 10).replace('.', ',')} h em ${md.n} projetos. Clique para usar." aria-label="Usar a média real">≈</button>` : ''}`; })()}</span>`}<input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="prazo" value="${ln.prazo ?? ''}" placeholder="dias" aria-label="Prazo em dias úteis" title="${ln.ap ? 'Termina com aprovação do cliente' : ''}">`}<label class="qf-par" title="Em paralelo: não conta horas nem prazo; fica dentro da etapa de cima"><input type="checkbox" data-par="${i}" ${ln.par ? 'checked' : ''} aria-label="Em paralelo"></label><label class="qf-par" title="Terceirizado: conta o prazo de entrega, não as suas horas; você informa o valor"><input type="checkbox" data-terc="${i}" ${ln.terc ? 'checked' : ''} aria-label="Terceirizado"></label><span class="small mono muted" data-etv="${i}" title="Valor da etapa">${ln.terc ? (Number(ln.valor) ? M$(ln.valor) : '') : c.porEtapa[i] ? M$(c.porEtapa[i]) : ''}</span><button type="button" class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
           <div><button type="button" class="btn sm ghost" data-add="${g.id}">${icon('plus')} Etapa</button></div>
         </div>`; }).join('')}
-        <div class="row between" style="flex-wrap:wrap;gap:8px"><span class="row" style="gap:6px"><button type="button" class="btn sm" data-gadd>${icon('plus')} Projeto</button><button type="button" class="btn sm" data-gclone>${icon('copy')} Clonar projeto</button></span>
+        <div class="row between" style="flex-wrap:wrap;gap:8px"><span class="row" style="gap:6px"><button type="button" class="btn sm" data-gadd>${icon('plus')} Projeto</button><button type="button" class="btn sm" data-gclone>${icon('copy')} Clonar projeto</button><button type="button" class="btn sm ghost" data-gmodelo title="Guarda um projeto desta proposta como modelo, para usar nas próximas">Salvar como modelo</button><button type="button" class="btn sm ghost" data-escopo title="Cole o pedido do cliente e o Claude monta os projetos e as etapas">${icon('doc')} Montar pelo texto</button></span>
           <label class="small muted">Total das etapas <input type="number" step="0.5" min="0" class="input sm" style="width:90px" data-htot value="${c.hBruto || ''}" aria-label="Total de horas das etapas" title="Mudar o total espalha a diferença entre as etapas na mesma proporção"> h</label></div>
         <div class="small" data-h-txt>${horasTxt(c)}</div>
         <div class="small">${sugHorasHTML(q.name).replace(/<button type="button" class="btn sm" data-modo="calc">Usar a calculadora<\/button>/, '')}</div>
@@ -254,6 +254,7 @@ function openQuote(id, preset = {}) {
         <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
           <div class="field" style="max-width:200px"><label for="cc-ds">Desconto</label><input id="cc-ds" type="number" min="0" step="${st.descTipo === '%' ? 1 : 50}" class="input" data-st="desc" value="${st.desc}" placeholder="0" ${Number(st.alvo) > 0 ? 'disabled' : ''}></div>
           <div class="seg" style="margin-bottom:4px">${['R$', '%'].map(k => `<button type="button" class="${st.descTipo === k ? 'on' : ''}" data-dtipo="${k}">${k}</button>`).join('')}</div>
+          <div class="field" style="max-width:190px"><label for="cc-pg">Pagamento</label><select id="cc-pg" class="input" data-st="pagto">${Object.entries(PAGAMENTOS).map(([k, p]) => `<option value="${k}" ${(st.pagto || 'final') === k ? 'selected' : ''}>${p.nome}</option>`).join('')}</select></div>
           <div class="field" style="max-width:150px"><label for="cc-ri">Rodadas incluídas</label><input id="cc-ri" type="number" class="input" data-st="revInc" value="${st.revInc}"></div>
           <div class="field" style="max-width:190px"><label for="cc-re">Preço por rodada extra</label><input id="cc-re" class="input" data-st="revExtra" ${moneyAttrs(st.revExtra)} placeholder="${c.r ? fmtMoney(c.r * 4) : 'R$ 0,00'}"></div>
         </div>
@@ -270,8 +271,17 @@ function openQuote(id, preset = {}) {
       </div></div>
 `;
 
+  /* E se eu aceitar? Quando cabe na agenda e o efeito de aprovar também os outros orçamentos em aberto. */
+  const agendaTxt = () => {
+    if (modo !== 'calc') return '';
+    const d = collect(); const ag = propAgenda(d); if (!ag) return '';
+    const outros = db.all('tempo_quotes').filter(o => o.id !== x?.id && statusCat(o.status_id) === 'open' && statusName(o.status_id) !== 'Rascunho' && Number(o.est_hours) > 0);
+    const hOut = outros.reduce((s2, o) => s2 + Number(o.est_hours), 0);
+    const ag2 = hOut ? propAgenda(d, hOut) : null;
+    return `<span data-tip="Pela sua agenda no Planejamento: horas livres por dia e o prazo das etapas">Na agenda: começa em <b>${fmtDate(ag.inicio)}</b>, entrega em <b>${fmtDate(ag.fim)}</b>${ag.apertado ? ' <span style="color:var(--warn)">(a agenda é que segura o prazo)</span>' : ''}.</span>${ag2 && ag2.fim !== ag.fim ? `<br><span class="muted">Se os ${outros.length} orçamento(s) em aberto também forem aprovados antes: entrega em ${fmtDate(ag2.fim)}.</span>` : ''}`;
+  };
   /* Texto da proposta (cliente, contato, descrição e condições): já vem preenchido e pode ser editado; vai para o PDF. */
-  const ppPadrao = () => { const d = collect(); return propEstado({ ...d, calc: d.calc ? { ...d.calc, proposta: null } : null }); };
+  const ppPadrao = () => { const d = collect(); return propEstado({ ...d, calc: { ...(d.calc || {}), proposta: { datas: !!pp.datas } } }); };
   const textoPropostaHTML = () => {
     const def = ppPadrao(); const val = (k) => pp[k] ?? def[k];
     return `<div class="panel"><div class="panel-h"><h3>Texto da proposta</h3><span class="small muted">vai para o PDF${pp.num ? ` · orçamento nº ${pp.num}` : ` · ganha o nº ${propProximoNum()} ao salvar`}</span></div><div class="panel-b stack" style="gap:10px">
@@ -280,12 +290,15 @@ function openQuote(id, preset = {}) {
       <div class="field"><label for="pp-ds">Descrição do escopo</label><textarea id="pp-ds" class="input" rows="4" data-pp="desc">${esc(val('desc'))}</textarea></div>
       <div class="field"><label for="pp-cd">Condições <span class="faint">(uma por linha)</span></label><textarea id="pp-cd" class="input" rows="6" data-pp="cond">${esc((val('cond') || []).join('\n'))}</textarea>
         ${pp.cond || pp.desc ? '<button type="button" class="btn sm ghost" style="align-self:flex-start;margin-top:4px" data-pp-padrao>Voltar ao texto padrão</button>' : ''}</div>
+      ${modo === 'calc' ? `<label class="check small"><input type="checkbox" data-pp-datas ${pp.datas ? 'checked' : ''}> Incluir datas na proposta <span class="faint">${(() => { const ag = propAgenda({ ...collect() }); return ag ? `(começo em ${fmtDate(ag.inicio)}, entrego em ${fmtDate(ag.fim)})` : ''; })()}</span></label>` : ''}
+      ${(pp.versoes || []).length ? `<div class="stack" style="gap:4px"><span class="lbl">Versões</span>${pp.versoes.slice().reverse().map(v => `<div class="row between small"><span class="mono">${esc(v.nome)}</span><span class="muted">${fmtDate(v.dia)} · ${fmtMoney0(v.valor)}</span>${isMacApp() ? `<button type="button" class="btn sm ghost" data-abre-pdf="${esc(v.nome)}">Abrir</button>` : ''}</div>`).join('')}</div>` : ''}
     </div></div>`;
   };
   // resumo à direita: acompanha o scroll e se atualiza enquanto digita
   const resumoCalc = (c) => `<div class="panel qf-resumo"><div class="panel-h"><h3>Resumo</h3><span class="grow"></span><b class="mono" data-tot-topo>${M$(c.total)}</b></div><div class="panel-b stack" style="gap:12px">${calcSummaryHTML(c, st)}
       <div class="row between small" style="flex-wrap:wrap;gap:6px">${st.moeda ? `<span class="muted">Em ${MOEDAS[st.moeda.cod].nome.toLowerCase()} · cotação de ${fmtDate(st.moeda.data)}: 1 ${st.moeda.cod} = ${fmtMoney(st.moeda.taxa)}</span><button type="button" class="btn sm ghost" data-moeda="BRL">Voltar para reais</button>` : '<span></span>'}<button type="button" class="btn sm" data-moeda-escolher>${icon('money')} Converter para outra moeda</button></div>
       <div data-parecidos>${parecidosHTML(q.name, st.modelo, c.total, x?.id)}</div>
+      <div class="small" data-agenda>${agendaTxt()}</div>
       <div class="field"><label for="cc-final">Total final da proposta</label><div class="row" style="flex-wrap:nowrap;gap:8px"><input id="cc-final" class="input mono" data-st="alvo" ${moneyAttrs(st.alvo)} placeholder="${c.total ? fmtMoney(c.total) : 'R$ 0,00'}">${Number(st.alvo) > 0 ? '<button type="button" class="btn sm" data-limpa-alvo>Voltar ao calculado</button>' : ''}</div><span class="hint">Digitando o total, só a sua parte se ajusta (entre as etapas); terceirizado fica igual e BV e imposto são refeitos.</span></div>
     </div></div>`;
   const draw = () => {
@@ -305,6 +318,7 @@ function openQuote(id, preset = {}) {
     </div>${modo === 'calc' ? `<aside class="qf-dir">${resumoCalc(c)}</aside>` : ''}</form>
     <div class="df">${x ? `<button class="btn danger left" data-x="del">${icon('trash')}</button>` : ''}
       ${linked ? `<button class="btn" data-x="sync-proj">${icon('arrowR')} Atualizar projeto</button><button class="btn" data-x="open-proj">${icon('folder')} Abrir projeto</button>` : x ? `<button class="btn" data-x="convert">${icon('arrowR')} Converter em projeto</button>` : ''}
+      ${x ? `<button class="btn" data-x="dup" title="Nova proposta igual a esta, com número novo">${icon('copy')} Duplicar</button>` : ''}
       <button class="btn" data-x="pdf">${icon('doc')} Criar PDF da proposta</button>
       <button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="save">Salvar</button></div>`;
   };
@@ -314,7 +328,7 @@ function openQuote(id, preset = {}) {
   const keyOf = (i) => i && ((i.dataset.gdur && 'gd' + i.dataset.gdur) || (i.dataset.pp && 'pp' + i.dataset.pp) || (i.dataset.q && 'q' + i.dataset.q) || (i.dataset.gnome && 'g' + i.dataset.gnome) || (i.dataset.pb && 'pb') || (i.dataset.pbm && 'pbm' + i.dataset.pbm) || i.dataset.st || i.dataset.encp || (i.dataset.line ? 'l' + i.dataset.line + i.dataset.k : null) || (i.dataset.ext ? 'e' + i.dataset.ext + i.dataset.k : null));
   const redraw = (focusKey) => { const a = document.activeElement; const key = focusKey || keyOf(a); l.refresh(); if (key) { const el = $$('input,select,textarea', l.box).find(i => keyOf(i) === key); if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} } } };
 
-  let salvaRates = null;
+  let salvaRates = null, _agT = null;
   const salvar = () => { clearTimeout(salvaRates); salvaRates = setTimeout(() => db.setSetting('precoBase', clone(rates)), 600); };
   const guardaCliente = () => { if (!st.cliente) return; perfis[st.cliente] = { porte: st.porte, mercado: st.mercado }; db.setSetting('clientePreco', { ...perfis }); };
   /* O Safari/app do Mac não dispara "change" em campo de dinheiro (reformatado a cada tecla): o estado é lido no "input". */
@@ -350,11 +364,13 @@ function openQuote(id, preset = {}) {
     c.porGrupo.forEach(g => { const el = $(`[data-gtot="${g.id}"]`, l.box); if (el) el.textContent = g.h || g.terc ? `${fmtH(g.h * 3600000)} · ${M$(c.total * g.parte)}` : ''; });
     c.porEtapa.forEach((vv, i) => { const el = $(`[data-etv="${i}"]`, l.box); const ln = st.lines[i]; if (el) el.textContent = ln?.terc ? (Number(ln.valor) ? M$(ln.valor) : '') : vv ? M$(vv) : ''; });
     const ds = $('#cc-ds', l.box); if (ds) ds.disabled = Number(st.alvo) > 0;
+    clearTimeout(_agT); _agT = setTimeout(() => { const ag = $('[data-agenda]', l.box); if (ag) ag.innerHTML = agendaTxt(); }, 400);
   });
   l.box.addEventListener('change', (e) => {
     const t = e.target;
     if (t.dataset.q) { apply(t); return; }
     if (t.hasAttribute('data-outro')) { st.outro = t.checked; redraw(); return; }
+    if (t.hasAttribute('data-pp-datas')) { pp.datas = t.checked; if (!pp.cond) redraw(); return; }
     if (t.hasAttribute('data-htot')) { redistribuiHoras(st.lines.filter(ln => !ln.par), numIn(t.value)); redraw(); return; }
     if (t.dataset.terc !== undefined) { const ln = st.lines[t.dataset.terc]; ln.terc = t.checked; if (ln.terc) { ln.h = ''; ln.par = false; } else ln.valor = null; redraw(); return; }
     if (t.dataset.par !== undefined) { const ln = st.lines[t.dataset.par]; ln.par = t.checked; if (ln.par) { ln.h = ''; ln.prazo = ''; } redraw(); return; }
@@ -444,6 +460,41 @@ function openQuote(id, preset = {}) {
 
   l.box.addEventListener('click', async (e) => {
     const cb = e.target.closest('[data-cli-busca]'); if (cb) { openCombo(cb, { kind: 'client', value: q.client_id, onPick: escolheCliente }); return; }
+    const ap = e.target.closest('[data-abre-pdf]'); if (ap) { try { window.webkit.messageHandlers.tempo.postMessage({ type: 'open', path: `${propPasta()}/${ap.dataset.abrePdf}.pdf`, abrir: true }); } catch (err) { toast('Não consegui abrir.'); } return; }
+    const mdb = e.target.closest('[data-media]'); if (mdb) { st.lines[mdb.dataset.media].h = Number(mdb.dataset.h); redraw(); return; }
+    const mdel = e.target.closest('[data-modelo-del]'); if (mdel) {
+      e.stopPropagation(); const mp = { ...modelosProprios() }; const nm = mp[mdel.dataset.modeloDel]?.nome;
+      if (!await confirmBox({ title: 'Apagar o modelo?', body: `<b>${esc(nm)}</b> sai da lista de modelos. Propostas já feitas não mudam.`, ok: 'Apagar', danger: true })) return;
+      delete mp[mdel.dataset.modeloDel]; db.setSetting('modelosProprios', mp); redraw(); return;
+    }
+    if (e.target.closest('[data-escopo]')) {
+      if (!db.setting('anthropicKey', '')) return toast('Coloque a chave da API da Anthropic em Ajustes › Claude para usar isso.', { ms: 7000 });
+      const lt = openLayer({ wide: true, html: `<div class="dh"><h2>Montar pelo texto</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+        <div class="db"><div class="field"><label for="es-t">Pedido do cliente (e-mail, WhatsApp, briefing)</label><textarea id="es-t" class="input" rows="12" placeholder="Ex.: Precisamos de uma identidade visual para a marca X, com manual, e dois vídeos de 30 s para Instagram…"></textarea></div><span class="hint">O Claude monta os projetos e as etapas com horas e prazos. As etapas atuais são substituídas; você revisa tudo antes de salvar.</span></div>
+        <div class="df"><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-es-ok>Montar</button></div>` });
+      lt.box.addEventListener('click', async (ev) => {
+        const b = ev.target.closest('[data-es-ok]'); if (!b) return; const txt = $('#es-t', lt.box).value.trim(); if (!txt) return toast('Cole o pedido do cliente.');
+        b.disabled = true; b.textContent = 'Montando…';
+        try {
+          const res = await escopoPorTexto(txt); aplicaEscopo(st, res, workTypes());
+          if (res.descricao && !pp.desc) pp.desc = res.descricao;
+          if (!q.name.trim() && res.projetos?.[0]?.nome) q.name = res.projetos.map(x => x.nome).join(' + ');
+          lt.close(); redraw(); toast('Projetos e etapas montados. Revise horas, prazos e terceirizados.');
+        } catch (err) { b.disabled = false; b.textContent = 'Montar'; toast('Não consegui montar: ' + esc(err.message || 'erro'), { ms: 8000 }); }
+      });
+      return;
+    }
+    if (e.target.closest('[data-gmodelo]')) {
+      const gs = gruposDe(st); let id = gs[0].id;
+      if (gs.length > 1) { id = await escolhaBox({ title: 'Salvar qual projeto como modelo?', body: 'As etapas, horas, prazos, quantidades e terceirizados viram um botão de modelo.', opcoes: gs.map((g, i) => ({ id: g.id, label: g.nome || `Projeto ${i + 1}` })) }); if (!id) return; }
+      const g = gs.find(x => x.id === id); const nome = (g.nome || q.name || '').trim();
+      if (!nome) return toast('Dê um nome ao projeto antes de salvar como modelo.');
+      const etapas = st.lines.filter(ln => ln.grp === id && ((ln.name || '').trim() || Number(ln.h))).map(ln => ({ name: ln.name, wtId: ln.wt || '', h: Number(ln.h) || 0, prazo: Number(ln.prazo) || 0, qtd: Number(ln.qtd) || '', ap: !!ln.ap, par: !!ln.par, terc: !!ln.terc, valor: ln.terc ? ln.valor : null }));
+      if (!etapas.length) return toast('Esse projeto não tem etapas.');
+      const chave = 'p' + Date.now().toString(36);
+      db.setSetting('modelosProprios', { ...modelosProprios(), [chave]: { nome, video: grupoVideo(g), etapas } });
+      redraw(); toast(`Modelo “${esc(nome)}” salvo`); return;
+    }
     if (e.target.closest('[data-moeda="BRL"]')) { st.moeda = null; redraw(); return; }
     if (e.target.closest('[data-moeda-escolher]')) {
       const cod = await escolhaBox({ title: 'Converter para outra moeda', body: 'Os valores da proposta e do PDF passam a aparecer na moeda escolhida, pela cotação de hoje. Por dentro tudo continua em reais.', opcoes: Object.entries(MOEDAS).map(([k, m]) => ({ id: k, label: `${m.nome} (${k})` })) });
@@ -455,7 +506,7 @@ function openQuote(id, preset = {}) {
     if (e.target.closest('[data-pp-padrao]')) { delete pp.desc; delete pp.cond; redraw(); return; }
     const md = e.target.closest('[data-modo]'); if (md) { modo = md.dataset.modo; tamanho(); redraw(); return; }
     const mo = e.target.closest('[data-modelo]'); if (mo) {
-      const k = mo.dataset.modelo, nome = MODELOS[k].nome;
+      const k = mo.dataset.modelo, nome = todosModelos()[k].nome;
       const temAlgo = st.lines.some(ln => (ln.name || '').trim() && ln.name !== 'Criação' || Number(ln.h));
       if (modelosDe(st).includes(k) && temAlgo) {   // clicar de novo num modelo já usado: tira as etapas dele
         if (!await confirmBox({ title: `Tirar ${nome}?`, body: `As etapas de <b>${esc(nome)}</b> saem da proposta.`, ok: 'Tirar' })) return;
@@ -464,7 +515,7 @@ function openQuote(id, preset = {}) {
         if (!st.grupos.length) st.grupos = [{ id: novoGrupoId(), nome: '', mod: null }];
         if (!st.lines.length) st.lines.push({ name: '', wt: '', h: '', prazo: '', grp: st.grupos[0].id });
         st.modelos = modelosDe(st); st.modelo = st.modelos[0] || null;
-        st.aprov = Math.max(0, (Number(st.aprov) || 0) - MODELOS[k].etapas.filter(x => x.ap).length);
+        st.aprov = Math.max(0, (Number(st.aprov) || 0) - todosModelos()[k].etapas.filter(x => x.ap).length);
         if (!temVideo(st)) st.duracao = '';
         redraw(); return;
       }
@@ -502,7 +553,7 @@ function openQuote(id, preset = {}) {
       const g = gruposDe(st).find(x => x.id === gd.dataset.gdel); const temConteudo = st.lines.some(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h)));
       if (temConteudo && !await confirmBox({ title: 'Remover o projeto?', body: `<b>${esc(g.nome || 'Projeto')}</b> e as etapas dele saem da proposta.`, ok: 'Remover', danger: true })) return;
       st.grupos = st.grupos.filter(x => x.id !== g.id); st.lines = st.lines.filter(ln => ln.grp !== g.id);
-      if (g.mod && MODELOS[g.mod]) st.aprov = Math.max(0, (Number(st.aprov) || 0) - MODELOS[g.mod].etapas.filter(x => x.ap).length);
+      if (g.mod && todosModelos()[g.mod]) st.aprov = Math.max(0, (Number(st.aprov) || 0) - todosModelos()[g.mod].etapas.filter(x => x.ap).length);
       if (!st.lines.length) st.lines.push({ name: '', wt: '', h: '', prazo: '', grp: st.grupos[0].id });
       if (!temVideo(st)) st.duracao = '';
       redraw(); return;
@@ -516,6 +567,12 @@ function openQuote(id, preset = {}) {
     if (k === 'use-hint') { if (modo === 'calc') { redistribuiHoras(st.lines, Number(b.dataset.h)); } else q.est_hours = b.dataset.h; redraw(); return; }
     if (k === 'fu') { const n = $('#fu-n', l.box).value.trim(); if (!n) return toast('Escreva o que foi conversado.'); db.update('tempo_quotes', x.id, { followups: [...(x.followups || []), { date: $('#fu-d', l.box).value, note: n }] }); l.close(); openQuote(x.id); toast('Contato registrado'); return; }
     if (k === 'del') { if (!await confirmBox({ title: 'Excluir proposta?', body: esc(x.name), ok: 'Excluir', danger: true })) return; db.remove('tempo_quotes', x.id); l.close(); return; }
+    if (k === 'dup') {
+      const d = collect(); const calc = d.calc ? clone(d.calc) : null; if (calc) delete calc.proposta;
+      const novoPp = { ...pp }; ['num', 'letra', 'dia', 'assin', 'versoes'].forEach(c => delete novoPp[c]);
+      l.close(); openQuote(null, { ...d, name: d.name + ' (cópia)', status_id: statuses('quote')[0]?.id, sent_at: ymd(new Date()), valid_until: null, calc: calc ? { ...calc, proposta: novoPp } : { proposta: novoPp }, modo });
+      toast('Cópia aberta: escolha o cliente e salve para ganhar o número'); return;
+    }
     if (k === 'open-proj') { l.close(); openProject(linkedProject(x).id); return; }
     if (k === 'pdf') {   // salva a proposta (nova ou não) e abre a tela do PDF
       const data = collect(); if (!data.name || !data.client_id) return toast('Preencha nome e cliente para criar o PDF.');

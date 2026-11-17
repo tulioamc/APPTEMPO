@@ -174,7 +174,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private func handleOpen(_ d: [String: Any]) {
         guard let caminho = (d["path"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !caminho.isEmpty else { return }
         var url = URL(fileURLWithPath: (caminho as NSString).expandingTildeInPath).standardizedFileURL
-        guard url.path.hasPrefix(ICloudTerapias.root.standardizedFileURL.path) else { return }
+        // só abre arquivos do iCloud do Tempo ou da pasta do Dropbox (orçamentos)
+        let dropbox = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("BAQUER Dropbox").standardizedFileURL.path
+        guard url.path.hasPrefix(ICloudTerapias.root.standardizedFileURL.path) || url.path.hasPrefix(dropbox) else { return }
+        if (d["abrir"] as? Bool) == true, FileManager.default.fileExists(atPath: url.path) { NSWorkspace.shared.open(url); return }
         let fm = FileManager.default
         // link antigo de um arquivo que já foi renomeado para o formato novo
         if !fm.fileExists(atPath: url.path), let novo = ICloudTerapias.nomeNovo(url.lastPathComponent) {

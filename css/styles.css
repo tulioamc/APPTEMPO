@@ -1318,7 +1318,7 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 /* Projetos dentro da proposta: cada grupo com as suas etapas; alça para arrastar; etapa em paralelo */
 .qf-grupo { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; background: var(--surface-1, #fff); }
 .qf-grupo .qf-gnome { font-weight: 600; }
-.qf-2col .calc-line, .calc-line { grid-template-columns: 18px minmax(0, 1.6fr) minmax(0, 1fr) 58px 58px 34px 86px 28px; gap: 6px; align-items: center; }
+.qf-2col .calc-line, .calc-line { grid-template-columns: 18px minmax(0, 1.6fr) minmax(0, 1fr) 48px 58px 58px 34px 34px 86px 28px; gap: 6px; align-items: center; }
 .calc-line.par { opacity: .8; }
 .calc-line.arrastando { opacity: .4; }
 .calc-line.drop-antes { box-shadow: 0 -2px 0 var(--accent, #6b46c1); }
@@ -1326,3 +1326,7 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .qf-handle { cursor: grab; color: var(--fg-3, #999); display: inline-flex; }
 .qf-handle svg { width: 16px; height: 16px; fill: currentColor; stroke: none; }
 .qf-par { display: flex; justify-content: center; }
+
+.qf-hwrap { position: relative; display: block; }
+.qf-hwrap .input { width: 100%; }
+.qf-media { position: absolute; top: -7px; right: -5px; width: 16px; height: 16px; border-radius: 50%; border: 0; padding: 0; font-size: 11px; line-height: 16px; background: var(--accent, #6b46c1); color: #fff; cursor: pointer; }

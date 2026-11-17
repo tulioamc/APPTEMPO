@@ -56,14 +56,17 @@ function gruposDe(st) {
   (st.lines || []).forEach(l => { if (!l.grp || !ids.has(l.grp)) l.grp = st.grupos[0].id; });
   return st.grupos;
 }
+/* Modelos próprios (salvos de uma proposta): em tempo_settings 'modelosProprios' { chave: { nome, video, etapas } }. */
+const modelosProprios = () => (typeof db !== 'undefined' && db.setting('modelosProprios', null)) || {};
+const todosModelos = () => ({ ...MODELOS, ...modelosProprios() });
 function aplicaModelo(st, chave, tipos = [], modo = 'substitui') {
-  const mo = MODELOS[chave]; if (!mo) return st;
+  const mo = todosModelos()[chave]; if (!mo) return st;
   const wtId = (n) => (tipos.find(t => t.name === n) || {}).id || '';
   gruposDe(st);
   const vazias = (st.lines || []).every(l => !(l.name || '').trim() && !Number(l.h));
   const g = { id: novoGrupoId(), nome: mo.nome, mod: chave };
   if (mo.video) g.duracao = 1;
-  const novas = mo.etapas.map(e => ({ name: e.name, wt: wtId(e.wt), h: e.par || e.terc ? '' : (e.h || ''), prazo: e.par ? '' : (e.prazo || ''), ap: !!e.ap, par: !!e.par, terc: !!e.terc, valor: null, mod: chave, grp: g.id }));
+  const novas = mo.etapas.map(e => ({ name: e.name, wt: e.wtId || wtId(e.wt), h: e.par || e.terc ? '' : (e.h || ''), prazo: e.par ? '' : (e.prazo || ''), qtd: e.qtd || '', ap: !!e.ap, par: !!e.par, terc: !!e.terc, valor: e.terc ? (e.valor ?? null) : null, mod: chave, grp: g.id }));
   if (modo === 'adiciona' && !vazias) {
     const usados = new Set(st.lines.filter(l => (l.name || '').trim() || Number(l.h)).map(l => l.grp));
     st.grupos = [...st.grupos.filter(x => usados.has(x.id)), g];
@@ -77,17 +80,20 @@ function aplicaModelo(st, chave, tipos = [], modo = 'substitui') {
   return st;
 }
 const modelosDe = (st) => Array.isArray(st.grupos) && st.grupos.length ? [...new Set(st.grupos.map(g => g.mod).filter(Boolean))] : (st.modelos || (st.modelo ? [st.modelo] : []));
-const temVideo = (st) => modelosDe(st).some(k => MODELOS[k]?.video);
+const temVideo = (st) => modelosDe(st).some(k => todosModelos()[k]?.video);
 /* Multiplicador de duração de cada etapa: só nas etapas de projeto de vídeo. Etapa em paralelo não conta horas nem prazo. */
-const grupoVideo = (g) => !!(g && (g.video || MODELOS[g.mod]?.video));
+const grupoVideo = (g) => !!(g && (g.video || todosModelos()[g.mod]?.video));
 /* Duração é de cada projeto de vídeo (3 vídeos podem ter durações diferentes); fora de vídeo, 1×. */
 function multEtapa(st, l) {
   const gs = gruposDe(st); const g = gs.find(x => x.id === l.grp) || gs[0];
   return grupoVideo(g) ? durMult(g.duracao ?? st.duracao ?? 1) : 1;
 }
 /* Etapa em paralelo ou terceirizada não conta horas minhas (a terceirizada entra pelo valor, sem multiplicar). */
-const horasEtapa = (st, l) => l.par || l.terc ? 0 : (Number(l.h) || 0) * multEtapa(st, l);
-const tercEtapas = (st) => (st.lines || []).reduce((s, l) => s + (l.terc && !l.par ? Number(l.valor) || 0 : 0), 0);
+/* Quantidade (ex.: 50 ícones): multiplica as horas e o valor do terceirizado da etapa; vazio = 1. */
+const qtdEtapa = (l) => Math.max(0, Number(l.qtd) > 0 ? Number(l.qtd) : 1);
+const horasEtapa = (st, l) => l.par || l.terc ? 0 : (Number(l.h) || 0) * qtdEtapa(l) * multEtapa(st, l);
+const valorTerc = (l) => l.terc && !l.par ? (Number(l.valor) || 0) * qtdEtapa(l) : 0;
+const tercEtapas = (st) => (st.lines || []).reduce((s, l) => s + valorTerc(l), 0);
 /* Prazo das etapas (dias úteis): fechado = soma das etapas em sequência × duração; provável = + ajuste de 40% do prazo
    de cada etapa com aprovação (o mínimo combinado). Sem prazos nas etapas, vale horas ÷ 8 h. */
 function prazosEtapas(st, h) {
@@ -113,7 +119,7 @@ const durMult = (min) => { const d = Number(min); return d > 0 ? Math.max(0.5, d
 function calcQuote(st, pb) {
   const r = calcRate(st, pb);
   gruposDe(st);
-  const hBruto = st.lines.reduce((s, x) => s + (x.par || x.terc ? 0 : Number(x.h) || 0), 0);   // como digitado (por minuto, no vídeo)
+  const hBruto = st.lines.reduce((s, x) => s + (x.par || x.terc ? 0 : Number(x.h) || 0), 0);   // por unidade/minuto, como digitado   // como digitado (por minuto, no vídeo)
   const hEt = st.lines.map(x => horasEtapa(st, x));
   const hEtapas = hEt.reduce((s, v) => s + v, 0);
   // duração só vale nos modelos de vídeo (horas do modelo são por minuto); fora deles, 1×
@@ -150,7 +156,7 @@ function calcQuote(st, pb) {
   const baseTot = Mf + B;
   const porGrupo = st.grupos.map(g => {
     const hg = st.lines.reduce((s, x, i) => s + (x.grp === g.id ? hEt[i] : 0), 0);
-    const tg = st.lines.reduce((s, x) => s + (x.grp === g.id && x.terc && !x.par ? Number(x.valor) || 0 : 0), 0);
+    const tg = st.lines.reduce((s, x) => s + (x.grp === g.id ? valorTerc(x) : 0), 0);
     const sh = hEtapas ? hg / hEtapas : (st.grupos.length ? 1 / st.grupos.length : 0);
     return { id: g.id, nome: g.nome, mod: g.mod, h: hg * cx, terc: tg, parte: baseTot ? (Mf * sh + tg + Bext * sh) / baseTot : 0 };
   });
@@ -189,4 +195,65 @@ function fmtNaMoeda(v, moeda, casas = 0) {
   const m = moeda && MOEDAS[moeda.cod];
   if (!m || !(moeda.taxa > 0)) return casas ? fmtMoney(v) : fmtMoney0(v);
   return m.simb + ' ' + (Number(v) / moeda.taxa).toLocaleString(m.loc, { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+
+/* Sua média real por etapa: tarefas de projetos concluídos com "Estimado: X h" e o mesmo nome de etapa.
+   Devolve { h, n } (horas reais médias por tarefa) só com 2 ou mais exemplos. */
+const _normEtapa = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+let _mediasCache = null;
+function mediasReais() {
+  const rev = (db.data.tempo_time_entries || []).length + ':' + (db.data.tempo_tasks || []).length;
+  if (_mediasCache && _mediasCache.rev === rev) return _mediasCache.m;
+  const m = {};
+  (db.data.tempo_tasks || []).forEach(t => {
+    if (t.parent_id || !/Estimado:/i.test(t.notes || '')) return;
+    const p = db.get('tempo_projects', t.project_id); if (!p || statusCat(p.status_id) !== 'done') return;
+    const ms = taskMs(t.id); if (!ms) return;
+    const k = _normEtapa(t.name); (m[k] ||= []).push(ms / 36e5);
+  });
+  const out = {}; Object.entries(m).forEach(([k, v]) => { if (v.length >= 2) out[k] = { h: v.reduce((s, x) => s + x, 0) / v.length, n: v.length }; });
+  _mediasCache = { rev, m: out }; return out;
+}
+const mediaDaEtapa = (nome) => mediasReais()[_normEtapa(nome)] || null;
+
+/* Prazo (dias úteis) só das etapas de um projeto: etapas em sequência, sem as paralelas. */
+const prazoGrupo = (st, gid) => Math.ceil(st.lines.filter(l => l.grp === gid && !l.par).reduce((s, l) => s + (Number(l.prazo) || 0) * multEtapa(st, l), 0));
+
+/* Escopo por texto: o Claude lê o pedido do cliente e devolve projetos e etapas no formato da calculadora.
+   Chamada direta do navegador à API da Anthropic com a chave dos Ajustes ('anthropicKey'). */
+async function escopoPorTexto(texto) {
+  const key = db.setting('anthropicKey', ''); if (!key) throw new Error('sem chave');
+  const ref = Object.values(todosModelos()).map(m => `- ${m.nome}${m.video ? ' (vídeo, horas e dias por minuto)' : ''}: ${m.etapas.map(e => `${e.name} ${e.terc ? '(terceirizado)' : e.par ? '(paralelo)' : e.h + ' h'} ${e.prazo ? e.prazo + ' dias' : ''}`).join('; ')}`).join('\n');
+  const sistema = `Você monta orçamentos para um designer e motion designer freelancer brasileiro (identidade visual, design gráfico, motion 2D/3D, 3D).
+Responda SÓ com JSON, sem texto em volta, no formato:
+{"descricao": "1 a 3 frases descrevendo o escopo para o cliente, em português",
+ "projetos": [{"nome": "...", "video_min": número ou null, "etapas": [{"nome": "...", "horas": número, "dias": número, "qtd": número ou null, "terceirizado": true/false, "paralelo": true/false}]}]}
+Regras: um projeto por entrega distinta (ex.: identidade, manual, cada vídeo); vídeos iguais podem ser projetos separados; horas são do trabalho do designer (terceirizado = 0 h, mas com dias);
+para vídeo, horas e dias são por minuto e video_min é a duração; use quantidade quando o pedido for por unidade (ex.: 50 ícones, horas por ícone).
+Use como referência os modelos do designer:\n${ref}`;
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: 2000, system: sistema, messages: [{ role: 'user', content: texto }] }),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j?.error?.message || 'erro da API');
+  const txt = (j.content || []).map(c => c.text || '').join('');
+  const m = txt.match(/\{[\s\S]*\}/); if (!m) throw new Error('resposta sem JSON');
+  return JSON.parse(m[0]);
+}
+/* Transforma a resposta em grupos e etapas da calculadora (substitui as atuais). */
+function aplicaEscopo(st, res, tipos = []) {
+  const wtGuess = (n) => { const t = String(n || '').toLowerCase(); const by = (nm) => (tipos.find(x => x.name === nm) || {}).id || '';
+    if (/anima[cç][aã]o 3d|render/.test(t)) return by('Animação 3D'); if (/anima/.test(t)) return by('Animação 2D'); if (/modelag/.test(t)) return by('Modelagem 3D');
+    if (/marca|identidade|manual|logo/.test(t)) return by('Branding / marcas'); if (/style|dire[cç][aã]o/.test(t)) return by('Direção de arte'); if (/ilustra|storyboard/.test(t)) return by('Ilustração 2D'); return by('Design gráfico'); };
+  st.grupos = []; st.lines = [];
+  (res.projetos || []).forEach(pj => {
+    const g = { id: novoGrupoId(), nome: pj.nome || 'Projeto', mod: null, video: !!pj.video_min, duracao: pj.video_min || undefined };
+    st.grupos.push(g);
+    (pj.etapas || []).forEach(e => st.lines.push({ name: e.nome || 'Etapa', wt: e.terceirizado ? '' : wtGuess(e.nome), h: e.terceirizado || e.paralelo ? '' : (Number(e.horas) || ''), prazo: e.paralelo ? '' : (Number(e.dias) || ''), qtd: Number(e.qtd) > 1 ? Number(e.qtd) : '', terc: !!e.terceirizado, par: !!e.paralelo, valor: null, ap: false, grp: g.id }));
+  });
+  if (!st.grupos.length) { st.grupos = [{ id: novoGrupoId(), nome: '', mod: null }]; st.lines = [{ name: '', h: '', grp: st.grupos[0].id }]; }
+  st.modelos = []; st.modelo = null;
+  return st;
 }

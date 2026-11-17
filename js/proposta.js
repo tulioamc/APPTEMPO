@@ -1,13 +1,39 @@
 /* Proposta em PDF no visual dos orçamentos do Tulio (modelos 1010–1020): DM Mono, data em vermelho, cliente e contato,
    descrição do escopo, tabela de itens entre linhas vermelhas, condições em tópicos, assinatura e contato no rodapé.
    Textos ficam na proposta (calc.proposta); rodapé e numeração em tempo_settings ('propostaRodape', 'propostaNum'). */
+/* Condições de pagamento: o padrão dele é tudo no final. */
+const PAGAMENTOS = {
+  final: { nome: '100% no final', texto: 'O pagamento deverá ser efetuado ao final do serviço.', parcelas: [[1, 'Na entrega']] },
+  '5050': { nome: '50% + 50%', texto: 'O pagamento será feito em duas parcelas: 50% na aprovação do orçamento e 50% na entrega final.', parcelas: [[0.5, 'Na aprovação'], [0.5, 'Na entrega']] },
+  '3x': { nome: '3 parcelas', texto: 'O pagamento será feito em três parcelas iguais: na aprovação, na metade do projeto e na entrega final.', parcelas: [[1 / 3, 'Na aprovação'], [1 / 3, 'Na metade'], [1 / 3, 'Na entrega']] },
+  mensal: { nome: 'Mensal', texto: 'Os pagamentos deverão ser realizados ao final de cada mês, considerando o valor proporcional ao que foi entregue no período.', parcelas: [[1, 'Mensal']] },
+};
+/* Agenda: quando dá para começar e entregar, pelo Planejamento (horas livres por dia) e pelo prazo fechado das etapas.
+   extraH: horas de outros orçamentos em aberto que entrariam antes (para o "e se eu aceitar tudo?"). */
+function propAgenda(x, extraH = 0) {
+  if (typeof planejar !== 'function' || !x?.calc?.lines) return null;
+  const k = calcQuote({ ...x.calc }, precoBase()); if (!k.h) return null;
+  const cfg = planoCfg(); const { porDia } = planejar(planoProjetos());
+  const usado = (dia) => (porDia[dia]?.horas || 0);
+  const proxUtil = (d) => { const n = new Date(d); do { n.setDate(n.getDate() + 1); } while (!planoDiaUtil(ymd(n))); return n; };
+  let d = proxUtil(new Date()); let extra = extraH;
+  // os outros orçamentos ocupam as horas livres primeiro
+  for (let i = 0; i < 400 && extra > 0.05; i++) { const livre = Math.max(0, cfg.horasDia - usado(ymd(d))); extra -= livre; if (extra > 0.05) d = proxUtil(d); }
+  for (let i = 0; i < 400 && usado(ymd(d)) >= cfg.horasDia - 1; i++) d = proxUtil(d);
+  const inicio = ymd(d);
+  let falta = k.h; let fimAg = new Date(d); let dias = 0;
+  for (let i = 0; i < 400 && falta > 0.05; i++) { falta -= Math.max(0, cfg.horasDia - usado(ymd(fimAg))); dias++; if (falta > 0.05) fimAg = proxUtil(fimAg); }
+  let fimPz = new Date(d); for (let i = 1; i < Math.max(1, k.fechado); i++) fimPz = proxUtil(fimPz);
+  const fim = fimAg > fimPz ? fimAg : fimPz;
+  return { inicio, fim: ymd(fim), apertado: fimAg > fimPz };
+}
 const PROP_MESES = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 const propData = (iso) => { const d = iso ? new Date(iso + 'T12:00:00') : new Date(); return `${String(d.getDate()).padStart(2, '0')} ${PROP_MESES[d.getMonth()]} ${d.getFullYear()}`; };
 const propMoeda = (v, moeda) => {
   const m = moeda && typeof MOEDAS !== 'undefined' && MOEDAS[moeda.cod];
   return m && moeda.taxa > 0 ? m.simb + ' ' + Math.round((Number(v) || 0) / moeda.taxa).toLocaleString(m.loc) : 'R$ ' + Math.round(Number(v) || 0).toLocaleString('pt-BR');
 };
-const propNumExtenso = (n) => ['', 'uma', 'duas', 'três', 'quatro', 'cinco', 'seis'][n] || String(n);
+const propNumExtenso = (n) => ['', 'uma', 'duas', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez'][n] || String(n);
 
 /* Itens da tabela. Com calculadora e mais de uma etapa com horas: uma linha por etapa, com a parte do total
    proporcional às horas (o total já com BV, imposto e terceirizado). Sem isso, uma linha só com o nome. */
@@ -19,26 +45,48 @@ function propItens(x) {
     const gs = k.porGrupo.filter(g => g.h > 0); let acc = 0;
     if (gs.length > 1) return gs.map((g, i) => { const v = i === gs.length - 1 ? total - acc : Math.round(total * g.h / gs.reduce((s, y) => s + y.h, 0) / 50) * 50; acc += v; return { desc: g.nome || `Projeto ${i + 1}`, unit: '', qtd: '', valor: v }; });
   }
-  const ls = (x.calc?.lines || []).filter(l => Number(l.h) > 0 && !l.par && (l.name || '').trim());
-  if (ls.length < 2) return [{ desc: x.name || 'Projeto', unit: '', qtd: '', valor: total }];
-  const soma = ls.reduce((s, l) => s + Number(l.h), 0);
+  const lines = x.calc?.lines || [];
+  const ls = lines.map((l, i) => [l, i]).filter(([l]) => !l.par && (Number(l.h) > 0 || Number(l.valor) > 0) && (l.name || '').trim());
+  if (ls.length < 2) {
+    const so = ls[0]?.[0]; const q = so && Number(so.qtd) > 1 ? Number(so.qtd) : 0;
+    return [{ desc: x.name || 'Projeto', unit: q ? propMoeda(total / q, x.calc?.moeda) + '/und' : '', qtd: q ? q + 'und' : '', valor: total }];
+  }
+  // parte de cada etapa no total: minha parte dela + o terceirizado dela
+  const k = calcQuote({ ...x.calc }, precoBase());
+  const partes = ls.map(([l, i]) => (k.porEtapa[i] || 0) + valorTerc(l)); const soma = partes.reduce((s, v) => s + v, 0) || 1;
   let acc = 0;
-  return ls.map((l, i) => {
-    const v = i === ls.length - 1 ? total - acc : Math.round(total * Number(l.h) / soma / 50) * 50; acc += v;
-    return { desc: l.name.trim(), unit: '', qtd: '', valor: v };
+  return ls.map(([l], n) => {
+    const v = n === ls.length - 1 ? total - acc : Math.round(total * partes[n] / soma / 50) * 50; acc += v;
+    const q = Number(l.qtd) > 1 ? Number(l.qtd) : 0;
+    return { desc: l.name.trim(), unit: q ? propMoeda(v / q, x.calc?.moeda) + '/und' : '', qtd: q ? q + 'und' : '', valor: v };
   });
 }
 /* Condições padrão, tiradas dos modelos que ele já manda. */
 function propCondicoes(x) {
   const ls = (x.calc?.lines || []).filter(l => (l.name || '').trim() && (Number(l.h) > 0 || Number(l.prazo) > 0));
   const nomes = ls.map(l => l.name.trim().toLowerCase());
-  const lista = nomes.length > 1 ? nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1] : nomes[0];
   const k = x.calc && x.calc.lines ? calcQuote({ ...x.calc }, precoBase()) : null;
   const rod = Number(x.revisions_included ?? 2);
   const out = [];
-  out.push(nomes.length > 1 ? `A criação será realizada com base no briefing enviado pelo cliente e dividida em ${propNumExtenso(nomes.length)} etapas: ${lista}.` : 'A criação será realizada com base no briefing enviado pelo cliente.');
-  out.push('O pagamento deverá ser efetuado ao final do serviço.');
-  if (k && k.fechado) out.push(`O prazo estimado é de ${k.fechado} dias úteis, sem contar o tempo de aprovação do cliente e possíveis ajustes.`);
+  const gs = x.calc?.lines ? gruposDe(x.calc).filter(g => x.calc.lines.some(l => l.grp === g.id && (l.name || '').trim())) : [];
+  const lista = (arr) => arr.length > 1 ? arr.slice(0, -1).join(', ') + ' e ' + arr[arr.length - 1] : arr[0] || '';
+  if (gs.length > 1) {
+    // vários projetos: um tópico por projeto; projetos iguais (ex.: 2 vídeos) viram um tópico só
+    const blocos = [];
+    gs.forEach((g, i) => {
+      const et = x.calc.lines.filter(l => l.grp === g.id && (l.name || '').trim()).map(l => l.name.trim().toLowerCase().replace(/\b2d\b/g, '2D').replace(/\b3d\b/g, '3D'));
+      const base = (g.nome || `Projeto ${i + 1}`).replace(/\s*\(cópia\)\s*/gi, '').trim();
+      const dur = grupoVideo(g) ? durMult(g.duracao ?? 1) : null;
+      const sig = base + '|' + et.join('|') + '|' + (dur || '');
+      const pz = prazoGrupo(x.calc, g.id);
+      const b = blocos.find(y => y.sig === sig); if (b) b.n++; else blocos.push({ sig, base, et, pz, dur, video: grupoVideo(g), n: 1 });
+    });
+    out.push(`O projeto será realizado com base no briefing enviado pelo cliente e dividido em ${propNumExtenso(blocos.reduce((s, b) => s + b.n, 0))} entregas:`);
+    blocos.forEach(b => out.push(`${b.base}${b.n > 1 ? ` (${b.n} ${b.video ? 'vídeos' : 'unidades'})` : ''}${b.dur ? `, ${String(b.dur).replace('.', ',')} min${b.n > 1 ? ' cada' : ''}` : ''}: ${lista(b.et)}. Prazo de ${b.pz} dias úteis${b.n > 1 ? ' cada' : ''}.`));
+  } else out.push(nomes.length > 1 ? `A criação será realizada com base no briefing enviado pelo cliente e dividida em ${propNumExtenso(nomes.length)} etapas: ${lista(nomes)}.` : 'A criação será realizada com base no briefing enviado pelo cliente.');
+  out.push(PAGAMENTOS[x.calc?.pagto || 'final']?.texto || PAGAMENTOS.final.texto);
+  if (x.calc?.proposta?.datas) { const ag = propAgenda(x); if (ag) out.push(`Início previsto em ${fmtDate(ag.inicio)} e entrega em ${fmtDate(ag.fim)} (dias úteis). Se a aprovação de alguma etapa atrasar, a entrega anda junto.`); }
+  if (k && k.fechado) out.push(gs.length > 1 ? `O prazo total estimado é de ${k.fechado} dias úteis, com as entregas em sequência, sem contar o tempo de aprovação do cliente e possíveis ajustes.` : `O prazo estimado é de ${k.fechado} dias úteis, sem contar o tempo de aprovação do cliente e possíveis ajustes.`);
   if (rod) out.push(`O valor inclui até ${propNumExtenso(rod)} rodada${rod > 1 ? 's' : ''} de ajustes${nomes.length > 1 ? ' por etapa' : ''}. Alterações fora do briefing ou em etapas já aprovadas poderão gerar custos adicionais.`);
   const dv = x.sent_at && x.valid_until ? daysBetween(x.sent_at, x.valid_until) : 30;
   out.push(`Este orçamento tem validade de ${dv > 0 ? dv : 30} dias.`);
@@ -57,7 +105,7 @@ function propEstado(x) {
   return {
     num: p.num || null, data: p.data || x.sent_at || ymd(new Date()), cliente: p.cliente ?? cliNome, contato: p.contato ?? (cli?.contact || ''),
     desc: p.desc ?? (x.name || ''), itens: p.itens || propItens(x), cond: p.cond || propCondicoes(x), moeda: x.calc?.moeda || null,
-    letra: p.letra || '', dia: p.dia || null,
+    letra: p.letra || '', dia: p.dia || null, datas: !!p.datas,
   };
 }
 function propHTML(e) {
@@ -111,7 +159,7 @@ const propNome = (e, x) => {
   return [`${e.num}${e.letra || ''}`, ag && !isDirectAgency(ag) ? limpa(ag.name) : '', limpa(cli?.name), `${d.getFullYear()}${PROP_MESES[d.getMonth()]}${String(d.getDate()).padStart(2, '0')}`].filter(Boolean).join('_');
 };
 /* O que entra no PDF: se mudar depois de salvo, vira uma versão nova (B, C…). */
-const propAssinatura = (e) => JSON.stringify([e.cliente, e.contato, e.desc, e.cond, e.itens.map(i => [i.desc, Math.round(Number(i.valor) || 0)]), e.moeda?.cod || '', e.data]);
+const propAssinatura = (e) => JSON.stringify([e.datas ? 1 : 0, e.cliente, e.contato, e.desc, e.cond, e.itens.map(i => [i.desc, Math.round(Number(i.valor) || 0)]), e.moeda?.cod || '', e.data]);
 const PROP_PASTA = '~/BAQUER Dropbox/Tulio Couceiro/_TULIO COUCEIRO LTDA/_ADMIN/Orçamento';
 const propPasta = () => db.setting('propostaPasta', null) || PROP_PASTA;
 /* Grava o PDF da proposta na pasta de orçamentos (app do Mac). abrir=false: salva calado (ao salvar a proposta). */
@@ -133,6 +181,13 @@ function propVersionar(qid, abrir = false) {
     else p.letra = String.fromCharCode(Math.min(90, p.letra.charCodeAt(0) + 1));
     p.dia = hoje; p.assin = assin;
   }
+  // histórico: cada versão gravada (o original passa a se chamar A quando sai a B)
+  const vs = [...(p.versoes || [])];
+  const nomeAtual = propNome({ ...e, letra: p.letra, dia: p.dia }, x);
+  if (renomear) { const o = vs.find(v => v.nome === renomear.de); if (o) o.nome = renomear.para; }
+  if (!vs.some(v => v.nome === nomeAtual)) vs.push({ nome: nomeAtual, dia: p.dia, valor: Number(x.value) || 0 });
+  else { const v = vs.find(v => v.nome === nomeAtual); v.valor = Number(x.value) || 0; }
+  p.versoes = vs;
   db.update('tempo_quotes', qid, { calc: { ...(x.calc || {}), proposta: p } }, true);
   if (isMacApp()) {
     try {
