@@ -301,7 +301,7 @@ async function suggestActivity(seg) {
   // troca de app com menos de 10 s é ignorada; a partir disso entra no log e no gráfico
   if (!(toMs > fromMs) || toMs - fromMs < 10000) return;
   // fim do último registro antes deste (para achar o tempo sem nenhum registro do computador)
-  const prevEnd = [ymd(new Date(fromMs - 86400000)), ymd(new Date(fromMs))].flatMap(d => db.setting(logKeyOf(d), null) || [])
+  const prevEnd = [ymd(new Date(fromMs - 86400000)), ymd(new Date(fromMs))].flatMap(d => logRecsDay(d))
     .map(r => new Date(r.to).getTime()).filter(t => t <= fromMs + 1000).reduce((m, t) => Math.max(m, t), 0);
   // o log do dia recebe tudo, com ou sem sessão ativa
   const logged = logAppend(seg);

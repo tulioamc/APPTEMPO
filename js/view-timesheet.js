@@ -179,7 +179,7 @@ function unionMs(arr) {
 /* Há bloqueio ou suspensão do Mac (registro de loginwindow) entre s e e? */
 function bloqueioEntre(s, e) {
   const days = [...new Set([ymd(new Date(s)), ymd(new Date(e))])];
-  const recs = days.flatMap(d => db.setting(logKeyOf(d), null) || []);
+  const recs = days.flatMap(d => logRecsDay(d));
   return recs.some(r => String(r.app || '').toLowerCase() === 'loginwindow' && new Date(r.to).getTime() > s && new Date(r.from).getTime() < e);
 }
 /* Tira dos intervalos os trechos de Mac bloqueado (loginwindow) de 2 min ou mais, dividindo o intervalo se preciso. */
@@ -189,7 +189,7 @@ function tiraBloqueios(segs, minMs = 2 * 60e3) {
     if (!sg.e) { out.push(sg); return; }
     const S = new Date(sg.s).getTime(), E = new Date(sg.e).getTime();
     const days = [...new Set([ymd(new Date(S)), ymd(new Date(E))])];
-    const locks = days.flatMap(d => db.setting(logKeyOf(d), null) || []).filter(r => String(r.app || '').toLowerCase() === 'loginwindow')
+    const locks = days.flatMap(d => logRecsDay(d)).filter(r => String(r.app || '').toLowerCase() === 'loginwindow')
       .map(r => [Math.max(S, new Date(r.from).getTime()), Math.min(E, new Date(r.to).getTime())]).filter(([a, b]) => b - a >= minMs).sort((x, y) => x[0] - y[0]);
     let cur = S;
     locks.forEach(([a, b]) => { if (b <= cur) return; if (a > cur) out.push({ ...sg, s: new Date(cur).toISOString(), e: new Date(a).toISOString() }); tirado += b - Math.max(a, cur); cur = Math.max(cur, b); });
@@ -201,7 +201,7 @@ function analisePausa(s, e) {
   const total = e - s;
   if (total <= 0) return { total: 0, pergunta: false };
   const days = [...new Set([ymd(new Date(s)), ymd(new Date(e))])];
-  const recs = days.flatMap(d => db.setting(logKeyOf(d), null) || []);
+  const recs = days.flatMap(d => logRecsDay(d));
   const pausa = [], outras = [], porApp = {};
   recs.forEach(r => {
     const a = Math.max(s, new Date(r.from).getTime()), b = Math.min(e, new Date(r.to).getTime());

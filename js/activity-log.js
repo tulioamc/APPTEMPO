@@ -15,6 +15,9 @@ const LOG_AFTER_MS = 24 * 3600 * 1000;
 const LOG_DEFAULT_DAYS = 365;
 const logKeyOf = (day) => 'actlog:' + day;
 const trashKeyOf = (day) => 'lixeira:' + day;
+/* Registros do dia, do log ou da lixeira (o log vai para a lixeira 24 h depois). */
+const logRecsDay = (d) => typeof actPool === 'function' ? (actPool().get(d) || [])
+  : [...(db.setting(logKeyOf(d), null) || []), ...((db.setting(trashKeyOf(d), null) || {}).records || [])];
 const logRidNew = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const logSettings = () => (db.data && db.data.tempo_settings) || [];
 
