@@ -46,6 +46,7 @@ function pdOverview(p) {
     ${p.description ? `<span class="k">Descrição</span><div class="muted">${esc(p.description)}</div>` : ''}
   </div>
   ${changes.length ? `<div class="stack" style="gap:6px"><span class="lbl">Alterações de prazo</span><div class="timeline">${changes.map(d => `<div class="tl"><span class="w">${fmtDate(d.at)}</span><span class="b"></span><span>${fmtDate(d.from)} → <b>${d.to ? fmtDate(d.to) : 'sem prazo'}</b>${d.reason ? ` <span class="muted">— ${esc(d.reason)}</span>` : ''} <button class="btn sm icon ghost" data-x="del-change" data-id="${d.id}" aria-label="Apagar alteração" title="Apagar esta alteração do histórico">${icon('trash')}</button></span></div>`).join('')}</div></div>` : ''}
+  ${orcadoRealizadoHTML(p)}
   <div class="panel"><div class="panel-h"><h3>Marcos do projeto</h3></div><div class="panel-b stack">
     <div class="grid2">${MILESTONES.map(([k, lab]) => `<div class="field"><label for="ms-${k}">${lab}</label><input id="ms-${k}" type="datetime-local" class="input sm" value="${toLocalInput(p[k])}" data-pd="ms" data-k="${k}"></div>`).join('')}</div>
     <div class="stack" style="gap:4px"><span class="lbl">Intervalos entre etapas</span>
@@ -258,4 +259,22 @@ function askReason(from, to) {
     l.box.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); });
     l.box.addEventListener('click', (e) => { const b = e.target.closest('[data-x]'); if (!b) return; if (b.dataset.x === 'yes') ok(); else if (b.dataset.x === 'reason') { const inp = $('#rs-in', l.box); if (inp) inp.value = b.dataset.r; ok(); } else { done = true; res(null); l.close(); } });
   });
+}
+
+/* Orçado × realizado por etapa: tarefas criadas pela calculadora levam "Estimado: X h" nas notas;
+   compara com as horas líquidas reais de cada uma (com subtarefas). */
+const estimadoDaTarefa = (t) => { const m = /Estimado:\s*([\d.,]+)\s*h/i.exec(t?.notes || ''); return m ? Number(m[1].replace(/\./g, '').replace(',', '.')) : null; };
+function orcadoRealizadoHTML(p) {
+  const ts = db.where('tempo_tasks', t => t.project_id === p.id && !t.parent_id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const linhas = ts.map(t => ({ t, est: estimadoDaTarefa(t), real: taskMs(t.id) / 36e5 })).filter(x => x.est !== null);
+  if (!linhas.length) return '';
+  const totE = linhas.reduce((s, x) => s + x.est, 0), totR = linhas.reduce((s, x) => s + x.real, 0);
+  const pct = (r, e) => e ? Math.round(r / e * 100) : null;
+  const cor = (pc) => pc === null ? '' : pc > 100 ? 'color:var(--danger)' : pc >= 80 ? 'color:var(--warn)' : '';
+  const fh = (h) => fmtH(h * 36e5);
+  return `<div class="panel"><div class="panel-h"><h3>Orçado × realizado</h3><span class="small muted">horas por etapa da proposta</span></div><div class="panel-b">
+    <div class="calc-sum4"><span class="lbl">Etapa</span><span class="lbl v">Orçado</span><span class="lbl v">Real</span><span class="lbl v">%</span>
+    ${linhas.map(x => { const pc = pct(x.real, x.est); return `<span>${esc(x.t.name)}</span><span class="v">${fh(x.est)}</span><span class="v">${fh(x.real)}</span><span class="v small" style="${cor(pc)}">${pc === null ? '—' : pc + '%'}</span>`; }).join('')}
+    <span class="tot">Total</span><span class="v tot">${fh(totE)}</span><span class="v tot">${fh(totR)}</span><span class="v tot" style="${cor(pct(totR, totE))}">${pct(totR, totE) ?? '—'}${totE ? '%' : ''}</span></div>
+  </div></div>`;
 }

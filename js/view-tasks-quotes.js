@@ -122,11 +122,29 @@ VIEWS.quotes = () => {
     <div class="kpi"><span class="k">Taxa de aprovação</span><span class="v">${won.length + lost.length ? Math.round(won.length / (won.length + lost.length) * 100) + '%' : '—'}</span><span class="s">aprovados ÷ decididos</span></div>
     <div class="kpi"><span class="k">Follow-up pendente</span><span class="v">${open.filter(x => x.sent_at && daysBetween(x.followups?.slice(-1)[0]?.date || x.sent_at, today) >= 5).length}</span><span class="s">sem contato há 5+ dias</span></div>
   </div>
+  ${aprovacaoHTML(all)}
   <div class="panel"><div class="filters"><input id="qt-q" class="input search" placeholder="Buscar proposta ou cliente" value="${esc(f.q)}" data-input="qt" data-k="q"><select id="qt-s" class="input" data-on="qt" data-k="status" aria-label="Status">${options(statuses('quote'), f.status, { empty: true, emptyLabel: 'Todos os status' })}</select><span class="grow"></span>${colsBtn('quotes')}</div>
   <div class="panel-b tight">${list.length ? gridTable({ id: 'quotes', cols: QCOLS, rows: list, rowAttrs: x => `data-act="qt-open" data-id="${x.id}"`, rowById: (id) => db.get('tempo_quotes', id) })
     : `<div class="empty">${icon('doc')}<b>Nenhuma proposta</b><span>Registre os orçamentos enviados para acompanhar follow-up e converter em projeto quando aprovados.</span><button class="btn primary" data-act="qt-new">${icon('plus')} Nova proposta</button></div>`}</div></div>`;
   return { title: 'Orçamentos', actions: `<button class="btn primary" data-act="qt-new">${icon('plus')} Nova proposta</button>`, html };
 };
+/* Taxa de aprovação por modelo/tipo e por cliente, com preço médio dos aprovados × recusados. */
+function aprovacaoHTML(all) {
+  const dec = all.filter(x => ['won', 'lost'].includes(statusCat(x.status_id)));
+  if (dec.length < 3) return '';
+  const grupo = (chave, nome) => {
+    const m = new Map();
+    dec.forEach(x => { const k = chave(x); if (!k) return; const g = m.get(k) || { nome: nome(x), won: [], lost: [] }; (statusCat(x.status_id) === 'won' ? g.won : g.lost).push(Number(x.value) || 0); m.set(k, g); });
+    return [...m.values()].filter(g => g.won.length + g.lost.length >= 2).sort((a, b) => (b.won.length + b.lost.length) - (a.won.length + a.lost.length)).slice(0, 8);
+  };
+  const med = (a) => a.length ? fmtMoney0(a.reduce((s, v) => s + v, 0) / a.length) : '—';
+  const tabela = (titulo, gs) => gs.length ? `<div><div class="lbl" style="margin-bottom:6px">${titulo}</div><div class="calc-sum4"><span class="lbl"></span><span class="lbl v">Aprovação</span><span class="lbl v">Média aprovados</span><span class="lbl v">Média recusados</span>
+    ${gs.map(g => `<span>${esc(g.nome)}</span><span class="v">${Math.round(g.won.length / (g.won.length + g.lost.length) * 100)}% <span class="faint small">(${g.won.length}/${g.won.length + g.lost.length})</span></span><span class="v">${med(g.won)}</span><span class="v">${med(g.lost)}</span>`).join('')}</div></div>` : '';
+  const tipoNome = (x) => x.calc?.modelo && MODELOS[x.calc.modelo] ? MODELOS[x.calc.modelo].nome : (db.get('tempo_work_types', x.work_type_id)?.name || null);
+  const porTipo = grupo(tipoNome, tipoNome), porCli = grupo(x => x.client_id, x => db.get('tempo_clients', x.client_id)?.name || '—');
+  if (!porTipo.length && !porCli.length) return '';
+  return `<details class="panel" style="margin-bottom:14px"><summary class="panel-h" style="cursor:pointer"><h3>Taxa de aprovação</h3><span class="small muted">por tipo e por cliente</span></summary><div class="panel-b stack" style="gap:16px">${tabela('Por tipo', porTipo)}${tabela('Por cliente', porCli)}</div></details>`;
+}
 const QCOLS = {
   agency: { label: 'Agência', ico: 'spin', w: 140, sort: x => db.get('tempo_agencies', x.agency_id)?.name || '~', cell: x => agencyTag(db.get('tempo_agencies', db.get('tempo_clients', x.client_id)?.agency_id)) },
   client: { label: 'Cliente', ico: 'users', w: 200, sort: x => db.get('tempo_clients', x.client_id)?.name || '', cell: x => clientTag(db.get('tempo_clients', x.client_id)), edit: { type: 'combo', kind: 'client', get: x => x.client_id, set: (x, v) => db.update('tempo_quotes', x.id, { client_id: v, agency_id: db.get('tempo_clients', v)?.agency_id || null }) } },
