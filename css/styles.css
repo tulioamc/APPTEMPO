@@ -1335,3 +1335,9 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .me-line { display: grid; grid-template-columns: 26px minmax(0, 1.6fr) minmax(0, 1fr) 52px 64px 64px 40px 40px 40px 28px; gap: 6px; align-items: center; }
 .me-seta { min-height: 14px; padding: 0 4px; }
 .me-seta svg { width: 12px; height: 12px; }
+
+/* Sugestões do contato (WhatsApp e Gmail) */
+.ct-sug { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; background: var(--surface-1, #fff); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); margin-top: 4px; overflow: hidden; }
+.ct-opt { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; width: 100%; text-align: left; border: 0; background: transparent; padding: 7px 10px; cursor: pointer; }
+.ct-opt:hover { background: var(--surface-2); }
+.ct-opt .muted { grid-column: 1; } .ct-opt .faint { grid-column: 2; grid-row: 1; }

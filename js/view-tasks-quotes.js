@@ -207,7 +207,9 @@ function openQuote(id, preset = {}) {
   const camposTopo = () => `<div class="grid2">
       <div class="field span2"><label for="qf-n">Nome / escopo *</label><input id="qf-n" class="input" data-q="name" value="${esc(q.name)}"></div>
       <div class="field"><label for="qf-c">Cliente *</label><div class="row" style="flex-wrap:nowrap"><button type="button" id="qf-c" class="input combo-field grow" data-cli-busca aria-label="Buscar cliente">${q.client_id && db.get('tempo_clients', q.client_id) ? clientTag(db.get('tempo_clients', q.client_id)) : '<span class="faint">Buscar cliente…</span>'}</button><button type="button" class="btn" data-x="newclient" aria-label="Novo cliente" title="Cadastrar cliente novo">${icon('plus')}</button></div></div>
-      <div class="field"><label for="qf-ct">Contato</label><input id="qf-ct" class="input" data-pp="contato" value="${esc(pp.contato ?? (db.get('tempo_clients', q.client_id)?.contact || ''))}" placeholder="Quem pediu o orçamento"></div>
+      <div class="field" style="position:relative"><label for="qf-ct">Contato</label><input id="qf-ct" class="input" data-pp="contato" autocomplete="off" value="${esc(pp.contato ?? (db.get('tempo_clients', q.client_id)?.contact || ''))}" placeholder="Quem pediu o orçamento">
+        <div class="ct-sug" data-ct-sug hidden></div>
+        ${pp.contatoTel || pp.contatoEmail ? `<span class="hint">${pp.contatoTel ? `tel. ${esc(pp.contatoTel)}` : ''}${pp.contatoTel && pp.contatoEmail ? ' · ' : ''}${pp.contatoEmail ? esc(pp.contatoEmail) : ''}</span>` : ''}</div>
       <div class="field"><label for="qf-s">Status</label><select id="qf-s" class="input" data-q="status_id">${options(statuses('quote'), q.status_id)}</select></div>
       <div class="field"><label for="qf-sa">Data da proposta</label><input id="qf-sa" type="date" class="input" data-q="sent_at" value="${q.sent_at}"></div>
       <div class="field"><label for="qf-vd">Validade</label><div class="row" style="flex-wrap:nowrap;gap:8px;align-items:center"><input id="qf-vd" type="number" min="1" class="input" style="max-width:110px" data-q="validade" value="${q.validade}"><span class="small muted">dias${q.sent_at && Number(q.validade) ? ` · até ${fmtDate(validadeAte())}` : ''}</span></div></div>
@@ -356,9 +358,29 @@ function openQuote(id, preset = {}) {
     else return false;
     return true;
   };
+  /* Contato: enquanto digita, procura nome parecido nos contatos do WhatsApp e no Gmail; escolher preenche telefone e e-mail. */
+  let _ctT = null, _ctSeq = 0;
+  const foneDoJid = (jid) => { const n = String(jid || '').split('@')[0].replace(/\D/g, ''); if (n.length < 10) return ''; const br = n.startsWith('55') ? n.slice(2) : n; return br.length >= 10 ? `(${br.slice(0, 2)}) ${br.slice(2, -4)}-${br.slice(-4)}` : '+' + n; };
+  const nrmCt = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const sugContato = async (txt) => {
+    const box = $('[data-ct-sug]', l.box); if (!box) return;
+    const t = nrmCt(txt); if (t.length < 2) { box.hidden = true; return; }
+    const seq = ++_ctSeq;
+    const wa = (db.all('tempo_wa_contacts') || []).filter(c => !/@g\.us$/.test(c.jid || '') && nrmCt(c.name).includes(t)).slice(0, 5).map(c => ({ nome: c.name, tel: foneDoJid(c.jid), fonte: 'WhatsApp' }));
+    const desenha = (lista, carregando) => { if (seq !== _ctSeq) return; box._lista = lista; box.hidden = !lista.length && !carregando;
+      box.innerHTML = lista.map((c, i) => `<button type="button" class="ct-opt" data-ct-i="${i}"><b>${esc(c.nome || c.email)}</b><span class="small muted">${[c.tel, c.email].filter(Boolean).map(esc).join(' · ')}</span><span class="small faint">${c.fonte}</span></button>`).join('') + (carregando ? '<div class="small faint" style="padding:6px 10px">procurando no Gmail…</div>' : ''); };
+    desenha(wa, true);
+    let gm = [];
+    try { const token = await bankToken(); const r = await fetch('/api/gmail/contatos?q=' + encodeURIComponent(txt), { headers: { Authorization: 'Bearer ' + token } }); const j = await r.json(); gm = (j.contatos || []).map(c => ({ nome: c.nome, email: c.email, fonte: 'E-mail' })); } catch (e) {}
+    // junta: o do WhatsApp e o do e-mail com o mesmo primeiro nome viram uma sugestão só
+    const out = [...wa];
+    gm.forEach(g => { const m = out.find(w => !w.email && nrmCt(w.nome).split(' ')[0] === nrmCt(g.nome).split(' ')[0]); if (m) { m.email = g.email; m.fonte = 'WhatsApp e e-mail'; } else out.push(g); });
+    desenha(out.slice(0, 7), false);
+  };
   // enquanto digita: só os números mudam (o campo continua com o foco)
   l.box.addEventListener('input', (e) => {
     const t = e.target; if (t.type === 'checkbox' || t.tagName === 'SELECT') return;
+    if (t.id === 'qf-ct') { clearTimeout(_ctT); _ctT = setTimeout(() => sugContato(t.value), 500); }
     const r = apply(t); if (!r || r === 'q' || modo !== 'calc') return;
     const c = calcQuote(st, rates);
     const sum = $('.calc-sum4', l.box); if (sum) sum.outerHTML = calcSummaryHTML(c, st);
@@ -469,6 +491,12 @@ function openQuote(id, preset = {}) {
   };
 
   l.box.addEventListener('click', async (e) => {
+    const co = e.target.closest('[data-ct-i]'); if (co) {
+      const c = co.closest('[data-ct-sug]')._lista[Number(co.dataset.ctI)];
+      pp.contato = c.nome || c.email; if (c.tel) pp.contatoTel = c.tel; if (c.email) pp.contatoEmail = c.email;
+      redraw(); toast('Contato preenchido' + (c.tel || c.email ? ' com ' + [c.tel && 'telefone', c.email && 'e-mail'].filter(Boolean).join(' e ') : '')); return;
+    }
+    if (!e.target.closest('[data-ct-sug]')) { const sb = $('[data-ct-sug]', l.box); if (sb) sb.hidden = true; }
     const cb = e.target.closest('[data-cli-busca]'); if (cb) { openCombo(cb, { kind: 'client', value: q.client_id, onPick: escolheCliente }); return; }
     const ap = e.target.closest('[data-abre-pdf]'); if (ap) { try { window.webkit.messageHandlers.tempo.postMessage({ type: 'open', path: `${propPasta()}/${ap.dataset.abrePdf}.pdf`, abrir: true }); } catch (err) { toast('Não consegui abrir.'); } return; }
     const mdb = e.target.closest('[data-media]'); if (mdb) { st.lines[mdb.dataset.media].h = Number(mdb.dataset.h); redraw(); return; }
