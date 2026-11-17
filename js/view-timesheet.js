@@ -163,6 +163,7 @@ function pausaRec(r) {
   const app = String(r.app || '').trim().toLowerCase();
   const apps = (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
   if (apps.includes(app)) return true;
+  if (app === 'loginwindow') return true;   // Mac bloqueado nunca é trabalho
   if (BROWSER_RE.test(String(r.app || ''))) {
     const sites = (db.setting('pauseSites', DEFAULT_PAUSE_SITES) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
     return sites.some(x => String(r.doc || '').toLowerCase().includes(x));
