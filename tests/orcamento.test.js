@@ -53,7 +53,7 @@ test('proposta abre com a calculadora; proposta antiga abre no simplificado', ()
     { VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: { quote: { q: '', status: '' } }, openBtn: () => '' });
   m.db.data = m.db.empty(); m.db.loaded = true;
   let render = null;
-  m.ctx.openLayer = (o) => { render = o.render; return { box: { addEventListener() {} }, refresh() {}, close() {} }; };
+  m.ctx.openLayer = (o) => { render = o.render; return { box: { addEventListener() {}, classList: { toggle() {} } }, refresh() {}, close() {} }; };
   m.openQuote(null);
   const html = render();
   assert.ok(html.includes('Com calculadora') && html.includes('Orçamento simplificado'));

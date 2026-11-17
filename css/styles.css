@@ -1295,3 +1295,20 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .pl-bloco.late { outline: 2px solid var(--danger); }
 .pl-fixo { position: absolute; left: 0; right: 0; background: var(--surface-2); color: var(--fg-3, #888); font-size: .72em; padding: 2px 6px; border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); }
 @media (max-width: 900px) { .pl-semana { grid-template-columns: 34px repeat(5, minmax(120px, 1fr)); overflow-x: auto; } }
+/* Proposta com calculadora: formulário compacto à esquerda, resumo fixo à direita acompanhando o scroll */
+.modal.wide.xl { width: min(1220px, 100%); }
+
+.qf-2col { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 20px; align-items: start; }
+.qf-esq { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.qf-dir { position: sticky; top: 0; align-self: start; }
+.qf-resumo .panel-h b { font-size: 1.15em; }
+.qf-resumo .calc-sum4 { font-size: .86em; row-gap: 5px; }
+.qf-resumo .calc-sum4 > .v { padding-left: 10px; }
+.qf-2col .grid2 { gap: 10px 14px; }
+.qf-2col .panel-b { padding: 14px; }
+.qf-2col .panel-b.stack { gap: 10px; }
+.qf-2col .seg button { padding: 4px 8px; font-size: .86em; }
+.qf-2col .calc-line { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 64px 64px 78px 30px; gap: 6px; }
+.qf-2col .enc-row > .check:first-child { min-width: 170px; }
+.qf-2col textarea.input { min-height: 70px; }
+@media (max-width: 1000px) { .qf-2col { grid-template-columns: 1fr; } .qf-dir { position: static; } }

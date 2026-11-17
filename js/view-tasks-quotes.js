@@ -222,12 +222,12 @@ function openQuote(id, preset = {}) {
         ${q.client_id && !st.outro ? '<div class="small faint">Porte e mercado ficam guardados para este cliente.</div>' : ''}
       </div></div>
       <div class="panel"><div class="panel-h"><h3>Horas</h3></div><div class="panel-b stack">
+        <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="lbl">Modelo</span><div class="seg">${Object.entries(MODELOS).map(([k, mo]) => `<button type="button" class="${st.modelo === k ? 'on' : ''}" data-modelo="${k}">${mo.nome}</button>`).join('')}</div><span class="small faint">preenche as etapas com horas e prazos padrão</span></div>
         <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
           ${MODELOS[st.modelo]?.video ? `<div class="field" style="max-width:200px"><label for="cc-dur">Duração do vídeo (min)</label><input id="cc-dur" type="number" step="0.5" min="0.5" class="input" data-st="duracao" value="${st.duracao}" title="As horas do modelo são para 1 minuto de vídeo: 2 min = o dobro de horas e de prazo; 30 s = metade (mínimo)"></div>` : ''}
           <div class="field"><span class="lbl">Complexidade</span><div class="seg">${COMPLEXIDADES.map(([k, nome, m]) => `<button type="button" class="${st.cx === k ? 'on' : ''}" data-cx="${k}">${nome} <span class="faint">${fmtX(m)}</span></button>`).join('')}</div></div>
           <div class="field" style="max-width:260px"><label for="cc-ap">Reuniões de aprovação</label><div class="row" style="flex-wrap:nowrap;gap:6px;align-items:center"><input id="cc-ap" type="number" min="0" class="input" style="width:80px" data-st="aprov" value="${st.aprov}" placeholder="0" aria-label="Quantidade de reuniões"><span class="small muted">×</span><input type="number" min="0" step="0.5" class="input" style="width:80px" data-st="hAprov" value="${st.hAprov ?? 1}" aria-label="Horas por reunião"><span class="small muted">h</span></div></div>
         </div>
-        <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="lbl">Modelo</span><div class="seg">${Object.entries(MODELOS).map(([k, mo]) => `<button type="button" class="${st.modelo === k ? 'on' : ''}" data-modelo="${k}">${mo.nome}</button>`).join('')}</div><span class="small faint">preenche as etapas com horas e prazos padrão</span></div>
         <span class="lbl">Etapas${c.dur !== 1 ? ' (horas e dias por minuto de vídeo)' : ''} · viram as tarefas do projeto quando aprovado</span>
         <div class="calc-line calc-head small faint"><span>Etapa</span><span>Tipo</span><span>Horas</span><span>Dias úteis</span><span>Valor</span><span></span></div>
         ${st.lines.map((ln, i) => `<div class="calc-line"><input class="input sm" data-line="${i}" data-k="name" value="${esc(ln.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), ln.wt, { empty: true, emptyLabel: 'Tipo' })}</select><input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${ln.h}" placeholder="Horas" aria-label="Horas"><input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="prazo" value="${ln.prazo ?? ''}" placeholder="${ln.par ? 'paralelo' : 'dias'}" aria-label="Prazo em dias úteis" title="${ln.ap ? 'Termina com aprovação do cliente' : ''}${ln.par ? 'Corre em paralelo com a etapa anterior' : ''}"><span class="small mono muted" data-etv="${i}" title="Valor da etapa (minha parte)">${c.porEtapa[i] ? fmtMoney0(c.porEtapa[i]) : ''}</span><button type="button" class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
@@ -259,16 +259,19 @@ function openQuote(id, preset = {}) {
           <div class="stack grow" style="gap:6px">${st.ext.items.map((it, i) => `<div class="row" style="flex-wrap:nowrap"><input class="input sm grow" data-ext="${i}" data-k="name" value="${esc(it.name)}" placeholder="Ex.: Locutor" ${st.ext.on ? '' : 'disabled'} aria-label="Descrição"><input class="input sm mono" style="width:150px" data-ext="${i}" data-k="value" ${moneyAttrs(it.value)} placeholder="R$ 0,00" ${st.ext.on ? '' : 'disabled'} aria-label="Valor"><button type="button" class="btn sm icon" data-extadd="${i}" ${st.ext.on ? '' : 'disabled'} aria-label="Adicionar abaixo">${icon('plus')}</button><button type="button" class="btn sm icon" data-extdel="${i}" ${st.ext.on ? '' : 'disabled'} aria-label="Remover">−</button></div>`).join('')}
             <div class="row between small"><span class="muted">Total dos custos extras</span><b class="mono">${fmtMoney0(c.B)}</b></div></div></div>
       </div></div>
-      <div class="panel"><div class="panel-b">${calcSummaryHTML(c, st)}</div></div>
-      ${parecidosHTML(q.name, st.modelo, c.total, x?.id)}
-      <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end"><div class="field" style="max-width:240px"><label for="cc-final">Total final da proposta</label><input id="cc-final" class="input mono" data-st="alvo" ${moneyAttrs(st.alvo)} placeholder="${c.total ? fmtMoney(c.total) : 'R$ 0,00'}"></div>${Number(st.alvo) > 0 ? '<button type="button" class="btn sm" data-limpa-alvo>Voltar ao calculado</button>' : ''}<span class="hint grow" style="padding-bottom:8px">Digitando o total, só a sua parte se ajusta (entre as etapas); terceirizado fica igual e BV e imposto são refeitos.</span></div>`;
+`;
 
+  // resumo à direita: acompanha o scroll e se atualiza enquanto digita
+  const resumoCalc = (c) => `<div class="panel qf-resumo"><div class="panel-h"><h3>Resumo</h3><span class="grow"></span><b class="mono" data-tot-topo>${fmtMoney0(c.total)}</b></div><div class="panel-b stack" style="gap:12px">${calcSummaryHTML(c, st)}
+      <div data-parecidos>${parecidosHTML(q.name, st.modelo, c.total, x?.id)}</div>
+      <div class="field"><label for="cc-final">Total final da proposta</label><div class="row" style="flex-wrap:nowrap;gap:8px"><input id="cc-final" class="input mono" data-st="alvo" ${moneyAttrs(st.alvo)} placeholder="${c.total ? fmtMoney(c.total) : 'R$ 0,00'}">${Number(st.alvo) > 0 ? '<button type="button" class="btn sm" data-limpa-alvo>Voltar ao calculado</button>' : ''}</div><span class="hint">Digitando o total, só a sua parte se ajusta (entre as etapas); terceirizado fica igual e BV e imposto são refeitos.</span></div>
+    </div></div>`;
   const draw = () => {
     const c = calcQuote(st, rates);
     return `<div class="dh">${icon('doc')}<h2>${x ? esc(x.name) : 'Nova proposta'}</h2><span class="grow"></span>
       <div class="seg">${[['calc', 'Com calculadora'], ['simples', 'Orçamento simplificado']].map(([k, lab]) => `<button type="button" class="${modo === k ? 'on' : ''}" data-modo="${k}">${lab}</button>`).join('')}</div>
       <button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
-    <form class="db" id="qf">
+    <form class="db${modo === 'calc' ? ' qf-2col' : ''}" id="qf"><div class="qf-esq">
       ${camposTopo()}
       ${modo === 'calc' ? camposCalc(c) : camposSimples()}
       <div class="field"><label for="qf-o">Observações</label><textarea id="qf-o" class="input" data-q="notes">${esc(q.notes)}</textarea></div>
@@ -276,13 +279,14 @@ function openQuote(id, preset = {}) {
         ${(x.followups || []).length ? `<div class="timeline">${x.followups.map(fu => `<div class="tl"><span class="w">${fmtDate(fu.date)}</span><span class="b"></span><span>${esc(fu.note)}</span></div>`).join('')}</div>` : '<span class="small muted">Nenhum contato registrado.</span>'}
         <div class="row"><input type="date" class="input" style="max-width:170px" id="fu-d" value="${ymd(new Date())}" aria-label="Data do contato"><input class="input grow" id="fu-n" placeholder="O que foi conversado" aria-label="Contato"><button type="button" class="btn" data-x="fu">Registrar contato</button></div></div>` : ''}
       ${modo === 'simples' && x?.calc && !calcDaProposta(x.calc) && x.calc.computed ? `<div class="subtle-box small">Valor calculado na calculadora antiga: <b>${fmtMoney(x.calc.computed)}</b></div>` : ''}
-    </form>
+    </div>${modo === 'calc' ? `<aside class="qf-dir">${resumoCalc(c)}</aside>` : ''}</form>
     <div class="df">${x ? `<button class="btn danger left" data-x="del">${icon('trash')}</button>` : ''}
       ${linked ? `<button class="btn" data-x="sync-proj">${icon('arrowR')} Atualizar projeto</button><button class="btn" data-x="open-proj">${icon('folder')} Abrir projeto</button>` : x ? `<button class="btn" data-x="convert">${icon('arrowR')} Converter em projeto</button>` : ''}
       ${x ? `<button class="btn" data-x="pdf">${icon('doc')} Proposta em PDF</button>` : ''}
       <button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="save">Salvar</button></div>`;
   };
   const l = openLayer({ wide: true, render: draw });
+  const tamanho = () => l.box.classList.toggle('xl', modo === 'calc'); tamanho();
   l.box.addEventListener('submit', e => e.preventDefault());
   const keyOf = (i) => i && ((i.dataset.q && 'q' + i.dataset.q) || (i.dataset.pb && 'pb') || (i.dataset.pbm && 'pbm' + i.dataset.pbm) || i.dataset.st || i.dataset.encp || (i.dataset.line ? 'l' + i.dataset.line + i.dataset.k : null) || (i.dataset.ext ? 'e' + i.dataset.ext + i.dataset.k : null));
   const redraw = (focusKey) => { const a = document.activeElement; const key = focusKey || keyOf(a); l.refresh(); if (key) { const el = $$('input,select,textarea', l.box).find(i => keyOf(i) === key); if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} } } };
@@ -311,6 +315,8 @@ function openQuote(id, preset = {}) {
     const c = calcQuote(st, rates);
     const sum = $('.calc-sum4', l.box); if (sum) sum.outerHTML = calcSummaryHTML(c, st);
     const rt = $('[data-rate-txt]', l.box); if (rt) rt.innerHTML = calcRateTxt();
+    const tt = $('[data-tot-topo]', l.box); if (tt) tt.textContent = fmtMoney0(c.total);
+    const pa = $('[data-parecidos]', l.box); if (pa) pa.innerHTML = parecidosHTML(q.name, st.modelo, c.total, x?.id);
     const fin = $('#cc-final', l.box); if (fin) fin.placeholder = c.total ? fmtMoney(c.total) : 'R$ 0,00';
     const ht = $('[data-h-txt]', l.box); if (ht) ht.innerHTML = horasTxt(c);
     const ut = $('[data-urg-txt]', l.box); if (ut) ut.innerHTML = urgTxt(c);
@@ -361,7 +367,7 @@ function openQuote(id, preset = {}) {
 
   l.box.addEventListener('click', async (e) => {
     const cb = e.target.closest('[data-cli-busca]'); if (cb) { openCombo(cb, { kind: 'client', value: q.client_id, onPick: escolheCliente }); return; }
-    const md = e.target.closest('[data-modo]'); if (md) { modo = md.dataset.modo; redraw(); return; }
+    const md = e.target.closest('[data-modo]'); if (md) { modo = md.dataset.modo; tamanho(); redraw(); return; }
     const mo = e.target.closest('[data-modelo]'); if (mo) {
       const temAlgo = st.lines.some(ln => (ln.name || '').trim() && ln.name !== 'Criação' || Number(ln.h));
       if (temAlgo && !await confirmBox({ title: 'Trocar as etapas pelo modelo?', body: `As etapas atuais são substituídas pelas de <b>${esc(MODELOS[mo.dataset.modelo].nome)}</b>.`, ok: 'Usar o modelo' })) return;
