@@ -3,7 +3,10 @@
    Textos ficam na proposta (calc.proposta); rodapé e numeração em tempo_settings ('propostaRodape', 'propostaNum'). */
 const PROP_MESES = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 const propData = (iso) => { const d = iso ? new Date(iso + 'T12:00:00') : new Date(); return `${String(d.getDate()).padStart(2, '0')} ${PROP_MESES[d.getMonth()]} ${d.getFullYear()}`; };
-const propMoeda = (v) => 'R$ ' + Math.round(Number(v) || 0).toLocaleString('pt-BR');
+const propMoeda = (v, moeda) => {
+  const m = moeda && typeof MOEDAS !== 'undefined' && MOEDAS[moeda.cod];
+  return m && moeda.taxa > 0 ? m.simb + ' ' + Math.round((Number(v) || 0) / moeda.taxa).toLocaleString(m.loc) : 'R$ ' + Math.round(Number(v) || 0).toLocaleString('pt-BR');
+};
 const propNumExtenso = (n) => ['', 'uma', 'duas', 'três', 'quatro', 'cinco', 'seis'][n] || String(n);
 
 /* Itens da tabela. Com calculadora e mais de uma etapa com horas: uma linha por etapa, com a parte do total
@@ -53,13 +56,15 @@ function propEstado(x) {
   const cliNome = ag && !/direto/i.test(ag.name || '') ? `${ag.name} // ${cli.name}` : (cli?.name || '');
   return {
     num: p.num || null, data: p.data || x.sent_at || ymd(new Date()), cliente: p.cliente ?? cliNome, contato: p.contato ?? (cli?.contact || ''),
-    desc: p.desc ?? (x.name || ''), itens: p.itens || propItens(x), cond: p.cond || propCondicoes(x),
+    desc: p.desc ?? (x.name || ''), itens: p.itens || propItens(x), cond: p.cond || propCondicoes(x), moeda: x.calc?.moeda || null,
+    letra: p.letra || '', dia: p.dia || null,
   };
 }
 function propHTML(e) {
   const rod = propRodape();
   const ass = `${location.origin}/icons/assinatura.png`;
   const totalItens = e.itens.reduce((s, i) => s + (Number(i.valor) || 0), 0);
+  const simb = propMoeda(0, e.moeda).split(' ')[0];
   const letra = (i) => e.itens.length > 1 ? `${'abcdefghij'[i] || i + 1}. ` : '';
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Orçamento ${esc(e.num || '')}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -90,20 +95,23 @@ function propHTML(e) {
   <div class="cli">Cliente: ${esc(e.cliente || '')}<br>Contato: ${esc(e.contato || '')}</div>
   <div class="desc">${esc(e.desc || '')}</div>
   <table>
-    ${e.itens.map((i, n) => `<tr class="${n === 0 ? 'first' : ''}"><td>${letra(n)}${esc(i.desc || '')}</td><td class="u">${esc(i.unit || '')}</td><td class="q">${esc(i.qtd || '')}</td><td class="r">R$</td><td class="v">${esc(propMoeda(i.valor).replace('R$ ', ''))}</td></tr>`).join('')}
-    <tr class="tot fim"><td>Total</td><td class="u"></td><td class="q"></td><td class="r">R$</td><td class="v">${esc(propMoeda(totalItens).replace('R$ ', ''))}</td></tr>
+    ${e.itens.map((i, n) => `<tr class="${n === 0 ? 'first' : ''}"><td>${letra(n)}${esc(i.desc || '')}</td><td class="u">${esc(i.unit || '')}</td><td class="q">${esc(i.qtd || '')}</td><td class="r">${esc(simb)}</td><td class="v">${esc(propMoeda(i.valor, e.moeda).replace(/^\S+ /, ''))}</td></tr>`).join('')}
+    <tr class="tot fim"><td>Total</td><td class="u"></td><td class="q"></td><td class="r">${esc(simb)}</td><td class="v">${esc(propMoeda(totalItens, e.moeda).replace(/^\S+ /, ''))}</td></tr>
   </table>
   <ul>${e.cond.filter(c => String(c).trim()).map(c => `<li>${esc(c)}</li>`).join('')}</ul>
   <div class="pe"><div><img src="${ass}" alt="">${rod.linhas.map(l => esc(l)).join('<br>')}</div><div class="cargo">${esc(rod.cargo)}</div></div>
 </div></body></html>`;
 }
-/* Nome do arquivo: NÚMERO_Agência_Cliente_ANO_MÊS (ex.: 1021_BRENDA_Bem-Brasil_2026_NOV); cliente direto fica sem agência. */
+/* Nome do arquivo: NÚMERO+versão_AGÊNCIA_CLIENTE_ANOMÊSDIA, tudo junto (ex.: 1021A_BRENDA_BEMBRASIL_2026NOV17).
+   Cliente direto fica sem agência. A versão (A, B, C…) só aparece quando a proposta foi alterada depois de salva. */
 const propNome = (e, x) => {
-  const limpa = (t) => String(t || '').normalize('NFC').replace(/[\/\\:*?"<>|]+/g, '-').trim().replace(/\s+/g, '-');
+  const limpa = (t) => String(t || '').normalize('NFC').replace(/[\s\-\/\\:*?"<>|.]+/g, '');
   const cli = db.get('tempo_clients', x.client_id); const ag = cli?.agency_id ? db.get('tempo_agencies', cli.agency_id) : null;
-  const d = new Date((e.data || ymd(new Date())) + 'T12:00:00');
-  return [e.num, ag && !isDirectAgency(ag) ? limpa(ag.name) : '', limpa(cli?.name), d.getFullYear(), PROP_MESES[d.getMonth()]].filter(Boolean).join('_');
+  const d = new Date((e.dia || e.data || ymd(new Date())) + 'T12:00:00');
+  return [`${e.num}${e.letra || ''}`, ag && !isDirectAgency(ag) ? limpa(ag.name) : '', limpa(cli?.name), `${d.getFullYear()}${PROP_MESES[d.getMonth()]}${String(d.getDate()).padStart(2, '0')}`].filter(Boolean).join('_');
 };
+/* O que entra no PDF: se mudar depois de salvo, vira uma versão nova (B, C…). */
+const propAssinatura = (e) => JSON.stringify([e.cliente, e.contato, e.desc, e.cond, e.itens.map(i => [i.desc, Math.round(Number(i.valor) || 0)]), e.moeda?.cod || '', e.data]);
 const PROP_PASTA = '~/BAQUER Dropbox/Tulio Couceiro/_TULIO COUCEIRO LTDA/_ADMIN/Orçamento';
 const propPasta = () => db.setting('propostaPasta', null) || PROP_PASTA;
 /* Grava o PDF da proposta na pasta de orçamentos (app do Mac). abrir=false: salva calado (ao salvar a proposta). */
@@ -111,6 +119,30 @@ function propSalvaArquivo(qid, abrir = false) {
   const x = db.get('tempo_quotes', qid); if (!x || !isMacApp()) return false;
   const e = propEstado(x); if (!e.num) return false;
   try { window.webkit.messageHandlers.tempo.postMessage({ type: 'pdf', html: propHTML(e), nome: propNome(e, x), dir: propPasta(), abrir }); return true; } catch (err) { return false; }
+}
+/* Depois de salvar: primeira vez guarda a assinatura; se o conteúdo do PDF mudou, vira versão nova
+   (o original 1021 é renomeado para 1021A e a nova sai como 1021B; depois C, D…). Grava o PDF na pasta. */
+function propVersionar(qid, abrir = false) {
+  const x = db.get('tempo_quotes', qid); if (!x) return null;
+  const p = { ...(x.calc?.proposta || {}) }; if (!p.num) return null;
+  const e = propEstado(x); const assin = propAssinatura(e); const hoje = ymd(new Date());
+  let renomear = null;
+  if (!p.assin) { p.assin = assin; p.dia = p.dia || hoje; p.letra = p.letra || ''; }
+  else if (p.assin !== assin) {
+    if (!p.letra) { renomear = { de: propNome({ ...e, letra: '', dia: p.dia }, x), para: propNome({ ...e, letra: 'A', dia: p.dia }, x) }; p.letra = 'B'; }
+    else p.letra = String.fromCharCode(Math.min(90, p.letra.charCodeAt(0) + 1));
+    p.dia = hoje; p.assin = assin;
+  }
+  db.update('tempo_quotes', qid, { calc: { ...(x.calc || {}), proposta: p } }, true);
+  if (isMacApp()) {
+    try {
+      if (renomear) window.webkit.messageHandlers.tempo.postMessage({ type: 'pdfRenomear', dir: propPasta(), ...renomear });
+      const e2 = propEstado(db.get('tempo_quotes', qid));
+      window.webkit.messageHandlers.tempo.postMessage({ type: 'pdf', html: propHTML(e2), nome: propNome(e2, x), dir: propPasta(), abrir });
+      return { nome: propNome(e2, x), gravou: true };
+    } catch (err) { return { nome: propNome(e, x), gravou: false }; }
+  }
+  return { nome: propNome(propEstado(db.get('tempo_quotes', qid)), x), gravou: false };
 }
 /* Próximo número de orçamento (o último feito à mão foi 1020). */
 const propProximoNum = () => Number(db.setting('propostaNum', 1020)) + 1;
@@ -146,7 +178,8 @@ function openPropostaPDF(qid) {
   });
   const guarda = () => {
     const atual = db.get('tempo_quotes', qid);
-    db.update('tempo_quotes', qid, { calc: { ...(atual.calc || {}), proposta: { ...clone(e), cond: e.cond.filter(c => String(c).trim()) } } }, true);
+    const { moeda, ...resto } = clone(e);
+    db.update('tempo_quotes', qid, { calc: { ...(atual.calc || {}), proposta: { ...(atual.calc?.proposta || {}), ...resto, cond: e.cond.filter(c => String(c).trim()) } } }, true);
     if (e.num > Number(db.setting('propostaNum', 1020))) db.setSetting('propostaNum', e.num);
   };
   l.box.addEventListener('click', (ev) => {
@@ -157,12 +190,8 @@ function openPropostaPDF(qid) {
     if (ev.target.closest('[data-psave]')) { guarda(); toast('Textos da proposta salvos'); return; }
     if (ev.target.closest('[data-pgera]')) {
       guarda();
-      const html = propHTML(e), nome = propNome(e, x);
-      if (isMacApp()) {
-        try { window.webkit.messageHandlers.tempo.postMessage({ type: 'pdf', html, nome, dir: propPasta(), abrir: true }); toast('Gerando a proposta na pasta Orçamento…'); }
-        catch (err) { toast('Não consegui gerar o PDF.'); }
-        return;
-      }
+      if (isMacApp()) { const r = propVersionar(qid, true); toast(r?.gravou ? `Gerando ${r.nome}.pdf na pasta Orçamento…` : 'Não consegui gerar o PDF.'); return; }
+      const html = propHTML(propEstado(db.get('tempo_quotes', qid)));
       const w = window.open('', '_blank');
       if (!w) { toast('Permita janelas pop-up para gerar o PDF.'); return; }
       w.document.write(html); w.document.close(); setTimeout(() => { try { w.focus(); w.print(); } catch (err) {} }, 600);

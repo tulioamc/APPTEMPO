@@ -234,6 +234,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
+    /// Renomeia um PDF já gravado na pasta escolhida (ex.: 1021_… vira 1021A_… quando sai a versão B).
+    private func handlePDFRenomear(_ d: [String: Any]) {
+        guard let dir = d["dir"] as? String, let de = d["de"] as? String, let para = d["para"] as? String,
+              !de.isEmpty, !para.isEmpty, !de.contains("/"), !para.contains("/") else { return }
+        let pasta = URL(fileURLWithPath: (dir as NSString).expandingTildeInPath)
+        let a = pasta.appendingPathComponent(de + ".pdf"), b = pasta.appendingPathComponent(para + ".pdf")
+        guard FileManager.default.fileExists(atPath: a.path), !FileManager.default.fileExists(atPath: b.path) else { return }
+        try? FileManager.default.moveItem(at: a, to: b)
+    }
+
     /// Grava nota fiscal (PDF) ou comprovante (PNG) em iCloud/Terapias/<Ano_Mes>, a pedido do site.
     private func handleTerapia(_ d: [String: Any]) {
         guard let tipo = d["tipo"] as? String, let anoMes = d["anoMes"] as? String, let terapeuta = d["terapeuta"] as? String,
@@ -265,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         case "update": runUpdate(manual: true); return
         case "open": handleOpen(d); return
         case "pdf": handlePDF(d); return
+        case "pdfRenomear": handlePDFRenomear(d); return
         case "foco": handleFoco(d); return
         default: break
         }

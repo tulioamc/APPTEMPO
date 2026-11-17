@@ -73,11 +73,11 @@ test('modelos: identidade 34 h; motion 2D 42 h/min com 4 aprovações e prazo fe
   let c = m.calcQuote(st, m.precoBase());
   assert.equal(c.hEtapas, 34); assert.equal(c.fechado, 12);
   m.aplicaModelo(st, 'motion2d', []);
-  assert.equal(st.duracao, 1); assert.equal(st.aprov, 4);
+  assert.equal(st.grupos[0].duracao, 1); assert.equal(st.aprov, 4);
   c = m.calcQuote(st, m.precoBase());
   assert.equal(c.hEtapas, 42); assert.equal(c.h, 46); assert.equal(c.fechado, 21);
   assert.ok(c.provavel > c.fechado);
-  st.duracao = 2; c = m.calcQuote(st, m.precoBase());
+  st.grupos[0].duracao = 2; c = m.calcQuote(st, m.precoBase());
   assert.equal(c.h, 88); assert.equal(c.fechado, 42);
 });
 
@@ -128,7 +128,7 @@ test('vários projetos na proposta: horas por projeto, paralelo não conta, reor
   m.aplicaModelo(st, 'identidade', []);
   m.aplicaModelo(st, 'manual', [], 'adiciona');
   m.aplicaModelo(st, 'motion2d', [], 'adiciona');
-  st.duracao = 2;
+  st.grupos[2].duracao = 2;
   assert.equal(st.grupos.length, 3);
   const c = m.calcQuote(st, m.precoBase());
   assert.deepEqual(c.porGrupo.map(g => g.h), [34, 16, 84], 'vídeo de 2 min dobra só o projeto de vídeo');
@@ -146,6 +146,44 @@ test('nome do arquivo do orçamento: NÚMERO_Agência_Cliente_ANO_MÊS', () => {
   m.db.data = m.db.empty();
   m.db.data.tempo_agencies = [{ id: 'a', name: 'BRENDA' }, { id: 'd', name: 'Cliente Direto' }];
   m.db.data.tempo_clients = [{ id: 'c', name: 'BEM BRASIL', agency_id: 'a' }, { id: 'k', name: 'AmiGo', agency_id: 'd' }];
-  assert.equal(m.propNome({ num: 1021, data: '2026-11-17' }, { client_id: 'c' }), '1021_BRENDA_BEM-BRASIL_2026_NOV');
-  assert.equal(m.propNome({ num: 1022, data: '2026-12-02' }, { client_id: 'k' }), '1022_AmiGo_2026_DEZ');
+  assert.equal(m.propNome({ num: 1021, data: '2026-11-17' }, { client_id: 'c' }), '1021_BRENDA_BEMBRASIL_2026NOV17');
+  assert.equal(m.propNome({ num: 1021, letra: 'A', dia: '2026-11-17' }, { client_id: 'c' }), '1021A_BRENDA_BEMBRASIL_2026NOV17');
+  assert.equal(m.propNome({ num: 1022, data: '2026-12-02' }, { client_id: 'k' }), '1022_AmiGo_2026DEZ02');
+});
+
+test('terceirizado na etapa: conta prazo, não conta horas, valor entra sem multiplicar; duração por vídeo', () => {
+  const m = load(['js/store.js', 'js/domain.js', 'js/orcamento.js'], ['db', 'calcQuote', 'precoBase', 'aplicaModelo'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty();
+  const st = { porte: 'medio', mercado: 'local', lines: [{ name: '', h: '' }], cx: 'simples', nf: { on: false }, bv: { on: false }, ext: { on: false, items: [] } };
+  m.aplicaModelo(st, 'identidade', []);
+  m.aplicaModelo(st, 'motion2d', [], 'adiciona');
+  m.aplicaModelo(st, 'motion2d', [], 'adiciona');
+  st.grupos[1].duracao = 3; st.grupos[2].duracao = 0.5;
+  const roteiro = st.lines.find(l => l.grp === st.grupos[1].id && l.name === 'Roteiro'); roteiro.valor = 1500;
+  const c = m.calcQuote(st, m.precoBase());
+  assert.deepEqual(c.porGrupo.map(g => g.h), [34, 126, 21], 'identidade sem multiplicar; cada vídeo com a sua duração');
+  assert.equal(c.Bterc, 1500, 'terceirizado não multiplica pela duração');
+  assert.ok(c.porGrupo[1].terc === 1500);
+  const t = m.aplicaModelo({ ...st, lines: [{ name: '', h: '' }], grupos: null }, 'traducao', []);
+  assert.equal(m.calcQuote(t, m.precoBase()).hEtapas, 8); assert.equal(m.calcQuote(t, m.precoBase()).fechado, 10);
+});
+
+test('versões: alterar a proposta salva vira B e o original vira A', () => {
+  const msgs = [];
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/orcamento.js', 'js/proposta.js'], ['db', 'propVersionar'], { VIEWS: {}, ACTIONS: {}, CHANGES: {}, isMacApp: () => true });
+  m.ctx.window.webkit = { messageHandlers: { tempo: { postMessage: (x) => msgs.push(x) } } };
+  m.db.data = m.db.empty();
+  m.db.data.tempo_agencies = [{ id: 'a', name: 'BRENDA' }];
+  m.db.data.tempo_clients = [{ id: 'c', name: 'BEM BRASIL', agency_id: 'a' }];
+  m.db.data.tempo_quotes = [{ id: 'q', name: 'Vinheta', client_id: 'c', value: 5000, sent_at: '2026-11-17', calc: { proposta: { num: 1021 } } }];
+  m.propVersionar('q');
+  assert.ok(msgs.at(-1).nome.startsWith('1021_BRENDA_BEMBRASIL_'));
+  m.propVersionar('q'); assert.ok(msgs.at(-1).nome.startsWith('1021_'), 'sem mudança: mesmo arquivo');
+  m.db.update('tempo_quotes', 'q', { value: 6000 }, true);
+  m.propVersionar('q');
+  const ren = msgs.find(x => x.type === 'pdfRenomear');
+  assert.ok(ren.de.startsWith('1021_') && ren.para.startsWith('1021A_'));
+  assert.ok(msgs.at(-1).nome.startsWith('1021B_'));
+  m.db.update('tempo_quotes', 'q', { value: 7000 }, true);
+  m.propVersionar('q'); assert.ok(msgs.at(-1).nome.startsWith('1021C_'));
 });

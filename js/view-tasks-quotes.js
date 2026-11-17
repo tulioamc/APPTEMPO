@@ -193,6 +193,7 @@ function openQuote(id, preset = {}) {
   const ratio = done.length ? done.reduce((s, p) => s + hours(projectMs(p.id)) / p.estimated_hours, 0) / done.length : null;
   const linked = linkedProject(x);
 
+  const M$ = (v) => fmtNaMoeda(v, st.moeda);
   const calcRateTxt = () => st.outro ? `Valor-hora: <b>${fmtMoney(calcRate(st, rates)) || 'R$ —'}</b>`
     : `${fmtMoney(rates.hora) || 'R$ —'} × ${fmtX(rates.porte[st.porte])} (porte) × ${fmtX(rates.mercado[st.mercado])} (mercado) = <b>${fmtMoney(calcRate(st, rates)) || 'R$ —'}/h</b>`;
   const horasTxt = (c) => c.h ? `Total: <b>${fmtH(c.h * 3600000)}</b> de trabalho${c.reun ? ` (${fmtH((c.h - c.reun) * 3600000)} das etapas + ${fmtH(c.reun * 3600000)} de reuniões)` : ''} · prazo ${c.prazoModelo ? `fechado <b>${c.fechado} dia(s) útil(eis)</b>, provável com ajustes <b>~${c.provavel}</b> (sem contar o tempo de aprovação do cliente)` : `no ritmo normal: <b>${c.fechado} dia(s) útil(eis)</b> (${HORAS_DIA} h/dia)`}` : '';
@@ -229,15 +230,14 @@ function openQuote(id, preset = {}) {
       <div class="panel"><div class="panel-h"><h3>Horas</h3></div><div class="panel-b stack">
         <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="lbl">Modelo</span><div class="seg">${Object.entries(MODELOS).map(([k, mo]) => `<button type="button" class="${modelosDe(st).includes(k) ? 'on' : ''}" data-modelo="${k}">${mo.nome}</button>`).join('')}</div><span class="small faint">preenche as etapas com horas e prazos padrão; dá para juntar mais de um</span></div>
         <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
-          ${temVideo(st) ? `<div class="field" style="max-width:200px"><label for="cc-dur">Duração do vídeo (min)</label><input id="cc-dur" type="number" step="0.5" min="0.5" class="input" data-st="duracao" value="${st.duracao}" title="As horas do modelo são para 1 minuto de vídeo: 2 min = o dobro de horas e de prazo; 30 s = metade (mínimo)"></div>` : ''}
           <div class="field"><span class="lbl">Complexidade</span><div class="seg">${COMPLEXIDADES.map(([k, nome, m]) => `<button type="button" class="${st.cx === k ? 'on' : ''}" data-cx="${k}">${nome} <span class="faint">${fmtX(m)}</span></button>`).join('')}</div></div>
           <div class="field" style="max-width:260px"><label for="cc-ap">Reuniões de aprovação</label><div class="row" style="flex-wrap:nowrap;gap:6px;align-items:center"><input id="cc-ap" type="number" min="0" class="input" style="width:80px" data-st="aprov" value="${st.aprov}" placeholder="0" aria-label="Quantidade de reuniões"><span class="small muted">×</span><input type="number" min="0" step="0.5" class="input" style="width:80px" data-st="hAprov" value="${st.hAprov ?? 1}" aria-label="Horas por reunião"><span class="small muted">h</span></div></div>
         </div>
         <span class="lbl">Projetos e etapas · cada projeto vira um projeto no app quando aprovado, e as etapas viram as tarefas${c.dur !== 1 ? ' · nos vídeos, horas e dias são por minuto' : ''}</span>
         ${gruposDe(st).map((g, gi) => { const pg = c.porGrupo.find(x => x.id === g.id); const linhas = st.lines.map((ln, i) => [ln, i]).filter(([ln]) => ln.grp === g.id); return `<div class="qf-grupo" data-grp="${g.id}">
-          <div class="row" style="flex-wrap:nowrap;gap:8px;align-items:center"><input class="input sm grow qf-gnome" data-gnome="${g.id}" value="${esc(g.nome || '')}" placeholder="${gruposDe(st).length > 1 ? `Projeto ${gi + 1}` : 'Nome do projeto (opcional)'}" aria-label="Nome do projeto"><span class="small mono muted" data-gtot="${g.id}">${pg && pg.h ? `${fmtH(pg.h * 3600000)} · ${fmtMoney0(c.total * pg.parte)}` : ''}</span>${gruposDe(st).length > 1 ? `<button type="button" class="btn sm icon ghost" data-gdel="${g.id}" aria-label="Remover projeto" title="Remover este projeto">${icon('trash')}</button>` : ''}</div>
-          <div class="calc-line calc-head small faint"><span></span><span>Etapa</span><span>Tipo</span><span>Horas</span><span>Dias úteis</span><span title="Em paralelo: fica dentro do tempo da etapa de cima">Paral.</span><span>Valor</span><span></span></div>
-          ${linhas.map(([ln, i]) => `<div class="calc-line${ln.par ? ' par' : ''}" data-row="${i}"><span class="qf-handle" data-handle="${i}" title="Arraste para reordenar" aria-label="Arrastar">${icon('grip')}</span><input class="input sm" data-line="${i}" data-k="name" value="${esc(ln.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), ln.wt, { empty: true, emptyLabel: 'Tipo' })}</select>${ln.par ? '<span class="small faint" style="grid-column:span 2">junto com a de cima</span>' : `<input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${ln.h}" placeholder="Horas" aria-label="Horas"><input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="prazo" value="${ln.prazo ?? ''}" placeholder="dias" aria-label="Prazo em dias úteis" title="${ln.ap ? 'Termina com aprovação do cliente' : ''}">`}<label class="qf-par" title="Em paralelo: não conta horas nem prazo; fica dentro da etapa de cima"><input type="checkbox" data-par="${i}" ${ln.par ? 'checked' : ''} aria-label="Em paralelo"></label><span class="small mono muted" data-etv="${i}" title="Valor da etapa (minha parte)">${c.porEtapa[i] ? fmtMoney0(c.porEtapa[i]) : ''}</span><button type="button" class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
+          <div class="row" style="flex-wrap:nowrap;gap:8px;align-items:center"><input class="input sm grow qf-gnome" data-gnome="${g.id}" value="${esc(g.nome || '')}" placeholder="${gruposDe(st).length > 1 ? `Projeto ${gi + 1}` : 'Nome do projeto (opcional)'}" aria-label="Nome do projeto">${grupoVideo(g) ? `<label class="small muted" style="white-space:nowrap">Duração <input type="number" step="0.5" min="0.5" class="input sm" style="width:70px" data-gdur="${g.id}" value="${g.duracao ?? 1}" aria-label="Duração do vídeo em minutos" title="As horas e os dias deste vídeo são por minuto: 3 min = 3×; 30 s = metade (mínimo). Terceirizado não multiplica."> min</label>` : ''}<span class="small mono muted" data-gtot="${g.id}">${pg && (pg.h || pg.terc) ? `${fmtH(pg.h * 3600000)} · ${M$(c.total * pg.parte)}` : ''}</span>${gruposDe(st).length > 1 ? `<button type="button" class="btn sm icon ghost" data-gdel="${g.id}" aria-label="Remover projeto" title="Remover este projeto">${icon('trash')}</button>` : ''}</div>
+          <div class="calc-line calc-head small faint"><span></span><span>Etapa</span><span>Tipo</span><span>Horas</span><span>Dias úteis</span><span title="Em paralelo: fica dentro do tempo da etapa de cima">Paral.</span><span title="Terceirizado: conta o prazo, não as suas horas; entra pelo valor que você paga">Terc.</span><span>Valor</span><span></span></div>
+          ${linhas.map(([ln, i]) => `<div class="calc-line${ln.par ? ' par' : ''}" data-row="${i}"><span class="qf-handle" data-handle="${i}" title="Arraste para reordenar" aria-label="Arrastar">${icon('grip')}</span><input class="input sm" data-line="${i}" data-k="name" value="${esc(ln.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), ln.wt, { empty: true, emptyLabel: 'Tipo' })}</select>${ln.par ? '<span class="small faint" style="grid-column:span 2">junto com a de cima</span>' : `${ln.terc ? `<input class="input sm mono" data-line="${i}" data-k="valor" ${moneyAttrs(ln.valor)} placeholder="R$ custo" aria-label="Valor pago ao terceirizado" title="Quanto você paga ao terceirizado (entra no total sem multiplicar)">` : `<input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${ln.h}" placeholder="Horas" aria-label="Horas">`}<input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="prazo" value="${ln.prazo ?? ''}" placeholder="dias" aria-label="Prazo em dias úteis" title="${ln.ap ? 'Termina com aprovação do cliente' : ''}">`}<label class="qf-par" title="Em paralelo: não conta horas nem prazo; fica dentro da etapa de cima"><input type="checkbox" data-par="${i}" ${ln.par ? 'checked' : ''} aria-label="Em paralelo"></label><label class="qf-par" title="Terceirizado: conta o prazo de entrega, não as suas horas; você informa o valor"><input type="checkbox" data-terc="${i}" ${ln.terc ? 'checked' : ''} aria-label="Terceirizado"></label><span class="small mono muted" data-etv="${i}" title="Valor da etapa">${ln.terc ? (Number(ln.valor) ? M$(ln.valor) : '') : c.porEtapa[i] ? M$(c.porEtapa[i]) : ''}</span><button type="button" class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
           <div><button type="button" class="btn sm ghost" data-add="${g.id}">${icon('plus')} Etapa</button></div>
         </div>`; }).join('')}
         <div class="row between" style="flex-wrap:wrap;gap:8px"><button type="button" class="btn sm" data-gadd>${icon('plus')} Projeto</button>
@@ -264,7 +264,7 @@ function openQuote(id, preset = {}) {
           <label class="check small"><input type="checkbox" data-inside ${st.nf.inside ? 'checked' : ''} ${st.nf.on ? '' : 'disabled'}> Calcular por dentro <span class="faint">(você recebe o valor líquido cheio)</span></label></div>
         <div class="enc-row ${st.bv.on ? '' : 'off'}"><label class="check"><input type="checkbox" data-enc="bv" ${st.bv.on ? 'checked' : ''}> <b>BV</b></label>
           <label class="enc-f">Comissão <input type="number" min="0" max="99" step="0.5" class="input sm" data-encp="bv" value="${st.bv.pct}" ${st.bv.on ? '' : 'disabled'} aria-label="Comissão em %"> %</label><span class="small faint">sobre trabalho + custos extras</span></div>
-        <div class="enc-row ${st.ext.on ? '' : 'off'}" style="align-items:flex-start"><label class="check" style="padding-top:5px"><input type="checkbox" data-enc="ext" ${st.ext.on ? 'checked' : ''}> <b>Terceirizado / custo extra</b></label>
+        <div class="enc-row ${st.ext.on ? '' : 'off'}" style="align-items:flex-start"><label class="check" style="padding-top:5px"><input type="checkbox" data-enc="ext" ${st.ext.on ? 'checked' : ''}> <b>Outros custos extras</b></label>
           <div class="stack grow" style="gap:6px">${st.ext.items.map((it, i) => `<div class="row" style="flex-wrap:nowrap"><input class="input sm grow" data-ext="${i}" data-k="name" value="${esc(it.name)}" placeholder="Ex.: Locutor" ${st.ext.on ? '' : 'disabled'} aria-label="Descrição"><input class="input sm mono" style="width:150px" data-ext="${i}" data-k="value" ${moneyAttrs(it.value)} placeholder="R$ 0,00" ${st.ext.on ? '' : 'disabled'} aria-label="Valor"><button type="button" class="btn sm icon" data-extadd="${i}" ${st.ext.on ? '' : 'disabled'} aria-label="Adicionar abaixo">${icon('plus')}</button><button type="button" class="btn sm icon" data-extdel="${i}" ${st.ext.on ? '' : 'disabled'} aria-label="Remover">−</button></div>`).join('')}
             <div class="row between small"><span class="muted">Total dos custos extras</span><b class="mono">${fmtMoney0(c.B)}</b></div></div></div>
       </div></div>
@@ -283,7 +283,8 @@ function openQuote(id, preset = {}) {
     </div></div>`;
   };
   // resumo à direita: acompanha o scroll e se atualiza enquanto digita
-  const resumoCalc = (c) => `<div class="panel qf-resumo"><div class="panel-h"><h3>Resumo</h3><span class="grow"></span><b class="mono" data-tot-topo>${fmtMoney0(c.total)}</b></div><div class="panel-b stack" style="gap:12px">${calcSummaryHTML(c, st)}
+  const resumoCalc = (c) => `<div class="panel qf-resumo"><div class="panel-h"><h3>Resumo</h3><span class="grow"></span><b class="mono" data-tot-topo>${M$(c.total)}</b></div><div class="panel-b stack" style="gap:12px">${calcSummaryHTML(c, st)}
+      <div class="row between small" style="flex-wrap:wrap;gap:6px">${st.moeda ? `<span class="muted">Em ${MOEDAS[st.moeda.cod].nome.toLowerCase()} · cotação de ${fmtDate(st.moeda.data)}: 1 ${st.moeda.cod} = ${fmtMoney(st.moeda.taxa)}</span><button type="button" class="btn sm ghost" data-moeda="BRL">Voltar para reais</button>` : '<span></span>'}<button type="button" class="btn sm" data-moeda-escolher>${icon('money')} Converter para outra moeda</button></div>
       <div data-parecidos>${parecidosHTML(q.name, st.modelo, c.total, x?.id)}</div>
       <div class="field"><label for="cc-final">Total final da proposta</label><div class="row" style="flex-wrap:nowrap;gap:8px"><input id="cc-final" class="input mono" data-st="alvo" ${moneyAttrs(st.alvo)} placeholder="${c.total ? fmtMoney(c.total) : 'R$ 0,00'}">${Number(st.alvo) > 0 ? '<button type="button" class="btn sm" data-limpa-alvo>Voltar ao calculado</button>' : ''}</div><span class="hint">Digitando o total, só a sua parte se ajusta (entre as etapas); terceirizado fica igual e BV e imposto são refeitos.</span></div>
     </div></div>`;
@@ -310,7 +311,7 @@ function openQuote(id, preset = {}) {
   const l = openLayer({ wide: true, render: draw });
   const tamanho = () => l.box.classList.toggle('xl', modo === 'calc'); tamanho();
   l.box.addEventListener('submit', e => e.preventDefault());
-  const keyOf = (i) => i && ((i.dataset.pp && 'pp' + i.dataset.pp) || (i.dataset.q && 'q' + i.dataset.q) || (i.dataset.gnome && 'g' + i.dataset.gnome) || (i.dataset.pb && 'pb') || (i.dataset.pbm && 'pbm' + i.dataset.pbm) || i.dataset.st || i.dataset.encp || (i.dataset.line ? 'l' + i.dataset.line + i.dataset.k : null) || (i.dataset.ext ? 'e' + i.dataset.ext + i.dataset.k : null));
+  const keyOf = (i) => i && ((i.dataset.gdur && 'gd' + i.dataset.gdur) || (i.dataset.pp && 'pp' + i.dataset.pp) || (i.dataset.q && 'q' + i.dataset.q) || (i.dataset.gnome && 'g' + i.dataset.gnome) || (i.dataset.pb && 'pb') || (i.dataset.pbm && 'pbm' + i.dataset.pbm) || i.dataset.st || i.dataset.encp || (i.dataset.line ? 'l' + i.dataset.line + i.dataset.k : null) || (i.dataset.ext ? 'e' + i.dataset.ext + i.dataset.k : null));
   const redraw = (focusKey) => { const a = document.activeElement; const key = focusKey || keyOf(a); l.refresh(); if (key) { const el = $$('input,select,textarea', l.box).find(i => keyOf(i) === key); if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} } } };
 
   let salvaRates = null;
@@ -320,6 +321,7 @@ function openQuote(id, preset = {}) {
   const apply = (t) => {
     if (t.dataset.q) { q[t.dataset.q] = t.dataset.money !== undefined ? moneyVal(t) : t.value; return 'q'; }
     if (t.dataset.pp) { const k = t.dataset.pp; pp[k] = k === 'cond' ? t.value.split('\n') : t.value; return 'q'; }
+    if (t.dataset.gdur) { const g = gruposDe(st).find(x => x.id === t.dataset.gdur); if (g) g.duracao = t.value; return true; }
     if (t.dataset.gnome) { const g = gruposDe(st).find(x => x.id === t.dataset.gnome); if (g) g.nome = t.value; return 'q'; }
     if (t.dataset.pb) { rates.hora = moneyVal(t); salvar(); }
     else if (t.dataset.pbm) { const k = t.dataset.pbm; rates[k][st[k]] = numIn(t.value) ?? 1; salvar(); }
@@ -339,14 +341,14 @@ function openQuote(id, preset = {}) {
     const c = calcQuote(st, rates);
     const sum = $('.calc-sum4', l.box); if (sum) sum.outerHTML = calcSummaryHTML(c, st);
     const rt = $('[data-rate-txt]', l.box); if (rt) rt.innerHTML = calcRateTxt();
-    const tt = $('[data-tot-topo]', l.box); if (tt) tt.textContent = fmtMoney0(c.total);
+    const tt = $('[data-tot-topo]', l.box); if (tt) tt.textContent = M$(c.total);
     const pa = $('[data-parecidos]', l.box); if (pa) pa.innerHTML = parecidosHTML(q.name, st.modelo, c.total, x?.id);
     const fin = $('#cc-final', l.box); if (fin) fin.placeholder = c.total ? fmtMoney(c.total) : 'R$ 0,00';
     const ht = $('[data-h-txt]', l.box); if (ht) ht.innerHTML = horasTxt(c);
     const ut = $('[data-urg-txt]', l.box); if (ut) ut.innerHTML = urgTxt(c);
     const tot = $('[data-htot]', l.box); if (tot && t !== tot) tot.value = c.hBruto || '';
-    c.porGrupo.forEach(g => { const el = $(`[data-gtot="${g.id}"]`, l.box); if (el) el.textContent = g.h ? `${fmtH(g.h * 3600000)} · ${fmtMoney0(c.total * g.parte)}` : ''; });
-    c.porEtapa.forEach((vv, i) => { const el = $(`[data-etv="${i}"]`, l.box); if (el) el.textContent = vv ? fmtMoney0(vv) : ''; });
+    c.porGrupo.forEach(g => { const el = $(`[data-gtot="${g.id}"]`, l.box); if (el) el.textContent = g.h || g.terc ? `${fmtH(g.h * 3600000)} · ${M$(c.total * g.parte)}` : ''; });
+    c.porEtapa.forEach((vv, i) => { const el = $(`[data-etv="${i}"]`, l.box); const ln = st.lines[i]; if (el) el.textContent = ln?.terc ? (Number(ln.valor) ? M$(ln.valor) : '') : vv ? M$(vv) : ''; });
     const ds = $('#cc-ds', l.box); if (ds) ds.disabled = Number(st.alvo) > 0;
   });
   l.box.addEventListener('change', (e) => {
@@ -354,6 +356,7 @@ function openQuote(id, preset = {}) {
     if (t.dataset.q) { apply(t); return; }
     if (t.hasAttribute('data-outro')) { st.outro = t.checked; redraw(); return; }
     if (t.hasAttribute('data-htot')) { redistribuiHoras(st.lines.filter(ln => !ln.par), numIn(t.value)); redraw(); return; }
+    if (t.dataset.terc !== undefined) { const ln = st.lines[t.dataset.terc]; ln.terc = t.checked; if (ln.terc) { ln.h = ''; ln.par = false; } else ln.valor = null; redraw(); return; }
     if (t.dataset.par !== undefined) { const ln = st.lines[t.dataset.par]; ln.par = t.checked; if (ln.par) { ln.h = ''; ln.prazo = ''; } redraw(); return; }
     if (t.type === 'checkbox' || t.tagName === 'SELECT') { if (apply(t)) redraw(); }
   });
@@ -441,6 +444,14 @@ function openQuote(id, preset = {}) {
 
   l.box.addEventListener('click', async (e) => {
     const cb = e.target.closest('[data-cli-busca]'); if (cb) { openCombo(cb, { kind: 'client', value: q.client_id, onPick: escolheCliente }); return; }
+    if (e.target.closest('[data-moeda="BRL"]')) { st.moeda = null; redraw(); return; }
+    if (e.target.closest('[data-moeda-escolher]')) {
+      const cod = await escolhaBox({ title: 'Converter para outra moeda', body: 'Os valores da proposta e do PDF passam a aparecer na moeda escolhida, pela cotação de hoje. Por dentro tudo continua em reais.', opcoes: Object.entries(MOEDAS).map(([k, m]) => ({ id: k, label: `${m.nome} (${k})` })) });
+      if (!cod) return;
+      try { st.moeda = await cotacaoHoje(cod); redraw(); toast(`Cotação de hoje: 1 ${cod} = ${fmtMoney(st.moeda.taxa)}`); }
+      catch (err) { toast('Não consegui buscar a cotação agora. Tente de novo em instantes.'); }
+      return;
+    }
     if (e.target.closest('[data-pp-padrao]')) { delete pp.desc; delete pp.cond; redraw(); return; }
     const md = e.target.closest('[data-modo]'); if (md) { modo = md.dataset.modo; tamanho(); redraw(); return; }
     const mo = e.target.closest('[data-modelo]'); if (mo) {
@@ -522,13 +533,13 @@ function openQuote(id, preset = {}) {
       const dados = comProposta(data);
       const qid = x ? x.id : db.insert('tempo_quotes', { ...dados, followups: [], project_id: null }, true).id;
       if (x) db.update('tempo_quotes', x.id, dados, true);
-      const gravou = propSalvaArquivo(qid, false);
+      const ver = propVersionar(qid, false); const gravou = ver?.gravou;
       // virou aprovada agora e ainda não tem projeto: oferece criar com as tarefas
       if (statusCat(data.status_id) === 'won' && !linkedProject(db.get('tempo_quotes', qid))
         && await confirmBox({ title: 'Proposta aprovada: criar o projeto?', body: textoConverter(dados), ok: 'Criar projeto', no: 'Só salvar' })) {
         const p = criaProjeto(qid, dados); db.emit(); l.close(); toast(`Proposta nº ${dados.calc.proposta.num} salva e projeto criado`); openProject(p.id); return;
       }
-      db.emit(); l.close(); toast(`${x ? 'Proposta atualizada' : 'Proposta criada'} · nº ${dados.calc.proposta.num}${gravou ? ' · PDF salvo na pasta Orçamento' : ''}`); if (S.route !== 'quotes') go('quotes');
+      db.emit(); l.close(); toast(`${x ? 'Proposta atualizada' : 'Proposta criada'} · ${ver?.nome || 'nº ' + dados.calc.proposta.num}${gravou ? ' · PDF salvo na pasta Orçamento' : ''}`, { ms: 7000 }); if (S.route !== 'quotes') go('quotes');
     }
     if (k === 'convert') {
       if (linkedProject(x)) { toast('Essa proposta já virou projeto. Use “Atualizar projeto”.'); return; }
@@ -566,19 +577,20 @@ function sugHorasHTML(name) {
 }
 /* Resumo da calculadora (a conta está em js/orcamento.js). */
 function calcSummaryHTML(c, st) {
+  const F = (v) => fmtNaMoeda(v, st.moeda); const Fh = (v) => fmtNaMoeda(v, st.moeda, 2);
   const pct = (v) => c.total ? (v / c.total * 100).toFixed(1).replace('.', ',') + '%' : '—';
-  const line = (lab, rate, v, sub, neg) => `<span class="${sub ? 'muted small sub' : ''}">${lab}</span><span class="v muted small">${rate}</span><span class="v">${neg && v ? '− ' : ''}${fmtMoney0(Math.abs(v))}</span><span class="v faint small">${sub ? '' : pct(v)}</span>`;
+  const line = (lab, rate, v, sub, neg) => `<span class="${sub ? 'muted small sub' : ''}">${lab}</span><span class="v muted small">${rate}</span><span class="v">${neg && v ? '− ' : ''}${F(Math.abs(v))}</span><span class="v faint small">${sub ? '' : pct(v)}</span>`;
   const hTxt = `${fmtH(c.hEtapas * 3600000)}${c.dur !== 1 ? ' × ' + fmtX(c.dur) + ' (duração)' : ''}${c.cx !== 1 ? ' × ' + fmtX(c.cx) : ''}${c.reun ? ' + ' + c.reun + ' h reunião' : ''}`;
   return `<div class="calc-sum4">
     <span class="lbl">Item</span><span class="lbl v">Taxa</span><span class="lbl v">Valor</span><span class="lbl v">% do total</span>
-    ${line('<b>Minha parte</b>', fmtH(c.h * 3600000) + ' × ' + (fmtMoney(c.r) || 'R$ —') + '/h', c.Mf)}
+    ${line('<b>Minha parte</b>', fmtH(c.h * 3600000) + ' × ' + (c.r ? Fh(c.r) : 'R$ —') + '/h', c.Mf)}
     ${line('↳ horas', hTxt, c.M, 1)}
     ${c.U ? line('↳ urgência', fmtX(c.urg) + (c.semPrazo ? ' (teto)' : ''), c.U, 1) : ''}
     ${Math.abs(c.desc) > 0.004 ? line(c.desc > 0 ? '↳ desconto' : '↳ acréscimo', Number(st.alvo) > 0 ? 'pelo total' : st.descTipo === '%' ? (st.desc || 0) + '%' : '', c.desc, 1, c.desc > 0) : ''}
-    ${line('<b>Terceirizado</b> (custos extras)', st.ext.on ? st.ext.items.filter(x => x.value).length + ' item(ns)' : 'desligado', c.B)}
+    ${line('<b>Terceirizado</b> e custos extras', [(st.lines || []).filter(l => l.terc && Number(l.valor)).length ? (st.lines || []).filter(l => l.terc && Number(l.valor)).length + ' etapa(s)' : '', st.ext?.on && st.ext.items.filter(x => x.value).length ? st.ext.items.filter(x => x.value).length + ' extra(s)' : ''].filter(Boolean).join(' + ') || 'nenhum', c.B)}
     ${line('<b>Comissão</b> (BV)', st.bv.on ? (st.bv.pct || 0) + '% de minha parte + terceirizado' : 'desligado', c.C)}
     ${line('<b>Impostos</b> (nota fiscal)', st.nf.on ? (st.nf.pct || 0) + '% ' + (st.nf.inside ? 'por dentro' : 'por fora') : 'sem nota', c.D)}
-    <span class="tot">Total da proposta</span><span class="v tot"></span><span class="v tot">${fmtMoney0(c.total)}</span><span class="v tot">100%</span>
-    <span class="muted small">Sua hora neste orçamento</span><span></span><span class="v small"><b>${fmtMoney0(c.horaEf)}/h</b></span><span class="v faint small">${c.r && Math.abs(c.horaEf - c.r) > 0.5 ? (c.horaEf < c.r ? '−' : '+') + Math.round(Math.abs(c.horaEf / c.r - 1) * 100) + '%' : ''}</span>
+    <span class="tot">Total da proposta</span><span class="v tot"></span><span class="v tot">${F(c.total)}</span><span class="v tot">100%</span>
+    <span class="muted small">Sua hora neste orçamento</span><span></span><span class="v small"><b>${F(c.horaEf)}/h</b></span><span class="v faint small">${c.r && Math.abs(c.horaEf - c.r) > 0.5 ? (c.horaEf < c.r ? '−' : '+') + Math.round(Math.abs(c.horaEf / c.r - 1) * 100) + '%' : ''}</span>
   </div>`;
 }
