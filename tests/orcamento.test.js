@@ -57,7 +57,7 @@ test('proposta abre com a calculadora; proposta antiga abre no simplificado', ()
   m.openQuote(null);
   const html = render();
   assert.ok(html.includes('Com calculadora') && html.includes('Orçamento simplificado'));
-  assert.ok(html.includes('Hora base') && html.includes('Etapas') && html.includes('Total final da proposta'));
+  assert.ok(html.includes('Hora base') && html.includes('Projetos e etapas') && html.includes('Total final da proposta'));
   m.db.data.tempo_quotes = [{ id: 'q1', name: 'Antiga', value: 5000, est_hours: 20, calc: { computed: 5000, lines: [{ h: 20 }], contingency: 10 } }];
   m.openQuote('q1');
   const h2 = render();
@@ -119,4 +119,24 @@ test('mais de um modelo: Identidade + Manual somam etapas, aprovações e prazo'
   assert.equal(c.hEtapas, 50); assert.equal(c.fechado, 17);
   m.aplicaModelo(st, 'motion2d', [], 'substitui');
   assert.equal(st.lines.length, 6); assert.deepEqual([...st.modelos], ['motion2d']);
+});
+
+test('vários projetos na proposta: horas por projeto, paralelo não conta, reordenar', () => {
+  const m = load(['js/store.js', 'js/domain.js', 'js/orcamento.js'], ['db', 'calcQuote', 'precoBase', 'aplicaModelo', 'moveEtapa'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty();
+  const st = { porte: 'medio', mercado: 'local', lines: [{ name: '', h: '' }], cx: 'simples', nf: { on: false }, bv: { on: false }, ext: { on: false, items: [] } };
+  m.aplicaModelo(st, 'identidade', []);
+  m.aplicaModelo(st, 'manual', [], 'adiciona');
+  m.aplicaModelo(st, 'motion2d', [], 'adiciona');
+  st.duracao = 2;
+  assert.equal(st.grupos.length, 3);
+  const c = m.calcQuote(st, m.precoBase());
+  assert.deepEqual(c.porGrupo.map(g => g.h), [34, 16, 84], 'vídeo de 2 min dobra só o projeto de vídeo');
+  assert.ok(Math.abs(c.porGrupo.reduce((s, g) => s + g.parte, 0) - 1) < 1e-9);
+  // paralelo: a etapa não soma horas
+  st.lines[1].par = true; const c2 = m.calcQuote(st, m.precoBase());
+  assert.equal(c2.porGrupo[0].h, 22);
+  // reordenar e mudar de projeto
+  const nome = st.lines[0].name; m.moveEtapa(st, 0, 6, st.grupos[1].id);
+  assert.equal(st.lines[5].name, nome); assert.equal(st.lines[5].grp, st.grupos[1].id);
 });

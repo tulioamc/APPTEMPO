@@ -231,11 +231,15 @@ function openQuote(id, preset = {}) {
           <div class="field"><span class="lbl">Complexidade</span><div class="seg">${COMPLEXIDADES.map(([k, nome, m]) => `<button type="button" class="${st.cx === k ? 'on' : ''}" data-cx="${k}">${nome} <span class="faint">${fmtX(m)}</span></button>`).join('')}</div></div>
           <div class="field" style="max-width:260px"><label for="cc-ap">Reuniões de aprovação</label><div class="row" style="flex-wrap:nowrap;gap:6px;align-items:center"><input id="cc-ap" type="number" min="0" class="input" style="width:80px" data-st="aprov" value="${st.aprov}" placeholder="0" aria-label="Quantidade de reuniões"><span class="small muted">×</span><input type="number" min="0" step="0.5" class="input" style="width:80px" data-st="hAprov" value="${st.hAprov ?? 1}" aria-label="Horas por reunião"><span class="small muted">h</span></div></div>
         </div>
-        <span class="lbl">Etapas${c.dur !== 1 ? ' (horas e dias por minuto de vídeo)' : ''} · viram as tarefas do projeto quando aprovado</span>
-        <div class="calc-line calc-head small faint"><span>Etapa</span><span>Tipo</span><span>Horas</span><span>Dias úteis</span><span>Valor</span><span></span></div>
-        ${st.lines.map((ln, i) => `<div class="calc-line"><input class="input sm" data-line="${i}" data-k="name" value="${esc(ln.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), ln.wt, { empty: true, emptyLabel: 'Tipo' })}</select><input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${ln.h}" placeholder="Horas" aria-label="Horas"><input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="prazo" value="${ln.prazo ?? ''}" placeholder="${ln.par ? 'paralelo' : 'dias'}" aria-label="Prazo em dias úteis" title="${ln.ap ? 'Termina com aprovação do cliente' : ''}${ln.par ? 'Corre em paralelo com a etapa anterior' : ''}"><span class="small mono muted" data-etv="${i}" title="Valor da etapa (minha parte)">${c.porEtapa[i] ? fmtMoney0(c.porEtapa[i]) : ''}</span><button type="button" class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
-        <div class="row between" style="flex-wrap:wrap;gap:8px"><button type="button" class="btn sm" data-add>${icon('plus')} Adicionar etapa</button>
-          <label class="small muted">Total das etapas <input type="number" step="0.5" min="0" class="input sm" style="width:90px" data-htot value="${c.hEtapas || ''}" aria-label="Total de horas das etapas" title="Mudar o total espalha a diferença entre as etapas na mesma proporção"> h</label></div>
+        <span class="lbl">Projetos e etapas · cada projeto vira um projeto no app quando aprovado, e as etapas viram as tarefas${c.dur !== 1 ? ' · nos vídeos, horas e dias são por minuto' : ''}</span>
+        ${gruposDe(st).map((g, gi) => { const pg = c.porGrupo.find(x => x.id === g.id); const linhas = st.lines.map((ln, i) => [ln, i]).filter(([ln]) => ln.grp === g.id); return `<div class="qf-grupo" data-grp="${g.id}">
+          <div class="row" style="flex-wrap:nowrap;gap:8px;align-items:center"><input class="input sm grow qf-gnome" data-gnome="${g.id}" value="${esc(g.nome || '')}" placeholder="${gruposDe(st).length > 1 ? `Projeto ${gi + 1}` : 'Nome do projeto (opcional)'}" aria-label="Nome do projeto"><span class="small mono muted" data-gtot="${g.id}">${pg && pg.h ? `${fmtH(pg.h * 3600000)} · ${fmtMoney0(c.total * pg.parte)}` : ''}</span>${gruposDe(st).length > 1 ? `<button type="button" class="btn sm icon ghost" data-gdel="${g.id}" aria-label="Remover projeto" title="Remover este projeto">${icon('trash')}</button>` : ''}</div>
+          <div class="calc-line calc-head small faint"><span></span><span>Etapa</span><span>Tipo</span><span>Horas</span><span>Dias úteis</span><span title="Em paralelo: fica dentro do tempo da etapa de cima">Paral.</span><span>Valor</span><span></span></div>
+          ${linhas.map(([ln, i]) => `<div class="calc-line${ln.par ? ' par' : ''}" data-row="${i}"><span class="qf-handle" data-handle="${i}" title="Arraste para reordenar" aria-label="Arrastar">${icon('grip')}</span><input class="input sm" data-line="${i}" data-k="name" value="${esc(ln.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), ln.wt, { empty: true, emptyLabel: 'Tipo' })}</select>${ln.par ? '<span class="small faint" style="grid-column:span 2">junto com a de cima</span>' : `<input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${ln.h}" placeholder="Horas" aria-label="Horas"><input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="prazo" value="${ln.prazo ?? ''}" placeholder="dias" aria-label="Prazo em dias úteis" title="${ln.ap ? 'Termina com aprovação do cliente' : ''}">`}<label class="qf-par" title="Em paralelo: não conta horas nem prazo; fica dentro da etapa de cima"><input type="checkbox" data-par="${i}" ${ln.par ? 'checked' : ''} aria-label="Em paralelo"></label><span class="small mono muted" data-etv="${i}" title="Valor da etapa (minha parte)">${c.porEtapa[i] ? fmtMoney0(c.porEtapa[i]) : ''}</span><button type="button" class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
+          <div><button type="button" class="btn sm ghost" data-add="${g.id}">${icon('plus')} Etapa</button></div>
+        </div>`; }).join('')}
+        <div class="row between" style="flex-wrap:wrap;gap:8px"><button type="button" class="btn sm" data-gadd>${icon('plus')} Projeto</button>
+          <label class="small muted">Total das etapas <input type="number" step="0.5" min="0" class="input sm" style="width:90px" data-htot value="${c.hBruto || ''}" aria-label="Total de horas das etapas" title="Mudar o total espalha a diferença entre as etapas na mesma proporção"> h</label></div>
         <div class="small" data-h-txt>${horasTxt(c)}</div>
         <div class="small">${sugHorasHTML(q.name).replace(/<button type="button" class="btn sm" data-modo="calc">Usar a calculadora<\/button>/, '')}</div>
         ${ratio ? `<div class="subtle-box small">Nos seus ${done.length} projeto(s) concluído(s) com estimativa, as horas reais foram em média <b>${Math.round(ratio * 100)}%</b> do estimado. Com esse histórico, ${fmtH(c.hEtapas * 3600000)} viraria cerca de <b>${fmtH(c.hEtapas * ratio * 3600000)}</b>. <button type="button" class="btn sm" data-adjust>Aplicar ajuste</button></div>` : ''}
@@ -291,7 +295,7 @@ function openQuote(id, preset = {}) {
   const l = openLayer({ wide: true, render: draw });
   const tamanho = () => l.box.classList.toggle('xl', modo === 'calc'); tamanho();
   l.box.addEventListener('submit', e => e.preventDefault());
-  const keyOf = (i) => i && ((i.dataset.q && 'q' + i.dataset.q) || (i.dataset.pb && 'pb') || (i.dataset.pbm && 'pbm' + i.dataset.pbm) || i.dataset.st || i.dataset.encp || (i.dataset.line ? 'l' + i.dataset.line + i.dataset.k : null) || (i.dataset.ext ? 'e' + i.dataset.ext + i.dataset.k : null));
+  const keyOf = (i) => i && ((i.dataset.q && 'q' + i.dataset.q) || (i.dataset.gnome && 'g' + i.dataset.gnome) || (i.dataset.pb && 'pb') || (i.dataset.pbm && 'pbm' + i.dataset.pbm) || i.dataset.st || i.dataset.encp || (i.dataset.line ? 'l' + i.dataset.line + i.dataset.k : null) || (i.dataset.ext ? 'e' + i.dataset.ext + i.dataset.k : null));
   const redraw = (focusKey) => { const a = document.activeElement; const key = focusKey || keyOf(a); l.refresh(); if (key) { const el = $$('input,select,textarea', l.box).find(i => keyOf(i) === key); if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} } } };
 
   let salvaRates = null;
@@ -300,6 +304,7 @@ function openQuote(id, preset = {}) {
   /* O Safari/app do Mac não dispara "change" em campo de dinheiro (reformatado a cada tecla): o estado é lido no "input". */
   const apply = (t) => {
     if (t.dataset.q) { q[t.dataset.q] = t.dataset.money !== undefined ? moneyVal(t) : t.value; return 'q'; }
+    if (t.dataset.gnome) { const g = gruposDe(st).find(x => x.id === t.dataset.gnome); if (g) g.nome = t.value; return 'q'; }
     if (t.dataset.pb) { rates.hora = moneyVal(t); salvar(); }
     else if (t.dataset.pbm) { const k = t.dataset.pbm; rates[k][st[k]] = numIn(t.value) ?? 1; salvar(); }
     else if (t.dataset.st) st[t.dataset.st] = t.dataset.money !== undefined ? moneyVal(t) : t.value;
@@ -323,7 +328,8 @@ function openQuote(id, preset = {}) {
     const fin = $('#cc-final', l.box); if (fin) fin.placeholder = c.total ? fmtMoney(c.total) : 'R$ 0,00';
     const ht = $('[data-h-txt]', l.box); if (ht) ht.innerHTML = horasTxt(c);
     const ut = $('[data-urg-txt]', l.box); if (ut) ut.innerHTML = urgTxt(c);
-    const tot = $('[data-htot]', l.box); if (tot && t !== tot) tot.value = c.hEtapas || '';
+    const tot = $('[data-htot]', l.box); if (tot && t !== tot) tot.value = c.hBruto || '';
+    c.porGrupo.forEach(g => { const el = $(`[data-gtot="${g.id}"]`, l.box); if (el) el.textContent = g.h ? `${fmtH(g.h * 3600000)} · ${fmtMoney0(c.total * g.parte)}` : ''; });
     c.porEtapa.forEach((vv, i) => { const el = $(`[data-etv="${i}"]`, l.box); if (el) el.textContent = vv ? fmtMoney0(vv) : ''; });
     const ds = $('#cc-ds', l.box); if (ds) ds.disabled = Number(st.alvo) > 0;
   });
@@ -331,10 +337,35 @@ function openQuote(id, preset = {}) {
     const t = e.target;
     if (t.dataset.q) { apply(t); return; }
     if (t.hasAttribute('data-outro')) { st.outro = t.checked; redraw(); return; }
-    if (t.hasAttribute('data-htot')) { redistribuiHoras(st.lines, numIn(t.value)); redraw(); return; }
+    if (t.hasAttribute('data-htot')) { redistribuiHoras(st.lines.filter(ln => !ln.par), numIn(t.value)); redraw(); return; }
+    if (t.dataset.par !== undefined) { const ln = st.lines[t.dataset.par]; ln.par = t.checked; if (ln.par) { ln.h = ''; ln.prazo = ''; } redraw(); return; }
     if (t.type === 'checkbox' || t.tagName === 'SELECT') { if (apply(t)) redraw(); }
   });
 
+  /* Arrastar etapas: pela alça (⠿) para cima/baixo, inclusive para outro projeto. */
+  let arrastando = null;
+  l.box.addEventListener('mousedown', (e) => { const h = e.target.closest('[data-handle]'); const row = h && h.closest('[data-row]'); if (row) row.setAttribute('draggable', 'true'); });
+  l.box.addEventListener('dragstart', (e) => { const row = e.target.closest?.('[data-row]'); if (!row) return; arrastando = Number(row.dataset.row); row.classList.add('arrastando'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(arrastando)); } catch (err) {} });
+  const alvo = (e) => e.target.closest?.('[data-row]') || e.target.closest?.('[data-grp]');
+  l.box.addEventListener('dragover', (e) => {
+    if (arrastando === null) return; const a = alvo(e); if (!a) return; e.preventDefault();
+    $$('.drop-antes,.drop-depois', l.box).forEach(x => x.classList.remove('drop-antes', 'drop-depois'));
+    if (a.dataset.row !== undefined) { const r = a.getBoundingClientRect(); a.classList.add(e.clientY < r.top + r.height / 2 ? 'drop-antes' : 'drop-depois'); }
+  });
+  l.box.addEventListener('dragend', () => { arrastando = null; $$('[draggable]', l.box).forEach(x => x.removeAttribute('draggable')); $$('.arrastando,.drop-antes,.drop-depois', l.box).forEach(x => x.classList.remove('arrastando', 'drop-antes', 'drop-depois')); });
+  l.box.addEventListener('drop', (e) => {
+    if (arrastando === null) return; const a = alvo(e); if (!a) return; e.preventDefault();
+    const de = arrastando; arrastando = null;
+    if (a.dataset.row !== undefined) {
+      const j = Number(a.dataset.row); const r = a.getBoundingClientRect(); const pos = e.clientY < r.top + r.height / 2 ? j : j + 1;
+      moveEtapa(st, de, pos, st.lines[j].grp);
+    } else {   // soltou no espaço do projeto: vai para o fim dele
+      const grp = a.dataset.grp; let pos = st.lines.length; st.lines.forEach((ln, i) => { if (ln.grp === grp) pos = i + 1; });
+      moveEtapa(st, de, pos, grp);
+    }
+    gruposDe(st).forEach(g => { if (!st.lines.some(ln => ln.grp === g.id)) st.lines.push({ name: '', wt: '', h: '', prazo: '', grp: g.id }); });
+    redraw('__nenhum');
+  });
   const escolheCliente = (id) => {
     q.client_id = id || ''; st.cliente = q.client_id; const pf = perfis[q.client_id];
     if (pf) { st.porte = pf.porte || st.porte; st.mercado = pf.mercado || st.mercado; } else guardaCliente();
@@ -353,20 +384,36 @@ function openQuote(id, preset = {}) {
   /* Proposta aprovada → projeto. Com calculadora: uma tarefa por etapa (horas da etapa nas notas). */
   const criaProjeto = (qid, data) => {
     const won = statusByCat('quote', 'won');
-    const p = db.insert('tempo_projects', { name: data.name, client_id: data.client_id, description: data.notes, status_id: statusByCat('work', 'todo').id, payment_status_id: statuses('payment')[0].id, deadline: null, deadline_original: null, budget: data.value, remaining_override: null, estimated_hours: data.est_hours, revisions_included: data.revisions_included, notes: '', archived: false, approved_at: nowISO(), quote_id: qid }, true);
     const k = data.calc ? calcQuote({ ...data.calc }, rates) : null;
-    const etapas = data.calc ? data.calc.lines.filter(ln => (ln.name || '').trim() || Number(ln.h)) : [];
-    if (etapas.length) etapas.forEach((ln, i) => {
-      const h = (Number(ln.h) || 0) * k.dur * k.cx;
-      db.insert('tempo_tasks', { project_id: p.id, parent_id: null, name: (ln.name || '').trim() || `Etapa ${i + 1}`, status_id: p.status_id, status_inherited: true, deadline: null, notes: [h ? `Estimado: ${String(Math.round(h * 10) / 10).replace('.', ',')} h` : '', Number(ln.prazo) ? `Prazo: ${String(Math.round(Number(ln.prazo) * k.dur * 10) / 10).replace('.', ',')} dia(s) útil(eis)${ln.ap ? ' + aprovação do cliente' : ''}` : ''].filter(Boolean).join(' · '), order: i, work_type_id: ln.wt || null }, true);
+    const gs = data.calc ? gruposDe(data.calc).filter(g => data.calc.lines.some(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h)))) : [];
+    const varios = gs.length > 1;
+    const novos = (gs.length ? gs : [null]).map((g, gi) => {
+      const pg = g && k ? k.porGrupo.find(x => x.id === g.id) : null;
+      const nome = varios ? `${data.name} · ${g.nome || 'Projeto ' + (gi + 1)}` : data.name;
+      const budget = varios && pg ? Math.round(data.value * pg.parte * 100) / 100 : data.value;
+      const horas = varios && pg ? Math.round((pg.h + (k.reun || 0) * pg.parte) * 10) / 10 : data.est_hours;
+      const p = db.insert('tempo_projects', { name: nome, client_id: data.client_id, description: data.notes, status_id: statusByCat('work', 'todo').id, payment_status_id: statuses('payment')[0].id, deadline: null, deadline_original: null, budget, remaining_override: null, estimated_hours: horas, revisions_included: data.revisions_included, notes: '', archived: false, approved_at: nowISO(), quote_id: qid }, true);
+      const etapas = g ? data.calc.lines.filter(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h))) : [];
+      if (etapas.length) etapas.forEach((ln, i) => {
+        const h = horasEtapa(data.calc, ln) * k.cx;
+        const pz = Number(ln.prazo) ? Number(ln.prazo) * multEtapa(data.calc, ln) : 0;
+        db.insert('tempo_tasks', { project_id: p.id, parent_id: null, name: (ln.name || '').trim() || `Etapa ${i + 1}`, status_id: p.status_id, status_inherited: true, deadline: null,
+          notes: [ln.par ? 'Em paralelo com a etapa anterior' : '', h ? `Estimado: ${String(Math.round(h * 10) / 10).replace('.', ',')} h` : '', pz ? `Prazo: ${String(Math.round(pz * 10) / 10).replace('.', ',')} dia(s) útil(eis)${ln.ap ? ' + aprovação do cliente' : ''}` : ''].filter(Boolean).join(' · '), order: i, work_type_id: ln.wt || null }, true);
+      });
+      else if (data.work_type_id) db.insert('tempo_tasks', { project_id: p.id, parent_id: null, name: data.name, status_id: p.status_id, status_inherited: true, deadline: null, notes: '', order: 0, work_type_id: data.work_type_id }, true);
+      if (k && k.reun && gi === 0) db.insert('tempo_tasks', { project_id: p.id, parent_id: null, name: 'Reuniões e aprovações', status_id: p.status_id, status_inherited: true, deadline: null, notes: `Estimado: ${k.reun} h`, order: 99, work_type_id: null }, true);
+      logEvent('project', p.id, 'created', `Projeto criado a partir da proposta “${data.name}”${etapas.length ? ` com ${etapas.length} tarefa(s) das etapas` : ''}`); logEvent('project', p.id, 'milestone', 'Aprovação');
+      return p;
     });
-    else if (data.work_type_id) db.insert('tempo_tasks', { project_id: p.id, parent_id: null, name: data.name, status_id: p.status_id, status_inherited: true, deadline: null, notes: '', order: 0, work_type_id: data.work_type_id }, true);
-    if (k && k.reun) db.insert('tempo_tasks', { project_id: p.id, parent_id: null, name: 'Reuniões e aprovações', status_id: p.status_id, status_inherited: true, deadline: null, notes: `Estimado: ${k.reun} h (1 h por aprovação)`, order: 99, work_type_id: null }, true);
-    logEvent('project', p.id, 'created', `Projeto criado a partir da proposta “${data.name}”${etapas.length ? ` com ${etapas.length} tarefa(s) das etapas` : ''}`); logEvent('project', p.id, 'milestone', 'Aprovação');
-    db.update('tempo_quotes', qid, { project_id: p.id, status_id: won?.id || data.status_id }, true);
-    return p;
+    db.update('tempo_quotes', qid, { project_id: novos[0].id, status_id: won?.id || data.status_id }, true);
+    return novos[0];
   };
-  const textoConverter = (data) => `Cria o projeto <b>${esc(data.name)}</b> para ${esc(db.get('tempo_clients', data.client_id)?.name)} com orçamento ${fmtMoney(data.value) || '—'}, ${data.est_hours || 0} h estimadas e ${data.revisions_included ?? 0} rodadas incluídas${data.calc ? `, com uma tarefa para cada etapa (${data.calc.lines.filter(ln => (ln.name || '').trim() || Number(ln.h)).map(ln => esc(ln.name || 'Etapa')).join(', ')})` : ''}. A proposta fica marcada como aprovada.`;
+  const textoConverter = (data) => {
+    const gs = data.calc ? gruposDe(data.calc).filter(g => data.calc.lines.some(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h)))) : [];
+    const cli = esc(db.get('tempo_clients', data.client_id)?.name || '');
+    if (gs.length > 1) return `Cria <b>${gs.length} projetos</b> para ${cli} (${gs.map((g, i) => esc(g.nome || 'Projeto ' + (i + 1))).join(', ')}), cada um com as suas etapas como tarefas e a sua parte do valor (${fmtMoney(data.value)} no total). A proposta fica marcada como aprovada.`;
+    return `Cria o projeto <b>${esc(data.name)}</b> para ${cli} com orçamento ${fmtMoney(data.value) || '—'}, ${data.est_hours || 0} h estimadas e ${data.revisions_included ?? 0} rodadas incluídas${data.calc ? `, com uma tarefa para cada etapa (${data.calc.lines.filter(ln => (ln.name || '').trim() || Number(ln.h)).map(ln => esc(ln.name || 'Etapa')).join(', ')})` : ''}. A proposta fica marcada como aprovada.`;
+  };
 
   l.box.addEventListener('click', async (e) => {
     const cb = e.target.closest('[data-cli-busca]'); if (cb) { openCombo(cb, { kind: 'client', value: q.client_id, onPick: escolheCliente }); return; }
@@ -376,15 +423,18 @@ function openQuote(id, preset = {}) {
       const temAlgo = st.lines.some(ln => (ln.name || '').trim() && ln.name !== 'Criação' || Number(ln.h));
       if (modelosDe(st).includes(k) && temAlgo) {   // clicar de novo num modelo já usado: tira as etapas dele
         if (!await confirmBox({ title: `Tirar ${nome}?`, body: `As etapas de <b>${esc(nome)}</b> saem da proposta.`, ok: 'Tirar' })) return;
-        st.lines = st.lines.filter(ln => ln.mod !== k); if (!st.lines.length) st.lines.push({ name: '', wt: '', h: '', prazo: '' });
-        st.modelos = modelosDe(st).filter(x => x !== k); st.modelo = st.modelos[0] || null;
+        const sai = new Set(gruposDe(st).filter(g => g.mod === k).map(g => g.id));
+        st.lines = st.lines.filter(ln => !sai.has(ln.grp)); st.grupos = st.grupos.filter(g => !sai.has(g.id));
+        if (!st.grupos.length) st.grupos = [{ id: novoGrupoId(), nome: '', mod: null }];
+        if (!st.lines.length) st.lines.push({ name: '', wt: '', h: '', prazo: '', grp: st.grupos[0].id });
+        st.modelos = modelosDe(st); st.modelo = st.modelos[0] || null;
         st.aprov = Math.max(0, (Number(st.aprov) || 0) - MODELOS[k].etapas.filter(x => x.ap).length);
         if (!temVideo(st)) st.duracao = '';
         redraw(); return;
       }
       let modoM = 'substitui';
       if (temAlgo) {
-        modoM = await escolhaBox({ title: `Usar ${nome}`, body: `Já há etapas na proposta. Juntar as de <b>${esc(nome)}</b> às que já existem, ou apagar tudo e usar só ${esc(nome)}?`, opcoes: [{ id: 'substitui', label: 'Apagar e substituir' }, { id: 'adiciona', label: 'Adicionar' }] });
+        modoM = await escolhaBox({ title: `Usar ${nome}`, body: `Já há etapas na proposta. Adicionar <b>${esc(nome)}</b> como mais um projeto, ou apagar tudo e usar só ${esc(nome)}?`, opcoes: [{ id: 'substitui', label: 'Apagar e substituir' }, { id: 'adiciona', label: 'Adicionar como projeto' }] });
         if (!modoM) return;
       }
       aplicaModelo(st, k, workTypes(), modoM); redraw(); return;
@@ -393,8 +443,21 @@ function openQuote(id, preset = {}) {
     const dt = e.target.closest('[data-dtipo]'); if (dt) { st.descTipo = dt.dataset.dtipo; st.desc = ''; redraw(); return; }
     if (e.target.closest('[data-limpa-alvo]')) { st.alvo = null; redraw(); return; }
     const mb = e.target.closest('[data-mult]'); if (mb) { st[mb.dataset.mult] = mb.dataset.v; guardaCliente(); redraw(); return; }
-    if (e.target.closest('[data-add]')) { st.lines.push({ name: '', wt: '', h: '', prazo: '' }); redraw('l' + (st.lines.length - 1) + 'name'); return; }
-    const d = e.target.closest('[data-del]'); if (d) { st.lines.splice(Number(d.dataset.del), 1); if (!st.lines.length) st.lines.push({ name: '', wt: '', h: '' }); redraw(); return; }
+    const ad = e.target.closest('[data-add]'); if (ad) {
+      const grp = ad.dataset.add || gruposDe(st)[0].id; let pos = -1; st.lines.forEach((ln, i) => { if (ln.grp === grp) pos = i; });
+      st.lines.splice(pos + 1, 0, { name: '', wt: '', h: '', prazo: '', grp }); redraw('l' + (pos + 1) + 'name'); return;
+    }
+    if (e.target.closest('[data-gadd]')) { const g = { id: novoGrupoId(), nome: '', mod: null }; gruposDe(st).push(g); st.lines.push({ name: '', wt: '', h: '', prazo: '', grp: g.id }); redraw('g' + g.id); return; }
+    const gd = e.target.closest('[data-gdel]'); if (gd) {
+      const g = gruposDe(st).find(x => x.id === gd.dataset.gdel); const temConteudo = st.lines.some(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h)));
+      if (temConteudo && !await confirmBox({ title: 'Remover o projeto?', body: `<b>${esc(g.nome || 'Projeto')}</b> e as etapas dele saem da proposta.`, ok: 'Remover', danger: true })) return;
+      st.grupos = st.grupos.filter(x => x.id !== g.id); st.lines = st.lines.filter(ln => ln.grp !== g.id);
+      if (g.mod && MODELOS[g.mod]) st.aprov = Math.max(0, (Number(st.aprov) || 0) - MODELOS[g.mod].etapas.filter(x => x.ap).length);
+      if (!st.lines.length) st.lines.push({ name: '', wt: '', h: '', prazo: '', grp: st.grupos[0].id });
+      if (!temVideo(st)) st.duracao = '';
+      redraw(); return;
+    }
+    const d = e.target.closest('[data-del]'); if (d) { const grp = st.lines[Number(d.dataset.del)]?.grp; st.lines.splice(Number(d.dataset.del), 1); if (!st.lines.some(ln => ln.grp === grp)) st.lines.push({ name: '', wt: '', h: '', prazo: '', grp }); redraw(); return; }
     const ea = e.target.closest('[data-extadd]'); if (ea) { const i = Number(ea.dataset.extadd) + 1; st.ext.items.splice(i, 0, { name: '', value: null }); redraw('e' + i + 'name'); return; }
     const ed = e.target.closest('[data-extdel]'); if (ed) { st.ext.items.splice(Number(ed.dataset.extdel), 1); if (!st.ext.items.length) st.ext.items.push({ name: '', value: null }); redraw(); return; }
     if (e.target.closest('[data-adjust]')) { st.lines.forEach(ln => { if (ln.h) ln.h = Math.round(Number(ln.h) * ratio * 2) / 2; }); redraw(); return; }

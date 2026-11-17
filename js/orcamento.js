@@ -41,31 +41,53 @@ const MODELOS = {
     { name: 'Trilha e sound effects', wt: '', h: 0, prazo: 1, ap: true, terc: true }] },
 };
 /* Aplica o modelo nas etapas da calculadora; tipo de trabalho pelo nome (o que não existir fica em branco). */
-/* modo 'substitui' (padrão) troca as etapas; 'adiciona' soma as do modelo às que já existem (ex.: Identidade + Manual). */
+/* Projetos do orçamento: cada modelo vira um projeto (grupo de etapas). Ao aprovar, cada grupo vira um projeto no app.
+   modo 'substitui' (padrão) troca tudo; 'adiciona' acrescenta o modelo como mais um projeto (ex.: Identidade + Manual + Vídeo 2D). */
+let _gid = 0;
+const novoGrupoId = () => 'g' + Date.now().toString(36) + (++_gid);
+/* Normaliza estados antigos (sem grupos): um grupo só, com todas as etapas. */
+function gruposDe(st) {
+  if (!Array.isArray(st.grupos) || !st.grupos.length) st.grupos = [{ id: 'g1', nome: '', mod: (st.modelos && st.modelos[0]) || st.modelo || null }];
+  const ids = new Set(st.grupos.map(g => g.id));
+  (st.lines || []).forEach(l => { if (!l.grp || !ids.has(l.grp)) l.grp = st.grupos[0].id; });
+  return st.grupos;
+}
 function aplicaModelo(st, chave, tipos = [], modo = 'substitui') {
   const mo = MODELOS[chave]; if (!mo) return st;
   const wtId = (n) => (tipos.find(t => t.name === n) || {}).id || '';
-  const novas = mo.etapas.map(e => ({ name: e.name, wt: wtId(e.wt), h: e.h || '', prazo: e.prazo || '', ap: !!e.ap, par: !!e.par, mod: chave }));
-  const soma = modo === 'adiciona';
+  gruposDe(st);
   const vazias = (st.lines || []).every(l => !(l.name || '').trim() && !Number(l.h));
-  st.lines = soma && !vazias ? [...st.lines.filter(l => (l.name || '').trim() || Number(l.h)), ...novas] : novas;
-  st.modelos = soma ? [...new Set([...(modelosDe(st)), chave])] : [chave];
-  st.modelo = st.modelos[0];
-  st.aprov = (soma ? (Number(st.aprov) || 0) : 0) + mo.etapas.filter(e => e.ap).length;
+  const g = { id: novoGrupoId(), nome: mo.nome, mod: chave };
+  const novas = mo.etapas.map(e => ({ name: e.name, wt: wtId(e.wt), h: e.par ? '' : (e.h || ''), prazo: e.par ? '' : (e.prazo || ''), ap: !!e.ap, par: !!e.par, mod: chave, grp: g.id }));
+  if (modo === 'adiciona' && !vazias) {
+    const usados = new Set(st.lines.filter(l => (l.name || '').trim() || Number(l.h)).map(l => l.grp));
+    st.grupos = [...st.grupos.filter(x => usados.has(x.id)), g];
+    st.lines = [...st.lines.filter(l => (l.name || '').trim() || Number(l.h)), ...novas];
+    st.aprov = (Number(st.aprov) || 0) + mo.etapas.filter(e => e.ap).length;
+  } else {
+    st.grupos = [g]; st.lines = novas; st.aprov = mo.etapas.filter(e => e.ap).length;
+  }
+  st.modelos = [...new Set(st.grupos.map(x => x.mod).filter(Boolean))];
+  st.modelo = st.modelos[0] || null;
   if (temVideo(st) && !(Number(st.duracao) > 0)) st.duracao = 1;
   if (!temVideo(st)) st.duracao = '';
   return st;
 }
-const modelosDe = (st) => st.modelos || (st.modelo ? [st.modelo] : []);
+const modelosDe = (st) => Array.isArray(st.grupos) && st.grupos.length ? [...new Set(st.grupos.map(g => g.mod).filter(Boolean))] : (st.modelos || (st.modelo ? [st.modelo] : []));
 const temVideo = (st) => modelosDe(st).some(k => MODELOS[k]?.video);
+/* Multiplicador de duração de cada etapa: só nas etapas de projeto de vídeo. Etapa em paralelo não conta horas nem prazo. */
+function multEtapa(st, l) {
+  const gs = gruposDe(st); const g = gs.find(x => x.id === l.grp) || gs[0];
+  return MODELOS[g?.mod]?.video ? durMult(st.duracao) : 1;
+}
+const horasEtapa = (st, l) => l.par ? 0 : (Number(l.h) || 0) * multEtapa(st, l);
 /* Prazo das etapas (dias úteis): fechado = soma das etapas em sequência × duração; provável = + ajuste de 40% do prazo
    de cada etapa com aprovação (o mínimo combinado). Sem prazos nas etapas, vale horas ÷ 8 h. */
 function prazosEtapas(st, h) {
-  const dur = temVideo(st) ? durMult(st.duracao) : 1;
-  const temPrazo = st.lines.some(x => Number(x.prazo) > 0);
+  const temPrazo = st.lines.some(x => !x.par && Number(x.prazo) > 0);
   if (!temPrazo) { const f = h ? Math.max(1, Math.ceil(h / HORAS_DIA)) : 0; return { fechado: f, provavel: f, doModelo: false }; }
-  const seq = st.lines.filter(x => !x.par).reduce((s, x) => s + (Number(x.prazo) || 0), 0) * dur;
-  const aj = st.lines.filter(x => x.ap).reduce((s, x) => s + 0.4 * (Number(x.prazo) || 0), 0) * dur;
+  const seq = st.lines.filter(x => !x.par).reduce((s, x) => s + (Number(x.prazo) || 0) * multEtapa(st, x), 0);
+  const aj = st.lines.filter(x => x.ap && !x.par).reduce((s, x) => s + 0.4 * (Number(x.prazo) || 0) * multEtapa(st, x), 0);
   return { fechado: Math.ceil(seq), provavel: Math.ceil(seq + aj), doModelo: true };
 }
 function precoBase() {
@@ -83,12 +105,15 @@ const durMult = (min) => { const d = Number(min); return d > 0 ? Math.max(0.5, d
 
 function calcQuote(st, pb) {
   const r = calcRate(st, pb);
-  const hEtapas = st.lines.reduce((s, x) => s + (Number(x.h) || 0), 0);
+  gruposDe(st);
+  const hBruto = st.lines.reduce((s, x) => s + (x.par ? 0 : Number(x.h) || 0), 0);   // como digitado (por minuto, no vídeo)
+  const hEt = st.lines.map(x => horasEtapa(st, x));
+  const hEtapas = hEt.reduce((s, v) => s + v, 0);
   // duração só vale nos modelos de vídeo (horas do modelo são por minuto); fora deles, 1×
   const dur = temVideo(st) ? durMult(st.duracao) : 1, cx = cxMult(st.cx);
   // reuniões de aprovação somam horas (não multiplicam): quantidade × horas por reunião (padrão 1 h)
   const reun = Math.max(0, Number(st.aprov) || 0) * (st.hAprov === '' || st.hAprov == null ? 1 : Math.max(0, Number(st.hAprov) || 0));
-  const h = hEtapas * dur * cx + reun;
+  const h = hEtapas * cx + reun;
   const M = h * r;
   // urgência: prazo fechado = o trabalho sozinho no ritmo normal (horas ÷ 8 h por dia útil)
   const pz = prazosEtapas(st, h); const fechado = pz.fechado;
@@ -111,9 +136,18 @@ function calcQuote(st, pb) {
   const C = (Mf + B) * bvP;
   const pre = Mf + B + C; const D = pre * nfF - pre;
   // etapas com o valor proporcional da minha parte final (o ajuste do total se espalha entre elas)
-  const porEtapa = st.lines.map(x => hEtapas ? Mf * (Number(x.h) || 0) / hEtapas : 0);
-  return { r, hEtapas, dur, cx, reun, h, M, fechado, provavel: pz.provavel, prazoModelo: pz.doModelo, pedido, urgBruta, urg, U, Mu, desc, Mf, B, C, D,
+  const porEtapa = hEt.map(v => hEtapas ? Mf * v / hEtapas : 0);
+  // por projeto (grupo): horas com complexidade e a parte do total (reuniões e impostos na mesma proporção)
+  const porGrupo = st.grupos.map(g => { const hg = st.lines.reduce((s, x, i) => s + (x.grp === g.id ? hEt[i] : 0), 0); return { id: g.id, nome: g.nome, mod: g.mod, h: hg * cx, parte: hEtapas ? hg / hEtapas : 0 }; });
+  return { r, hBruto, hEtapas, porGrupo, dur, cx, reun, h, M, fechado, provavel: pz.provavel, prazoModelo: pz.doModelo, pedido, urgBruta, urg, U, Mu, desc, Mf, B, C, D,
     total: pre + D, horaEf: h ? Mf / h : 0, porEtapa, semPrazo: urgBruta > URGENCIA_TETO };
+}
+/* Move a etapa i para a posição de j (e para o grupo de j). */
+function moveEtapa(st, i, j, grp) {
+  if (i === j && !grp) return st;
+  const [l] = st.lines.splice(i, 1); if (grp) l.grp = grp;
+  st.lines.splice(j > i ? j - 1 : j, 0, l);
+  return st;
 }
 /* Muda o total de horas das etapas mantendo a proporção entre elas (ex.: 6/18/6 com 40 h vira 8/24/8). */
 function redistribuiHoras(lines, total) {

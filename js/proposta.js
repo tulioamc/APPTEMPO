@@ -10,7 +10,13 @@ const propNumExtenso = (n) => ['', 'uma', 'duas', 'três', 'quatro', 'cinco', 's
    proporcional às horas (o total já com BV, imposto e terceirizado). Sem isso, uma linha só com o nome. */
 function propItens(x) {
   const total = Number(x.value) || 0;
-  const ls = (x.calc?.lines || []).filter(l => Number(l.h) > 0 && (l.name || '').trim());
+  // vários projetos na proposta: uma linha por projeto, com a parte do total pelas horas
+  if (x.calc?.lines && Array.isArray(x.calc.grupos) && x.calc.grupos.length > 1) {
+    const k = calcQuote({ ...x.calc }, precoBase());
+    const gs = k.porGrupo.filter(g => g.h > 0); let acc = 0;
+    if (gs.length > 1) return gs.map((g, i) => { const v = i === gs.length - 1 ? total - acc : Math.round(total * g.h / gs.reduce((s, y) => s + y.h, 0) / 50) * 50; acc += v; return { desc: g.nome || `Projeto ${i + 1}`, unit: '', qtd: '', valor: v }; });
+  }
+  const ls = (x.calc?.lines || []).filter(l => Number(l.h) > 0 && !l.par && (l.name || '').trim());
   if (ls.length < 2) return [{ desc: x.name || 'Projeto', unit: '', qtd: '', valor: total }];
   const soma = ls.reduce((s, l) => s + Number(l.h), 0);
   let acc = 0;
