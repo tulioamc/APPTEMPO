@@ -1311,4 +1311,6 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .qf-2col .calc-line { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 64px 64px 78px 30px; gap: 6px; }
 .qf-2col .enc-row > .check:first-child { min-width: 170px; }
 .qf-2col textarea.input { min-height: 70px; }
-@media (max-width: 1000px) { .qf-2col { grid-template-columns: 1fr; } .qf-dir { position: static; } }
+.modal.xl { container-type: inline-size; }
+/* janela estreita (ex.: app do Mac pequeno): resumo vai para baixo, sem ficar cortado na lateral */
+@container (max-width: 900px) { .qf-2col { grid-template-columns: minmax(0, 1fr); } .qf-dir { position: static; } }

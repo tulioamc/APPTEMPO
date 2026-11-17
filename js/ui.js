@@ -118,6 +118,19 @@ function confirmBox({ title, body, ok = 'Confirmar', no = 'Cancelar', danger = f
   });
 }
 
+/* Pergunta com várias respostas: resolve com o id da opção escolhida, ou null se fechar. */
+function escolhaBox({ title, body, opcoes }) {
+  return new Promise(res => {
+    let done = false;
+    const l = openLayer({
+      html: `<div class="dh"><h2>${esc(title)}</h2></div><div class="db"><div>${body}</div></div>
+      <div class="df"><button class="btn" data-x="">Cancelar</button>${opcoes.map((o, i) => `<button class="btn ${i === opcoes.length - 1 ? 'primary' : ''}" data-x="${esc(o.id)}">${esc(o.label)}</button>`).join('')}</div>`,
+      onClose: () => { if (!done) res(null); }
+    });
+    l.box.addEventListener('click', (e) => { const b = e.target.closest('[data-x]'); if (!b) return; done = true; res(b.dataset.x || null); l.close(); });
+  });
+}
+
 function toast(msg, opts = {}) {
   let host = $('.toasts'); if (!host) { host = document.createElement('div'); host.className = 'toasts'; host.setAttribute('aria-live', 'polite'); document.body.appendChild(host); }
   const t = document.createElement('div'); t.className = 'toast' + (opts.cls ? ' ' + opts.cls : '');

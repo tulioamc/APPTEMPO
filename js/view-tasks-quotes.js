@@ -171,7 +171,7 @@ function linkedProject(x) {
    Aprovada (status de aprovação ou "Converter em projeto"), a calculadora vira projeto com uma tarefa por etapa. */
 const calcNovo = () => ({ cliente: '', porte: 'medio', mercado: 'local', outro: false, customRate: null, lines: [{ name: 'Criação', wt: '', h: '' }],
   duracao: '', cx: 'simples', aprov: '', pedido: '', desc: '', descTipo: 'R$', alvo: null, revInc: 2, revExtra: null,
-  nf: { on: true, pct: 9, inside: false }, bv: { on: false, pct: 10 }, ext: { on: false, items: [{ name: '', value: null }] } });
+  nf: { on: true, pct: 9, inside: true }, bv: { on: false, pct: 10 }, ext: { on: false, items: [{ name: '', value: null }] } });
 // proposta antiga sem a calculadora nova (sem "lines" ou com contingência) abre no simplificado
 const calcDaProposta = (c) => c && Array.isArray(c.lines) && c.cx !== undefined ? { ...calcNovo(), ...clone(c) } : null;
 function openQuote(id, preset = {}) {
@@ -180,8 +180,11 @@ function openQuote(id, preset = {}) {
   const perfis = db.setting('clientePreco', {}) || {};
   const st = calcDaProposta(v.calc) || calcNovo();
   let modo = preset.modo || (x ? (calcDaProposta(x.calc) ? 'calc' : 'simples') : 'calc');
-  const q = { name: v.name || '', client_id: v.client_id || '', status_id: v.status_id || statuses('quote')[0]?.id, sent_at: v.sent_at || '', valid_until: v.valid_until || '',
+  const q = { name: v.name || '', client_id: v.client_id || '', status_id: v.status_id || statuses('quote')[0]?.id, sent_at: v.sent_at || ymd(new Date()), valid_until: v.valid_until || '',
     notes: v.notes || '', value: v.value ?? null, est_hours: v.est_hours ?? '', work_type_id: v.work_type_id || '', revisions_included: v.revisions_included ?? 2, extra_revision_price: v.extra_revision_price ?? null };
+  // validade em dias (padrão 30), a partir da data da proposta
+  q.validade = v.valid_until && q.sent_at ? Math.max(1, daysBetween(q.sent_at, v.valid_until)) : 30;
+  const validadeAte = () => { const d = new Date(q.sent_at + 'T12:00:00'); d.setDate(d.getDate() + (Number(q.validade) || 30)); return ymd(d); };
   if (q.client_id) { st.cliente = q.client_id; const pf = perfis[q.client_id]; if (pf && !calcDaProposta(v.calc)) { st.porte = pf.porte || st.porte; st.mercado = pf.mercado || st.mercado; } }
   if (calcDaProposta(v.calc)) { st.revInc = q.revisions_included ?? st.revInc; }
   const done = projects().filter(p => statusCat(p.status_id) === 'done' && p.estimated_hours && projectMs(p.id));
@@ -199,8 +202,8 @@ function openQuote(id, preset = {}) {
       <div class="field span2"><label for="qf-n">Nome / escopo *</label><input id="qf-n" class="input" data-q="name" value="${esc(q.name)}"></div>
       <div class="field"><label for="qf-c">Cliente *</label><div class="row" style="flex-wrap:nowrap"><button type="button" id="qf-c" class="input combo-field grow" data-cli-busca aria-label="Buscar cliente">${q.client_id && db.get('tempo_clients', q.client_id) ? clientTag(db.get('tempo_clients', q.client_id)) : '<span class="faint">Buscar cliente…</span>'}</button><button type="button" class="btn" data-x="newclient" aria-label="Novo cliente" title="Cadastrar cliente novo">${icon('plus')}</button></div></div>
       <div class="field"><label for="qf-s">Status</label><select id="qf-s" class="input" data-q="status_id">${options(statuses('quote'), q.status_id)}</select></div>
-      <div class="field"><label for="qf-sa">Enviado em</label><input id="qf-sa" type="date" class="input" data-q="sent_at" value="${q.sent_at}"></div>
-      <div class="field"><label for="qf-vu">Válido até</label><input id="qf-vu" type="date" class="input" data-q="valid_until" value="${q.valid_until}"></div>
+      <div class="field"><label for="qf-sa">Data da proposta</label><input id="qf-sa" type="date" class="input" data-q="sent_at" value="${q.sent_at}"></div>
+      <div class="field"><label for="qf-vd">Validade</label><div class="row" style="flex-wrap:nowrap;gap:8px;align-items:center"><input id="qf-vd" type="number" min="1" class="input" style="max-width:110px" data-q="validade" value="${q.validade}"><span class="small muted">dias${q.sent_at && Number(q.validade) ? ` · até ${fmtDate(validadeAte())}` : ''}</span></div></div>
     </div>`;
   const camposSimples = () => `<div class="grid2">
       <div class="field"><label for="qf-v">Valor</label><input id="qf-v" class="input mono" data-q="value" ${moneyAttrs(q.value)}></div>
@@ -222,9 +225,9 @@ function openQuote(id, preset = {}) {
         ${q.client_id && !st.outro ? '<div class="small faint">Porte e mercado ficam guardados para este cliente.</div>' : ''}
       </div></div>
       <div class="panel"><div class="panel-h"><h3>Horas</h3></div><div class="panel-b stack">
-        <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="lbl">Modelo</span><div class="seg">${Object.entries(MODELOS).map(([k, mo]) => `<button type="button" class="${st.modelo === k ? 'on' : ''}" data-modelo="${k}">${mo.nome}</button>`).join('')}</div><span class="small faint">preenche as etapas com horas e prazos padrão</span></div>
+        <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="lbl">Modelo</span><div class="seg">${Object.entries(MODELOS).map(([k, mo]) => `<button type="button" class="${modelosDe(st).includes(k) ? 'on' : ''}" data-modelo="${k}">${mo.nome}</button>`).join('')}</div><span class="small faint">preenche as etapas com horas e prazos padrão; dá para juntar mais de um</span></div>
         <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
-          ${MODELOS[st.modelo]?.video ? `<div class="field" style="max-width:200px"><label for="cc-dur">Duração do vídeo (min)</label><input id="cc-dur" type="number" step="0.5" min="0.5" class="input" data-st="duracao" value="${st.duracao}" title="As horas do modelo são para 1 minuto de vídeo: 2 min = o dobro de horas e de prazo; 30 s = metade (mínimo)"></div>` : ''}
+          ${temVideo(st) ? `<div class="field" style="max-width:200px"><label for="cc-dur">Duração do vídeo (min)</label><input id="cc-dur" type="number" step="0.5" min="0.5" class="input" data-st="duracao" value="${st.duracao}" title="As horas do modelo são para 1 minuto de vídeo: 2 min = o dobro de horas e de prazo; 30 s = metade (mínimo)"></div>` : ''}
           <div class="field"><span class="lbl">Complexidade</span><div class="seg">${COMPLEXIDADES.map(([k, nome, m]) => `<button type="button" class="${st.cx === k ? 'on' : ''}" data-cx="${k}">${nome} <span class="faint">${fmtX(m)}</span></button>`).join('')}</div></div>
           <div class="field" style="max-width:260px"><label for="cc-ap">Reuniões de aprovação</label><div class="row" style="flex-wrap:nowrap;gap:6px;align-items:center"><input id="cc-ap" type="number" min="0" class="input" style="width:80px" data-st="aprov" value="${st.aprov}" placeholder="0" aria-label="Quantidade de reuniões"><span class="small muted">×</span><input type="number" min="0" step="0.5" class="input" style="width:80px" data-st="hAprov" value="${st.hAprov ?? 1}" aria-label="Horas por reunião"><span class="small muted">h</span></div></div>
         </div>
@@ -282,7 +285,7 @@ function openQuote(id, preset = {}) {
     </div>${modo === 'calc' ? `<aside class="qf-dir">${resumoCalc(c)}</aside>` : ''}</form>
     <div class="df">${x ? `<button class="btn danger left" data-x="del">${icon('trash')}</button>` : ''}
       ${linked ? `<button class="btn" data-x="sync-proj">${icon('arrowR')} Atualizar projeto</button><button class="btn" data-x="open-proj">${icon('folder')} Abrir projeto</button>` : x ? `<button class="btn" data-x="convert">${icon('arrowR')} Converter em projeto</button>` : ''}
-      ${x ? `<button class="btn" data-x="pdf">${icon('doc')} Proposta em PDF</button>` : ''}
+      <button class="btn" data-x="pdf">${icon('doc')} Criar PDF da proposta</button>
       <button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="save">Salvar</button></div>`;
   };
   const l = openLayer({ wide: true, render: draw });
@@ -340,7 +343,7 @@ function openQuote(id, preset = {}) {
   /* Dados da proposta a salvar. Com calculadora: valor, horas e rodadas vêm da conta. */
   const collect = () => {
     const c = db.get('tempo_clients', q.client_id);
-    const base = { name: q.name.trim(), client_id: q.client_id || null, agency_id: c?.agency_id || null, status_id: q.status_id, sent_at: q.sent_at || null, valid_until: q.valid_until || null, notes: q.notes };
+    const base = { name: q.name.trim(), client_id: q.client_id || null, agency_id: c?.agency_id || null, status_id: q.status_id, sent_at: q.sent_at || null, valid_until: q.sent_at ? validadeAte() : null, notes: q.notes };
     if (modo !== 'calc') return { ...base, value: numIn(q.value), est_hours: numIn(q.est_hours), work_type_id: q.work_type_id || null, revisions_included: numIn(q.revisions_included), extra_revision_price: numIn(q.extra_revision_price) };
     const k = calcQuote(st, rates);
     return { ...base, value: Math.round(k.total * 100) / 100, est_hours: Math.round(k.h * 10) / 10, work_type_id: st.lines.map(ln => ln.wt).find(Boolean) || null,
@@ -369,9 +372,22 @@ function openQuote(id, preset = {}) {
     const cb = e.target.closest('[data-cli-busca]'); if (cb) { openCombo(cb, { kind: 'client', value: q.client_id, onPick: escolheCliente }); return; }
     const md = e.target.closest('[data-modo]'); if (md) { modo = md.dataset.modo; tamanho(); redraw(); return; }
     const mo = e.target.closest('[data-modelo]'); if (mo) {
+      const k = mo.dataset.modelo, nome = MODELOS[k].nome;
       const temAlgo = st.lines.some(ln => (ln.name || '').trim() && ln.name !== 'Criação' || Number(ln.h));
-      if (temAlgo && !await confirmBox({ title: 'Trocar as etapas pelo modelo?', body: `As etapas atuais são substituídas pelas de <b>${esc(MODELOS[mo.dataset.modelo].nome)}</b>.`, ok: 'Usar o modelo' })) return;
-      aplicaModelo(st, mo.dataset.modelo, workTypes()); redraw(); return;
+      if (modelosDe(st).includes(k) && temAlgo) {   // clicar de novo num modelo já usado: tira as etapas dele
+        if (!await confirmBox({ title: `Tirar ${nome}?`, body: `As etapas de <b>${esc(nome)}</b> saem da proposta.`, ok: 'Tirar' })) return;
+        st.lines = st.lines.filter(ln => ln.mod !== k); if (!st.lines.length) st.lines.push({ name: '', wt: '', h: '', prazo: '' });
+        st.modelos = modelosDe(st).filter(x => x !== k); st.modelo = st.modelos[0] || null;
+        st.aprov = Math.max(0, (Number(st.aprov) || 0) - MODELOS[k].etapas.filter(x => x.ap).length);
+        if (!temVideo(st)) st.duracao = '';
+        redraw(); return;
+      }
+      let modoM = 'substitui';
+      if (temAlgo) {
+        modoM = await escolhaBox({ title: `Usar ${nome}`, body: `Já há etapas na proposta. Juntar as de <b>${esc(nome)}</b> às que já existem, ou apagar tudo e usar só ${esc(nome)}?`, opcoes: [{ id: 'substitui', label: 'Apagar e substituir' }, { id: 'adiciona', label: 'Adicionar' }] });
+        if (!modoM) return;
+      }
+      aplicaModelo(st, k, workTypes(), modoM); redraw(); return;
     }
     const cxb = e.target.closest('[data-cx]'); if (cxb) { st.cx = cxb.dataset.cx; redraw(); return; }
     const dt = e.target.closest('[data-dtipo]'); if (dt) { st.descTipo = dt.dataset.dtipo; st.desc = ''; redraw(); return; }
@@ -388,7 +404,13 @@ function openQuote(id, preset = {}) {
     if (k === 'fu') { const n = $('#fu-n', l.box).value.trim(); if (!n) return toast('Escreva o que foi conversado.'); db.update('tempo_quotes', x.id, { followups: [...(x.followups || []), { date: $('#fu-d', l.box).value, note: n }] }); l.close(); openQuote(x.id); toast('Contato registrado'); return; }
     if (k === 'del') { if (!await confirmBox({ title: 'Excluir proposta?', body: esc(x.name), ok: 'Excluir', danger: true })) return; db.remove('tempo_quotes', x.id); l.close(); return; }
     if (k === 'open-proj') { l.close(); openProject(linkedProject(x).id); return; }
-    if (k === 'pdf') { const data = collect(); if (!data.name || !data.client_id) return toast('Preencha nome e cliente.'); db.update('tempo_quotes', x.id, { ...data, calc: data.calc ? { ...data.calc, proposta: x.calc?.proposta } : x.calc }, true); l.close(); openPropostaPDF(x.id); return; }
+    if (k === 'pdf') {   // salva a proposta (nova ou não) e abre a tela do PDF
+      const data = collect(); if (!data.name || !data.client_id) return toast('Preencha nome e cliente para criar o PDF.');
+      const atual = x ? db.get('tempo_quotes', x.id) : null;
+      const calc = data.calc ? { ...data.calc, proposta: atual?.calc?.proposta } : atual?.calc || null;
+      const qid = atual ? (db.update('tempo_quotes', atual.id, { ...data, calc }, true), atual.id) : db.insert('tempo_quotes', { ...data, calc, followups: [], project_id: null }, true).id;
+      db.emit(); l.close(); openPropostaPDF(qid); return;
+    }
     const data = collect();
     if (!data.name || !data.client_id) return toast('Preencha nome e cliente.');
     if (k === 'sync-proj') {

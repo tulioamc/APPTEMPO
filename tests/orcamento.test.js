@@ -107,3 +107,16 @@ test('relatório do mês do cliente: horas por projeto e tarefa', () => {
   assert.equal(d.total, 3 * 36e5); assert.equal(d.linhas[0].entregue, true);
   assert.ok(m.relClienteHTML('client', 'c', '2026-11').includes('Animação'));
 });
+
+test('mais de um modelo: Identidade + Manual somam etapas, aprovações e prazo', () => {
+  const m = load(['js/store.js', 'js/domain.js', 'js/orcamento.js'], ['db', 'calcQuote', 'precoBase', 'aplicaModelo'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty();
+  const st = { porte: 'medio', mercado: 'local', lines: [{ name: '', h: '' }], cx: 'simples', nf: { on: false }, bv: { on: false }, ext: { on: false, items: [] } };
+  m.aplicaModelo(st, 'identidade', []);
+  m.aplicaModelo(st, 'manual', [], 'adiciona');
+  assert.equal(st.lines.length, 5); assert.deepEqual([...st.modelos], ['identidade', 'manual']); assert.equal(st.aprov, 3);
+  const c = m.calcQuote(st, m.precoBase());
+  assert.equal(c.hEtapas, 50); assert.equal(c.fechado, 17);
+  m.aplicaModelo(st, 'motion2d', [], 'substitui');
+  assert.equal(st.lines.length, 6); assert.deepEqual([...st.modelos], ['motion2d']);
+});

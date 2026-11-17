@@ -31,7 +31,8 @@ function propCondicoes(x) {
   out.push('O pagamento deverá ser efetuado ao final do serviço.');
   if (k && k.fechado) out.push(`O prazo estimado é de ${k.fechado} dias úteis, sem contar o tempo de aprovação do cliente e possíveis ajustes.`);
   if (rod) out.push(`O valor inclui até ${propNumExtenso(rod)} rodada${rod > 1 ? 's' : ''} de ajustes${nomes.length > 1 ? ' por etapa' : ''}. Alterações fora do briefing ou em etapas já aprovadas poderão gerar custos adicionais.`);
-  out.push('Este orçamento tem validade de 30 dias.');
+  const dv = x.sent_at && x.valid_until ? daysBetween(x.sent_at, x.valid_until) : 30;
+  out.push(`Este orçamento tem validade de ${dv > 0 ? dv : 30} dias.`);
   out.push('O envio dos textos e a revisão do material final são de responsabilidade do cliente.');
   return out;
 }

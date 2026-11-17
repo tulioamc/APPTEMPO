@@ -41,20 +41,27 @@ const MODELOS = {
     { name: 'Trilha e sound effects', wt: '', h: 0, prazo: 1, ap: true, terc: true }] },
 };
 /* Aplica o modelo nas etapas da calculadora; tipo de trabalho pelo nome (o que não existir fica em branco). */
-function aplicaModelo(st, chave, tipos = []) {
+/* modo 'substitui' (padrão) troca as etapas; 'adiciona' soma as do modelo às que já existem (ex.: Identidade + Manual). */
+function aplicaModelo(st, chave, tipos = [], modo = 'substitui') {
   const mo = MODELOS[chave]; if (!mo) return st;
   const wtId = (n) => (tipos.find(t => t.name === n) || {}).id || '';
-  st.modelo = chave;
-  st.lines = mo.etapas.map(e => ({ name: e.name, wt: wtId(e.wt), h: e.h || '', prazo: e.prazo || '', ap: !!e.ap, par: !!e.par }));
-  st.aprov = mo.etapas.filter(e => e.ap).length;
-  if (mo.video && !(Number(st.duracao) > 0)) st.duracao = 1;
-  if (!mo.video) st.duracao = '';
+  const novas = mo.etapas.map(e => ({ name: e.name, wt: wtId(e.wt), h: e.h || '', prazo: e.prazo || '', ap: !!e.ap, par: !!e.par, mod: chave }));
+  const soma = modo === 'adiciona';
+  const vazias = (st.lines || []).every(l => !(l.name || '').trim() && !Number(l.h));
+  st.lines = soma && !vazias ? [...st.lines.filter(l => (l.name || '').trim() || Number(l.h)), ...novas] : novas;
+  st.modelos = soma ? [...new Set([...(modelosDe(st)), chave])] : [chave];
+  st.modelo = st.modelos[0];
+  st.aprov = (soma ? (Number(st.aprov) || 0) : 0) + mo.etapas.filter(e => e.ap).length;
+  if (temVideo(st) && !(Number(st.duracao) > 0)) st.duracao = 1;
+  if (!temVideo(st)) st.duracao = '';
   return st;
 }
+const modelosDe = (st) => st.modelos || (st.modelo ? [st.modelo] : []);
+const temVideo = (st) => modelosDe(st).some(k => MODELOS[k]?.video);
 /* Prazo das etapas (dias úteis): fechado = soma das etapas em sequência × duração; provável = + ajuste de 40% do prazo
    de cada etapa com aprovação (o mínimo combinado). Sem prazos nas etapas, vale horas ÷ 8 h. */
 function prazosEtapas(st, h) {
-  const dur = MODELOS[st.modelo]?.video ? durMult(st.duracao) : 1;
+  const dur = temVideo(st) ? durMult(st.duracao) : 1;
   const temPrazo = st.lines.some(x => Number(x.prazo) > 0);
   if (!temPrazo) { const f = h ? Math.max(1, Math.ceil(h / HORAS_DIA)) : 0; return { fechado: f, provavel: f, doModelo: false }; }
   const seq = st.lines.filter(x => !x.par).reduce((s, x) => s + (Number(x.prazo) || 0), 0) * dur;
@@ -78,7 +85,7 @@ function calcQuote(st, pb) {
   const r = calcRate(st, pb);
   const hEtapas = st.lines.reduce((s, x) => s + (Number(x.h) || 0), 0);
   // duração só vale nos modelos de vídeo (horas do modelo são por minuto); fora deles, 1×
-  const dur = MODELOS[st.modelo]?.video ? durMult(st.duracao) : 1, cx = cxMult(st.cx);
+  const dur = temVideo(st) ? durMult(st.duracao) : 1, cx = cxMult(st.cx);
   // reuniões de aprovação somam horas (não multiplicam): quantidade × horas por reunião (padrão 1 h)
   const reun = Math.max(0, Number(st.aprov) || 0) * (st.hAprov === '' || st.hAprov == null ? 1 : Math.max(0, Number(st.hAprov) || 0));
   const h = hEtapas * dur * cx + reun;
