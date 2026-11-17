@@ -767,3 +767,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V2.06.31: tempo sem nenhum registro do computador (2 min+) vira pausa sozinha ("Sem registro"); retroativo desde 16/11.
 - V2.06.32: janela única para projeto/cliente/agência, com o timesheet completo (mesma barra do Resumo) embutido.
 - V2.06.33: pausa por falta de registro e bloqueio também leem a lixeira do log; correção retroativa desde 19/10 (só onde o log existe).
+- V2.06.34: setinha dos grupos abre a lista; caminho no Editar sessão com links (agência, cliente, projeto, tarefa).

@@ -126,7 +126,7 @@ function projectTable(list) {
   if (!list.length) return `<div class="empty">${icon('search')}<b>Nenhum projeto com esses filtros</b><button class="btn sm" data-act="flt-clear" data-ns="proj">Limpar filtros</button></div>`;
   return gridTable({ id: 'projects', cols: PCOLS, rows: list, defHidden: DEFAULT_PHIDDEN, defSort: { key: 'deadline', dir: 1 }, rowAttrs: p => `data-act="proj-open" data-id="${p.id}"`, rowById: (id) => db.get('tempo_projects', id) });
 }
-ACTIONS['proj-open'] = (el) => openProject(el.dataset.id);
+ACTIONS['proj-open'] = (el) => openProject(el.dataset.id, el.dataset.tab || 'time');
 function projectBoard(list) {
   return `<div class="kanban">${statuses('work').map(s => {
     const items = list.filter(p => p.status_id === s.id);

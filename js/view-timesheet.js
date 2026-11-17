@@ -6,6 +6,21 @@ function selPath(sel) {
   const parts = [a ? a.name : (c && !c.agency_id ? 'Direto' : null), c?.name, p?.name, t?.name, s?.name].filter(Boolean);
   return parts;
 }
+/* Caminho com links: agência, cliente, projeto e tarefa abrem a mesma janela de sempre (tarefa abre o projeto). */
+function selPathLinksHTML(sel) {
+  const a = db.get('tempo_agencies', sel.agency_id), c = db.get('tempo_clients', sel.client_id), p = db.get('tempo_projects', sel.project_id), t = db.get('tempo_tasks', sel.task_id), sb = db.get('tempo_tasks', sel.sub_id);
+  const ag = a || (c?.agency_id ? db.get('tempo_agencies', c.agency_id) : null);
+  const link = (txt, attrs) => `<a href="#" class="path-link" ${attrs}>${esc(txt)}</a>`;
+  const parts = [
+    ag ? link(ag.name, `data-act="party-open" data-kind="agency" data-id="${ag.id}"`) : (c && !c.agency_id ? '<span>Direto</span>' : null),
+    c ? link(c.name, `data-act="party-open" data-kind="client" data-id="${c.id}"`) : null,
+    p ? link(p.name, `data-act="proj-open" data-id="${p.id}"`) : null,
+    t && p ? link(t.name, `data-act="proj-open" data-id="${p.id}" data-tab="tasks"`) : null,
+    sb && p ? link(sb.name, `data-act="proj-open" data-id="${p.id}" data-tab="tasks"`) : null,
+  ].filter(Boolean);
+  if (!parts.length) return pathHTML([]);
+  return parts.map((x, i) => i === parts.length - 1 ? `<b>${x}</b>` : `${x}<span class="sep">›</span>`).join('');
+}
 function pathHTML(parts) { return parts.length ? parts.map((x, i) => i === parts.length - 1 ? `<b>${esc(x)}</b>` : `<span>${esc(x)}</span><span class="sep">›</span>`).join('') : '<span class="faint">Sessão avulsa, sem projeto</span>'; }
 function entrySel(e) { const t = db.get('tempo_tasks', e.task_id); return { agency_id: e.agency_id || '', client_id: e.client_id || '', project_id: e.project_id || '', task_id: t?.parent_id ? t.parent_id : (t?.id || ''), sub_id: t?.parent_id ? t.id : '' }; }
 function selToEntry(sel) {
@@ -602,7 +617,7 @@ function openEntryModal(id, startIso = null, endIso = null) {
     const total = segs.reduce((s, x) => s + ((x.e ? new Date(x.e) : Date.now()) - new Date(x.s)), 0);
     return `<div class="dh">${icon(e ? 'edit' : 'plus')}<h2>${e ? (e.state === 'done' ? 'Editar sessão' : 'Sessão atual') : 'Apontamento manual'}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db">
-      ${showPicker ? '<div data-picker></div>' : `<div class="row subtle-box"><div class="timer-path grow">${pathHTML(selPath(sel))}</div><button class="btn sm" data-x="pick">Alterar</button></div>`}
+      ${showPicker ? '<div data-picker></div>' : `<div class="row subtle-box"><div class="timer-path grow">${selPathLinksHTML(sel)}</div><button class="btn sm" data-x="pick">Alterar</button></div>`}
       <div class="grid2">
         <div class="field"><label for="em-wt">Tipo de trabalho</label><select id="em-wt" class="input" name="work_type_id">${options(workTypes(), e?.work_type_id || defaultWorkType(sel), { empty: true, emptyLabel: 'Sem tipo' })}</select></div>
         <div class="field"><label for="em-rev">Rodada de revisão</label><select id="em-rev" class="input" name="revision_id" ${revs.length ? '' : 'disabled'}>${options(revs, e?.revision_id, { empty: true, emptyLabel: revs.length ? 'Não é revisão' : 'Projeto sem rodadas', label: r => `Rodada ${r.number} — ${r.description.slice(0, 40)}` })}</select></div>

@@ -283,3 +283,5 @@ function resumoEmbedHTML(es) {
   return `<div class="panel res-embed res-wrap"><div class="panel-b stack" style="gap:12px">${resumoBodyHTML(done, { embed: true })}</div></div>`;
 }
 
+/* Setinha do grupo: abre/fecha a lista (botão dentro do <summary> não abre sozinho). */
+ACTIONS['grp-caret'] = (el) => { const d = el.closest('details'); if (d) d.open = !d.open; };
