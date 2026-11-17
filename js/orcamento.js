@@ -96,7 +96,9 @@ function multEtapa(st, l) {
 /* Quantidade (ex.: 50 ícones): multiplica as horas e o valor do terceirizado da etapa; vazio = 1. */
 const qtdEtapa = (l) => Math.max(0, Number(l.qtd) > 0 ? Number(l.qtd) : 1);
 const horasEtapa = (st, l) => l.par || l.terc ? 0 : (Number(l.h) || 0) * qtdEtapa(l) * multEtapa(st, l);
-const valorTerc = (l) => l.terc && !l.par ? (Number(l.valor) || 0) * qtdEtapa(l) : 0;
+// aceita também valor salvo como texto ("R$ 1.200,00"), de versões anteriores
+const numBR = (v) => typeof v === 'number' ? v : (() => { const d = String(v ?? '').replace(/[^\d,.-]/g, ''); return d.includes(',') ? Number(d.replace(/\./g, '').replace(',', '.')) || 0 : Number(d) || 0; })();
+const valorTerc = (l) => l.terc ? numBR(l.valor) * qtdEtapa(l) : 0;   // terceirizado em paralelo também tem valor
 const tercEtapas = (st) => (st.lines || []).reduce((s, l) => s + valorTerc(l), 0);
 /* Prazo das etapas (dias úteis): fechado = soma das etapas em sequência × duração; provável = + ajuste de 40% do prazo
    de cada etapa com aprovação (o mínimo combinado). Sem prazos nas etapas, vale horas ÷ 8 h. */
@@ -120,53 +122,71 @@ const cxMult = (k) => (COMPLEXIDADES.find(x => x[0] === k) || COMPLEXIDADES[0])[
 /* duração do vídeo em minutos: vazio = não é vídeo (1×); abaixo de 30 s conta 30 s */
 const durMult = (min) => { const d = Number(min); return d > 0 ? Math.max(0.5, d) : 1; };
 
+/* Dias úteis de amanhã até a data (inclusive), sem fim de semana, feriados e férias quando o Planejamento está carregado. */
+function diasUteisAte(data, hoje = new Date()) {
+  if (!data) return 0; const fim = new Date(data + 'T12:00:00'); const d = new Date(hoje); d.setHours(12, 0, 0, 0);
+  let n = 0; for (let i = 0; i < 800 && d < fim; i++) { d.setDate(d.getDate() + 1); const k = ymd(d);
+    const util = typeof planoDiaUtil === 'function' ? planoDiaUtil(k) : ![0, 6].includes(d.getDay()); if (util) n++; }
+  return n;
+}
+/* Prazo pedido de uma entrega: data (vira dias úteis) ou número de dias úteis. Proposta antiga com um prazo só vale para a única entrega. */
+const pedidoGrupo = (st, g, gs) => g.pedidoData ? diasUteisAte(g.pedidoData) : Number(g.pedido) || (gs.length === 1 ? Number(st.pedido) || 0 : 0);
+const urgDe = (fechado, pedido) => { const bruta = pedido > 0 && fechado && pedido < fechado ? fechado / pedido : 1; return { bruta, urg: Math.min(URGENCIA_TETO, bruta) }; };
 function calcQuote(st, pb) {
   const r = calcRate(st, pb);
-  gruposDe(st);
-  const hBruto = st.lines.reduce((s, x) => s + (x.par || x.terc ? 0 : Number(x.h) || 0), 0);   // por unidade/minuto, como digitado   // como digitado (por minuto, no vídeo)
+  const gs = gruposDe(st);
+  const hBruto = st.lines.reduce((s, x) => s + (x.par || x.terc ? 0 : Number(x.h) || 0), 0);   // por unidade/minuto, como digitado
   const hEt = st.lines.map(x => horasEtapa(st, x));
   const hEtapas = hEt.reduce((s, v) => s + v, 0);
-  // duração só vale nos modelos de vídeo (horas do modelo são por minuto); fora deles, 1×
   const dur = 1, cx = cxMult(st.cx);
-  // reuniões de aprovação somam horas (não multiplicam): quantidade × horas por reunião (padrão 1 h)
+  // reuniões de aprovação somam horas (não multiplicam): quantidade × horas por reunião (padrão 1 h), divididas pelas entregas
   const reun = Math.max(0, Number(st.aprov) || 0) * (st.hAprov === '' || st.hAprov == null ? 1 : Math.max(0, Number(st.hAprov) || 0));
   const h = hEtapas * cx + reun;
   const M = h * r;
-  // urgência: prazo fechado = o trabalho sozinho no ritmo normal (horas ÷ 8 h por dia útil)
   const pz = prazosEtapas(st, h); const fechado = pz.fechado;
-  const pedido = Number(st.pedido) || 0;
-  const urgBruta = pedido > 0 && fechado && pedido < fechado ? fechado / pedido : 1;
-  const urg = Math.min(URGENCIA_TETO, urgBruta);
-  const Mu = M * urg; const U = Mu - M;
+  // por entrega: horas, prazo fechado, prazo pedido → urgência própria, e desconto próprio (R$ ou %)
+  const G = gs.map(g => {
+    const hg = st.lines.reduce((s, x, i) => s + (x.grp === g.id ? hEt[i] : 0), 0);
+    const sh = hEtapas ? hg / hEtapas : (gs.length ? 1 / gs.length : 0);
+    const hgt = hg * cx + reun * sh; const Mg = hgt * r;
+    const temPz = st.lines.some(x => x.grp === g.id && !x.par && Number(x.prazo) > 0);
+    const fg = temPz ? prazoGrupo(st, g.id) : (hgt ? Math.max(1, Math.ceil(hgt / HORAS_DIA)) : 0);
+    const ped = pedidoGrupo(st, g, gs); const u = urgDe(fg, ped);
+    const Mu = Mg * u.urg;
+    const dv = Number(g.desc) || 0; const dg = Math.min(Mu, Math.max(0, g.descTipo === '%' ? Mu * Math.min(100, dv) / 100 : dv));
+    return { g, hg, sh, hgt, Mg, fechado: fg, pedido: ped, urgBruta: u.bruta, urg: u.urg, Mu, descG: dg, liq: Mu - dg };
+  });
+  const Mu = G.reduce((s, x) => s + x.Mu, 0); const U = Mu - M;
+  const descEntregas = G.reduce((s, x) => s + x.descG, 0); const Mliq = Mu - descEntregas;
+  const urgBruta = Math.max(1, ...G.map(x => x.urgBruta)); const urg = M ? Mu / M : 1;
+  const pedido = Math.max(0, ...G.map(x => x.pedido));
   const Bext = st.ext?.on ? st.ext.items.reduce((s, x) => s + (Number(x.value) || 0), 0) : 0;
   const Bterc = tercEtapas(st); const B = Bext + Bterc;
   const bvP = st.bv.on ? (Number(st.bv.pct) || 0) / 100 : 0;
   const nfP = st.nf.on ? (Number(st.nf.pct) || 0) / 100 : 0;
   const nfF = !nfP ? 1 : st.nf.inside && nfP < 1 ? 1 / (1 - nfP) : 1 + nfP;
-  let Mf, desc;
+  let Mf, descGeral;
   if (Number(st.alvo) > 0) {   // total digitado: só a minha parte se ajusta
-    Mf = Math.max(0, Number(st.alvo) / ((1 + bvP) * nfF) - B); desc = Mu - Mf;
-  } else {
+    Mf = Math.max(0, Number(st.alvo) / ((1 + bvP) * nfF) - B); descGeral = Mliq - Mf;
+  } else {   // desconto geral, sobre tudo o que é seu (depois dos descontos das entregas)
     const dv = Number(st.desc) || 0;
-    desc = st.descTipo === '%' ? Mu * Math.min(100, dv) / 100 : dv;
-    desc = Math.min(Math.max(0, desc), Mu); Mf = Mu - desc;
+    descGeral = Math.min(Mliq, Math.max(0, st.descTipo === '%' ? Mliq * Math.min(100, dv) / 100 : dv)); Mf = Mliq - descGeral;
   }
+  const desc = descEntregas + descGeral;
   const C = (Mf + B) * bvP;
   const pre = Mf + B + C; const D = pre * nfF - pre;
-  // etapas com o valor proporcional da minha parte final (o ajuste do total se espalha entre elas)
-  const porEtapa = hEt.map(v => hEtapas ? Mf * v / hEtapas : 0);
-  // por projeto (grupo): horas com complexidade e a parte do total (reuniões e impostos na mesma proporção)
-  // parte de cada projeto: minha parte pelas horas + terceirizados das etapas dele + custo extra geral pelas horas
+  const escala = Mliq ? Mf / Mliq : 0;   // desconto geral (ou total digitado) se espalha pelas entregas
+  const porEtapa = st.lines.map((x, i) => { const gg = G.find(y => y.g.id === x.grp); return gg && gg.hg ? gg.liq * escala * hEt[i] / gg.hg : 0; });
   const baseTot = Mf + B;
-  const porGrupo = st.grupos.map(g => {
-    const hg = st.lines.reduce((s, x, i) => s + (x.grp === g.id ? hEt[i] : 0), 0);
-    const tg = st.lines.reduce((s, x) => s + (x.grp === g.id ? valorTerc(x) : 0), 0);
-    const sh = hEtapas ? hg / hEtapas : (st.grupos.length ? 1 / st.grupos.length : 0);
-    return { id: g.id, nome: g.nome, mod: g.mod, h: hg * cx, terc: tg, parte: baseTot ? (Mf * sh + tg + Bext * sh) / baseTot : 0 };
+  const porGrupo = G.map(x => {
+    const tg = st.lines.reduce((s, l) => s + (l.grp === x.g.id ? valorTerc(l) : 0), 0);
+    return { id: x.g.id, nome: x.g.nome, mod: x.g.mod, h: x.hg * cx, terc: tg, fechado: x.fechado, pedido: x.pedido, urg: x.urg, urgBruta: x.urgBruta, descG: x.descG,
+      parte: baseTot ? (x.liq * escala + tg + Bext * x.sh) / baseTot : 0 };
   });
-  return { r, hBruto, hEtapas, porGrupo, dur, cx, reun, Bext, Bterc, h, M, fechado, provavel: pz.provavel, prazoModelo: pz.doModelo, pedido, urgBruta, urg, U, Mu, desc, Mf, B, C, D,
+  return { r, hBruto, hEtapas, porGrupo, dur, cx, reun, Bext, Bterc, h, M, fechado, provavel: pz.provavel, prazoModelo: pz.doModelo, pedido, urgBruta, urg, U, Mu, desc, descEntregas, descGeral, Mf, B, C, D,
     total: pre + D, horaEf: h ? Mf / h : 0, porEtapa, semPrazo: urgBruta > URGENCIA_TETO };
 }
+
 /* Move a etapa i para a posição de j (e para o grupo de j). */
 function moveEtapa(st, i, j, grp) {
   if (i === j && !grp) return st;

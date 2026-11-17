@@ -40,7 +40,7 @@ const propNumExtenso = (n) => ['', 'uma', 'duas', 'três', 'quatro', 'cinco', 's
 function propItens(x, sep = {}) {
   const total = Number(x.value) || 0;
   const lines = x.calc?.lines || [];
-  const cheias = lines.map((l, i) => [l, i]).filter(([l]) => !l.par && (Number(l.h) > 0 || Number(l.valor) > 0) && (l.name || '').trim());
+  const cheias = lines.map((l, i) => [l, i]).filter(([l]) => (!l.par || l.terc) && (Number(l.h) > 0 || Number(l.valor) > 0) && (l.name || '').trim());
   if (!cheias.length) return [{ desc: x.name || 'Projeto', unit: '', qtd: '', valor: total, nivel: 0 }];
   const k = calcQuote({ ...x.calc }, precoBase());
   // imposto separado: os itens ficam sem o imposto (ele aparece embaixo, antes do total)

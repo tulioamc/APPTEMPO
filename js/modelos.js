@@ -55,7 +55,7 @@ function openEditorModelo(chave, onSalvar) {
   l.box.addEventListener('change', (ev) => {
     const t = ev.target;
     if (t.hasAttribute('data-me-video')) { m.video = t.checked; l.refresh(); return; }
-    if (t.dataset.meck !== undefined) { const e = m.etapas[t.dataset.meck]; e[t.dataset.k] = t.checked; if (t.dataset.k === 'terc' && t.checked) { e.h = ''; e.par = false; } if (t.dataset.k === 'par' && t.checked) { e.h = ''; e.prazo = ''; e.terc = false; } l.refresh(); return; }
+    if (t.dataset.meck !== undefined) { const e = m.etapas[t.dataset.meck]; e[t.dataset.k] = t.checked; if (t.dataset.k === 'terc' && t.checked) e.h = ''; if (t.dataset.k === 'par' && t.checked) { e.h = ''; e.prazo = ''; } l.refresh(); return; }
     if (t.dataset.mei !== undefined) m.etapas[t.dataset.mei][t.dataset.k] = t.value;
   });
   l.box.addEventListener('click', (ev) => {

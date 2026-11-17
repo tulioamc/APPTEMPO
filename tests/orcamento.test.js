@@ -244,3 +244,18 @@ test('modelos: favoritos, editar um pronto, apagar e criar novo', () => {
   m.db.setSetting('modelosOcultos', ['traducao']);
   assert.equal(m.todosModelos().traducao, undefined);
 });
+
+test('prazo e desconto por entrega; desconto geral sobre tudo', () => {
+  const m = load(['js/store.js', 'js/domain.js', 'js/orcamento.js'], ['db', 'calcQuote', 'precoBase', 'diasUteisAte'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty();
+  const st = { porte: 'medio', mercado: 'local', cx: 'simples', nf: { on: false }, bv: { on: false }, ext: { on: false, items: [] },
+    grupos: [{ id: 'a', nome: 'ID', pedido: 2 }, { id: 'b', nome: 'Vídeo', desc: 10, descTipo: '%' }],
+    lines: [{ name: 'Marca', h: 40, grp: 'a' }, { name: 'Animação', h: 40, grp: 'b' }] };
+  const c = m.calcQuote(st, m.precoBase());   // 40 h = 5 dias; pedido 2 → 2× (teto); vídeo sem pressa, 10% de desconto
+  assert.equal(c.porGrupo[0].urg, 2); assert.equal(c.porGrupo[1].urg, 1);
+  assert.equal(Math.round(c.Mf), Math.round(40 * 230 * 2 + 40 * 230 * 0.9));
+  st.desc = 1000; const c2 = m.calcQuote(st, m.precoBase());
+  assert.equal(Math.round(c2.Mf), Math.round(c.Mf - 1000));
+  assert.ok(Math.abs(c2.porEtapa.reduce((s, v) => s + v, 0) - c2.Mf) < 0.01);
+  assert.equal(m.diasUteisAte('2026-11-27', new Date(2026, 10, 17)), 8, 'de 18 a 27/11 sem fim de semana (feriados entram quando o Planejamento está carregado)');
+});
