@@ -1341,3 +1341,4 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .ct-opt { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; width: 100%; text-align: left; border: 0; background: transparent; padding: 7px 10px; cursor: pointer; }
 .ct-opt:hover { background: var(--surface-2); }
 .ct-opt .muted { grid-column: 1; } .ct-opt .faint { grid-column: 2; grid-row: 1; }
+.ct-opt.on { background: var(--surface-2); }

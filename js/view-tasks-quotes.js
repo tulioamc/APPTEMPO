@@ -207,9 +207,9 @@ function openQuote(id, preset = {}) {
   const camposTopo = () => `<div class="grid2">
       <div class="field span2"><label for="qf-n">Nome / escopo *</label><input id="qf-n" class="input" data-q="name" value="${esc(q.name)}"></div>
       <div class="field"><label for="qf-c">Cliente *</label><div class="row" style="flex-wrap:nowrap"><button type="button" id="qf-c" class="input combo-field grow" data-cli-busca aria-label="Buscar cliente">${q.client_id && db.get('tempo_clients', q.client_id) ? clientTag(db.get('tempo_clients', q.client_id)) : '<span class="faint">Buscar cliente…</span>'}</button><button type="button" class="btn" data-x="newclient" aria-label="Novo cliente" title="Cadastrar cliente novo">${icon('plus')}</button></div></div>
-      <div class="field" style="position:relative"><label for="qf-ct">Contato</label><input id="qf-ct" class="input" data-pp="contato" autocomplete="off" value="${esc(pp.contato ?? (db.get('tempo_clients', q.client_id)?.contact || ''))}" placeholder="Quem pediu o orçamento">
+      <div class="field" style="position:relative"><label for="qf-ct">Contato</label><div class="row" style="flex-wrap:nowrap;gap:6px"><input id="qf-ct" class="input grow" data-pp="contato" autocomplete="off" value="${esc(pp.contato ?? (db.get('tempo_clients', q.client_id)?.contact || ''))}" placeholder="Quem pediu o orçamento"><button type="button" class="btn icon" data-ct-ligar aria-label="Ligar a um contato salvo" title="${pp.contatoId ? 'Ligado a um contato da aba Contatos · trocar ou editar' : 'Ligar a um contato da aba Contatos'}" style="${pp.contatoId ? 'color:var(--accent, #6b46c1)' : ''}">${icon('edit')}</button></div>
         <div class="ct-sug" data-ct-sug hidden></div>
-        ${pp.contatoTel || pp.contatoEmail ? `<span class="hint">${pp.contatoTel ? `tel. ${esc(pp.contatoTel)}` : ''}${pp.contatoTel && pp.contatoEmail ? ' · ' : ''}${pp.contatoEmail ? esc(pp.contatoEmail) : ''}</span>` : ''}</div>
+        ${pp.contatoTel || pp.contatoEmail || pp.contatoId ? `<span class="hint">${pp.contatoId ? '<span class="tag c-green" style="margin-right:6px">ligado a Contatos</span>' : ''}${pp.contatoTel ? `tel. ${esc(pp.contatoTel)}` : ''}${pp.contatoTel && pp.contatoEmail ? ' · ' : ''}${pp.contatoEmail ? esc(pp.contatoEmail) : ''}</span>` : ''}</div>
       <div class="field"><label for="qf-s">Status</label><select id="qf-s" class="input" data-q="status_id">${options(statuses('quote'), q.status_id)}</select></div>
       <div class="field"><label for="qf-sa">Data da proposta</label><input id="qf-sa" type="date" class="input" data-q="sent_at" value="${q.sent_at}"></div>
       <div class="field"><label for="qf-vd">Validade</label><div class="row" style="flex-wrap:nowrap;gap:8px;align-items:center"><input id="qf-vd" type="number" min="1" class="input" style="max-width:110px" data-q="validade" value="${q.validade}"><span class="small muted">dias${q.sent_at && Number(q.validade) ? ` · até ${fmtDate(validadeAte())}` : ''}</span></div></div>
@@ -358,6 +358,42 @@ function openQuote(id, preset = {}) {
     else return false;
     return true;
   };
+  /* Lápis do contato: escolher um contato salvo (aba Contatos), ajustar telefone e e-mail e, se quiser, ligar o contato ao cliente. */
+  const ligarContato = () => {
+    const todos = (db.all('tempo_wa_contacts') || []).filter(c => !/@g\.us$/.test(c.jid || ''));
+    let busca = pp.contato || ''; let escolhido = pp.contatoId || null;
+    const tel0 = pp.contatoTel || '', mail0 = pp.contatoEmail || '';
+    const cli = db.get('tempo_clients', q.client_id);
+    const nr = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const lista = () => { const t = nr(busca).trim(); return todos.filter(c => !t || nr(c.name).includes(t.split(' ')[0])).sort((a, b) => String(b.last_at || '').localeCompare(String(a.last_at || ''))).slice(0, 12); };
+    const draw = () => `<div class="dh"><h2>Contato da proposta</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+      <div class="db stack" style="gap:10px">
+        <div class="field"><label for="lc-b">Buscar nos contatos salvos</label><input id="lc-b" class="input" data-lc-b value="${esc(busca)}" placeholder="Nome"></div>
+        <div class="stack" style="gap:2px;max-height:260px;overflow:auto">${lista().map(c => `<button type="button" class="ct-opt${escolhido === c.id ? ' on' : ''}" data-lc="${c.id}"><b>${esc(c.name)}</b><span class="small muted">${esc(foneDoJid(c.jid))}${c.client_id ? ' · ' + esc(db.get('tempo_clients', c.client_id)?.name || '') : c.agency_id ? ' · ' + esc(db.get('tempo_agencies', c.agency_id)?.name || '') : ''}</span><span class="small faint">${escolhido === c.id ? '✓ ligado' : ''}</span></button>`).join('') || '<div class="small muted">Nenhum contato com esse nome na aba Contatos.</div>'}</div>
+        <div class="grid2"><div class="field"><label for="lc-t">Telefone</label><input id="lc-t" class="input" value="${esc(tel0)}"></div><div class="field"><label for="lc-e">E-mail</label><input id="lc-e" class="input" value="${esc(mail0)}"></div></div>
+        ${cli ? `<label class="check small"><input type="checkbox" id="lc-cli" checked> Ligar o contato ao cliente ${esc(cli.name)} na aba Contatos (se ainda não estiver ligado a ninguém)</label>` : ''}
+      </div>
+      <div class="df">${pp.contatoId ? '<button class="btn left ghost" data-lc-solta>Desligar</button>' : ''}<button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-lc-ok>Usar</button></div>`;
+    const lc = openLayer({ render: draw });
+    lc.box.addEventListener('input', (ev) => { if (ev.target.hasAttribute('data-lc-b')) { busca = ev.target.value; clearTimeout(lc._t); lc._t = setTimeout(() => { const pos = ev.target.selectionStart; lc.refresh(); const b = $('[data-lc-b]', lc.box); if (b) { b.focus(); try { b.setSelectionRange(pos, pos); } catch (er) {} } }, 250); } });
+    lc.box.addEventListener('click', (ev) => {
+      const o = ev.target.closest('[data-lc]'); if (o) {
+        escolhido = escolhido === o.dataset.lc ? null : o.dataset.lc;
+        const c = todos.find(x => x.id === escolhido); const t = $('#lc-t', lc.box);
+        if (c && t && !t.value) t.value = foneDoJid(c.jid);
+        $$('[data-lc]', lc.box).forEach(b => { b.classList.toggle('on', b.dataset.lc === escolhido); b.lastElementChild.textContent = b.dataset.lc === escolhido ? '✓ ligado' : ''; });
+        return;
+      }
+      if (ev.target.closest('[data-lc-solta]')) { delete pp.contatoId; lc.close(); redraw(); return; }
+      if (ev.target.closest('[data-lc-ok]')) {
+        const c = todos.find(x => x.id === escolhido);
+        if (c) { pp.contatoId = c.id; if (!pp.contato || pp.contato === busca) pp.contato = c.name; } else delete pp.contatoId;
+        pp.contatoTel = $('#lc-t', lc.box).value.trim(); pp.contatoEmail = $('#lc-e', lc.box).value.trim();
+        if (c && cli && $('#lc-cli', lc.box)?.checked && !c.client_id && !c.agency_id && !c.project_id) db.update('tempo_wa_contacts', c.id, { client_id: cli.id }, true);
+        lc.close(); redraw(); toast(c ? `Contato ligado a ${esc(c.name)}` : 'Contato atualizado');
+      }
+    });
+  };
   /* Contato: enquanto digita, procura nome parecido nos contatos do WhatsApp e no Gmail; escolher preenche telefone e e-mail. */
   let _ctT = null, _ctSeq = 0;
   const foneDoJid = (jid) => { const n = String(jid || '').split('@')[0].replace(/\D/g, ''); if (n.length < 10) return ''; const br = n.startsWith('55') ? n.slice(2) : n; return br.length >= 10 ? `(${br.slice(0, 2)}) ${br.slice(2, -4)}-${br.slice(-4)}` : '+' + n; };
@@ -366,7 +402,7 @@ function openQuote(id, preset = {}) {
     const box = $('[data-ct-sug]', l.box); if (!box) return;
     const t = nrmCt(txt); if (t.length < 2) { box.hidden = true; return; }
     const seq = ++_ctSeq;
-    const wa = (db.all('tempo_wa_contacts') || []).filter(c => !/@g\.us$/.test(c.jid || '') && nrmCt(c.name).includes(t)).slice(0, 5).map(c => ({ nome: c.name, tel: foneDoJid(c.jid), fonte: 'WhatsApp' }));
+    const wa = (db.all('tempo_wa_contacts') || []).filter(c => !/@g\.us$/.test(c.jid || '') && nrmCt(c.name).includes(t)).slice(0, 5).map(c => ({ id: c.id, nome: c.name, tel: foneDoJid(c.jid), fonte: 'WhatsApp' }));
     const desenha = (lista, carregando) => { if (seq !== _ctSeq) return; box._lista = lista; box.hidden = !lista.length && !carregando;
       box.innerHTML = lista.map((c, i) => `<button type="button" class="ct-opt" data-ct-i="${i}"><b>${esc(c.nome || c.email)}</b><span class="small muted">${[c.tel, c.email].filter(Boolean).map(esc).join(' · ')}</span><span class="small faint">${c.fonte}</span></button>`).join('') + (carregando ? '<div class="small faint" style="padding:6px 10px">procurando no Gmail…</div>' : ''); };
     desenha(wa, true);
@@ -491,9 +527,10 @@ function openQuote(id, preset = {}) {
   };
 
   l.box.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-ct-ligar]')) { ligarContato(); return; }
     const co = e.target.closest('[data-ct-i]'); if (co) {
       const c = co.closest('[data-ct-sug]')._lista[Number(co.dataset.ctI)];
-      pp.contato = c.nome || c.email; if (c.tel) pp.contatoTel = c.tel; if (c.email) pp.contatoEmail = c.email;
+      pp.contato = c.nome || c.email; if (c.tel) pp.contatoTel = c.tel; if (c.email) pp.contatoEmail = c.email; if (c.id) pp.contatoId = c.id;
       redraw(); toast('Contato preenchido' + (c.tel || c.email ? ' com ' + [c.tel && 'telefone', c.email && 'e-mail'].filter(Boolean).join(' e ') : '')); return;
     }
     if (!e.target.closest('[data-ct-sug]')) { const sb = $('[data-ct-sug]', l.box); if (sb) sb.hidden = true; }
