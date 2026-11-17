@@ -15,7 +15,7 @@ const actColorMap = () => db.setting('actColors', {}) || {};
 const CHROME_SITE_NAMES = ['Behance', 'Pinterest', 'Magnific', 'Reunião', 'Claude', 'ChatGPT', 'Docs', 'Sheets', 'Slides', 'Gmail', 'Drive'];
 /* o app do ChatGPT e o site contam como a mesma ferramenta */
 // loginwindow = tela de bloqueio/login do macOS (Mac bloqueado, descanso de tela com senha, acordando do repouso)
-const toolAlias = (app) => (/chatgpt/i.test(String(app || '')) ? 'ChatGPT' : /^loginwindow$/i.test(String(app || '').trim()) ? 'Mac bloqueado' : app);
+const toolAlias = (app) => (/chatgpt/i.test(String(app || '')) ? 'ChatGPT' : /^loginwindow$/i.test(String(app || '').trim()) ? 'Tela bloqueada' : app);
 /* Cadastro único de programas (Configurações → Programas): nome que aparece, palavra que identifica o app e cor.
    Tudo que mostra programa (faixas, caixinhas, Resumo, relatórios) lê daqui. */
 const PROG_DEFAULTS = [
@@ -359,7 +359,7 @@ function actItemName(i) {
 /* Uma faixa só, com 100% da largura = todo o tempo da sessão. Cada trecho ocupa a parte proporcional ao seu tempo;
    o que não tem registro fica cinza. Os pausas saem da conta (a faixa mostra só o tempo trabalhado). */
 /* Motivo de uma pausa (o campo "why" fica no trabalho que vem antes da pausa; ver entryGaps). */
-const PAUSE_WHY = { mac: 'Ocioso (mouse e teclado parados) ou computador dormiu', app: 'WhatsApp / Telegram', WhatsApp: 'WhatsApp Distração', suspenso: 'Página parada (computador dormiu)', 'Mac bloqueado': 'Mac bloqueado (tela de bloqueio)', ocioso: 'Ociosidade (navegador)' };
+const PAUSE_WHY = { mac: 'Ocioso (mouse e teclado parados) ou computador dormiu', app: 'WhatsApp / Telegram', WhatsApp: 'WhatsApp Distração', suspenso: 'Página parada (computador dormiu)', 'Tela bloqueada': 'Tela bloqueada', ocioso: 'Ociosidade (navegador)' };
 const pauseWhy = (why) => PAUSE_WHY[why] || why || 'Intervalo manual';
 /* pausa de app (WhatsApp, Telegram…) aparece em verde claro; ociosidade fica cinza */
 const isAppPause = (why) => !!why && (why === 'app' || (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).some(x => String(x).trim().toLowerCase() === String(why).trim().toLowerCase()));

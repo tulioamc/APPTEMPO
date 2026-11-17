@@ -763,3 +763,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 **Lição desta conversa:** mudança no banco (tabela nova, coluna, tipo de status) precisa ir junto no schema, no carregamento do site e na sincronização; uma tabela fora do formato travou a atualização do site inteiro sem aviso.
 
 - V2.06.29: Mac bloqueado (loginwindow) vira pausa sozinha e nunca conta como trabalho; "Ajustar automaticamente" tira bloqueios ao salvar intervalo.
+- V2.06.30: bloqueio aparece como "Tela bloqueada"; sessões antigas corrigidas.
