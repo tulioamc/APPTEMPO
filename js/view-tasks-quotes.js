@@ -233,14 +233,14 @@ function openQuote(id, preset = {}) {
           <div class="field"><span class="lbl">Complexidade</span><div class="seg">${COMPLEXIDADES.map(([k, nome, m]) => `<button type="button" class="${st.cx === k ? 'on' : ''}" data-cx="${k}">${nome} <span class="faint">${fmtX(m)}</span></button>`).join('')}</div></div>
           <div class="field" style="max-width:260px"><label for="cc-ap">Reuniões de aprovação</label><div class="row" style="flex-wrap:nowrap;gap:6px;align-items:center"><input id="cc-ap" type="number" min="0" class="input" style="width:80px" data-st="aprov" value="${st.aprov}" placeholder="0" aria-label="Quantidade de reuniões"><span class="small muted">×</span><input type="number" min="0" step="0.5" class="input" style="width:80px" data-st="hAprov" value="${st.hAprov ?? 1}" aria-label="Horas por reunião"><span class="small muted">h</span></div></div>
         </div>
-        <span class="lbl">Projetos e etapas · cada projeto vira um projeto no app quando aprovado, e as etapas viram as tarefas${c.dur !== 1 ? ' · nos vídeos, horas e dias são por minuto' : ''}</span>
+        <span class="lbl">Entregas e etapas · cada entrega vira um projeto no app quando aprovado, e as etapas viram as tarefas${c.dur !== 1 ? ' · nos vídeos, horas e dias são por minuto' : ''}</span>
         ${gruposDe(st).map((g, gi) => { const pg = c.porGrupo.find(x => x.id === g.id); const linhas = st.lines.map((ln, i) => [ln, i]).filter(([ln]) => ln.grp === g.id); return `<div class="qf-grupo" data-grp="${g.id}">
-          <div class="row" style="flex-wrap:nowrap;gap:8px;align-items:center"><input class="input sm grow qf-gnome" data-gnome="${g.id}" value="${esc(g.nome || '')}" placeholder="${gruposDe(st).length > 1 ? `Projeto ${gi + 1}` : 'Nome do projeto (opcional)'}" aria-label="Nome do projeto">${grupoVideo(g) ? `<label class="small muted" style="white-space:nowrap">Duração <input type="number" step="0.5" min="0.5" class="input sm" style="width:70px" data-gdur="${g.id}" value="${g.duracao ?? 1}" aria-label="Duração do vídeo em minutos" title="As horas e os dias deste vídeo são por minuto: 3 min = 3×; 30 s = metade (mínimo). Terceirizado não multiplica."> min</label>` : ''}<span class="small mono muted" data-gtot="${g.id}">${pg && (pg.h || pg.terc) ? `${fmtH(pg.h * 3600000)} · ${M$(c.total * pg.parte)}` : ''}</span>${gruposDe(st).length > 1 ? `<button type="button" class="btn sm icon ghost" data-gmov="${g.id}" data-d="-1" ${gi === 0 ? 'disabled' : ''} aria-label="Subir projeto" title="Passar para antes">${icon('chevU')}</button><button type="button" class="btn sm icon ghost" data-gmov="${g.id}" data-d="1" ${gi === gruposDe(st).length - 1 ? 'disabled' : ''} aria-label="Descer projeto" title="Passar para depois">${icon('chevD')}</button><button type="button" class="btn sm icon ghost" data-gdel="${g.id}" aria-label="Remover projeto" title="Remover este projeto">${icon('trash')}</button>` : ''}</div>
+          <div class="row" style="flex-wrap:nowrap;gap:8px;align-items:center"><input class="input sm grow qf-gnome" data-gnome="${g.id}" value="${esc(g.nome || '')}" placeholder="${gruposDe(st).length > 1 ? `Entrega ${gi + 1}` : 'Nome da entrega (opcional)'}" aria-label="Nome da entrega">${grupoVideo(g) ? `<label class="small muted" style="white-space:nowrap">Duração <input type="number" step="0.5" min="0.5" class="input sm" style="width:70px" data-gdur="${g.id}" value="${g.duracao ?? 1}" aria-label="Duração do vídeo em minutos" title="As horas e os dias deste vídeo são por minuto: 3 min = 3×; 30 s = metade (mínimo). Terceirizado não multiplica."> min</label>` : ''}<span class="small mono muted" data-gtot="${g.id}">${pg && (pg.h || pg.terc) ? `${fmtH(pg.h * 3600000)} · ${M$(c.total * pg.parte)}` : ''}</span>${gruposDe(st).length > 1 ? `<button type="button" class="btn sm icon ghost" data-gmov="${g.id}" data-d="-1" ${gi === 0 ? 'disabled' : ''} aria-label="Subir entrega" title="Passar para antes">${icon('chevU')}</button><button type="button" class="btn sm icon ghost" data-gmov="${g.id}" data-d="1" ${gi === gruposDe(st).length - 1 ? 'disabled' : ''} aria-label="Descer entrega" title="Passar para depois">${icon('chevD')}</button><button type="button" class="btn sm icon ghost" data-gdel="${g.id}" aria-label="Remover entrega" title="Remover esta entrega">${icon('trash')}</button>` : ''}</div>
           <div class="calc-line calc-head small faint"><span></span><span>Etapa</span><span>Tipo</span><span title="Quantidade (ex.: 50 ícones); horas e terceirizado são por unidade">Qtd</span><span>Horas</span><span>Dias úteis</span><span title="Em paralelo: fica dentro do tempo da etapa de cima">Paral.</span><span title="Terceirizado: conta o prazo, não as suas horas; entra pelo valor que você paga">Terc.</span><span>Valor</span><span></span></div>
           ${linhas.map(([ln, i]) => `<div class="calc-line${ln.par ? ' par' : ''}" data-row="${i}"><span class="qf-handle" data-handle="${i}" title="Arraste para reordenar" aria-label="Arrastar">${icon('grip')}</span><input class="input sm" data-line="${i}" data-k="name" value="${esc(ln.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), ln.wt, { empty: true, emptyLabel: 'Tipo' })}</select>${ln.par ? '<span></span>' : `<input type="number" min="1" step="1" class="input sm" data-line="${i}" data-k="qtd" value="${ln.qtd ?? ''}" placeholder="1" aria-label="Quantidade">`}${ln.par ? '<span class="small faint" style="grid-column:span 2">junto com a de cima</span>' : `${ln.terc ? `<input class="input sm mono" data-line="${i}" data-k="valor" ${moneyAttrs(ln.valor)} placeholder="R$" aria-label="Valor pago ao terceirizado" title="Quanto você paga ao terceirizado (entra no total sem multiplicar)">` : `<span class="qf-hwrap">${(() => { const md = mediaDaEtapa(ln.name); return `<input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${ln.h}" placeholder="Horas" aria-label="Horas"${md ? ` title="Sua média real: ${String(Math.round(md.h * 10) / 10).replace('.', ',')} h (${md.n} projetos)"` : ''}>${md && Math.abs(md.h - (Number(ln.h) || 0)) >= 1 ? `<button type="button" class="qf-media" data-media="${i}" data-h="${Math.round(md.h * 2) / 2}" title="Sua média real: ${String(Math.round(md.h * 10) / 10).replace('.', ',')} h em ${md.n} projetos. Clique para usar." aria-label="Usar a média real">≈</button>` : ''}`; })()}</span>`}<input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="prazo" value="${ln.prazo ?? ''}" placeholder="dias" aria-label="Prazo em dias úteis" title="${ln.ap ? 'Termina com aprovação do cliente' : ''}">`}<label class="qf-par" title="Em paralelo: não conta horas nem prazo; fica dentro da etapa de cima"><input type="checkbox" data-par="${i}" ${ln.par ? 'checked' : ''} aria-label="Em paralelo"></label><label class="qf-par" title="Terceirizado: conta o prazo de entrega, não as suas horas; você informa o valor"><input type="checkbox" data-terc="${i}" ${ln.terc ? 'checked' : ''} aria-label="Terceirizado"></label><span class="small mono muted" data-etv="${i}" title="Valor da etapa">${ln.terc ? (Number(ln.valor) ? M$(ln.valor) : '') : c.porEtapa[i] ? M$(c.porEtapa[i]) : ''}</span><button type="button" class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
           <div><button type="button" class="btn sm ghost" data-add="${g.id}">${icon('plus')} Etapa</button></div>
         </div>`; }).join('')}
-        <div class="row between" style="flex-wrap:wrap;gap:8px"><span class="row" style="gap:6px"><button type="button" class="btn sm" data-gadd>${icon('plus')} Projeto</button><button type="button" class="btn sm" data-gclone>${icon('copy')} Clonar projeto</button><button type="button" class="btn sm ghost" data-gmodelo title="Guarda um projeto desta proposta como modelo, para usar nas próximas">Salvar como modelo</button><button type="button" class="btn sm ghost" data-escopo title="Cole o pedido do cliente e o Claude monta os projetos e as etapas">${icon('doc')} Montar pelo texto</button></span>
+        <div class="row between" style="flex-wrap:wrap;gap:8px"><span class="row" style="gap:6px"><button type="button" class="btn sm" data-gadd>${icon('plus')} Entrega</button><button type="button" class="btn sm" data-gclone>${icon('copy')} Clonar entrega</button><button type="button" class="btn sm ghost" data-gmodelo title="Guarda uma entrega desta proposta como modelo, para usar nas próximas">Salvar como modelo</button><button type="button" class="btn sm ghost" data-escopo title="Cole o pedido do cliente e o Claude monta as entregas e as etapas">${icon('doc')} Montar pelo texto</button></span>
           <label class="small muted">Total das etapas <input type="number" step="0.5" min="0" class="input sm" style="width:90px" data-htot value="${c.hBruto || ''}" aria-label="Total de horas das etapas" title="Mudar o total espalha a diferença entre as etapas na mesma proporção"> h</label></div>
         <div class="small" data-h-txt>${horasTxt(c)}</div>
         <div class="small">${sugHorasHTML(q.name).replace(/<button type="button" class="btn sm" data-modo="calc">Usar a calculadora<\/button>/, '')}</div>
@@ -432,7 +432,7 @@ function openQuote(id, preset = {}) {
     const varios = gs.length > 1;
     const novos = (gs.length ? gs : [null]).map((g, gi) => {
       const pg = g && k ? k.porGrupo.find(x => x.id === g.id) : null;
-      const nome = varios ? `${data.name} · ${g.nome || 'Projeto ' + (gi + 1)}` : data.name;
+      const nome = varios ? `${data.name} · ${g.nome || 'Entrega ' + (gi + 1)}` : data.name;
       const budget = varios && pg ? Math.round(data.value * pg.parte * 100) / 100 : data.value;
       const horas = varios && pg ? Math.round((pg.h + (k.reun || 0) * pg.parte) * 10) / 10 : data.est_hours;
       const p = db.insert('tempo_projects', { name: nome, client_id: data.client_id, description: data.notes, status_id: statusByCat('work', 'todo').id, payment_status_id: statuses('payment')[0].id, deadline: null, deadline_original: null, budget, remaining_override: null, estimated_hours: horas, revisions_included: data.revisions_included, notes: '', archived: false, approved_at: nowISO(), quote_id: qid }, true);
@@ -454,7 +454,7 @@ function openQuote(id, preset = {}) {
   const textoConverter = (data) => {
     const gs = data.calc?.lines ? gruposDe(data.calc).filter(g => data.calc.lines.some(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h)))) : [];
     const cli = esc(db.get('tempo_clients', data.client_id)?.name || '');
-    if (gs.length > 1) return `Cria <b>${gs.length} projetos</b> para ${cli} (${gs.map((g, i) => esc(g.nome || 'Projeto ' + (i + 1))).join(', ')}), cada um com as suas etapas como tarefas e a sua parte do valor (${fmtMoney(data.value)} no total). A proposta fica marcada como aprovada.`;
+    if (gs.length > 1) return `Cria <b>${gs.length} projetos</b> (um por entrega) para ${cli} (${gs.map((g, i) => esc(g.nome || 'Entrega ' + (i + 1))).join(', ')}), cada um com as suas etapas como tarefas e a sua parte do valor (${fmtMoney(data.value)} no total). A proposta fica marcada como aprovada.`;
     return `Cria o projeto <b>${esc(data.name)}</b> para ${cli} com orçamento ${fmtMoney(data.value) || '—'}, ${data.est_hours || 0} h estimadas e ${data.revisions_included ?? 0} rodadas incluídas${data.calc?.lines ? `, com uma tarefa para cada etapa (${data.calc.lines.filter(ln => (ln.name || '').trim() || Number(ln.h)).map(ln => esc(ln.name || 'Etapa')).join(', ')})` : ''}. A proposta fica marcada como aprovada.`;
   };
 
@@ -470,7 +470,7 @@ function openQuote(id, preset = {}) {
     if (e.target.closest('[data-escopo]')) {
       if (!db.setting('anthropicKey', '')) return toast('Coloque a chave da API da Anthropic em Ajustes › Claude para usar isso.', { ms: 7000 });
       const lt = openLayer({ wide: true, html: `<div class="dh"><h2>Montar pelo texto</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
-        <div class="db"><div class="field"><label for="es-t">Pedido do cliente (e-mail, WhatsApp, briefing)</label><textarea id="es-t" class="input" rows="12" placeholder="Ex.: Precisamos de uma identidade visual para a marca X, com manual, e dois vídeos de 30 s para Instagram…"></textarea></div><span class="hint">O Claude monta os projetos e as etapas com horas e prazos. As etapas atuais são substituídas; você revisa tudo antes de salvar.</span></div>
+        <div class="db"><div class="field"><label for="es-t">Pedido do cliente (e-mail, WhatsApp, briefing)</label><textarea id="es-t" class="input" rows="12" placeholder="Ex.: Precisamos de uma identidade visual para a marca X, com manual, e dois vídeos de 30 s para Instagram…"></textarea></div><span class="hint">O Claude monta as entregas e as etapas com horas e prazos. As etapas atuais são substituídas; você revisa tudo antes de salvar.</span></div>
         <div class="df"><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-es-ok>Montar</button></div>` });
       lt.box.addEventListener('click', async (ev) => {
         const b = ev.target.closest('[data-es-ok]'); if (!b) return; const txt = $('#es-t', lt.box).value.trim(); if (!txt) return toast('Cole o pedido do cliente.');
@@ -479,18 +479,18 @@ function openQuote(id, preset = {}) {
           const res = await escopoPorTexto(txt); aplicaEscopo(st, res, workTypes());
           if (res.descricao && !pp.desc) pp.desc = res.descricao;
           if (!q.name.trim() && res.projetos?.[0]?.nome) q.name = res.projetos.map(x => x.nome).join(' + ');
-          lt.close(); redraw(); toast('Projetos e etapas montados. Revise horas, prazos e terceirizados.');
+          lt.close(); redraw(); toast('Entregas e etapas montadas. Revise horas, prazos e terceirizados.');
         } catch (err) { b.disabled = false; b.textContent = 'Montar'; toast('Não consegui montar: ' + esc(err.message || 'erro'), { ms: 8000 }); }
       });
       return;
     }
     if (e.target.closest('[data-gmodelo]')) {
       const gs = gruposDe(st); let id = gs[0].id;
-      if (gs.length > 1) { id = await escolhaBox({ title: 'Salvar qual projeto como modelo?', body: 'As etapas, horas, prazos, quantidades e terceirizados viram um botão de modelo.', opcoes: gs.map((g, i) => ({ id: g.id, label: g.nome || `Projeto ${i + 1}` })) }); if (!id) return; }
+      if (gs.length > 1) { id = await escolhaBox({ title: 'Salvar qual entrega como modelo?', body: 'As etapas, horas, prazos, quantidades e terceirizados viram um botão de modelo.', opcoes: gs.map((g, i) => ({ id: g.id, label: g.nome || `Entrega ${i + 1}` })) }); if (!id) return; }
       const g = gs.find(x => x.id === id); const nome = (g.nome || q.name || '').trim();
-      if (!nome) return toast('Dê um nome ao projeto antes de salvar como modelo.');
+      if (!nome) return toast('Dê um nome à entrega antes de salvar como modelo.');
       const etapas = st.lines.filter(ln => ln.grp === id && ((ln.name || '').trim() || Number(ln.h))).map(ln => ({ name: ln.name, wtId: ln.wt || '', h: Number(ln.h) || 0, prazo: Number(ln.prazo) || 0, qtd: Number(ln.qtd) || '', ap: !!ln.ap, par: !!ln.par, terc: !!ln.terc, valor: ln.terc ? ln.valor : null }));
-      if (!etapas.length) return toast('Esse projeto não tem etapas.');
+      if (!etapas.length) return toast('Essa entrega não tem etapas.');
       const chave = 'p' + Date.now().toString(36);
       db.setSetting('modelosProprios', { ...modelosProprios(), [chave]: { nome, video: grupoVideo(g), etapas } });
       redraw(); toast(`Modelo “${esc(nome)}” salvo`); return;
@@ -521,7 +521,7 @@ function openQuote(id, preset = {}) {
       }
       let modoM = 'substitui';
       if (temAlgo) {
-        modoM = await escolhaBox({ title: `Usar ${nome}`, body: `Já há etapas na proposta. Adicionar <b>${esc(nome)}</b> como mais um projeto, ou apagar tudo e usar só ${esc(nome)}?`, opcoes: [{ id: 'substitui', label: 'Apagar e substituir' }, { id: 'adiciona', label: 'Adicionar como projeto' }] });
+        modoM = await escolhaBox({ title: `Usar ${nome}`, body: `Já há etapas na proposta. Adicionar <b>${esc(nome)}</b> como mais uma entrega, ou apagar tudo e usar só ${esc(nome)}?`, opcoes: [{ id: 'substitui', label: 'Apagar e substituir' }, { id: 'adiciona', label: 'Adicionar como entrega' }] });
         if (!modoM) return;
       }
       aplicaModelo(st, k, workTypes(), modoM); redraw(); return;
@@ -540,8 +540,8 @@ function openQuote(id, preset = {}) {
     }
     if (e.target.closest('[data-gclone]')) {
       const gs = gruposDe(st); let id = gs[0].id;
-      if (gs.length > 1) { id = await escolhaBox({ title: 'Clonar qual projeto?', body: 'Cria uma cópia com as mesmas etapas, horas, prazos e terceirizados, logo depois do original.', opcoes: gs.map((g, i) => ({ id: g.id, label: g.nome || `Projeto ${i + 1}` })) }); if (!id) return; }
-      const og = gs.find(x => x.id === id); const novo = { ...og, id: novoGrupoId(), nome: (og.nome || 'Projeto') + ' (cópia)' };
+      if (gs.length > 1) { id = await escolhaBox({ title: 'Clonar qual entrega?', body: 'Cria uma cópia com as mesmas etapas, horas, prazos e terceirizados, logo depois do original.', opcoes: gs.map((g, i) => ({ id: g.id, label: g.nome || `Entrega ${i + 1}` })) }); if (!id) return; }
+      const og = gs.find(x => x.id === id); const novo = { ...og, id: novoGrupoId(), nome: (og.nome || 'Entrega') + ' (cópia)' };
       const linhas = st.lines.filter(ln => ln.grp === id).map(ln => ({ ...ln, grp: novo.id }));
       gs.splice(gs.indexOf(og) + 1, 0, novo);
       let pos = -1; st.lines.forEach((ln, i) => { if (ln.grp === id) pos = i; }); st.lines.splice(pos + 1, 0, ...linhas);
@@ -551,7 +551,7 @@ function openQuote(id, preset = {}) {
     if (e.target.closest('[data-gadd]')) { const g = { id: novoGrupoId(), nome: '', mod: null }; gruposDe(st).push(g); st.lines.push({ name: '', wt: '', h: '', prazo: '', grp: g.id }); redraw('g' + g.id); return; }
     const gd = e.target.closest('[data-gdel]'); if (gd) {
       const g = gruposDe(st).find(x => x.id === gd.dataset.gdel); const temConteudo = st.lines.some(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h)));
-      if (temConteudo && !await confirmBox({ title: 'Remover o projeto?', body: `<b>${esc(g.nome || 'Projeto')}</b> e as etapas dele saem da proposta.`, ok: 'Remover', danger: true })) return;
+      if (temConteudo && !await confirmBox({ title: 'Remover a entrega?', body: `<b>${esc(g.nome || 'Entrega')}</b> e as etapas dela saem da proposta.`, ok: 'Remover', danger: true })) return;
       st.grupos = st.grupos.filter(x => x.id !== g.id); st.lines = st.lines.filter(ln => ln.grp !== g.id);
       if (g.mod && todosModelos()[g.mod]) st.aprov = Math.max(0, (Number(st.aprov) || 0) - todosModelos()[g.mod].etapas.filter(x => x.ap).length);
       if (!st.lines.length) st.lines.push({ name: '', wt: '', h: '', prazo: '', grp: st.grupos[0].id });
@@ -608,7 +608,7 @@ function openQuote(id, preset = {}) {
       // virou aprovada agora e ainda não tem projeto: oferece criar com as tarefas
       if (statusCat(data.status_id) === 'won' && !linkedProject(db.get('tempo_quotes', qid))
         && await confirmBox({ title: 'Proposta aprovada: criar o projeto?', body: textoConverter(dados), ok: 'Criar projeto', no: 'Só salvar' })) {
-        const p = criaProjeto(qid, dados); db.emit(); l.close(); toast(`Proposta nº ${dados.calc.proposta.num} salva e projeto criado`); openProject(p.id); return;
+        const p = criaProjeto(qid, dados); db.emit(); l.close(); toast(`Proposta nº ${dados.calc.proposta.num} salva e projeto criado`); openPrevisao({ ...db.get('tempo_quotes', qid) }, p.id, () => openProject(p.id)); return;
       }
       db.emit(); l.close(); toast(`${x ? 'Proposta atualizada' : 'Proposta criada'} · ${ver?.nome || 'nº ' + dados.calc.proposta.num}${gravou ? ' · PDF salvo na pasta Orçamento' : ''}`, { ms: 7000 }); if (S.route !== 'quotes') go('quotes');
     }
@@ -618,7 +618,7 @@ function openQuote(id, preset = {}) {
       db.update('tempo_quotes', x.id, dados, true);
       if (!await confirmBox({ title: 'Converter em projeto?', body: textoConverter(dados), ok: 'Criar projeto' })) return;
       const p = criaProjeto(x.id, dados);
-      db.emit(); l.close(); toast('Projeto criado a partir da proposta'); openProject(p.id);
+      db.emit(); l.close(); toast('Projeto criado a partir da proposta'); openPrevisao({ ...db.get('tempo_quotes', x.id) }, p.id, () => openProject(p.id));
     }
   });
 }

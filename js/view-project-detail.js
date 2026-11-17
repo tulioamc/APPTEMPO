@@ -109,6 +109,7 @@ function pdFinance(p) {
     <div class="field"><span class="lbl">Status do pagamento</span><div>${comboBtn('payment', p.payment_status_id, 'proj-pay', p.id)}</div><span class="hint">Independente do status do trabalho.</span></div>
     <div class="field"><label for="pd-inv">Nota fiscal emitida em</label><input id="pd-inv" type="datetime-local" class="input" value="${toLocalInput(p.invoice_at)}" data-pd="ms" data-k="invoice_at"></div>
   </div>
+  ${previsoesProjetoHTML(p)}
   <div class="panel"><div class="panel-h"><h3>Pagamentos recebidos</h3></div><div class="panel-b tight">
     ${pays.length ? `<table class="grid static compact"><thead><tr><th>Data</th><th class="money">Valor</th><th>Observação</th><th></th></tr></thead><tbody>${pays.map(x => `<tr><td>${fmtDate(x.date)}</td><td class="money">${fmtMoney(x.amount)}</td><td class="muted">${esc(x.note)}</td><td class="right"><button class="btn sm icon ghost" data-x="pay-del" data-id="${x.id}" aria-label="Excluir pagamento">${icon('trash')}</button></td></tr>`).join('')}</tbody></table>` : '<div class="empty small">Nenhum pagamento registrado.</div>'}
   </div></div>

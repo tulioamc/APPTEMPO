@@ -44,7 +44,10 @@ function finFlowHTML() {
   pays.forEach(x => { const m = ymOf(x.date); if (m in porMes) porMes[m] += Number(x.amount); });
   // a receber nos próximos 3 meses, pelo prazo do projeto (vencido entra no mês atual)
   const futuros = [0, 1, 2].map(mesAdd); const prev = Object.fromEntries(futuros.map(m => [m, 0])); let semPrazo = 0;
-  db.all('tempo_projects').filter(p => !p.archived).forEach(p => {
+  // previsões de pagamento (das propostas aprovadas) valem no lugar do prazo do projeto
+  const comPrev = new Set();
+  (db.setting('previsoes', []) || []).filter(v => !v.recebido).forEach(v => { comPrev.add(v.project_id); let m = ymOf(v.data); if (m < futuros[0]) m = futuros[0]; if (m in prev) prev[m] += Number(v.valor) || 0; });
+  db.all('tempo_projects').filter(p => !p.archived && !comPrev.has(p.id)).forEach(p => {
     const r = remainingOf(p) || 0; if (r <= 0) return;
     if (!p.deadline) { semPrazo += r; return; }
     let m = ymOf(p.deadline); if (m < futuros[0]) m = futuros[0];

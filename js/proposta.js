@@ -37,29 +37,58 @@ const propNumExtenso = (n) => ['', 'uma', 'duas', 'três', 'quatro', 'cinco', 's
 
 /* Itens da tabela. Com calculadora e mais de uma etapa com horas: uma linha por etapa, com a parte do total
    proporcional às horas (o total já com BV, imposto e terceirizado). Sem isso, uma linha só com o nome. */
-function propItens(x) {
+function propItens(x, sep = {}) {
   const total = Number(x.value) || 0;
-  // vários projetos na proposta: uma linha por projeto, com a parte do total pelas horas
-  if (x.calc?.lines && Array.isArray(x.calc.grupos) && x.calc.grupos.length > 1) {
-    const k = calcQuote({ ...x.calc }, precoBase());
-    const gs = k.porGrupo.filter(g => g.h > 0); let acc = 0;
-    if (gs.length > 1) return gs.map((g, i) => { const v = i === gs.length - 1 ? total - acc : Math.round(total * g.h / gs.reduce((s, y) => s + y.h, 0) / 50) * 50; acc += v; return { desc: g.nome || `Projeto ${i + 1}`, unit: '', qtd: '', valor: v }; });
-  }
   const lines = x.calc?.lines || [];
-  const ls = lines.map((l, i) => [l, i]).filter(([l]) => !l.par && (Number(l.h) > 0 || Number(l.valor) > 0) && (l.name || '').trim());
-  if (ls.length < 2) {
-    const so = ls[0]?.[0]; const q = so && Number(so.qtd) > 1 ? Number(so.qtd) : 0;
-    return [{ desc: x.name || 'Projeto', unit: q ? propMoeda(total / q, x.calc?.moeda) + '/und' : '', qtd: q ? q + 'und' : '', valor: total }];
-  }
-  // parte de cada etapa no total: minha parte dela + o terceirizado dela
+  const cheias = lines.map((l, i) => [l, i]).filter(([l]) => !l.par && (Number(l.h) > 0 || Number(l.valor) > 0) && (l.name || '').trim());
+  if (!cheias.length) return [{ desc: x.name || 'Projeto', unit: '', qtd: '', valor: total, nivel: 0 }];
   const k = calcQuote({ ...x.calc }, precoBase());
-  const partes = ls.map(([l, i]) => (k.porEtapa[i] || 0) + valorTerc(l)); const soma = partes.reduce((s, v) => s + v, 0) || 1;
-  let acc = 0;
-  return ls.map(([l], n) => {
-    const v = n === ls.length - 1 ? total - acc : Math.round(total * partes[n] / soma / 50) * 50; acc += v;
-    const q = Number(l.qtd) > 1 ? Number(l.qtd) : 0;
-    return { desc: l.name.trim(), unit: q ? propMoeda(v / q, x.calc?.moeda) + '/und' : '', qtd: q ? q + 'und' : '', valor: v };
+  // imposto separado: os itens ficam sem o imposto (ele aparece embaixo, antes do total)
+  const fator = sep.imposto && k.total ? (k.total - k.D) / k.total : 1;
+  const gs = gruposDe(x.calc);
+  const arred = (v) => Math.round(v / 10) * 10;
+  const qtdTxt = (l, v) => { const q = Number(l.qtd) > 1 ? Number(l.qtd) : 0; return q ? { unit: propMoeda(v / q, x.calc?.moeda) + '/und', qtd: q + 'und' } : { unit: '', qtd: '' }; };
+  const out = [];
+  gs.forEach((g, gi) => {
+    const doG = cheias.filter(([l]) => l.grp === g.id); if (!doG.length) return;
+    const pg = k.porGrupo.find(y => y.id === g.id); const G = total * (pg?.parte || 0) * fator;
+    const sh = k.hEtapas ? doG.reduce((s2, [l]) => s2 + horasEtapa(x.calc, l), 0) / k.hEtapas : 0;
+    const extra = k.Bext * sh;   // custos extras gerais entram na minha parte
+    const partes = doG.map(([l, i]) => ({ l, v: (k.porEtapa[i] || 0) + valorTerc(l) }));
+    const base = partes.reduce((s2, p) => s2 + p.v, 0) + extra || 1;
+    const valorDe = (v) => G * v / base;
+    const nome = g.nome || (gs.length > 1 ? `Entrega ${gi + 1}` : x.name || 'Entrega');
+    const dur = grupoVideo(g) ? ` ${String(durMult(g.duracao ?? 1)).replace('.', ',')} min` : '';
+    let subs = [];
+    if (sep.etapas) subs = partes.map((p, n) => ({ desc: p.l.name.trim() + (p.l.terc ? '' : ''), valor: valorDe(p.v + (n === 0 ? extra : 0)), l: p.l }));
+    else if (sep.terc && partes.some(p => p.l.terc)) {
+      const minhas = partes.filter(p => !p.l.terc);
+      if (minhas.length) subs.push({ desc: minhas.length <= 2 ? minhas.map(p => p.l.name.trim()).join(' e ') : 'Criação e produção', valor: valorDe(minhas.reduce((s2, p) => s2 + p.v, 0) + extra), l: minhas.length === 1 ? minhas[0].l : null });
+      partes.filter(p => p.l.terc).forEach(p => subs.push({ desc: p.l.name.trim(), valor: valorDe(p.v), l: p.l }));
+    }
+    const Gr = arred(G);
+    if (subs.length) {
+      let acc = 0; subs = subs.map((sb, n) => { const v = n === subs.length - 1 ? Gr - acc : arred(sb.valor); acc += v; return { desc: sb.desc, ...(sb.l ? qtdTxt(sb.l, v) : { unit: '', qtd: '' }), valor: v, nivel: 1 }; });
+      out.push({ desc: nome + dur, unit: '', qtd: '', valor: Gr, nivel: 0, sub: true }, ...subs);
+    } else {
+      const so = doG.length === 1 ? doG[0][0] : null;
+      out.push({ desc: (gs.length > 1 || doG.length === 1 ? nome : nome) + dur, ...(so ? qtdTxt(so, Gr) : { unit: '', qtd: '' }), valor: Gr, nivel: 0 });
+    }
   });
+  // um projeto só, sem separar nada: item único com o nome da proposta
+  if (out.length === 1 && !sep.etapas && !sep.terc) out[0].desc = (gs[0]?.nome || x.name || 'Projeto') + (out[0].desc.match(/ [\d,]+ min$/)?.[0] || '');
+  // fecha a soma no total (sem o imposto, se separado)
+  const alvo = arred(total * fator); const topo = out.filter(i => !i.nivel);
+  const soma = topo.reduce((s2, i) => s2 + i.valor, 0);
+  if (topo.length && soma !== alvo) { const ult = topo[topo.length - 1]; const d = alvo - soma; ult.valor += d; const filhos = out.slice(out.indexOf(ult) + 1); if (filhos.length) filhos[filhos.length - 1].valor += d; }
+  return out;
+}
+/* Imposto da proposta (para mostrar separado): valor arredondado e %. */
+function propImposto(x) {
+  if (!x.calc?.lines || !x.calc.nf?.on) return null;
+  const k = calcQuote({ ...x.calc }, precoBase()); const total = Number(x.value) || 0;
+  const v = Math.round(total * (k.total ? k.D / k.total : 0) / 10) * 10;
+  return v ? { valor: v, pct: x.calc.nf.pct } : null;
 }
 /* Condições padrão, tiradas dos modelos que ele já manda. */
 function propCondicoes(x) {
@@ -75,7 +104,7 @@ function propCondicoes(x) {
     const blocos = [];
     gs.forEach((g, i) => {
       const et = x.calc.lines.filter(l => l.grp === g.id && (l.name || '').trim()).map(l => l.name.trim().toLowerCase().replace(/\b2d\b/g, '2D').replace(/\b3d\b/g, '3D'));
-      const base = (g.nome || `Projeto ${i + 1}`).replace(/\s*\(cópia\)\s*/gi, '').trim();
+      const base = (g.nome || `Entrega ${i + 1}`).replace(/\s*\(cópia\)\s*/gi, '').trim();
       const dur = grupoVideo(g) ? durMult(g.duracao ?? 1) : null;
       const sig = base + '|' + et.join('|') + '|' + (dur || '');
       const pz = prazoGrupo(x.calc, g.id);
@@ -104,15 +133,16 @@ function propEstado(x) {
   const cliNome = ag && !/direto/i.test(ag.name || '') ? `${ag.name} // ${cli.name}` : (cli?.name || '');
   return {
     num: p.num || null, data: p.data || x.sent_at || ymd(new Date()), cliente: p.cliente ?? cliNome, contato: p.contato ?? (cli?.contact || ''),
-    desc: p.desc ?? (x.name || ''), itens: p.itens || propItens(x), cond: p.cond || propCondicoes(x), moeda: x.calc?.moeda || null,
+    desc: p.desc ?? (x.name || ''), itens: p.itens || propItens(x, p.sep || {}), cond: p.cond || propCondicoes(x), sep: p.sep || {}, imposto: propImposto(x), total: Number(x.value) || 0, moeda: x.calc?.moeda || null,
     letra: p.letra || '', dia: p.dia || null, datas: !!p.datas,
   };
 }
 function propHTML(e) {
   const rod = propRodape();
   const ass = `${location.origin}/icons/assinatura.png`;
-  const totalItens = e.itens.reduce((s, i) => s + (Number(i.valor) || 0), 0);
+  const totalItens = e.itens.filter(i => !Number(i.nivel)).reduce((s, i) => s + (Number(i.valor) || 0), 0);
   const simb = propMoeda(0, e.moeda).split(' ')[0];
+  const impV = e.sep?.imposto && e.imposto ? Math.max(0, (e.total || 0) - totalItens) : 0;
   const letra = (i) => e.itens.length > 1 ? `${'abcdefghij'[i] || i + 1}. ` : '';
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Orçamento ${esc(e.num || '')}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -129,6 +159,7 @@ function propHTML(e) {
   table { width: 100%; border-collapse: collapse; margin-top: 30px; }
   table tr.first td { border-top: 1.2px solid #e31b1b; padding-top: 10px; }
   td { padding: 2px 0; vertical-align: top; }
+  tr.sub td { font-size: 11.2px; color: #444; } tr.sub td:first-child { padding-left: 22px; } tr.grp td { padding-top: 8px; } .pt { color: #e31b1b; }
   td.u { width: 150px; } td.q { width: 90px; } td.r { width: 40px; } td.v { width: 64px; text-align: right; }
   tr.tot td { border-top: 1px solid #111; padding-top: 6px; }
   tr.fim td { border-bottom: 1.2px solid #e31b1b; padding-bottom: 8px; }
@@ -143,8 +174,10 @@ function propHTML(e) {
   <div class="cli">Cliente: ${esc(e.cliente || '')}<br>Contato: ${esc(e.contato || '')}</div>
   <div class="desc">${esc(e.desc || '')}</div>
   <table>
-    ${e.itens.map((i, n) => `<tr class="${n === 0 ? 'first' : ''}"><td>${letra(n)}${esc(i.desc || '')}</td><td class="u">${esc(i.unit || '')}</td><td class="q">${esc(i.qtd || '')}</td><td class="r">${esc(simb)}</td><td class="v">${esc(propMoeda(i.valor, e.moeda).replace(/^\S+ /, ''))}</td></tr>`).join('')}
-    <tr class="tot fim"><td>Total</td><td class="u"></td><td class="q"></td><td class="r">${esc(simb)}</td><td class="v">${esc(propMoeda(totalItens, e.moeda).replace(/^\S+ /, ''))}</td></tr>
+    ${(() => { let n0 = -1; return e.itens.map((i, n) => { const sub = Number(i.nivel) > 0; if (!sub) n0++; return `<tr class="${n === 0 ? 'first' : ''}${sub ? ' sub' : ''}${i.sub ? ' grp' : ''}"><td>${sub ? '<span class="pt">·</span> ' : letra(n0)}${esc(i.desc || '')}</td><td class="u">${esc(i.unit || '')}</td><td class="q">${esc(i.qtd || '')}</td><td class="r">${esc(simb)}</td><td class="v">${esc(propMoeda(i.valor, e.moeda).replace(/^\S+ /, ''))}</td></tr>`; }).join(''); })()}
+    ${impV ? `<tr class="tot"><td>Subtotal</td><td class="u"></td><td class="q"></td><td class="r">${esc(simb)}</td><td class="v">${esc(propMoeda(totalItens, e.moeda).replace(/^\S+ /, ''))}</td></tr>
+    <tr><td>Imposto (nota fiscal)${e.imposto.pct ? ` · ${String(e.imposto.pct).replace('.', ',')}%` : ''}</td><td class="u"></td><td class="q"></td><td class="r">${esc(simb)}</td><td class="v">${esc(propMoeda(impV, e.moeda).replace(/^\S+ /, ''))}</td></tr>` : ''}
+    <tr class="tot fim"><td>Total</td><td class="u"></td><td class="q"></td><td class="r">${esc(simb)}</td><td class="v">${esc(propMoeda(totalItens + impV, e.moeda).replace(/^\S+ /, ''))}</td></tr>
   </table>
   <ul>${e.cond.filter(c => String(c).trim()).map(c => `<li>${esc(c)}</li>`).join('')}</ul>
   <div class="pe"><div><img src="${ass}" alt="">${rod.linhas.map(l => esc(l)).join('<br>')}</div><div class="cargo">${esc(rod.cargo)}</div></div>
@@ -215,9 +248,11 @@ function openPropostaPDF(qid) {
         <div class="field"><label for="pp-c">Cliente</label><input id="pp-c" class="input" data-p="cliente" value="${esc(e.cliente)}"></div>
         <div class="field"><label for="pp-ct">Contato</label><input id="pp-ct" class="input" data-p="contato" value="${esc(e.contato)}"></div>
         <div class="field"><label for="pp-ds">Descrição do escopo</label><textarea id="pp-ds" class="input" rows="5" data-p="desc">${esc(e.desc)}</textarea></div>
-        <div class="field"><span class="lbl">Itens</span>${e.itens.map((i, n) => `<div class="row" style="flex-wrap:nowrap;gap:6px;margin-bottom:6px"><input class="input sm grow" data-it="${n}" data-k="desc" value="${esc(i.desc)}" aria-label="Item"><input class="input sm" style="width:110px" data-it="${n}" data-k="unit" value="${esc(i.unit)}" placeholder="R$/und" aria-label="Valor unitário"><input class="input sm" style="width:70px" data-it="${n}" data-k="qtd" value="${esc(i.qtd)}" placeholder="qtd" aria-label="Quantidade"><input class="input sm mono" style="width:110px" data-it="${n}" data-k="valor" type="number" value="${Math.round(Number(i.valor) || 0)}" aria-label="Valor"><button type="button" class="btn sm icon ghost" data-itdel="${n}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
+        <div class="field"><span class="lbl">Itens</span>
+          <div class="row" style="gap:14px;flex-wrap:wrap;margin-bottom:8px">${[['terc', 'Terceirizados', 'Separa o valor dos terceirizados do seu dentro de cada entrega'], ['etapas', 'Separar etapas', 'Cada entrega com o subtotal e as etapas embaixo'], ['imposto', 'Imposto', 'Itens sem imposto, com subtotal + imposto = total no fim']].map(([k2, lab, tip]) => `<label class="check small" title="${tip}"><input type="checkbox" data-sep="${k2}" ${e.sep?.[k2] ? 'checked' : ''}> ${lab}</label>`).join('')}</div>
+          ${e.itens.map((i, n) => `<div class="row" style="flex-wrap:nowrap;gap:6px;margin-bottom:6px;${Number(i.nivel) ? 'padding-left:22px' : ''}"><input class="input sm grow" data-it="${n}" data-k="desc" value="${esc(i.desc)}" aria-label="Item"><input class="input sm" style="width:110px" data-it="${n}" data-k="unit" value="${esc(i.unit)}" placeholder="R$/und" aria-label="Valor unitário"><input class="input sm" style="width:70px" data-it="${n}" data-k="qtd" value="${esc(i.qtd)}" placeholder="qtd" aria-label="Quantidade"><input class="input sm mono" style="width:110px" data-it="${n}" data-k="valor" type="number" value="${Math.round(Number(i.valor) || 0)}" aria-label="Valor"><button type="button" class="btn sm icon ghost" data-itdel="${n}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
           <div class="row" style="gap:6px"><button type="button" class="btn sm" data-itadd>${icon('plus')} Item</button><button type="button" class="btn sm" data-itrefaz title="Volta aos itens calculados pela proposta">Refazer pelos valores</button></div>
-          <span class="hint">Total dos itens: <b data-tot>${fmtMoney0(e.itens.reduce((s, i) => s + (Number(i.valor) || 0), 0))}</b> · proposta: ${fmtMoney0(x.value)}</span></div>
+          <span class="hint">Total dos itens: <b data-tot>${fmtMoney0(e.itens.filter(i => !Number(i.nivel)).reduce((s, i) => s + (Number(i.valor) || 0), 0))}</b>${e.sep?.imposto && e.imposto ? ' + imposto' : ''} · proposta: ${fmtMoney0(x.value)}</span></div>
         <div class="field"><label for="pp-cd">Condições (uma por linha)</label><textarea id="pp-cd" class="input" rows="8" data-p="cond">${esc(e.cond.join('\n'))}</textarea><button type="button" class="btn sm" style="margin-top:6px;align-self:flex-start" data-condrefaz>Condições padrão</button></div>
       </div>
       <div class="prop-wrap">${prev()}</div>
@@ -225,7 +260,7 @@ function openPropostaPDF(qid) {
     <div class="df"><button class="btn" data-act="close-layer">Fechar</button><button class="btn" data-psave>Salvar textos</button><button class="btn primary" data-pgera>${icon('doc')} Gerar PDF</button></div>`;
   const l = openLayer({ wide: true, render: draw });
   let t = null;
-  const atualizaPrev = () => { clearTimeout(t); t = setTimeout(() => { const w = $('.prop-wrap', l.box); if (w) w.innerHTML = prev(); const tt = $('[data-tot]', l.box); if (tt) tt.textContent = fmtMoney0(e.itens.reduce((s, i) => s + (Number(i.valor) || 0), 0)); }, 250); };
+  const atualizaPrev = () => { clearTimeout(t); t = setTimeout(() => { const w = $('.prop-wrap', l.box); if (w) w.innerHTML = prev(); const tt = $('[data-tot]', l.box); if (tt) tt.textContent = fmtMoney0(e.itens.filter(i => !Number(i.nivel)).reduce((s, i) => s + (Number(i.valor) || 0), 0)); }, 250); };
   l.box.addEventListener('input', (ev) => {
     const el = ev.target;
     if (el.dataset.p) { const k = el.dataset.p; e[k] = k === 'cond' ? el.value.split('\n') : k === 'num' ? Number(el.value) || e.num : el.value; atualizaPrev(); }
@@ -237,10 +272,15 @@ function openPropostaPDF(qid) {
     db.update('tempo_quotes', qid, { calc: { ...(atual.calc || {}), proposta: { ...(atual.calc?.proposta || {}), ...resto, cond: e.cond.filter(c => String(c).trim()) } } }, true);
     if (e.num > Number(db.setting('propostaNum', 1020))) db.setSetting('propostaNum', e.num);
   };
+  l.box.addEventListener('change', (ev) => {
+    const c = ev.target.closest('[data-sep]'); if (!c) return;
+    e.sep = { ...(e.sep || {}), [c.dataset.sep]: c.checked };
+    e.itens = propItens(db.get('tempo_quotes', qid), e.sep); l.refresh();
+  });
   l.box.addEventListener('click', (ev) => {
     const d = ev.target.closest('[data-itdel]'); if (d) { e.itens.splice(Number(d.dataset.itdel), 1); if (!e.itens.length) e.itens.push({ desc: '', unit: '', qtd: '', valor: 0 }); l.refresh(); return; }
     if (ev.target.closest('[data-itadd]')) { e.itens.push({ desc: '', unit: '', qtd: '', valor: 0 }); l.refresh(); return; }
-    if (ev.target.closest('[data-itrefaz]')) { e.itens = propItens(db.get('tempo_quotes', qid)); l.refresh(); return; }
+    if (ev.target.closest('[data-itrefaz]')) { e.itens = propItens(db.get('tempo_quotes', qid), e.sep || {}); l.refresh(); return; }
     if (ev.target.closest('[data-condrefaz]')) { e.cond = propCondicoes(db.get('tempo_quotes', qid)); l.refresh(); return; }
     if (ev.target.closest('[data-psave]')) { guarda(); toast('Textos da proposta salvos'); return; }
     if (ev.target.closest('[data-pgera]')) {

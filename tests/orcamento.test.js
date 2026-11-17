@@ -57,7 +57,7 @@ test('proposta abre com a calculadora; proposta antiga abre no simplificado', ()
   m.openQuote(null);
   const html = render();
   assert.ok(html.includes('Com calculadora') && html.includes('Orçamento simplificado'));
-  assert.ok(html.includes('Hora base') && html.includes('Projetos e etapas') && html.includes('Total final da proposta'));
+  assert.ok(html.includes('Hora base') && html.includes('Entregas e etapas') && html.includes('Total final da proposta'));
   m.db.data.tempo_quotes = [{ id: 'q1', name: 'Antiga', value: 5000, est_hours: 20, calc: { computed: 5000, lines: [{ h: 20 }], contingency: 10 } }];
   m.openQuote('q1');
   const h2 = render();
@@ -86,8 +86,9 @@ test('proposta em PDF: itens por etapa somam o total e condições padrão', () 
   m.db.data = m.db.empty();
   const x = { name: 'ID Visual', value: 10000, revisions_included: 2, client_id: null,
     calc: { lines: [{ name: 'Pesquisa', h: 2, prazo: 2 }, { name: 'Marca', h: 12, prazo: 4 }, { name: 'Apresentação', h: 10, prazo: 3 }], cx: 'simples', porte: 'medio', mercado: 'local', nf: { on: false }, bv: { on: false }, ext: { on: false, items: [] } } };
-  const it = m.propItens(x);
-  assert.equal(it.length, 3); assert.equal(it.reduce((s, i) => s + i.valor, 0), 10000);
+  assert.equal(m.propItens(x).length, 1, 'padrão: um item por projeto');
+  const it = m.propItens(x, { etapas: true });
+  assert.equal(it.length, 4); assert.equal(it[0].valor, 10000); assert.equal(it.slice(1).reduce((s, i) => s + i.valor, 0), 10000);
   const c = m.propCondicoes(x);
   assert.ok(c[0].includes('três etapas: pesquisa, marca e apresentação'));
   assert.ok(c.some(l => l.includes('9 dias úteis')));
@@ -195,10 +196,37 @@ test('quantidade multiplica horas e terceirizado; condições agrupam projetos i
     grupos: [{ id: 'g', nome: 'Ícones' }], lines: [{ name: 'Ícone', h: 1, qtd: 50, grp: 'g' }, { name: 'Revisão', terc: true, valor: 10, qtd: 50, grp: 'g' }] };
   const c = m.calcQuote(st, m.precoBase());
   assert.equal(c.hEtapas, 50); assert.equal(c.Bterc, 500);
-  const it = m.propItens({ name: 'Ícones', value: 12000, calc: st });
-  assert.equal(it[0].qtd, '50und'); assert.ok(it[0].unit.endsWith('/und'));
+  const it = m.propItens({ name: 'Ícones', value: 12000, calc: st }, { terc: true });
+  assert.equal(it.length, 3); assert.equal(it[1].qtd, '50und'); assert.ok(it[1].unit.endsWith('/und'));
+  assert.equal(it[1].valor + it[2].valor, 12000);
   const s2 = { porte: 'medio', mercado: 'local', lines: [{ name: '', h: '' }], cx: 'simples', nf: { on: false }, bv: { on: false }, ext: { on: false, items: [] } };
   m.aplicaModelo(s2, 'motion2d', []); m.aplicaModelo(s2, 'motion2d', [], 'adiciona');
   const cond = m.propCondicoes({ name: 'X', value: 1000, revisions_included: 2, calc: s2 });
   assert.ok(cond.some(l => l.startsWith('Motion 2D (2 vídeos)')));
+});
+
+test('PDF: imposto separado mostra subtotal + imposto = total da proposta', () => {
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/orcamento.js', 'js/proposta.js'], ['db', 'propEstado', 'propHTML'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty();
+  const x = { name: 'Vídeo', value: 11000, calc: { porte: 'medio', mercado: 'local', cx: 'simples', nf: { on: true, pct: 10, inside: false }, bv: { on: false }, ext: { on: false, items: [] },
+    grupos: [{ id: 'g', nome: 'Vídeo 2 min' }], lines: [{ name: 'Animação 2D', h: 40, grp: 'g' }, { name: 'Roteiro', terc: true, valor: 500, grp: 'g' }], proposta: { sep: { imposto: true, terc: true } } } };
+  const e = m.propEstado(x);
+  const sub = e.itens.filter(i => !i.nivel).reduce((s, i) => s + i.valor, 0);
+  assert.equal(sub, 10000);
+  const html = m.propHTML(e);
+  assert.ok(html.includes('Subtotal') && html.includes('Imposto (nota fiscal)') && html.includes('11.000'));
+});
+
+test('previsão de pagamento: parcelas pela condição escolhida somam o total', () => {
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/orcamento.js', 'js/proposta.js', 'js/previsoes.js'], ['db', 'previsoesPadrao'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty();
+  const q = { value: 10000 };
+  const f = m.previsoesPadrao(q, 'final', '2026-12-20');
+  assert.equal(f.length, 1); assert.equal(f[0].data, '2026-12-20'); assert.equal(f[0].valor, 10000);
+  const c = m.previsoesPadrao(q, '5050', '2026-12-20');
+  assert.equal(c.length, 2); assert.equal(c[0].valor + c[1].valor, 10000);
+  const t = m.previsoesPadrao(q, '3x', '2026-12-20');
+  assert.equal(t.reduce((s, x) => s + x.valor, 0), 10000);
+  const mm = m.previsoesPadrao(q, 'mensal', '2027-02-10');
+  assert.ok(mm.length >= 3); assert.equal(mm.reduce((s, x) => s + x.valor, 0), 10000);
 });
