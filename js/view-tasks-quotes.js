@@ -242,6 +242,7 @@ function openQuote(id, preset = {}) {
             <div class="row between small"><span class="muted">Total dos custos extras</span><b class="mono">${fmtMoney0(c.B)}</b></div></div></div>
       </div></div>
       <div class="panel"><div class="panel-b">${calcSummaryHTML(c, st)}</div></div>
+      ${parecidosHTML(q.name, st.modelo, c.total, x?.id)}
       <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end"><div class="field" style="max-width:240px"><label for="cc-final">Total final da proposta</label><input id="cc-final" class="input mono" data-st="alvo" ${moneyAttrs(st.alvo)} placeholder="${c.total ? fmtMoney(c.total) : 'R$ 0,00'}"></div>${Number(st.alvo) > 0 ? '<button type="button" class="btn sm" data-limpa-alvo>Voltar ao calculado</button>' : ''}<span class="hint grow" style="padding-bottom:8px">Digitando o total, só a sua parte se ajusta (entre as etapas); terceirizado fica igual e BV e imposto são refeitos.</span></div>`;
 
   const draw = () => {
@@ -402,6 +403,18 @@ function openQuote(id, preset = {}) {
   });
 }
 
+/* Comparar antes de mandar: média dos últimos projetos parecidos (mesmas palavras no nome) e propostas do mesmo modelo. */
+function parecidosHTML(nome, modelo, valor, qid) {
+  const toks = sugWords(nome).filter(w => w.length >= 3);
+  const proj = toks.length ? projects().filter(p => Number(p.budget) > 0 && statusCat(p.status_id) !== 'cancelled' && toks.every(t => new Set(sugWords(p.name)).has(t))) : [];
+  const props = modelo ? db.all('tempo_quotes').filter(x => x.id !== qid && x.calc?.modelo === modelo && Number(x.value) > 0 && !x.project_id) : [];
+  const lista = [...proj.map(p => ({ v: Number(p.budget), d: p.approved_at || p.created_at || '' })), ...props.map(x => ({ v: Number(x.value), d: x.sent_at || x.created_at || '' }))]
+    .sort((a, b) => String(b.d).localeCompare(String(a.d))).slice(0, 5);
+  if (!lista.length) return '';
+  const media = lista.reduce((s2, x) => s2 + x.v, 0) / lista.length;
+  const dif = valor && media ? Math.round((valor / media - 1) * 100) : null;
+  return `<div class="subtle-box small">Parecidos: últimos ${lista.length} ${proj.length ? 'projeto(s)/proposta(s)' : 'proposta(s) do mesmo modelo'} com média de <b>${fmtMoney0(media)}</b>${dif !== null ? ` · esta: <b>${fmtMoney0(valor)}</b> (${dif > 0 ? '+' : ''}${dif}%)` : ''}.</div>`;
+}
 /* Sugestão de horas (7.2): média líquida dos projetos com as mesmas palavras no nome (ex.: "ID VISUAL"). */
 const sugWords = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(Boolean);
 function sugHorasHTML(name) {
