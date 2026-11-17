@@ -359,7 +359,7 @@ function actItemName(i) {
 /* Uma faixa só, com 100% da largura = todo o tempo da sessão. Cada trecho ocupa a parte proporcional ao seu tempo;
    o que não tem registro fica cinza. Os pausas saem da conta (a faixa mostra só o tempo trabalhado). */
 /* Motivo de uma pausa (o campo "why" fica no trabalho que vem antes da pausa; ver entryGaps). */
-const PAUSE_WHY = { mac: 'Ocioso (mouse e teclado parados) ou computador dormiu', app: 'WhatsApp / Telegram', WhatsApp: 'WhatsApp Distração', suspenso: 'Página parada (computador dormiu)', ocioso: 'Ociosidade (navegador)' };
+const PAUSE_WHY = { mac: 'Ocioso (mouse e teclado parados) ou computador dormiu', app: 'WhatsApp / Telegram', WhatsApp: 'WhatsApp Distração', suspenso: 'Página parada (computador dormiu)', 'Mac bloqueado': 'Mac bloqueado (tela de bloqueio)', ocioso: 'Ociosidade (navegador)' };
 const pauseWhy = (why) => PAUSE_WHY[why] || why || 'Intervalo manual';
 /* pausa de app (WhatsApp, Telegram…) aparece em verde claro; ociosidade fica cinza */
 const isAppPause = (why) => !!why && (why === 'app' || (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).some(x => String(x).trim().toLowerCase() === String(why).trim().toLowerCase()));
@@ -375,7 +375,7 @@ const pauseKind = (why) => {
   if (w.includes('telegram')) return 'telegram';
   if (w.includes('instagram')) return 'instagram';
   if (w === 'app' || w.includes('whatsapp') || isAppPause(why)) return 'whatsapp';
-  if (w === 'mac' || w === 'ocioso' || w.includes('ocios')) return 'idle';
+  if (w === 'mac' || w === 'ocioso' || w.includes('ocios') || w.includes('bloquead') || w === 'loginwindow') return 'idle';
   return 'other';
 };
 const pauseHatch = (why) => PAUSE_HATCH[pauseKind(why)];

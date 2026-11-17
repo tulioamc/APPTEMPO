@@ -761,3 +761,5 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V2.05.04: gráficos com reais curtos ("R$ 32,8 mil") e rótulos de barra mais largos.
 
 **Lição desta conversa:** mudança no banco (tabela nova, coluna, tipo de status) precisa ir junto no schema, no carregamento do site e na sincronização; uma tabela fora do formato travou a atualização do site inteiro sem aviso.
+
+- V2.06.29: Mac bloqueado (loginwindow) vira pausa sozinha e nunca conta como trabalho; "Ajustar automaticamente" tira bloqueios ao salvar intervalo.

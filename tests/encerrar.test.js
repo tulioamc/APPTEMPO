@@ -40,3 +40,14 @@ test('uso acima de 5% da parada (e menos de 5 min) não é ignorado', () => {
   const p = setup(recs).stopPlan(e, T(10, 20));
   assert.equal(p.auto, null);
 });
+
+test('ajustar automaticamente: tira os trechos de Mac bloqueado (2 min ou mais) do intervalo', () => {
+  const { load } = require('./helpers');
+  const m = load(['js/store.js', 'js/domain.js', 'js/activity-log.js', 'js/view-timesheet.js'], ['db', 'tiraBloqueios'], { VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {} });
+  m.db.data = m.db.empty(); m.db.loaded = true;
+  const d = (h, mi) => new Date(2026, 10, 17, h, mi).toISOString();
+  m.db.data.tempo_settings = [{ key: 'actlog:2026-11-17', value: [{ app: 'loginwindow', from: d(10, 0), to: d(11, 0) }, { app: 'loginwindow', from: d(12, 0), to: d(12, 1) }] }];
+  const r = m.tiraBloqueios([{ s: d(9, 0), e: d(13, 0) }]);
+  assert.equal(r.tirado, 60 * 60e3);
+  assert.deepEqual(r.segs.map(x => [x.s, x.e]), [[d(9, 0), d(10, 0)], [d(11, 0), d(13, 0)]]);
+});

@@ -182,6 +182,21 @@ function bloqueioEntre(s, e) {
   const recs = days.flatMap(d => db.setting(logKeyOf(d), null) || []);
   return recs.some(r => String(r.app || '').toLowerCase() === 'loginwindow' && new Date(r.to).getTime() > s && new Date(r.from).getTime() < e);
 }
+/* Tira dos intervalos os trechos de Mac bloqueado (loginwindow) de 2 min ou mais, dividindo o intervalo se preciso. */
+function tiraBloqueios(segs, minMs = 2 * 60e3) {
+  let tirado = 0; const out = [];
+  segs.forEach(sg => {
+    if (!sg.e) { out.push(sg); return; }
+    const S = new Date(sg.s).getTime(), E = new Date(sg.e).getTime();
+    const days = [...new Set([ymd(new Date(S)), ymd(new Date(E))])];
+    const locks = days.flatMap(d => db.setting(logKeyOf(d), null) || []).filter(r => String(r.app || '').toLowerCase() === 'loginwindow')
+      .map(r => [Math.max(S, new Date(r.from).getTime()), Math.min(E, new Date(r.to).getTime())]).filter(([a, b]) => b - a >= minMs).sort((x, y) => x[0] - y[0]);
+    let cur = S;
+    locks.forEach(([a, b]) => { if (b <= cur) return; if (a > cur) out.push({ ...sg, s: new Date(cur).toISOString(), e: new Date(a).toISOString() }); tirado += b - Math.max(a, cur); cur = Math.max(cur, b); });
+    if (E > cur) out.push({ ...sg, s: new Date(cur).toISOString(), e: new Date(E).toISOString() });
+  });
+  return { segs: out.filter(x => !x.e || new Date(x.e) > new Date(x.s)), tirado };
+}
 function analisePausa(s, e) {
   const total = e - s;
   if (total <= 0) return { total: 0, pergunta: false };
@@ -673,7 +688,17 @@ function openEntryModal(id, startIso = null, endIso = null) {
       const ov = overlapOf(segs.filter(x => !antes.has(`${x.s}|${x.e}`)), e?.id || null);
       // intervalo longo com bloqueio do Mac dentro: quase sempre é tempo fora. Pede confirmação antes de contar.
       const bloq = segs.filter(s => s.e && new Date(s.e) - new Date(s.s) >= 60 * 60e3 && bloqueioEntre(new Date(s.s).getTime(), new Date(s.e).getTime()));
-      if (bloq.length && !(await confirmBox({ title: 'Intervalo com bloqueio do Mac', body: `${bloq.length === 1 ? 'Um intervalo longo' : bloq.length + ' intervalos longos'} tem o Mac bloqueado dentro dele. Se você estava fora, o tempo não deveria contar.`, ok: 'Salvar mesmo assim', no: 'Voltar e ajustar', padraoNao: true }))) return;
+      if (bloq.length) {
+        const r = await escolhaBox({ title: 'Intervalo com bloqueio do Mac', body: `${bloq.length === 1 ? 'Um intervalo longo' : bloq.length + ' intervalos longos'} tem o Mac bloqueado dentro dele. Se você estava fora, o tempo não deveria contar.<br><span class="small muted">“Ajustar automaticamente” tira da sessão os trechos em que o Mac ficou bloqueado (2 min ou mais).</span>`,
+          opcoes: [{ id: 'salva', label: 'Salvar mesmo assim' }, { id: 'volta', label: 'Voltar e ajustar' }, { id: 'auto', label: 'Ajustar automaticamente' }] });
+        if (!r || r === 'volta') return;
+        if (r === 'auto') {
+          const { segs: novos, tirado } = tiraBloqueios(segs);
+          if (!novos.length) return toast('A sessão inteira foi com o Mac bloqueado. Ajuste ou exclua a sessão.');
+          segs.splice(0, segs.length, ...novos);
+          toast(tirado ? `Tirei ${fmtDur(tirado)} de Mac bloqueado da sessão` : 'Não havia bloqueio de 2 min ou mais para tirar');
+        }
+      }
       if (ov) return toast(`Esse horário já está em outra sessão (${entryTitle(ov.entry)}, ${fmtTime(new Date(ov.a).toISOString())}–${fmtTime(new Date(ov.b).toISOString())}). Ajuste para não sobrepor.`);
       const data = { ...selToEntry(sel), work_type_id: f.work_type_id || null, revision_id: f.revision_id || null, notes: [(f.notes || '').replace(/\s+$/, ''), ...logLines].filter(Boolean).join('\n'), segments: segs };
       if (e) {
