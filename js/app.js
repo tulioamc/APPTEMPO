@@ -300,6 +300,9 @@ async function suggestActivity(seg) {
   const fromMs = new Date(seg.from).getTime(), toMs = new Date(seg.to).getTime();
   // troca de app com menos de 10 s é ignorada; a partir disso entra no log e no gráfico
   if (!(toMs > fromMs) || toMs - fromMs < 10000) return;
+  // fim do último registro antes deste (para achar o tempo sem nenhum registro do computador)
+  const prevEnd = [ymd(new Date(fromMs - 86400000)), ymd(new Date(fromMs))].flatMap(d => db.setting(logKeyOf(d), null) || [])
+    .map(r => new Date(r.to).getTime()).filter(t => t <= fromMs + 1000).reduce((m, t) => Math.max(m, t), 0);
   // o log do dia recebe tudo, com ou sem sessão ativa
   const logged = logAppend(seg);
   trackUnsaved(seg, toMs - fromMs);
@@ -311,6 +314,8 @@ async function suggestActivity(seg) {
   const isPauseApp = pauseApps.includes(String(seg.app).toLowerCase()) || !!siteHit;
   const rule = folderRule(seg.folder);
   const ruleProject = rule ? db.get('tempo_projects', rule.project_id) : null;
+  // computador sem nenhum registro (desligado, sem bateria, app do Mac fechado): é sempre pausa
+  if (a && a.state === 'running' && prevEnd && fromMs - prevEnd >= idleLimit() * 60000) suggestPause(prevEnd, fromMs, 'mac', 'Sem registro');
   // Mac bloqueado (loginwindow): nunca é trabalho; com sessão rodando vira pausa sozinha, como ociosidade
   if (/^loginwindow$/i.test(seg.app)) { if (a && a.state === 'running') suggestPause(fromMs, toMs, 'mac', 'Tela bloqueada'); return; }
   if (!a) { if (!isPauseApp && (ruleProject || DESIGN_APP_RE.test(seg.app))) suggestStart(ruleProject, seg); return; }
@@ -385,7 +390,7 @@ function applyPause(a, n, mode) {
   const out = []; segs.forEach(s => { const S0 = new Date(s.s), E0 = s.e ? new Date(s.e) : null; const F = new Date(f), T = new Date(t);
     if (E0 && E0 <= F || S0 >= T) { out.push(s); return; }
     // motivo da pausa: "mac"/"suspenso"/"ocioso", ou o nome do app que pausou (ex.: WhatsApp)
-    if (S0 < F) out.push({ s: s.s, e: f, why: sug.source === 'app' && sug.app ? sug.app : (sug.source === 'mac' && (sug.app === 'sono' || sug.app === 'Tela bloqueada') ? sug.app : sug.source) });
+    if (S0 < F) out.push({ s: s.s, e: f, why: sug.source === 'app' && sug.app ? sug.app : (sug.source === 'mac' && (sug.app === 'sono' || sug.app === 'Tela bloqueada' || sug.app === 'Sem registro') ? sug.app : sug.source) });
     if (!E0 || E0 > T) out.push({ s: t, e: s.e });
   });
   db.update('tempo_time_entries', a.id, { segments: out, edits: auditEdit(a, before, `Pausa de ${fmtDur(new Date(t) - new Date(f))} inserida (${fmtTime(f)}–${fmtTime(t)})`) }, true);

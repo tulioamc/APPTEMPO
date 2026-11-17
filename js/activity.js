@@ -359,7 +359,7 @@ function actItemName(i) {
 /* Uma faixa só, com 100% da largura = todo o tempo da sessão. Cada trecho ocupa a parte proporcional ao seu tempo;
    o que não tem registro fica cinza. Os pausas saem da conta (a faixa mostra só o tempo trabalhado). */
 /* Motivo de uma pausa (o campo "why" fica no trabalho que vem antes da pausa; ver entryGaps). */
-const PAUSE_WHY = { mac: 'Ocioso (mouse e teclado parados) ou computador dormiu', app: 'WhatsApp / Telegram', WhatsApp: 'WhatsApp Distração', suspenso: 'Página parada (computador dormiu)', 'Tela bloqueada': 'Tela bloqueada', ocioso: 'Ociosidade (navegador)' };
+const PAUSE_WHY = { mac: 'Ocioso (mouse e teclado parados) ou computador dormiu', app: 'WhatsApp / Telegram', WhatsApp: 'WhatsApp Distração', suspenso: 'Página parada (computador dormiu)', 'Tela bloqueada': 'Tela bloqueada', 'Sem registro': 'Sem registro do computador (desligado ou fora)', ocioso: 'Ociosidade (navegador)' };
 const pauseWhy = (why) => PAUSE_WHY[why] || why || 'Intervalo manual';
 /* pausa de app (WhatsApp, Telegram…) aparece em verde claro; ociosidade fica cinza */
 const isAppPause = (why) => !!why && (why === 'app' || (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).some(x => String(x).trim().toLowerCase() === String(why).trim().toLowerCase()));
@@ -375,7 +375,7 @@ const pauseKind = (why) => {
   if (w.includes('telegram')) return 'telegram';
   if (w.includes('instagram')) return 'instagram';
   if (w === 'app' || w.includes('whatsapp') || isAppPause(why)) return 'whatsapp';
-  if (w === 'mac' || w === 'ocioso' || w.includes('ocios') || w.includes('bloquead') || w === 'loginwindow') return 'idle';
+  if (w === 'mac' || w === 'ocioso' || w.includes('ocios') || w.includes('bloquead') || w === 'sem registro' || w === 'loginwindow') return 'idle';
   return 'other';
 };
 const pauseHatch = (why) => PAUSE_HATCH[pauseKind(why)];
@@ -417,9 +417,9 @@ function actUnspecOf(e, at = Date.now()) {
   return out.filter(([a, b]) => b - a >= 60e3);
 }
 const actUnspecMs = (list) => list.reduce((t, e) => t + actUnspecOf(e).reduce((s, [a, b]) => s + (b - a), 0), 0);
-const ACT_UNSPEC_TIP = 'Trabalho não especificado\nTempo da sessão sem registro de programa: app do Mac fechado, trabalho fora do computador ou no celular. Conta como trabalho, não como pausa.';
+const ACT_UNSPEC_TIP = 'Trabalho não especificado\nTempo da sessão sem registro de programa. Trechos de 2 min ou mais viram pausa sozinhos quando o computador volta a registrar.';
 function actUnspecSpanHTML(a, b, x, w) {
-  return `<span class="seg-b unspec" data-g="unspec" style="left:${x}%;width:${w}%" data-tip="${esc(`Não especificado ${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())} · ${fmtDur(b - a)}\nTrabalhado, mas sem registro de programa (app do Mac fechado, fora do computador ou no celular).`)}"></span>`;
+  return `<span class="seg-b unspec" data-g="unspec" style="left:${x}%;width:${w}%" data-tip="${esc(`Não especificado ${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())} · ${fmtDur(b - a)}\nSem registro do computador. Com 2 min ou mais, vira pausa quando o computador volta a registrar.`)}"></span>`;
 }
 function actUnspecChipHTML(ms) {
   return ms > 0 ? `<span class="act-chip act-unspec" data-g="unspec" style="--tb:#94A3B8" data-tip="${esc(ACT_UNSPEC_TIP + '\nTotal: ' + fmtDur(ms))}"><i></i>* Não especificado <span class="faint">${fmtDur(ms)}</span></span>` : '';
