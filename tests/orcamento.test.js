@@ -230,3 +230,17 @@ test('previsão de pagamento: parcelas pela condição escolhida somam o total',
   const mm = m.previsoesPadrao(q, 'mensal', '2027-02-10');
   assert.ok(mm.length >= 3); assert.equal(mm.reduce((s, x) => s + x.valor, 0), 10000);
 });
+
+test('modelos: favoritos, editar um pronto, apagar e criar novo', () => {
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/orcamento.js', 'js/modelos.js'], ['db', 'todosModelos', 'modelosFav', 'openModelos', 'openEditorModelo', 'MODELOS'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty(); m.db.loaded = true;
+  assert.deepEqual([...m.modelosFav()], ['identidade', 'manual', 'motion2d', 'motion3d']);
+  let render; m.ctx.openLayer = (o) => { render = o.render; return { box: { addEventListener() {} }, refresh() {}, close() {} }; };
+  m.openModelos(() => {}); const h = render();
+  assert.ok(h.includes('Tradução de vídeo') && h.includes('★') && h.includes('Criar novo'));
+  m.openEditorModelo('identidade', () => {}); assert.ok(render().includes('Pesquisa e moodboard'));
+  m.db.setSetting('modelosProprios', { identidade: { nome: 'Identidade (minha)', etapas: [{ name: 'Marca', h: 20 }] } });
+  assert.equal(m.todosModelos().identidade.nome, 'Identidade (minha)');
+  m.db.setSetting('modelosOcultos', ['traducao']);
+  assert.equal(m.todosModelos().traducao, undefined);
+});

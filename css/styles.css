@@ -1330,3 +1330,8 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .qf-hwrap { position: relative; display: block; }
 .qf-hwrap .input { width: 100%; }
 .qf-media { position: absolute; top: -7px; right: -5px; width: 16px; height: 16px; border-radius: 50%; border: 0; padding: 0; font-size: 11px; line-height: 16px; background: var(--accent, #6b46c1); color: #fff; cursor: pointer; }
+
+/* Editor de modelo */
+.me-line { display: grid; grid-template-columns: 26px minmax(0, 1.6fr) minmax(0, 1fr) 52px 64px 64px 40px 40px 40px 28px; gap: 6px; align-items: center; }
+.me-seta { min-height: 14px; padding: 0 4px; }
+.me-seta svg { width: 12px; height: 12px; }

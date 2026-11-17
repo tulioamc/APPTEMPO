@@ -58,7 +58,11 @@ function gruposDe(st) {
 }
 /* Modelos próprios (salvos de uma proposta): em tempo_settings 'modelosProprios' { chave: { nome, video, etapas } }. */
 const modelosProprios = () => (typeof db !== 'undefined' && db.setting('modelosProprios', null)) || {};
-const todosModelos = () => ({ ...MODELOS, ...modelosProprios() });
+/* Todos os modelos: os prontos (editáveis: a versão editada fica em modelosProprios com a mesma chave) e os criados;
+   os apagados ficam em 'modelosOcultos'. Favoritos ('modelosFav') aparecem como botões; o resto em "Outros". */
+const modelosOcultos = () => (typeof db !== 'undefined' && db.setting('modelosOcultos', null)) || [];
+const todosModelos = () => { const t = { ...MODELOS, ...modelosProprios() }; modelosOcultos().forEach(k => delete t[k]); return t; };
+const modelosFav = () => { const f = (typeof db !== 'undefined' && db.setting('modelosFav', null)); return (f || ['identidade', 'manual', 'motion2d', 'motion3d']).filter(k => todosModelos()[k]); };
 function aplicaModelo(st, chave, tipos = [], modo = 'substitui') {
   const mo = todosModelos()[chave]; if (!mo) return st;
   const wtId = (n) => (tipos.find(t => t.name === n) || {}).id || '';

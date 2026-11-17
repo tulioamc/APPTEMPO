@@ -228,7 +228,7 @@ function openQuote(id, preset = {}) {
         ${q.client_id && !st.outro ? '<div class="small faint">Porte e mercado ficam guardados para este cliente.</div>' : ''}
       </div></div>
       <div class="panel"><div class="panel-h"><h3>Horas</h3></div><div class="panel-b stack">
-        <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="lbl">Modelo</span><div class="seg">${Object.entries(todosModelos()).map(([k, mo]) => `<button type="button" class="${modelosDe(st).includes(k) ? 'on' : ''}" data-modelo="${k}">${esc(mo.nome)}${modelosProprios()[k] ? `<span class="faint" data-modelo-del="${k}" title="Apagar este modelo" aria-label="Apagar modelo"> ×</span>` : ''}</button>`).join('')}</div><span class="small faint">preenche as etapas com horas e prazos padrão; dá para juntar mais de um</span></div>
+        <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="lbl">Modelo</span><div class="seg">${modelosFav().map(k => `<button type="button" class="${modelosDe(st).includes(k) ? 'on' : ''}" data-modelo="${k}">${esc(todosModelos()[k].nome)}</button>`).join('')}<button type="button" data-modelos-outros title="Todos os modelos: escolher, favoritar, editar, apagar ou criar">Outros…</button></div></div>
         <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
           <div class="field"><span class="lbl">Complexidade</span><div class="seg">${COMPLEXIDADES.map(([k, nome, m]) => `<button type="button" class="${st.cx === k ? 'on' : ''}" data-cx="${k}">${nome} <span class="faint">${fmtX(m)}</span></button>`).join('')}</div></div>
           <div class="field" style="max-width:260px"><label for="cc-ap">Reuniões de aprovação</label><div class="row" style="flex-wrap:nowrap;gap:6px;align-items:center"><input id="cc-ap" type="number" min="0" class="input" style="width:80px" data-st="aprov" value="${st.aprov}" placeholder="0" aria-label="Quantidade de reuniões"><span class="small muted">×</span><input type="number" min="0" step="0.5" class="input" style="width:80px" data-st="hAprov" value="${st.hAprov ?? 1}" aria-label="Horas por reunião"><span class="small muted">h</span></div></div>
@@ -462,28 +462,6 @@ function openQuote(id, preset = {}) {
     const cb = e.target.closest('[data-cli-busca]'); if (cb) { openCombo(cb, { kind: 'client', value: q.client_id, onPick: escolheCliente }); return; }
     const ap = e.target.closest('[data-abre-pdf]'); if (ap) { try { window.webkit.messageHandlers.tempo.postMessage({ type: 'open', path: `${propPasta()}/${ap.dataset.abrePdf}.pdf`, abrir: true }); } catch (err) { toast('Não consegui abrir.'); } return; }
     const mdb = e.target.closest('[data-media]'); if (mdb) { st.lines[mdb.dataset.media].h = Number(mdb.dataset.h); redraw(); return; }
-    const mdel = e.target.closest('[data-modelo-del]'); if (mdel) {
-      e.stopPropagation(); const mp = { ...modelosProprios() }; const nm = mp[mdel.dataset.modeloDel]?.nome;
-      if (!await confirmBox({ title: 'Apagar o modelo?', body: `<b>${esc(nm)}</b> sai da lista de modelos. Propostas já feitas não mudam.`, ok: 'Apagar', danger: true })) return;
-      delete mp[mdel.dataset.modeloDel]; db.setSetting('modelosProprios', mp); redraw(); return;
-    }
-    if (e.target.closest('[data-escopo]')) {
-      if (!db.setting('anthropicKey', '')) return toast('Coloque a chave da API da Anthropic em Ajustes › Claude para usar isso.', { ms: 7000 });
-      const lt = openLayer({ wide: true, html: `<div class="dh"><h2>Montar pelo texto</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
-        <div class="db"><div class="field"><label for="es-t">Pedido do cliente (e-mail, WhatsApp, briefing)</label><textarea id="es-t" class="input" rows="12" placeholder="Ex.: Precisamos de uma identidade visual para a marca X, com manual, e dois vídeos de 30 s para Instagram…"></textarea></div><span class="hint">O Claude monta as entregas e as etapas com horas e prazos. As etapas atuais são substituídas; você revisa tudo antes de salvar.</span></div>
-        <div class="df"><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-es-ok>Montar</button></div>` });
-      lt.box.addEventListener('click', async (ev) => {
-        const b = ev.target.closest('[data-es-ok]'); if (!b) return; const txt = $('#es-t', lt.box).value.trim(); if (!txt) return toast('Cole o pedido do cliente.');
-        b.disabled = true; b.textContent = 'Montando…';
-        try {
-          const res = await escopoPorTexto(txt); aplicaEscopo(st, res, workTypes());
-          if (res.descricao && !pp.desc) pp.desc = res.descricao;
-          if (!q.name.trim() && res.projetos?.[0]?.nome) q.name = res.projetos.map(x => x.nome).join(' + ');
-          lt.close(); redraw(); toast('Entregas e etapas montadas. Revise horas, prazos e terceirizados.');
-        } catch (err) { b.disabled = false; b.textContent = 'Montar'; toast('Não consegui montar: ' + esc(err.message || 'erro'), { ms: 8000 }); }
-      });
-      return;
-    }
     if (e.target.closest('[data-gmodelo]')) {
       const gs = gruposDe(st); let id = gs[0].id;
       if (gs.length > 1) { id = await escolhaBox({ title: 'Salvar qual entrega como modelo?', body: 'As etapas, horas, prazos, quantidades e terceirizados viram um botão de modelo.', opcoes: gs.map((g, i) => ({ id: g.id, label: g.nome || `Entrega ${i + 1}` })) }); if (!id) return; }
@@ -505,8 +483,13 @@ function openQuote(id, preset = {}) {
     }
     if (e.target.closest('[data-pp-padrao]')) { delete pp.desc; delete pp.cond; redraw(); return; }
     const md = e.target.closest('[data-modo]'); if (md) { modo = md.dataset.modo; tamanho(); redraw(); return; }
-    const mo = e.target.closest('[data-modelo]'); if (mo) {
-      const k = mo.dataset.modelo, nome = todosModelos()[k].nome;
+    if (e.target.closest('[data-modelos-outros]')) { openModelos((k) => { if (k) usarModelo(k); else redraw(); }); return; }
+    const mo = e.target.closest('[data-modelo]'); if (mo) { usarModelo(mo.dataset.modelo); return; }
+  });
+  /* Usar um modelo: substituir ou adicionar como entrega; clicar de novo num já usado tira as etapas dele. */
+  async function usarModelo(k) {
+    {
+      const nome = todosModelos()[k].nome;
       const temAlgo = st.lines.some(ln => (ln.name || '').trim() && ln.name !== 'Criação' || Number(ln.h));
       if (modelosDe(st).includes(k) && temAlgo) {   // clicar de novo num modelo já usado: tira as etapas dele
         if (!await confirmBox({ title: `Tirar ${nome}?`, body: `As etapas de <b>${esc(nome)}</b> saem da proposta.`, ok: 'Tirar' })) return;
@@ -526,6 +509,8 @@ function openQuote(id, preset = {}) {
       }
       aplicaModelo(st, k, workTypes(), modoM); redraw(); return;
     }
+  }
+  l.box.addEventListener('click', async (e) => {
     const cxb = e.target.closest('[data-cx]'); if (cxb) { st.cx = cxb.dataset.cx; redraw(); return; }
     const dt = e.target.closest('[data-dtipo]'); if (dt) { st.descTipo = dt.dataset.dtipo; st.desc = ''; redraw(); return; }
     if (e.target.closest('[data-limpa-alvo]')) { st.alvo = null; redraw(); return; }
