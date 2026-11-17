@@ -173,7 +173,7 @@ function openQuote(id, preset = {}) {
       ${x ? `<div class="stack" style="gap:8px"><span class="lbl">Follow-up</span>
         ${(x.followups || []).length ? `<div class="timeline">${x.followups.map(fu => `<div class="tl"><span class="w">${fmtDate(fu.date)}</span><span class="b"></span><span>${esc(fu.note)}</span></div>`).join('')}</div>` : '<span class="small muted">Nenhum contato registrado.</span>'}
         <div class="row"><input type="date" class="input" style="max-width:170px" id="fu-d" value="${ymd(new Date())}" aria-label="Data do contato"><input class="input grow" id="fu-n" placeholder="O que foi conversado" aria-label="Contato"><button type="button" class="btn" data-x="fu">Registrar contato</button></div></div>` : ''}
-      ${v.calc?.nf ? `<div class="panel"><div class="panel-h"><h3>Composição calculada</h3></div><div class="panel-b">${calcSummaryHTML(v.calc, v.calc)}</div></div>` : ''}
+      ${v.calc?.nf ? `<div class="panel"><div class="panel-h"><h3>Composição calculada</h3></div><div class="panel-b">${calcSummaryHTML(calcQuote({ ...v.calc, outro: true, customRate: v.calc.rate, lines: v.calc.lines || [] }, precoBase()), v.calc)}</div></div>` : ''}
       ${v.calc ? `<div class="subtle-box small">Valor calculado na calculadora: <b>${fmtMoney(v.calc.computed)}</b>${Number(v.value) !== Number(v.calc.computed) ? ` · ajustado manualmente para ${fmtMoney(v.value)}` : ''}</div>` : ''}
     </form>
     <div class="df">${x ? `<button class="btn danger left" data-x="del">${icon('trash')}</button>` : ''}
@@ -237,57 +237,37 @@ function sugHorasHTML(name) {
   }
   return `<div class="row between small" style="flex-wrap:wrap;gap:8px"><span class="muted">${hint || 'Sem projetos concluídos parecidos para sugerir horas.'}</span><button type="button" class="btn sm" data-x="calc">Calculadora de horas</button></div>`;
 }
-/* Cálculo da proposta:
-   A = horas × valor-hora + contingência + margem
-   B = custos extras (terceirizados)
-   C = BV (comissão) sobre A + B
-   D = imposto da nota sobre A + B + C (por fora; ou por dentro, se marcado)  */
-/* Valor-hora = hora base × porte do cliente × mercado (definido em out/2026; Recife sem multiplicador).
-   "Outro valor" ignora os multiplicadores. Tudo ajustável na calculadora e salvo em 'precoBase'. */
-const PRECO_PADRAO = { hora: 200, porte: { pequeno: 0.85, medio: 1.15, grande: 1.5 }, mercado: { local: 1, nacional: 1.5, internacional: 2.5 } };
-const PORTES = [['pequeno', 'Pequeno'], ['medio', 'Médio'], ['grande', 'Grande']];
-const MERCADOS = [['local', 'Local (Recife)'], ['nacional', 'Nacional'], ['internacional', 'Internacional']];
-function precoBase() {
-  const v = db.setting('precoBase', null) || {};
-  return { hora: v.hora ?? PRECO_PADRAO.hora, porte: { ...PRECO_PADRAO.porte, ...(v.porte || {}) }, mercado: { ...PRECO_PADRAO.mercado, ...(v.mercado || {}) } };
-}
-function calcRate(st, pb) {
-  if (st.outro) return Number(st.customRate) || 0;
-  return (Number(pb.hora) || 0) * (Number(pb.porte[st.porte]) || 1) * (Number(pb.mercado[st.mercado]) || 1);
-}
-const fmtX = (n) => String(Math.round(Number(n || 0) * 100) / 100).replace('.', ',') + '×';
-function calcQuote(st, rates) {
-  const r = calcRate(st, rates); const h = st.lines.reduce((s, x) => s + (Number(x.h) || 0), 0);
-  const base = h * r; const cont = base * (Number(st.contingency) || 0) / 100; const marg = (base + cont) * (Number(st.margin) || 0) / 100;
-  const A = base + cont + marg;
-  const B = st.ext.on ? st.ext.items.reduce((s, x) => s + (Number(x.value) || 0), 0) : 0;
-  const bvP = st.bv.on ? (Number(st.bv.pct) || 0) / 100 : 0; const C = (A + B) * bvP;
-  const nfP = st.nf.on ? (Number(st.nf.pct) || 0) / 100 : 0;
-  const pre = A + B + C; const D = !nfP ? 0 : st.nf.inside && nfP < 1 ? pre / (1 - nfP) - pre : pre * nfP;
-  return { r, h, base, cont, marg, A, B, C, D, total: A + B + C + D };
-}
+/* Resumo da calculadora (a conta está em js/orcamento.js). */
 function calcSummaryHTML(c, st) {
   const pct = (v) => c.total ? (v / c.total * 100).toFixed(1).replace('.', ',') + '%' : '—';
-  const line = (lab, rate, v, sub) => `<span class="${sub ? 'muted small sub' : ''}">${lab}</span><span class="v muted small">${rate}</span><span class="v">${fmtMoney0(v)}</span><span class="v faint small">${sub ? '' : pct(v)}</span>`;
+  const line = (lab, rate, v, sub, neg) => `<span class="${sub ? 'muted small sub' : ''}">${lab}</span><span class="v muted small">${rate}</span><span class="v">${neg && v ? '− ' : ''}${fmtMoney0(Math.abs(v))}</span><span class="v faint small">${sub ? '' : pct(v)}</span>`;
+  const hTxt = `${fmtH(c.hEtapas * 3600000)}${c.dur !== 1 ? ' × ' + fmtX(c.dur) + ' (duração)' : ''}${c.cx !== 1 ? ' × ' + fmtX(c.cx) : ''}${c.reun ? ' + ' + c.reun + ' h reunião' : ''}`;
   return `<div class="calc-sum4">
     <span class="lbl">Item</span><span class="lbl v">Taxa</span><span class="lbl v">Valor</span><span class="lbl v">% do total</span>
-    ${line('<b>Subtotal</b> do trabalho', fmtH(c.h * 3600000) + ' × ' + (fmtMoney(c.r) || 'R$ —') + '/h', c.A)}
-    ${line('↳ horas × valor-hora', '', c.base, 1)}${c.cont ? line('↳ contingência', (st.contingency || 0) + '%', c.cont, 1) : ''}${c.marg ? line('↳ margem', (st.margin || 0) + '%', c.marg, 1) : ''}
+    ${line('<b>Minha parte</b>', fmtH(c.h * 3600000) + ' × ' + (fmtMoney(c.r) || 'R$ —') + '/h', c.Mf)}
+    ${line('↳ horas', hTxt, c.M, 1)}
+    ${c.U ? line('↳ urgência', fmtX(c.urg) + (c.semPrazo ? ' (teto)' : ''), c.U, 1) : ''}
+    ${Math.abs(c.desc) > 0.004 ? line(c.desc > 0 ? '↳ desconto' : '↳ acréscimo', Number(st.alvo) > 0 ? 'pelo total' : st.descTipo === '%' ? (st.desc || 0) + '%' : '', c.desc, 1, c.desc > 0) : ''}
     ${line('<b>Terceirizado</b> (custos extras)', st.ext.on ? st.ext.items.filter(x => x.value).length + ' item(ns)' : 'desligado', c.B)}
-    ${line('<b>Comissão</b> (BV)', st.bv.on ? (st.bv.pct || 0) + '% de A+B' : 'desligado', c.C)}
-    ${line('<b>Impostos</b> (nota fiscal)', st.nf.on ? (st.nf.pct || 0) + '% ' + (st.nf.inside ? 'por dentro' : 'de A+B+C') : 'sem nota', c.D)}
+    ${line('<b>Comissão</b> (BV)', st.bv.on ? (st.bv.pct || 0) + '% de minha parte + terceirizado' : 'desligado', c.C)}
+    ${line('<b>Impostos</b> (nota fiscal)', st.nf.on ? (st.nf.pct || 0) + '% ' + (st.nf.inside ? 'por dentro' : 'por fora') : 'sem nota', c.D)}
     <span class="tot">Total da proposta</span><span class="v tot"></span><span class="v tot">${fmtMoney0(c.total)}</span><span class="v tot">100%</span>
+    <span class="muted small">Sua hora neste orçamento</span><span></span><span class="v small"><b>${fmtMoney0(c.horaEf)}/h</b></span><span class="v faint small">${c.r && Math.abs(c.horaEf - c.r) > 0.5 ? (c.horaEf < c.r ? '−' : '+') + Math.round(Math.abs(c.horaEf / c.r - 1) * 100) + '%' : ''}</span>
   </div>`;
 }
 function openCalculator() {
   const rates = precoBase();
   const perfis = db.setting('clientePreco', {}) || {};
-  const st = { cliente: '', porte: 'medio', mercado: 'local', outro: false, lines: [{ name: 'Criação', wt: '', h: '' }], margin: '', contingency: '', revInc: 2, revExtra: null, final: null,
+  const st = { cliente: '', porte: 'medio', mercado: 'local', outro: false, lines: [{ name: 'Criação', wt: '', h: '' }], duracao: '', cx: 'simples', aprov: '', pedido: '', desc: '', descTipo: 'R$', alvo: null, revInc: 2, revExtra: null,
     nf: { on: true, pct: 9, inside: false }, bv: { on: false, pct: 10 }, ext: { on: false, items: [{ name: '', value: null }] } };
   const done = projects().filter(p => statusCat(p.status_id) === 'done' && p.estimated_hours && projectMs(p.id));
   const ratio = done.length ? done.reduce((s, p) => s + hours(projectMs(p.id)) / p.estimated_hours, 0) / done.length : null;
   const calcRateTxt = () => st.outro ? `Valor-hora: <b>${fmtMoney(calcRate(st, rates)) || 'R$ —'}</b>`
     : `${fmtMoney(rates.hora) || 'R$ —'} × ${fmtX(rates.porte[st.porte])} (porte) × ${fmtX(rates.mercado[st.mercado])} (mercado) = <b>${fmtMoney(calcRate(st, rates)) || 'R$ —'}/h</b>`;
+  const horasTxt = (c) => c.h ? `Total: <b>${fmtH(c.h * 3600000)}</b> de trabalho · prazo no ritmo normal: <b>${c.fechado} dia(s) útil(eis)</b> (${HORAS_DIA} h/dia)` : '';
+  const urgTxt = (c) => !c.pedido ? `Sem urgência. No ritmo normal leva ${c.fechado || '—'} dia(s) útil(eis).`
+    : c.urg > 1 ? `Urgência <b>${fmtX(c.urg)}</b> (${c.fechado} ÷ ${c.pedido} dias)${c.semPrazo ? ' · <span style="color:var(--warn)">nem dobrando dá para fazer nesse prazo; cobrado no teto de 2×</span>' : ''}`
+    : `Prazo folgado (${c.fechado} dia(s) no ritmo normal): sem urgência.`;
   const draw = () => {
     const c = calcQuote(st, rates);
     return `<div class="dh">${icon('calc')}<h2>Calculadora de preços</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
@@ -303,17 +283,31 @@ function openCalculator() {
         <div class="small" data-rate-txt>${calcRateTxt()}</div>
         ${st.cliente && !st.outro ? '<div class="small faint">Porte e mercado ficam guardados para este cliente.</div>' : ''}
       </div></div>
-      <div class="stack" style="gap:8px"><span class="lbl">Etapas e horas estimadas</span>
-        ${st.lines.map((x, i) => `<div class="calc-line"><input class="input sm" data-line="${i}" data-k="name" value="${esc(x.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), x.wt, { empty: true, emptyLabel: 'Tipo' })}</select><input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${x.h}" placeholder="Horas" aria-label="Horas"><button class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
-        <div><button class="btn sm" data-add>${icon('plus')} Adicionar etapa</button></div>
-        ${ratio ? `<div class="subtle-box small">Nos seus ${done.length} projeto(s) concluído(s) com estimativa, as horas reais foram em média <b>${Math.round(ratio * 100)}%</b> do estimado. Com esse histórico, ${fmtH(c.h * 3600000)} viraria cerca de <b>${fmtH(c.h * ratio * 3600000)}</b>. <button class="btn sm" data-adjust>Aplicar ajuste</button></div>` : ''}
-      </div>
-      <div class="grid4">
-        <div class="field"><label for="cc-ct">Contingência (%)</label><input id="cc-ct" type="number" class="input" data-st="contingency" value="${st.contingency}" placeholder="0"></div>
-        <div class="field"><label for="cc-mg">Margem (%)</label><input id="cc-mg" type="number" class="input" data-st="margin" value="${st.margin}" placeholder="0"></div>
-        <div class="field"><label for="cc-ri">Rodadas incluídas</label><input id="cc-ri" type="number" class="input" data-st="revInc" value="${st.revInc}"></div>
-        <div class="field"><label for="cc-re">Preço por rodada extra</label><input id="cc-re" class="input" data-st="revExtra" ${moneyAttrs(st.revExtra)} placeholder="${c.r ? fmtMoney(c.r * 4) : 'R$ 0,00'}"></div>
-      </div>
+      <div class="panel"><div class="panel-h"><h3>Horas</h3></div><div class="panel-b stack">
+        <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+          <div class="field" style="max-width:170px"><label for="cc-dur">Duração do vídeo (min)</label><input id="cc-dur" type="number" step="0.5" min="0" class="input" data-st="duracao" value="${st.duracao}" placeholder="não é vídeo"></div>
+          <div class="field"><span class="lbl">Complexidade</span><div class="seg">${COMPLEXIDADES.map(([k, nome, m]) => `<button class="${st.cx === k ? 'on' : ''}" data-cx="${k}">${nome} <span class="faint">${fmtX(m)}</span></button>`).join('')}</div></div>
+          <div class="field" style="max-width:150px"><label for="cc-ap">Aprovações</label><input id="cc-ap" type="number" min="0" class="input" data-st="aprov" value="${st.aprov}" placeholder="0" title="1 h de reunião por aprovação"></div>
+        </div>
+        <span class="lbl">Etapas${c.dur !== 1 ? ' (horas por minuto de vídeo)' : ''}</span>
+        ${st.lines.map((x, i) => `<div class="calc-line"><input class="input sm" data-line="${i}" data-k="name" value="${esc(x.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), x.wt, { empty: true, emptyLabel: 'Tipo' })}</select><input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${x.h}" placeholder="Horas" aria-label="Horas"><span class="small mono muted" data-etv="${i}" title="Valor da etapa (minha parte)">${c.porEtapa[i] ? fmtMoney0(c.porEtapa[i]) : ''}</span><button class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
+        <div class="row between" style="flex-wrap:wrap;gap:8px"><button class="btn sm" data-add>${icon('plus')} Adicionar etapa</button>
+          <label class="small muted">Total das etapas <input type="number" step="0.5" min="0" class="input sm" style="width:90px" data-htot value="${c.hEtapas || ''}" aria-label="Total de horas das etapas" title="Mudar o total espalha a diferença entre as etapas na mesma proporção"> h</label></div>
+        <div class="small" data-h-txt>${horasTxt(c)}</div>
+        ${ratio ? `<div class="subtle-box small">Nos seus ${done.length} projeto(s) concluído(s) com estimativa, as horas reais foram em média <b>${Math.round(ratio * 100)}%</b> do estimado. Com esse histórico, ${fmtH(c.hEtapas * 3600000)} viraria cerca de <b>${fmtH(c.hEtapas * ratio * 3600000)}</b>. <button class="btn sm" data-adjust>Aplicar ajuste</button></div>` : ''}
+      </div></div>
+      <div class="panel"><div class="panel-h"><h3>Prazo, desconto e rodadas</h3></div><div class="panel-b stack">
+        <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+          <div class="field" style="max-width:190px"><label for="cc-pp">Prazo pedido (dias úteis)</label><input id="cc-pp" type="number" min="0" class="input" data-st="pedido" value="${st.pedido}" placeholder="sem pressa"></div>
+          <div class="small grow" data-urg-txt style="padding-bottom:8px">${urgTxt(c)}</div>
+        </div>
+        <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+          <div class="field" style="max-width:200px"><label for="cc-ds">Desconto</label><input id="cc-ds" type="number" min="0" step="${st.descTipo === '%' ? 1 : 50}" class="input" data-st="desc" value="${st.desc}" placeholder="0" ${Number(st.alvo) > 0 ? 'disabled' : ''}></div>
+          <div class="seg" style="margin-bottom:4px">${['R$', '%'].map(k => `<button class="${st.descTipo === k ? 'on' : ''}" data-dtipo="${k}">${k}</button>`).join('')}</div>
+          <div class="field" style="max-width:150px"><label for="cc-ri">Rodadas incluídas</label><input id="cc-ri" type="number" class="input" data-st="revInc" value="${st.revInc}"></div>
+          <div class="field" style="max-width:190px"><label for="cc-re">Preço por rodada extra</label><input id="cc-re" class="input" data-st="revExtra" ${moneyAttrs(st.revExtra)} placeholder="${c.r ? fmtMoney(c.r * 4) : 'R$ 0,00'}"></div>
+        </div>
+      </div></div>
       <div class="panel"><div class="panel-h"><h3>Nota fiscal, BV e terceirizados</h3></div><div class="panel-b stack">
         <div class="enc-row ${st.nf.on ? '' : 'off'}"><label class="check"><input type="checkbox" data-enc="nf" ${st.nf.on ? 'checked' : ''}> <b>Nota fiscal</b></label>
           <label class="enc-f">Imposto <input type="number" min="0" max="99" step="0.5" class="input sm" data-encp="nf" value="${st.nf.pct}" ${st.nf.on ? '' : 'disabled'} aria-label="Imposto em %"> %</label>
@@ -325,9 +319,9 @@ function openCalculator() {
             <div class="row between small"><span class="muted">Total dos custos extras</span><b class="mono">${fmtMoney0(c.B)}</b></div></div></div>
       </div></div>
       <div class="panel"><div class="panel-b">${calcSummaryHTML(c, st)}</div></div>
-      <div class="field"><label for="cc-final">Valor final da proposta</label><input id="cc-final" class="input mono" data-st="final" ${moneyAttrs(st.final)} placeholder="${c.total ? fmtMoney(c.total) : 'R$ 0,00'}"><span class="hint">Deixe vazio para usar o total calculado. Se ajustar, os dois valores ficam registrados.</span></div>
+      <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end"><div class="field" style="max-width:240px"><label for="cc-final">Total final da proposta</label><input id="cc-final" class="input mono" data-st="alvo" ${moneyAttrs(st.alvo)} placeholder="${c.total ? fmtMoney(c.total) : 'R$ 0,00'}"></div>${Number(st.alvo) > 0 ? '<button class="btn sm" data-limpa-alvo>Voltar ao calculado</button>' : ''}<span class="hint grow" style="padding-bottom:8px">Digitando o total, só a sua parte se ajusta (entre as etapas); terceirizado fica igual e BV e imposto são refeitos.</span></div>
     </div>
-    <div class="df"><button class="btn" data-act="close-layer">Fechar</button><button class="btn primary" data-make ${c.total || st.final ? '' : 'disabled'}>${icon('doc')} Criar proposta com este valor</button></div>`;
+    <div class="df"><button class="btn" data-act="close-layer">Fechar</button><button class="btn primary" data-make ${c.total ? '' : 'disabled'}>${icon('doc')} Criar proposta com este valor</button></div>`;
   };
   const l = openLayer({ wide: true, render: draw });
   const keyOf = (i) => i && ((i.dataset.pb && 'pb') || (i.dataset.pbm && 'pbm' + i.dataset.pbm) || i.dataset.st || i.dataset.encp || (i.dataset.line ? 'l' + i.dataset.line + i.dataset.k : null) || (i.dataset.ext ? 'e' + i.dataset.ext + i.dataset.k : null));
@@ -357,16 +351,25 @@ function openCalculator() {
     const c = calcQuote(st, rates);
     const sum = $('.calc-sum4', l.box); if (sum) sum.outerHTML = calcSummaryHTML(c, st);
     const rt = $('[data-rate-txt]', l.box); if (rt) rt.innerHTML = calcRateTxt();
-    const mk = $('[data-make]', l.box); if (mk) mk.disabled = !(c.total || st.final);
+    const mk = $('[data-make]', l.box); if (mk) mk.disabled = !c.total;
     const fin = $('#cc-final', l.box); if (fin) fin.placeholder = c.total ? fmtMoney(c.total) : 'R$ 0,00';
+    const ht = $('[data-h-txt]', l.box); if (ht) ht.innerHTML = horasTxt(c);
+    const ut = $('[data-urg-txt]', l.box); if (ut) ut.innerHTML = urgTxt(c);
+    const tot = $('[data-htot]', l.box); if (tot && t !== tot) tot.value = c.hEtapas || '';
+    c.porEtapa.forEach((v, i) => { const el = $(`[data-etv="${i}"]`, l.box); if (el) el.textContent = v ? fmtMoney0(v) : ''; });
+    const ds = $('#cc-ds', l.box); if (ds) ds.disabled = Number(st.alvo) > 0;
   });
   l.box.addEventListener('change', (e) => {
     const t = e.target;
     if (t.hasAttribute('data-cli')) { st.cliente = t.value; const p = perfis[t.value]; if (p) { st.porte = p.porte || st.porte; st.mercado = p.mercado || st.mercado; } else guardaCliente(); redraw(); return; }
     if (t.hasAttribute('data-outro')) { st.outro = t.checked; redraw(); return; }
+    if (t.hasAttribute('data-htot')) { redistribuiHoras(st.lines, numIn(t.value)); redraw(); return; }
     if (t.type === 'checkbox' || t.tagName === 'SELECT') { if (apply(t)) redraw(); }
   });
   l.box.addEventListener('click', (e) => {
+    const cxb = e.target.closest('[data-cx]'); if (cxb) { st.cx = cxb.dataset.cx; redraw(); return; }
+    const dt = e.target.closest('[data-dtipo]'); if (dt) { st.descTipo = dt.dataset.dtipo; st.desc = ''; redraw(); return; }
+    if (e.target.closest('[data-limpa-alvo]')) { st.alvo = null; redraw(); return; }
     const mb = e.target.closest('[data-mult]'); if (mb) { st[mb.dataset.mult] = mb.dataset.v; guardaCliente(); redraw(); return; }
     if (e.target.closest('[data-add]')) { st.lines.push({ name: '', wt: '', h: '' }); redraw('l' + (st.lines.length - 1) + 'name'); return; }
     const d = e.target.closest('[data-del]'); if (d) { st.lines.splice(Number(d.dataset.del), 1); if (!st.lines.length) st.lines.push({ name: '', wt: '', h: '' }); redraw(); return; }
@@ -374,11 +377,11 @@ function openCalculator() {
     const ed = e.target.closest('[data-extdel]'); if (ed) { st.ext.items.splice(Number(ed.dataset.extdel), 1); if (!st.ext.items.length) st.ext.items.push({ name: '', value: null }); redraw(); return; }
     if (e.target.closest('[data-adjust]')) { st.lines.forEach(x => { if (x.h) x.h = Math.round(Number(x.h) * ratio * 2) / 2; }); redraw(); return; }
     if (e.target.closest('[data-make]')) {
-      const c = calcQuote(st, rates); const value = st.final ?? Math.round(c.total * 100) / 100;
+      const c = calcQuote(st, rates); const value = Math.round(c.total * 100) / 100;
       const wts = st.lines.map(x => x.wt).filter(Boolean);
-      const notes = [st.lines.filter(x => x.h).map(x => `${x.name || 'Etapa'}: ${x.h} h`).join(' · '), st.ext.on ? 'Terceirizados: ' + st.ext.items.filter(x => x.value).map(x => `${x.name || 'custo'} ${fmtMoney(x.value)}`).join(', ') : ''].filter(Boolean).join('\n');
+      const notes = [st.lines.filter(x => x.h).map(x => `${x.name || 'Etapa'}: ${x.h} h`).join(' · ') + (c.dur !== 1 ? ` (por minuto; vídeo de ${st.duracao} min)` : ''), c.urg > 1 ? `Urgência ${fmtX(c.urg)} (prazo pedido ${c.pedido} dias úteis)` : '', st.ext.on ? 'Terceirizados: ' + st.ext.items.filter(x => x.value).map(x => `${x.name || 'custo'} ${fmtMoney(x.value)}`).join(', ') : ''].filter(Boolean).join('\n');
       l.close();
-      openQuote(null, { ...(st.cliente ? { client_id: st.cliente } : {}), value, est_hours: c.h, revisions_included: numIn(st.revInc), extra_revision_price: st.revExtra, work_type_id: wts[0] || '', notes, calc: { computed: Math.round(c.total * 100) / 100, ...clone(st), rate: c.r, A: c.A, B: c.B, C: c.C, D: c.D, h: c.h, base: c.base, cont: c.cont, marg: c.marg, total: c.total } });
+      openQuote(null, { ...(st.cliente ? { client_id: st.cliente } : {}), value, est_hours: c.h, revisions_included: numIn(st.revInc), extra_revision_price: st.revExtra, work_type_id: wts[0] || '', notes, calc: { computed: Math.round(c.total * 100) / 100, ...clone(st), rate: c.r, h: c.h, M: c.M, urg: c.urg, desc: c.desc, mine: c.Mf, B: c.B, C: c.C, D: c.D, horaEf: c.horaEf, total: c.total } });
     }
   });
 }

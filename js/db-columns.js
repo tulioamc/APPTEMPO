@@ -23,6 +23,8 @@ window.DB_COLUMNS = {
   "last_out",
   "resp_med_s",
   "resp_n",
+  "msgs_7d",
+  "fora_30d",
   "created_at",
   "updated_at"
  ],

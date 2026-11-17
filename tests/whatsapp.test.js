@@ -68,3 +68,4 @@ test('tempo de hoje com amigos soma só quem não é de trabalho', () => {
   ] }];
   assert.equal(m.waAmigosHojeMs('2026-11-16'), 25 * 60e3);
 });
+

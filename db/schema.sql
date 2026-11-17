@@ -361,6 +361,7 @@ create table if not exists tempo_wa_contacts (
   last_at timestamptz,                  -- última mensagem na conversa (ordem do WhatsApp)
   last_in timestamptz, last_out timestamptz,   -- última recebida e última enviada (para "Responder [contato]")
   resp_med_s int, resp_n int,           -- tempo médio de resposta (segundos) e em quantas respostas, últimos 30 dias
+  msgs_7d int, fora_30d int,             -- mensagens nos últimos 7 dias e fora do horário (fim de semana, antes das 9h, depois das 19h) nos últimos 30
   created_at timestamptz not null default now(), updated_at timestamptz,
   primary key (user_id, jid)
 );
@@ -389,3 +390,5 @@ create trigger tempo_touch before update on public.tempo_wa_daily for each row e
 -- alter table tempo_status_options drop constraint tempo_status_options_kind_check;
 -- alter table tempo_status_options add constraint tempo_status_options_kind_check check (kind = any (array['work','payment','quote','reimb_pay','reimb_refund','reimb_req','wa_tipo']));
 -- migração: alter table tempo_wa_contacts add column if not exists project_id uuid references tempo_projects(id) on delete set null, add column if not exists last_in timestamptz, add column if not exists last_out timestamptz, add column if not exists resp_med_s int, add column if not exists resp_n int;
+
+-- migração (V2.06.05): alter table tempo_wa_contacts add column if not exists msgs_7d int, add column if not exists fora_30d int;

@@ -371,7 +371,7 @@ table.grid.static tbody tr:hover td { background: transparent; }
 .bar-track { height: 10px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 3px; background: var(--accent, #2E43D6); }
 .bar-row .val { font-family: var(--font-mono); font-size: .9em; white-space: nowrap; }
-.calc-line { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) 90px 34px; gap: 8px; align-items: center; }
+.calc-line { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) 90px 90px 34px; gap: 8px; align-items: center; }
 .calc-sum { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 16px; font-size: .94em; }
 .calc-sum .v { font-family: var(--font-mono); text-align: right; }
 .calc-sum .tot { font-weight: 700; border-top: 1px solid var(--line); padding-top: 6px; }

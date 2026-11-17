@@ -68,6 +68,8 @@ const WACOLS = {
   esperando: { label: 'Esperando você', ico: 'alert', w: 140, sort: c => waEsperando(c) || 0, cell: c => { const ms = waEsperando(c); return ms ? `<span data-tip="${esc(`Última mensagem dele às ${fmtTime(c.last_in)}, sem resposta sua depois`)}">${fmtDur(ms)}</span>` : ''; } },
   tempo: { label: 'Tempo no WhatsApp', ico: 'clock', w: 150, money: true, sort: c => waTempoDe(c), cell: c => { const ms = waTempoDe(c); return ms ? `<span data-tip="${esc(`Tempo com a conversa aberta no WhatsApp\nDesde ${fmtDate(waTempo().desde)}`)}">${fmtDur(ms)}</span>` : ''; } },
   last: { label: 'Última mensagem', ico: 'clock', w: 150, sort: c => c.last_at || '', cell: c => waUltima(c) ? `<span data-tip="Última mensagem na conversa, enviada ou recebida">${esc(waUltima(c))}</span>` : '<span class="faint">—</span>' },
+  semana: { label: 'Mensagens/semana', ico: 'hash', w: 150, money: true, sort: c => c.msgs_7d ?? -1, cell: c => c.msgs_7d ? `<span data-tip="${esc('Mensagens trocadas (enviadas e recebidas) nos últimos 7 dias, de qualquer aparelho')}">${c.msgs_7d}</span>` : '' },
+  fora: { label: 'Fora do horário', ico: 'clock', w: 140, money: true, sort: c => c.fora_30d ?? -1, cell: c => c.fora_30d ? `<span data-tip="${esc(`Mensagens nos últimos 30 dias em fim de semana ou antes das 9h / depois das 19h${waEhTrabalho(c) ? '\nCom contato de trabalho: é trabalho escondido' : ''}`)}" ${waEhTrabalho(c) && c.fora_30d >= 10 ? 'style="color:var(--warn)"' : ''}>${c.fora_30d}</span>` : '' },
   msgs: { label: 'Mensagens enviadas', ico: 'hash', w: 160, money: true, sort: c => waMsgs(c.jid), cell: c => {
     const n = waMsgs(c.jid); if (!n) return '';
     const dias = (db.all('tempo_wa_daily') || []).filter(d => d.jid === c.jid).map(d => d.day).sort();

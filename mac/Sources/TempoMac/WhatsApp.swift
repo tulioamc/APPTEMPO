@@ -281,7 +281,13 @@ final class WhatsAppMonitor {
         sqlite3_bind_int(stmt, 2, WhatsAppMonitor.tipoStatus)
         sqlite3_bind_double(stmt, 3, WhatsAppMonitor.epocaCoreData)
         sqlite3_bind_double(stmt, 4, agora - 30 * 86400)
-        struct Conv { var name = ""; var grupo = false; var lastIn = 0.0; var lastOut = 0.0; var pend: Double? = nil; var soma = 0.0; var n = 0 }
+        struct Conv { var name = ""; var grupo = false; var lastIn = 0.0; var lastOut = 0.0; var pend: Double? = nil; var soma = 0.0; var n = 0; var sem7 = 0; var fora = 0 }
+        // fora do horário: fim de semana ou antes das 9h / depois das 19h (horário do Mac)
+        let cal = Calendar.current
+        func foraDoHorario(_ t: Double) -> Bool {
+            let d = Date(timeIntervalSince1970: t); let wd = cal.component(.weekday, from: d); let h = cal.component(.hour, from: d)
+            return wd == 1 || wd == 7 || h < 9 || h >= 19
+        }
         var conv: [String: Conv] = [:]
         var ordem: [String] = []
         var enviadas: [[String: Any]] = []
@@ -291,6 +297,8 @@ final class WhatsAppMonitor {
             let meu = sqlite3_column_int(stmt, 4) == 1
             if conv[jid] == nil { conv[jid] = Conv(name: texto(stmt, 1) ?? jid, grupo: sqlite3_column_int(stmt, 2) == 1); ordem.append(jid) }
             var c = conv[jid]!
+            if t >= agora - 7 * 86400 { c.sem7 += 1 }
+            if foraDoHorario(t) { c.fora += 1 }
             if meu {
                 c.lastOut = max(c.lastOut, t)
                 if let p = c.pend, !c.grupo { let d = t - p; if d > 0 && d < 72 * 3600 { c.soma += d; c.n += 1 } }
@@ -305,7 +313,7 @@ final class WhatsAppMonitor {
         let lista: [[String: Any]] = ordem.compactMap { jid in
             guard let c = conv[jid] else { return nil }
             return ["jid": jid, "name": c.name, "grupo": c.grupo, "lastIn": c.lastIn, "lastOut": c.lastOut,
-                    "respMed": c.n > 0 ? c.soma / Double(c.n) : 0, "respN": c.n]
+                    "respMed": c.n > 0 ? c.soma / Double(c.n) : 0, "respN": c.n, "sem7": c.sem7, "fora30": c.fora]
         }
         return ["conversas": lista, "enviadas": enviadas]
     }

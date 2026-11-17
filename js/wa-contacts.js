@@ -84,7 +84,8 @@ async function waReportConversas(d) {
     const { data: { user } } = await c.auth.getUser(); if (!user) return;
     const iso = (t) => t > 0 ? new Date(t * 1000).toISOString() : null;
     const linhas = d.conversas.filter(x => x.jid).map(x => ({ user_id: user.id, jid: x.jid, name: x.name || x.jid, tipo: x.grupo ? 'grupo' : 'amigo',
-      last_in: iso(x.lastIn), last_out: iso(x.lastOut), resp_med_s: x.respN > 0 ? Math.round(x.respMed) : null, resp_n: x.respN || 0 }));
+      last_in: iso(x.lastIn), last_out: iso(x.lastOut), resp_med_s: x.respN > 0 ? Math.round(x.respMed) : null, resp_n: x.respN || 0,
+      ...(x.sem7 !== undefined ? { msgs_7d: x.sem7 || 0, fora_30d: x.fora30 || 0 } : {}) }));
     if (linhas.length) await c.from('tempo_wa_contacts').upsert(linhas, { onConflict: 'user_id,jid' });
     await db.refresh();
   } catch (e) { console.warn('waReportConversas', e); }
@@ -133,3 +134,4 @@ function waAmigosHojeMs(dia = ymd(new Date())) {
     .reduce((t, r) => t + Math.max(0, new Date(r.to) - new Date(r.from)), 0);
 }
 const waAmigosLimiteMin = () => Number(db.setting('waAmigosMin', 30)) || 30;
+
