@@ -242,8 +242,22 @@ function sugHorasHTML(name) {
    B = custos extras (terceirizados)
    C = BV (comissão) sobre A + B
    D = imposto da nota sobre A + B + C (por fora; ou por dentro, se marcado)  */
+/* Valor-hora = hora base × porte do cliente × mercado (definido em out/2026; Recife sem multiplicador).
+   "Outro valor" ignora os multiplicadores. Tudo ajustável na calculadora e salvo em 'precoBase'. */
+const PRECO_PADRAO = { hora: 200, porte: { pequeno: 0.85, medio: 1.15, grande: 1.5 }, mercado: { local: 1, nacional: 1.5, internacional: 2.5 } };
+const PORTES = [['pequeno', 'Pequeno'], ['medio', 'Médio'], ['grande', 'Grande']];
+const MERCADOS = [['local', 'Local (Recife)'], ['nacional', 'Nacional'], ['internacional', 'Internacional']];
+function precoBase() {
+  const v = db.setting('precoBase', null) || {};
+  return { hora: v.hora ?? PRECO_PADRAO.hora, porte: { ...PRECO_PADRAO.porte, ...(v.porte || {}) }, mercado: { ...PRECO_PADRAO.mercado, ...(v.mercado || {}) } };
+}
+function calcRate(st, pb) {
+  if (st.outro) return Number(st.customRate) || 0;
+  return (Number(pb.hora) || 0) * (Number(pb.porte[st.porte]) || 1) * (Number(pb.mercado[st.mercado]) || 1);
+}
+const fmtX = (n) => String(Math.round(Number(n || 0) * 100) / 100).replace('.', ',') + '×';
 function calcQuote(st, rates) {
-  const r = st.profile === "outro" ? (Number(st.customRate) || 0) : (Number(rates[st.profile]) || 0); const h = st.lines.reduce((s, x) => s + (Number(x.h) || 0), 0);
+  const r = calcRate(st, rates); const h = st.lines.reduce((s, x) => s + (Number(x.h) || 0), 0);
   const base = h * r; const cont = base * (Number(st.contingency) || 0) / 100; const marg = (base + cont) * (Number(st.margin) || 0) / 100;
   const A = base + cont + marg;
   const B = st.ext.on ? st.ext.items.reduce((s, x) => s + (Number(x.value) || 0), 0) : 0;
@@ -257,7 +271,7 @@ function calcSummaryHTML(c, st) {
   const line = (lab, rate, v, sub) => `<span class="${sub ? 'muted small sub' : ''}">${lab}</span><span class="v muted small">${rate}</span><span class="v">${fmtMoney0(v)}</span><span class="v faint small">${sub ? '' : pct(v)}</span>`;
   return `<div class="calc-sum4">
     <span class="lbl">Item</span><span class="lbl v">Taxa</span><span class="lbl v">Valor</span><span class="lbl v">% do total</span>
-    ${line('<b>Subtotal</b> do trabalho', fmtH(c.h * 3600000) + ' × ' + (fmtMoney(c.r) || 'R$ —'), c.A)}
+    ${line('<b>Subtotal</b> do trabalho', fmtH(c.h * 3600000) + ' × ' + (fmtMoney(c.r) || 'R$ —') + '/h', c.A)}
     ${line('↳ horas × valor-hora', '', c.base, 1)}${c.cont ? line('↳ contingência', (st.contingency || 0) + '%', c.cont, 1) : ''}${c.marg ? line('↳ margem', (st.margin || 0) + '%', c.marg, 1) : ''}
     ${line('<b>Terceirizado</b> (custos extras)', st.ext.on ? st.ext.items.filter(x => x.value).length + ' item(ns)' : 'desligado', c.B)}
     ${line('<b>Comissão</b> (BV)', st.bv.on ? (st.bv.pct || 0) + '% de A+B' : 'desligado', c.C)}
@@ -266,19 +280,29 @@ function calcSummaryHTML(c, st) {
   </div>`;
 }
 function openCalculator() {
-  const rates = db.setting('rates', { grande: null, medio: null, pequeno: null });
-  const st = { profile: 'medio', lines: [{ name: 'Criação', wt: '', h: '' }], margin: '', contingency: '', revInc: 2, revExtra: null, final: null,
+  const rates = precoBase();
+  const perfis = db.setting('clientePreco', {}) || {};
+  const st = { cliente: '', porte: 'medio', mercado: 'local', outro: false, lines: [{ name: 'Criação', wt: '', h: '' }], margin: '', contingency: '', revInc: 2, revExtra: null, final: null,
     nf: { on: true, pct: 9, inside: false }, bv: { on: false, pct: 10 }, ext: { on: false, items: [{ name: '', value: null }] } };
   const done = projects().filter(p => statusCat(p.status_id) === 'done' && p.estimated_hours && projectMs(p.id));
   const ratio = done.length ? done.reduce((s, p) => s + hours(projectMs(p.id)) / p.estimated_hours, 0) / done.length : null;
+  const calcRateTxt = () => st.outro ? `Valor-hora: <b>${fmtMoney(calcRate(st, rates)) || 'R$ —'}</b>`
+    : `${fmtMoney(rates.hora) || 'R$ —'} × ${fmtX(rates.porte[st.porte])} (porte) × ${fmtX(rates.mercado[st.mercado])} (mercado) = <b>${fmtMoney(calcRate(st, rates)) || 'R$ —'}/h</b>`;
   const draw = () => {
     const c = calcQuote(st, rates);
     return `<div class="dh">${icon('calc')}<h2>Calculadora de preços</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db">
-      <div class="panel"><div class="panel-h"><h3>Valor-hora por perfil de cliente</h3><span class="small muted">fica salvo nas preferências</span></div><div class="panel-b grid3">
-        ${[['grande', 'Grande'], ['medio', 'Médio'], ['pequeno', 'Pequeno']].map(([k, lab]) => `<div class="field"><label for="rt-${k}">${lab} (por hora)</label><input id="rt-${k}" class="input mono" data-rate="${k}" ${moneyAttrs(rates[k])} placeholder="Defina"></div>`).join('')}
+      <div class="panel"><div class="panel-h"><h3>Valor-hora</h3><span class="small muted">hora base e multiplicadores ficam salvos</span></div><div class="panel-b stack">
+        <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+          <div class="field" style="min-width:220px"><label for="cc-cli">Cliente</label><select id="cc-cli" class="input" data-cli>${options(db.all('tempo_clients').filter(x => !x.archived).sort((x, y) => x.name.localeCompare(y.name)), st.cliente, { empty: true, emptyLabel: 'Sem cliente' })}</select></div>
+          <div class="field" style="max-width:180px"><label for="cc-hb">Hora base</label><input id="cc-hb" class="input mono" data-pb="hora" ${moneyAttrs(rates.hora)} ${st.outro ? 'disabled' : ''}></div>
+          <label class="check small" style="padding-bottom:8px"><input type="checkbox" data-outro ${st.outro ? 'checked' : ''}> Outro valor-hora</label>
+          ${st.outro ? `<div class="field" style="max-width:180px"><label for="cc-cr">Valor-hora deste orçamento</label><input id="cc-cr" class="input mono" data-st="customRate" ${moneyAttrs(st.customRate)}></div>` : ''}
+        </div>
+        ${st.outro ? '' : [['porte', 'Porte', PORTES], ['mercado', 'Mercado', MERCADOS]].map(([k, lab, lista]) => `<div class="row" style="flex-wrap:wrap;gap:10px"><span class="lbl" style="min-width:70px">${lab}</span><div class="seg">${lista.map(([v, nome]) => `<button class="${st[k] === v ? 'on' : ''}" data-mult="${k}" data-v="${v}">${nome} <span class="faint">${fmtX(rates[k][v])}</span></button>`).join('')}</div><label class="small muted">multiplicador <input type="number" step="0.05" min="0" class="input sm" style="width:80px" data-pbm="${k}" value="${rates[k][st[k]]}" aria-label="Multiplicador de ${lab.toLowerCase()}"></label></div>`).join('')}
+        <div class="small" data-rate-txt>${calcRateTxt()}</div>
+        ${st.cliente && !st.outro ? '<div class="small faint">Porte e mercado ficam guardados para este cliente.</div>' : ''}
       </div></div>
-      <div class="row"><span class="lbl">Perfil deste cliente</span><div class="seg">${[['grande', 'Grande'], ['medio', 'Médio'], ['pequeno', 'Pequeno'], ['outro', 'Outro valor']].map(([k, lab]) => `<button class="${st.profile === k ? 'on' : ''}" data-prof="${k}">${lab}</button>`).join('')}</div>${st.profile === 'outro' ? `<div class="field" style="max-width:200px"><label for="cc-cr">Valor-hora deste orçamento</label><input id="cc-cr" class="input mono" data-st="customRate" ${moneyAttrs(st.customRate)}></div>` : ''}${st.profile !== 'outro' && !rates[st.profile] ? '<span class="small" style="color:var(--warn)">Defina o valor-hora deste perfil.</span>' : ''}</div>
       <div class="stack" style="gap:8px"><span class="lbl">Etapas e horas estimadas</span>
         ${st.lines.map((x, i) => `<div class="calc-line"><input class="input sm" data-line="${i}" data-k="name" value="${esc(x.name)}" placeholder="Etapa" aria-label="Etapa"><select class="input sm" data-line="${i}" data-k="wt" aria-label="Tipo">${options(workTypes(), x.wt, { empty: true, emptyLabel: 'Tipo' })}</select><input type="number" step="0.5" min="0" class="input sm" data-line="${i}" data-k="h" value="${x.h}" placeholder="Horas" aria-label="Horas"><button class="btn sm icon ghost" data-del="${i}" aria-label="Remover">${icon('x')}</button></div>`).join('')}
         <div><button class="btn sm" data-add>${icon('plus')} Adicionar etapa</button></div>
@@ -306,20 +330,44 @@ function openCalculator() {
     <div class="df"><button class="btn" data-act="close-layer">Fechar</button><button class="btn primary" data-make ${c.total || st.final ? '' : 'disabled'}>${icon('doc')} Criar proposta com este valor</button></div>`;
   };
   const l = openLayer({ wide: true, render: draw });
-  const keyOf = (i) => i && (i.dataset.rate || i.dataset.st || i.dataset.encp || (i.dataset.line ? 'l' + i.dataset.line + i.dataset.k : null) || (i.dataset.ext ? 'e' + i.dataset.ext + i.dataset.k : null));
+  const keyOf = (i) => i && ((i.dataset.pb && 'pb') || (i.dataset.pbm && 'pbm' + i.dataset.pbm) || i.dataset.st || i.dataset.encp || (i.dataset.line ? 'l' + i.dataset.line + i.dataset.k : null) || (i.dataset.ext ? 'e' + i.dataset.ext + i.dataset.k : null));
   const redraw = (focusKey) => { const a = document.activeElement; const key = focusKey || keyOf(a); l.refresh(); if (key) { const el = $$('input,select', l.box).find(i => keyOf(i) === key); if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} } } };
+  /* Lê o campo para o estado. O Safari/app do Mac não dispara "change" em campo de dinheiro (o valor é reformatado
+     a cada tecla), por isso o estado é atualizado no "input"; só o resumo e o botão mudam, sem redesenhar o campo. */
+  let salvaRates = null;
+  const salvar = () => { clearTimeout(salvaRates); salvaRates = setTimeout(() => db.setSetting('precoBase', clone(rates)), 600); };
+  // porte e mercado ficam guardados por cliente
+  const guardaCliente = () => { if (!st.cliente) return; perfis[st.cliente] = { porte: st.porte, mercado: st.mercado }; db.setSetting('clientePreco', { ...perfis }); };
+  const apply = (t) => {
+    if (t.dataset.pb) { rates.hora = moneyVal(t); salvar(); }
+    else if (t.dataset.pbm) { const k = t.dataset.pbm; rates[k][st[k]] = numIn(t.value) ?? 1; salvar(); }
+    else if (t.dataset.st) st[t.dataset.st] = t.dataset.money !== undefined ? moneyVal(t) : t.value;
+    else if (t.dataset.line) st.lines[t.dataset.line][t.dataset.k] = t.value;
+    else if (t.dataset.enc) st[t.dataset.enc].on = t.checked;
+    else if (t.dataset.encp) st[t.dataset.encp].pct = numIn(t.value) ?? 0;
+    else if (t.hasAttribute('data-inside')) st.nf.inside = t.checked;
+    else if (t.dataset.ext) st.ext.items[t.dataset.ext][t.dataset.k] = t.dataset.money !== undefined ? moneyVal(t) : t.value;
+    else return false;
+    return true;
+  };
+  // enquanto digita: só o resumo muda (o campo continua com o foco)
+  l.box.addEventListener('input', (e) => {
+    const t = e.target; if (t.type === 'checkbox' || t.tagName === 'SELECT') return;
+    if (!apply(t)) return;
+    const c = calcQuote(st, rates);
+    const sum = $('.calc-sum4', l.box); if (sum) sum.outerHTML = calcSummaryHTML(c, st);
+    const rt = $('[data-rate-txt]', l.box); if (rt) rt.innerHTML = calcRateTxt();
+    const mk = $('[data-make]', l.box); if (mk) mk.disabled = !(c.total || st.final);
+    const fin = $('#cc-final', l.box); if (fin) fin.placeholder = c.total ? fmtMoney(c.total) : 'R$ 0,00';
+  });
   l.box.addEventListener('change', (e) => {
     const t = e.target;
-    if (t.dataset.rate) { rates[t.dataset.rate] = moneyVal(t); db.setSetting('rates', { ...rates }); redraw(); }
-    else if (t.dataset.st) { st[t.dataset.st] = t.dataset.money !== undefined ? moneyVal(t) : t.value; redraw(); }
-    else if (t.dataset.line) { st.lines[t.dataset.line][t.dataset.k] = t.value; redraw(); }
-    else if (t.dataset.enc) { st[t.dataset.enc].on = t.checked; redraw(); }
-    else if (t.dataset.encp) { st[t.dataset.encp].pct = numIn(t.value) ?? 0; redraw(); }
-    else if (t.hasAttribute('data-inside')) { st.nf.inside = t.checked; redraw(); }
-    else if (t.dataset.ext) { st.ext.items[t.dataset.ext][t.dataset.k] = t.dataset.money !== undefined ? moneyVal(t) : t.value; redraw(); }
+    if (t.hasAttribute('data-cli')) { st.cliente = t.value; const p = perfis[t.value]; if (p) { st.porte = p.porte || st.porte; st.mercado = p.mercado || st.mercado; } else guardaCliente(); redraw(); return; }
+    if (t.hasAttribute('data-outro')) { st.outro = t.checked; redraw(); return; }
+    if (t.type === 'checkbox' || t.tagName === 'SELECT') { if (apply(t)) redraw(); }
   });
   l.box.addEventListener('click', (e) => {
-    const pf = e.target.closest('[data-prof]'); if (pf) { st.profile = pf.dataset.prof; redraw(); return; }
+    const mb = e.target.closest('[data-mult]'); if (mb) { st[mb.dataset.mult] = mb.dataset.v; guardaCliente(); redraw(); return; }
     if (e.target.closest('[data-add]')) { st.lines.push({ name: '', wt: '', h: '' }); redraw('l' + (st.lines.length - 1) + 'name'); return; }
     const d = e.target.closest('[data-del]'); if (d) { st.lines.splice(Number(d.dataset.del), 1); if (!st.lines.length) st.lines.push({ name: '', wt: '', h: '' }); redraw(); return; }
     const ea = e.target.closest('[data-extadd]'); if (ea) { const i = Number(ea.dataset.extadd) + 1; st.ext.items.splice(i, 0, { name: '', value: null }); redraw('e' + i + 'name'); return; }
@@ -330,7 +378,7 @@ function openCalculator() {
       const wts = st.lines.map(x => x.wt).filter(Boolean);
       const notes = [st.lines.filter(x => x.h).map(x => `${x.name || 'Etapa'}: ${x.h} h`).join(' · '), st.ext.on ? 'Terceirizados: ' + st.ext.items.filter(x => x.value).map(x => `${x.name || 'custo'} ${fmtMoney(x.value)}`).join(', ') : ''].filter(Boolean).join('\n');
       l.close();
-      openQuote(null, { value, est_hours: c.h, revisions_included: numIn(st.revInc), extra_revision_price: st.revExtra, work_type_id: wts[0] || '', notes, calc: { computed: Math.round(c.total * 100) / 100, ...clone(st), rate: c.r, A: c.A, B: c.B, C: c.C, D: c.D, h: c.h, base: c.base, cont: c.cont, marg: c.marg, total: c.total } });
+      openQuote(null, { ...(st.cliente ? { client_id: st.cliente } : {}), value, est_hours: c.h, revisions_included: numIn(st.revInc), extra_revision_price: st.revExtra, work_type_id: wts[0] || '', notes, calc: { computed: Math.round(c.total * 100) / 100, ...clone(st), rate: c.r, A: c.A, B: c.B, C: c.C, D: c.D, h: c.h, base: c.base, cont: c.cont, marg: c.marg, total: c.total } });
     }
   });
 }
