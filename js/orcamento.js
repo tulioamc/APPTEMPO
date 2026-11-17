@@ -13,6 +13,54 @@ const COMPLEXIDADES = [['simples', 'Simples', 1], ['padrao', 'Padrão', 1.3], ['
 const URGENCIA_TETO = 2;
 const HORAS_DIA = 8;
 
+/* Modelos por subcategoria (decididos em 21/10/2026). Horas de trabalho e prazo do cliente (dias úteis) por etapa;
+   motion é por minuto de vídeo. ap = etapa termina com aprovação do cliente (+1 h de reunião, ajuste previsto);
+   par = corre em paralelo com a anterior (não soma prazo). Terceirizados ficam com 0 h (custo na linha "Terceirizado"). */
+const MODELOS = {
+  identidade: { nome: 'Identidade visual', etapas: [
+    { name: 'Pesquisa e moodboard', wt: 'Branding / marcas', h: 2, prazo: 2, ap: true },
+    { name: 'Marca', wt: 'Branding / marcas', h: 12, prazo: 4 },
+    { name: 'Sistema da identidade e aplicações', wt: 'Branding / marcas', h: 10, prazo: 3 },
+    { name: 'Apresentação', wt: 'Design gráfico', h: 10, prazo: 3, ap: true }] },
+  manual: { nome: 'Manual de marca', etapas: [{ name: 'Manual da marca', wt: 'Branding / marcas', h: 16, prazo: 5, ap: true }] },
+  motion2d: { nome: 'Motion 2D', video: true, etapas: [
+    { name: 'Roteiro', wt: '', h: 0, prazo: 5, ap: true, terc: true },
+    { name: 'Style frames', wt: 'Direção de arte', h: 10, prazo: 5, ap: true },
+    { name: 'Storyboard', wt: 'Ilustração 2D', h: 16, prazo: 5, ap: true },
+    { name: 'Locução', wt: '', h: 0, prazo: 0, par: true, terc: true },
+    { name: 'Animação 2D', wt: 'Animação 2D', h: 16, prazo: 5 },
+    { name: 'Trilha e sound effects', wt: '', h: 0, prazo: 1, ap: true, terc: true }] },
+  motion3d: { nome: 'Motion 3D', video: true, etapas: [
+    { name: 'Roteiro', wt: '', h: 0, prazo: 5, ap: true, terc: true },
+    { name: 'Style frames', wt: 'Direção de arte', h: 10, prazo: 5, ap: true },
+    { name: 'Modelagem e storyboard', wt: 'Modelagem 3D', h: 20, prazo: 7.5, ap: true },
+    { name: 'Locução', wt: '', h: 0, prazo: 0, par: true, terc: true },
+    { name: 'Animação 3D', wt: 'Animação 3D', h: 16, prazo: 5 },
+    { name: 'Render 3D', wt: '', h: 0, prazo: 2 },
+    { name: 'Animação 2D', wt: 'Animação 2D', h: 16, prazo: 5 },
+    { name: 'Trilha e sound effects', wt: '', h: 0, prazo: 1, ap: true, terc: true }] },
+};
+/* Aplica o modelo nas etapas da calculadora; tipo de trabalho pelo nome (o que não existir fica em branco). */
+function aplicaModelo(st, chave, tipos = []) {
+  const mo = MODELOS[chave]; if (!mo) return st;
+  const wtId = (n) => (tipos.find(t => t.name === n) || {}).id || '';
+  st.modelo = chave;
+  st.lines = mo.etapas.map(e => ({ name: e.name, wt: wtId(e.wt), h: e.h || '', prazo: e.prazo || '', ap: !!e.ap, par: !!e.par }));
+  st.aprov = mo.etapas.filter(e => e.ap).length;
+  if (mo.video && !(Number(st.duracao) > 0)) st.duracao = 1;
+  if (!mo.video) st.duracao = '';
+  return st;
+}
+/* Prazo das etapas (dias úteis): fechado = soma das etapas em sequência × duração; provável = + ajuste de 40% do prazo
+   de cada etapa com aprovação (o mínimo combinado). Sem prazos nas etapas, vale horas ÷ 8 h. */
+function prazosEtapas(st, h) {
+  const dur = durMult(st.duracao);
+  const temPrazo = st.lines.some(x => Number(x.prazo) > 0);
+  if (!temPrazo) { const f = h ? Math.max(1, Math.ceil(h / HORAS_DIA)) : 0; return { fechado: f, provavel: f, doModelo: false }; }
+  const seq = st.lines.filter(x => !x.par).reduce((s, x) => s + (Number(x.prazo) || 0), 0) * dur;
+  const aj = st.lines.filter(x => x.ap).reduce((s, x) => s + 0.4 * (Number(x.prazo) || 0), 0) * dur;
+  return { fechado: Math.ceil(seq), provavel: Math.ceil(seq + aj), doModelo: true };
+}
 function precoBase() {
   const v = db.setting('precoBase', null) || {};
   return { hora: v.hora ?? PRECO_PADRAO.hora, porte: { ...PRECO_PADRAO.porte, ...(v.porte || {}) }, mercado: { ...PRECO_PADRAO.mercado, ...(v.mercado || {}) } };
@@ -34,7 +82,7 @@ function calcQuote(st, pb) {
   const h = hEtapas * dur * cx + reun;
   const M = h * r;
   // urgência: prazo fechado = o trabalho sozinho no ritmo normal (horas ÷ 8 h por dia útil)
-  const fechado = h ? Math.max(1, Math.ceil(h / HORAS_DIA)) : 0;
+  const pz = prazosEtapas(st, h); const fechado = pz.fechado;
   const pedido = Number(st.pedido) || 0;
   const urgBruta = pedido > 0 && fechado && pedido < fechado ? fechado / pedido : 1;
   const urg = Math.min(URGENCIA_TETO, urgBruta);
@@ -55,7 +103,7 @@ function calcQuote(st, pb) {
   const pre = Mf + B + C; const D = pre * nfF - pre;
   // etapas com o valor proporcional da minha parte final (o ajuste do total se espalha entre elas)
   const porEtapa = st.lines.map(x => hEtapas ? Mf * (Number(x.h) || 0) / hEtapas : 0);
-  return { r, hEtapas, dur, cx, reun, h, M, fechado, pedido, urgBruta, urg, U, Mu, desc, Mf, B, C, D,
+  return { r, hEtapas, dur, cx, reun, h, M, fechado, provavel: pz.provavel, prazoModelo: pz.doModelo, pedido, urgBruta, urg, U, Mu, desc, Mf, B, C, D,
     total: pre + D, horaEf: h ? Mf / h : 0, porEtapa, semPrazo: urgBruta > URGENCIA_TETO };
 }
 /* Muda o total de horas das etapas mantendo a proporção entre elas (ex.: 6/18/6 com 40 h vira 8/24/8). */

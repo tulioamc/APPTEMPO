@@ -371,7 +371,7 @@ table.grid.static tbody tr:hover td { background: transparent; }
 .bar-track { height: 10px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 3px; background: var(--accent, #2E43D6); }
 .bar-row .val { font-family: var(--font-mono); font-size: .9em; white-space: nowrap; }
-.calc-line { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) 90px 90px 34px; gap: 8px; align-items: center; }
+.calc-line { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) 80px 80px 90px 34px; gap: 8px; align-items: center; }
 .calc-sum { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 16px; font-size: .94em; }
 .calc-sum .v { font-family: var(--font-mono); text-align: right; }
 .calc-sum .tot { font-weight: 700; border-top: 1px solid var(--line); padding-top: 6px; }
@@ -561,6 +561,8 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 .enc-row.off .enc-f, .enc-row.off .stack { opacity: .5; }
 .enc-f { display: inline-flex; align-items: center; gap: 6px; font-size: .92em; color: var(--fg-2); }
 .enc-f .input { width: 74px; }
+.calc-head { padding: 0 2px; }
+.calc-head span:nth-child(5) { text-align: left; }
 .calc-sum4 { display: grid; grid-template-columns: minmax(0,1fr) auto auto auto; gap: 7px 16px; align-items: baseline; font-size: .94em; }
 .calc-sum4 .v { text-align: right; font-family: var(--font-mono); white-space: nowrap; }
 .calc-sum4 .sub { padding-left: 16px; }
@@ -1259,3 +1261,10 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 
 /* Modo foco: botão ao lado do "Iniciar registro" */
 .btn.foco-on { border-color: #9C36B5; color: #862E9C; background: #F8F0FC; }
+/* campo de busca (abre o dropdown com busca) com cara de input */
+.combo-field { text-align: left; cursor: pointer; display: flex; align-items: center; min-height: 38px; }
+/* proposta em PDF: formulário à esquerda, prévia A4 à direita */
+.prop-grid { display: grid; grid-template-columns: minmax(0, 1fr) 480px; gap: 20px; align-items: start; }
+.prop-wrap { position: sticky; top: 0; width: 480px; height: 679px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.prop-prev { width: 794px; height: 1123px; border: 0; transform: scale(.6045); transform-origin: 0 0; }
+@media (max-width: 1100px) { .prop-grid { grid-template-columns: 1fr; } }

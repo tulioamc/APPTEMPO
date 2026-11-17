@@ -173,7 +173,7 @@ ACTIONS['an-pdf'] = () => {
   if (!w) { toast('Permita janelas pop-up para gerar o PDF.'); return; }
   w.document.write(html); w.document.close(); setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 400);
 };
-if (window.TempoBridge) window.TempoBridge.pdfDone = (ok) => toast(ok ? 'PDF salvo em iCloud › Tempo › Análises' : 'Não consegui gerar o PDF.');
+if (window.TempoBridge) window.TempoBridge.pdfDone = (ok) => toast(ok ? 'PDF salvo no iCloud, na pasta Tempo' : 'Não consegui gerar o PDF.');
 
 VIEWS.analises = () => {
   const { t, lista, item } = anAtual();

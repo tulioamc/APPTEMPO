@@ -62,3 +62,35 @@ test('proposta abre com a calculadora; proposta antiga abre no simplificado', ()
   const h2 = render();
   assert.ok(!h2.includes('Hora base') && h2.includes('Horas estimadas'), 'antiga abre no simplificado');
 });
+
+test('modelos: identidade 34 h; motion 2D 42 h/min com 4 aprovações e prazo fechado por etapas', () => {
+  const m = load(['js/store.js', 'js/domain.js', 'js/orcamento.js'], ['db', 'calcQuote', 'precoBase', 'aplicaModelo'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty();
+  const st = { porte: 'medio', mercado: 'local', lines: [], cx: 'simples', nf: { on: false }, bv: { on: false }, ext: { on: false, items: [] } };
+  m.aplicaModelo(st, 'identidade', [{ id: 'b', name: 'Branding / marcas' }]);
+  assert.equal(st.lines.length, 4); assert.equal(st.lines[0].wt, 'b'); assert.equal(st.aprov, 2);
+  let c = m.calcQuote(st, m.precoBase());
+  assert.equal(c.hEtapas, 34); assert.equal(c.fechado, 12);
+  m.aplicaModelo(st, 'motion2d', []);
+  assert.equal(st.duracao, 1); assert.equal(st.aprov, 4);
+  c = m.calcQuote(st, m.precoBase());
+  assert.equal(c.hEtapas, 42); assert.equal(c.h, 46); assert.equal(c.fechado, 21);
+  assert.ok(c.provavel > c.fechado);
+  st.duracao = 2; c = m.calcQuote(st, m.precoBase());
+  assert.equal(c.h, 88); assert.equal(c.fechado, 42);
+});
+
+test('proposta em PDF: itens por etapa somam o total e condições padrão', () => {
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/orcamento.js', 'js/proposta.js'], ['db', 'propItens', 'propCondicoes', 'propHTML', 'propEstado'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty();
+  const x = { name: 'ID Visual', value: 10000, revisions_included: 2, client_id: null,
+    calc: { lines: [{ name: 'Pesquisa', h: 2, prazo: 2 }, { name: 'Marca', h: 12, prazo: 4 }, { name: 'Apresentação', h: 10, prazo: 3 }], cx: 'simples', porte: 'medio', mercado: 'local', nf: { on: false }, bv: { on: false }, ext: { on: false, items: [] } } };
+  const it = m.propItens(x);
+  assert.equal(it.length, 3); assert.equal(it.reduce((s, i) => s + i.valor, 0), 10000);
+  const c = m.propCondicoes(x);
+  assert.ok(c[0].includes('três etapas: pesquisa, marca e apresentação'));
+  assert.ok(c.some(l => l.includes('9 dias úteis')));
+  assert.ok(c.some(l => l.includes('duas rodadas de ajustes por etapa')));
+  const html = m.propHTML(m.propEstado(x));
+  assert.ok(html.includes('DM Mono') && html.includes('Orçamento') && html.includes('10.000'));
+});

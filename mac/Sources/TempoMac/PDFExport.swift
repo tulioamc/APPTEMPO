@@ -11,17 +11,17 @@ final class PDFExport: NSObject, WKNavigationDelegate {
     private var done: ((URL?) -> Void)?
     private var euMesmo: PDFExport?   // segura o objeto vivo até terminar
 
-    static var pasta: URL {
-        if ICloudTerapias.disponivel { return ICloudTerapias.root.appendingPathComponent("Tempo/Análises") }
-        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents/Tempo/Análises")
+    static func pasta(_ sub: String = "Análises") -> URL {
+        if ICloudTerapias.disponivel { return ICloudTerapias.root.appendingPathComponent("Tempo/\(sub)") }
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents/Tempo/\(sub)")
     }
 
-    static func gerar(html: String, nome: String, done: @escaping (URL?) -> Void) {
+    static func gerar(html: String, nome: String, pasta sub: String = "Análises", done: @escaping (URL?) -> Void) {
         let e = PDFExport()
         e.euMesmo = e
         e.done = done
         let limpo = nome.components(separatedBy: CharacterSet(charactersIn: "/:\\")).joined(separator: "-")
-        let dir = pasta
+        let dir = pasta(sub)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         e.destino = dir.appendingPathComponent((limpo.isEmpty ? "Analise" : limpo) + ".pdf")
         let w = WKWebView(frame: NSRect(x: 0, y: 0, width: 794, height: 1123))
