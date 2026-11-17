@@ -78,7 +78,8 @@ function calcQuote(st, pb) {
   const r = calcRate(st, pb);
   const hEtapas = st.lines.reduce((s, x) => s + (Number(x.h) || 0), 0);
   const dur = durMult(st.duracao), cx = cxMult(st.cx);
-  const reun = Math.max(0, Number(st.aprov) || 0);
+  // reuniões de aprovação somam horas (não multiplicam): quantidade × horas por reunião (padrão 1 h)
+  const reun = Math.max(0, Number(st.aprov) || 0) * (st.hAprov === '' || st.hAprov == null ? 1 : Math.max(0, Number(st.hAprov) || 0));
   const h = hEtapas * dur * cx + reun;
   const M = h * r;
   // urgência: prazo fechado = o trabalho sozinho no ritmo normal (horas ÷ 8 h por dia útil)
