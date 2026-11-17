@@ -130,6 +130,12 @@ function diasUteisAte(data, hoje = new Date()) {
     const util = typeof planoDiaUtil === 'function' ? planoDiaUtil(k) : ![0, 6].includes(d.getDay()); if (util) n++; }
   return n;
 }
+/* Data em que caem n dias úteis a partir de amanhã (inverso de diasUteisAte). */
+function dataAposDiasUteis(n, hoje = new Date()) {
+  const d = new Date(hoje); d.setHours(12, 0, 0, 0); let k = 0;
+  for (let i = 0; i < 800 && k < n; i++) { d.setDate(d.getDate() + 1); const y = ymd(d); if (typeof planoDiaUtil === 'function' ? planoDiaUtil(y) : ![0, 6].includes(d.getDay())) k++; }
+  return ymd(d);
+}
 /* Prazo pedido de uma entrega: data (vira dias úteis) ou número de dias úteis. Proposta antiga com um prazo só vale para a única entrega. */
 const pedidoGrupo = (st, g, gs) => g.pedidoData ? diasUteisAte(g.pedidoData) : Number(g.pedido) || (gs.length === 1 ? Number(st.pedido) || 0 : 0);
 const urgDe = (fechado, pedido) => { const bruta = pedido > 0 && fechado && pedido < fechado ? fechado / pedido : 1; return { bruta, urg: Math.min(URGENCIA_TETO, bruta) }; };

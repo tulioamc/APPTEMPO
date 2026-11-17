@@ -25,6 +25,9 @@ function propAgenda(x, extraH = 0) {
   for (let i = 0; i < 400 && falta > 0.05; i++) { falta -= Math.max(0, cfg.horasDia - usado(ymd(fimAg))); dias++; if (falta > 0.05) fimAg = proxUtil(fimAg); }
   let fimPz = new Date(d); for (let i = 1; i < Math.max(1, k.fechado); i++) fimPz = proxUtil(fimPz);
   const fim = fimAg > fimPz ? fimAg : fimPz;
+  // prazo pedido pelo cliente manda na data de entrega
+  const gs = gruposDe(x.calc); const peds = gs.map(g => pedidoGrupo(x.calc, g, gs)).filter(Boolean);
+  if (peds.length) return { inicio, fim: dataAposDiasUteis(Math.max(...peds)), apertado: fimAg > new Date(dataAposDiasUteis(Math.max(...peds)) + 'T12:00:00') };
   return { inicio, fim: ymd(fim), apertado: fimAg > fimPz };
 }
 const PROP_MESES = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
@@ -106,16 +109,18 @@ function propCondicoes(x) {
       const et = x.calc.lines.filter(l => l.grp === g.id && (l.name || '').trim()).map(l => l.name.trim().toLowerCase().replace(/\b2d\b/g, '2D').replace(/\b3d\b/g, '3D'));
       const base = (g.nome || `Entrega ${i + 1}`).replace(/\s*\(cópia\)\s*/gi, '').trim();
       const dur = grupoVideo(g) ? durMult(g.duracao ?? 1) : null;
-      const sig = base + '|' + et.join('|') + '|' + (dur || '');
-      const pz = prazoGrupo(x.calc, g.id);
-      const b = blocos.find(y => y.sig === sig); if (b) b.n++; else blocos.push({ sig, base, et, pz, dur, video: grupoVideo(g), n: 1 });
+      const ped = pedidoGrupo(x.calc, g, gs); const pz = ped || prazoGrupo(x.calc, g.id);
+      const sig = base + '|' + et.join('|') + '|' + (dur || '') + '|' + (ped || '');
+      const b = blocos.find(y => y.sig === sig); if (b) b.n++; else blocos.push({ sig, base, et, pz, dur, video: grupoVideo(g), n: 1, ped });
     });
     out.push(`O projeto será realizado com base no briefing enviado pelo cliente e dividido em ${propNumExtenso(blocos.reduce((s, b) => s + b.n, 0))} entregas:`);
-    blocos.forEach(b => out.push(`${b.base}${b.n > 1 ? ` (${b.n} ${b.video ? 'vídeos' : 'unidades'})` : ''}${b.dur ? `, ${String(b.dur).replace('.', ',')} min${b.n > 1 ? ' cada' : ''}` : ''}: ${lista(b.et)}. Prazo de ${b.pz} dias úteis${b.n > 1 ? ' cada' : ''}.`));
+    blocos.forEach(b => out.push(`${b.base}${b.n > 1 ? ` (${b.n} ${b.video ? 'vídeos' : 'unidades'})` : ''}${b.dur ? `, ${String(b.dur).replace('.', ',')} min${b.n > 1 ? ' cada' : ''}` : ''}: ${lista(b.et)}. ${b.ped ? `Entrega até ${fmtDate(dataAposDiasUteis(b.ped))} (${b.ped} dias úteis)` : `Prazo de ${b.pz} dias úteis${b.n > 1 ? ' cada' : ''}`}.`));
   } else out.push(nomes.length > 1 ? `A criação será realizada com base no briefing enviado pelo cliente e dividida em ${propNumExtenso(nomes.length)} etapas: ${lista(nomes)}.` : 'A criação será realizada com base no briefing enviado pelo cliente.');
   out.push(PAGAMENTOS[x.calc?.pagto || 'final']?.texto || PAGAMENTOS.final.texto);
   if (x.calc?.proposta?.datas) { const ag = propAgenda(x); if (ag) out.push(`Início previsto em ${fmtDate(ag.inicio)} e entrega em ${fmtDate(ag.fim)} (dias úteis). Se a aprovação de alguma etapa atrasar, a entrega anda junto.`); }
-  if (k && k.fechado) out.push(gs.length > 1 ? `O prazo total estimado é de ${k.fechado} dias úteis, com as entregas em sequência, sem contar o tempo de aprovação do cliente e possíveis ajustes.` : `O prazo estimado é de ${k.fechado} dias úteis, sem contar o tempo de aprovação do cliente e possíveis ajustes.`);
+  const pedidos = gs.map(g => pedidoGrupo(x.calc, g, gs)).filter(Boolean);
+  if (pedidos.length) out.push(`${gs.length > 1 ? 'Entrega final' : 'Entrega'} até ${fmtDate(dataAposDiasUteis(Math.max(...pedidos)))}, sem contar o tempo de aprovação do cliente e possíveis ajustes.`);
+  else if (k && k.fechado) out.push(gs.length > 1 ? `O prazo total estimado é de ${k.fechado} dias úteis, com as entregas em sequência, sem contar o tempo de aprovação do cliente e possíveis ajustes.` : `O prazo estimado é de ${k.fechado} dias úteis, sem contar o tempo de aprovação do cliente e possíveis ajustes.`);
   if (rod) out.push(`O valor inclui até ${propNumExtenso(rod)} rodada${rod > 1 ? 's' : ''} de ajustes${nomes.length > 1 ? ' por etapa' : ''}. Alterações fora do briefing ou em etapas já aprovadas poderão gerar custos adicionais.`);
   const dv = x.sent_at && x.valid_until ? daysBetween(x.sent_at, x.valid_until) : 30;
   out.push(`Este orçamento tem validade de ${dv > 0 ? dv : 30} dias.`);
