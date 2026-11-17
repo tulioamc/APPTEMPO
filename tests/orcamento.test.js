@@ -46,3 +46,19 @@ test('total das etapas se espalha na proporção (6/18/6 → 8/24/8)', () => {
   const m = setup();
   assert.deepEqual(m.redistribuiHoras([{ h: 6 }, { h: 18 }, { h: 6 }], 40).map(x => x.h), [8, 24, 8]);
 });
+
+test('proposta abre com a calculadora; proposta antiga abre no simplificado', () => {
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/table.js', 'js/view-projects.js', 'js/orcamento.js', 'js/view-tasks-quotes.js'], ['db', 'openQuote'],
+    { VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: { quote: { q: '', status: '' } }, openBtn: () => '' });
+  m.db.data = m.db.empty(); m.db.loaded = true;
+  let render = null;
+  m.ctx.openLayer = (o) => { render = o.render; return { box: { addEventListener() {} }, refresh() {}, close() {} }; };
+  m.openQuote(null);
+  const html = render();
+  assert.ok(html.includes('Com calculadora') && html.includes('Orçamento simplificado'));
+  assert.ok(html.includes('Hora base') && html.includes('Etapas') && html.includes('Total final da proposta'));
+  m.db.data.tempo_quotes = [{ id: 'q1', name: 'Antiga', value: 5000, est_hours: 20, calc: { computed: 5000, lines: [{ h: 20 }], contingency: 10 } }];
+  m.openQuote('q1');
+  const h2 = render();
+  assert.ok(!h2.includes('Hora base') && h2.includes('Horas estimadas'), 'antiga abre no simplificado');
+});
