@@ -207,6 +207,7 @@ function openQuote(id, preset = {}) {
   const camposTopo = () => `<div class="grid2">
       <div class="field span2"><label for="qf-n">Nome / escopo *</label><input id="qf-n" class="input" data-q="name" value="${esc(q.name)}"></div>
       <div class="field"><label for="qf-c">Cliente *</label><div class="row" style="flex-wrap:nowrap"><button type="button" id="qf-c" class="input combo-field grow" data-cli-busca aria-label="Buscar cliente">${q.client_id && db.get('tempo_clients', q.client_id) ? clientTag(db.get('tempo_clients', q.client_id)) : '<span class="faint">Buscar cliente…</span>'}</button><button type="button" class="btn" data-x="newclient" aria-label="Novo cliente" title="Cadastrar cliente novo">${icon('plus')}</button></div></div>
+      <div class="field"><label for="qf-ct">Contato</label><input id="qf-ct" class="input" data-pp="contato" value="${esc(pp.contato ?? (db.get('tempo_clients', q.client_id)?.contact || ''))}" placeholder="Quem pediu o orçamento"></div>
       <div class="field"><label for="qf-s">Status</label><select id="qf-s" class="input" data-q="status_id">${options(statuses('quote'), q.status_id)}</select></div>
       <div class="field"><label for="qf-sa">Data da proposta</label><input id="qf-sa" type="date" class="input" data-q="sent_at" value="${q.sent_at}"></div>
       <div class="field"><label for="qf-vd">Validade</label><div class="row" style="flex-wrap:nowrap;gap:8px;align-items:center"><input id="qf-vd" type="number" min="1" class="input" style="max-width:110px" data-q="validade" value="${q.validade}"><span class="small muted">dias${q.sent_at && Number(q.validade) ? ` · até ${fmtDate(validadeAte())}` : ''}</span></div></div>
@@ -290,8 +291,7 @@ function openQuote(id, preset = {}) {
   const textoPropostaHTML = () => {
     const def = ppPadrao(); const val = (k) => pp[k] ?? def[k];
     return `<div class="panel"><div class="panel-h"><h3>Texto da proposta</h3><span class="small muted">vai para o PDF${pp.num ? ` · orçamento nº ${pp.num}` : ` · ganha o nº ${propProximoNum()} ao salvar`}</span></div><div class="panel-b stack" style="gap:10px">
-      <div class="grid2"><div class="field"><label for="pp-cli">Cliente</label><input id="pp-cli" class="input" data-pp="cliente" value="${esc(val('cliente'))}" placeholder="Nome que aparece na proposta"></div>
-        <div class="field"><label for="pp-ct">Contato</label><input id="pp-ct" class="input" data-pp="contato" value="${esc(val('contato'))}" placeholder="Quem pediu o orçamento"></div></div>
+      <div class="field"><label for="pp-cli">Cliente na proposta</label><input id="pp-cli" class="input" data-pp="cliente" value="${esc(val('cliente'))}" placeholder="Nome que aparece na proposta"></div>
       <div class="field"><label for="pp-ds">Descrição do escopo</label><textarea id="pp-ds" class="input" rows="4" data-pp="desc">${esc(val('desc'))}</textarea></div>
       <div class="field"><label for="pp-cd">Condições <span class="faint">(uma por linha)</span></label><textarea id="pp-cd" class="input" rows="6" data-pp="cond">${esc((val('cond') || []).join('\n'))}</textarea>
         ${pp.cond || pp.desc ? '<button type="button" class="btn sm ghost" style="align-self:flex-start;margin-top:4px" data-pp-padrao>Voltar ao texto padrão</button>' : ''}</div>
