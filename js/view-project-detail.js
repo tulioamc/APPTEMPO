@@ -17,7 +17,7 @@ function projectDrawer(id, st) {
   const a = agencyOf(p), c = clientOf(p);
   const tabs = [['time', 'Tempo'], ['overview', 'Visão geral'], ['tasks', `Tarefas (${db.where('tempo_tasks', t => t.project_id === id).length})`], ['revisions', `Revisões (${db.where('tempo_revisions', r => r.project_id === id).length})`], ['finance', 'Financeiro'], ['history', 'Histórico']];
   const body = { overview: pdOverview, tasks: pdTasks, time: pdTime, revisions: pdRevisions, finance: pdFinance, history: pdHistory }[st.tab](p);
-  return `<div class="dh"><div class="grow"><div class="row small" style="gap:6px">${agencyTag(a)}${comboBtn('client', p.client_id, 'proj-client', p.id)}</div><h2 style="margin-top:4px">${esc(p.name)}</h2></div>
+  return `<div class="dh"><div class="grow"><div class="row small" style="gap:6px">${a ? `<button type="button" class="btn-plain" data-x="open-party" data-kind="agency" data-id="${a.id}" data-tip="Abrir agência">${agencyTag(a)}</button>` : agencyTag(a)}${comboBtn('client', p.client_id, 'proj-client', p.id)}${c ? `<button type="button" class="btn sm icon ghost" data-x="open-party" data-kind="client" data-id="${c.id}" aria-label="Abrir cliente" data-tip="Abrir cliente">${icon('arrowR')}</button>` : ''}</div><h2 style="margin-top:4px">${esc(p.name)}</h2></div>
     <button class="btn sm" data-x="track">${icon('play')} Registrar tempo</button><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
   <div class="tabs" role="tablist">${tabs.map(([k, lab]) => `<button class="${st.tab === k ? 'on' : ''}" data-tab="${k}" role="tab">${lab}</button>`).join('')}</div>
   <div class="db">${body}</div>
@@ -80,7 +80,7 @@ function pdTasks(p) {
 function pdTime(p) {
   const es = db.where('tempo_time_entries', e => e.project_id === p.id).sort((a, b) => new Date(entryStart(b)) - new Date(entryStart(a)));
   const tot = es.reduce((s, e) => s + entryMs(e), 0);
-  const actHtml = actProjectHTML(es) + projectTaskChartHTML(p, es);
+  const actHtml = resumoEmbedHTML(es) + projectTaskChartHTML(p, es);
   const by = {}; es.forEach(e => { by[e.work_type_id || '_'] = (by[e.work_type_id || '_'] || 0) + entryMs(e); });
   return `${actHtml}<div class="kpis"><div class="kpi"><span class="k">Total líquido</span><span class="v">${fmtH(tot)}</span><span class="s">${es.length} sessão(ões)</span></div><div class="kpi"><span class="k">Bruto</span><span class="v">${fmtH(es.reduce((s, e) => s + entryBrutoMs(e), 0))}</span><span class="s">pausas ${fmtH(Math.max(0, es.reduce((s, e) => s + entryBrutoMs(e), 0) - tot))}</span></div><div class="kpi"><span class="k">Em revisões</span><span class="v">${fmtH(revisionMs(p.id))}</span><span class="s">${tot ? Math.round(revisionMs(p.id) / tot * 100) : 0}% do tempo</span></div></div>
   ${tot ? stdBarsHTML(Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, ms]) => { const w = db.get('tempo_work_types', k); return { key: w?.name || 'Sem tipo', label: w?.name || 'Sem tipo', v: ms, color: hexOf(w?.color || 'gray') }; }), fmtDur, tot) : ''}
@@ -126,12 +126,15 @@ function bindProjectDrawer(ly, id, st) {
   if (ly.bound) return; ly.bound = true;
   const p = () => db.get('tempo_projects', id);
   const quiet = (patch) => { db.update('tempo_projects', id, patch, true); render(); };
+  const ids = () => db.where('tempo_time_entries', e => e.project_id === id && e.state === 'done').map(e => e.id);
+  bindResumoClicks(ly.box, ids, { refresh: () => ly.refresh(), reabrir: () => ly.refresh(), selfProject: id });
   ly.box.addEventListener('click', async (e) => {
     const tb = e.target.closest('[data-tab]'); if (tb) { st.tab = tb.dataset.tab; ly.refresh(); return; }
     const b = e.target.closest('[data-x]'); if (!b) return;
     const x = b.dataset.x, bid = b.dataset.id;
     if (x === 'track') { const pr = p(); const c = clientOf(pr); openStartModal({ agency_id: c?.agency_id || '__none', client_id: pr.client_id, project_id: pr.id }); }
     if (x === 'track-task') { const t = db.get('tempo_tasks', bid); const pr = p(); const c = clientOf(pr); openStartModal({ agency_id: c?.agency_id || '__none', client_id: pr.client_id, project_id: pr.id, task_id: t.parent_id || t.id, sub_id: t.parent_id ? t.id : '' }); }
+    if (x === 'open-party') return openParty(b.dataset.kind, bid);
     if (x === 'edit-project') openProjectForm(id);
     if (x === 'archive') { const pr = p(); db.update('tempo_projects', id, { archived: !pr.archived }); logEvent('project', id, 'archive', pr.archived ? 'Arquivado' : 'Desarquivado'); toast(pr.archived ? 'Projeto arquivado' : 'Projeto desarquivado'); }
     if (x === 'del-project') {

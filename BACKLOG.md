@@ -765,3 +765,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V2.06.29: Mac bloqueado (loginwindow) vira pausa sozinha e nunca conta como trabalho; "Ajustar automaticamente" tira bloqueios ao salvar intervalo.
 - V2.06.30: bloqueio aparece como "Tela bloqueada"; sessões antigas corrigidas.
 - V2.06.31: tempo sem nenhum registro do computador (2 min+) vira pausa sozinha ("Sem registro"); retroativo desde 16/11.
+- V2.06.32: janela única para projeto/cliente/agência, com o timesheet completo (mesma barra do Resumo) embutido.

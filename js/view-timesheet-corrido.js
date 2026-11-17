@@ -45,7 +45,7 @@ function corridoProjHTML(p) {
     const tTotal = T.list.reduce((s, e) => s + entryMs(e), 0);
     const subsHTML = [...T.subs.values()].map(sb => `<div class="cor-sub"><div class="cor-subh"><span>↳ ${esc(sb.name)}</span><span class="mono small">${fmtDur(sb.list.reduce((s, e) => s + entryMs(e), 0))}</span></div><div class="grp-kids">${sb.list.map(entryRowHTML).join('')}</div></div>`).join('');
     const body = aglo ? groupedRowsHTML(T.list) : T.direct.map(entryRowHTML).join('') + subsHTML;
-    return `<div class="cor-task"><div class="cor-taskh" data-act="ts-resumo" data-title="${esc(T.name)}" data-ids="${tids}"><b>${esc(T.name)}</b><span class="mono small">${fmtDur(tTotal)}</span></div>${body}</div>`;
+    return `<div class="cor-task"><div class="cor-taskh" ${db.get('tempo_projects', p.pid) ? `data-act="proj-open" data-id="${p.pid}"` : `data-act="ts-resumo" data-title="${esc(T.name)}" data-ids="${tids}"`}><b>${esc(T.name)}</b><span class="mono small">${fmtDur(tTotal)}</span></div>${body}</div>`;
   }).join('');
   const modeBtns = `<div class="row cor-mode" style="gap:6px;padding:8px 0 4px"><button class="btn sm ${aglo ? '' : 'primary'}" data-act="ts-cor-mode" data-m="cron">Cronológico</button><button class="btn sm ${aglo ? 'primary' : ''}" data-act="ts-cor-mode" data-m="agl">Aglomerado</button></div>`;
   const ids = p.list.map(e => e.id).join(',');
@@ -56,7 +56,7 @@ function corridoProjHTML(p) {
   const when = dm(firstMs) === dm(lastMs) ? dm(firstMs) : `${dm(firstMs)}–${dm(lastMs)}`;
   const tags = [...new Set(p.list.map(e => e.work_type_id || ''))].map(id => wtTag(id || null)).join('');
   return `<details class="grp-det cor-proj" data-pid="${p.pid}" ${COR_OPEN.has(p.pid) ? 'open' : ''}>
-    <summary class="entry grp-sum" data-act="ts-resumo" data-title="${esc(pr.name)}" data-ids="${ids}">
+    <summary class="entry grp-sum" ${pr.id ? `data-act="proj-open" data-id="${p.pid}"` : `data-act="ts-resumo" data-title="${esc(pr.name)}" data-ids="${ids}"`}>
       <span class="when">${when}</span>
       <div class="what"><div class="t">${esc(pr.name)} <span class="tag pill small">${p.list.length} ${p.list.length === 1 ? 'sessão' : 'sessões'}</span></div><div class="p">${esc(cl?.name || 'Sem cliente')}${pr.name ? '' : ''}</div></div>
       <span class="ent-tag">${tags}</span><span class="dur">${fmtDur(total)}</span><button type="button" class="grp-caret" data-act="grp-caret" aria-label="Ver tarefas" title="Ver tarefas">▾</button>
@@ -112,43 +112,59 @@ function openResumo(title, ids) {
       const reabrir = () => { l.close(); openResumo(title, allIds); };
       // depois de transferir, alterar o tipo ou excluir um trecho selecionado na barra, o resumo se refaz
       window.actRedrawHook = () => { if (layers.includes(l)) reabrir(); };
-      const menuPrograma = (gid, label, seg) => openProgChoice(allIds, gid, label, { seg, redraw: () => l.refresh(), done: reabrir });
-      l.box.addEventListener('click', (ev) => {
-        const modo = ev.target.closest('[data-rmode]');
-        if (modo) { db.setSetting('resMode', modo.dataset.rmode); ACT_SEL = null; l.refresh(); return; }
-        if (ev.target.closest('[data-x="act-fora-toggle"]')) { db.setSetting('actShowFora', !db.setting('actShowFora', true)); return l.refresh(); }
-        const mv = ev.target.closest('.act-moved[data-pid]');
-        if (mv && mv.dataset.pid) { l.close(); return openProject(mv.dataset.pid); }
-        if (ACT_SEL) return;   // enquanto marca trechos, o clique só serve para arrastar
-        const fileEl = ev.target.closest('[data-x="res-file"]');
-        if (fileEl) return openActGroup(allIds, fileEl.dataset.g, reabrir);
-        const chipEl = ev.target.closest('[data-x="res-prog"]');
-        if (chipEl) return menuPrograma(chipEl.dataset.g, chipEl.dataset.label);
-        const seg = ev.target.closest('.res-strip .act-b[data-g]');
-        if (seg) {
-          const chip = Array.from(l.box.querySelectorAll('[data-x="res-prog"]')).find(c => c.dataset.g === seg.dataset.g);
-          if (chip) menuPrograma(chip.dataset.g, chip.dataset.label, seg.dataset.a ? { a: +seg.dataset.a, b: +seg.dataset.b } : null);
-        }
-      });
+      bindResumoClicks(l.box, () => allIds, { refresh: () => l.refresh(), reabrir, close: () => l.close() });
     }
   });
 }
 
+/* Cliques do timesheet (Resumo ou embutido): modos, programas, arquivos, trechos e nomes de projeto/tarefa.
+   Nome de projeto ou tarefa sempre abre a mesma janela do projeto. */
+function bindResumoClicks(box, getIds, { refresh, reabrir, close, selfProject = null }) {
+  const menuPrograma = (gid, label, seg) => openProgChoice(getIds(), gid, label, { seg, redraw: refresh, done: reabrir });
+  box.addEventListener('click', (ev) => {
+    const modo = ev.target.closest('[data-rmode]');
+    if (modo) { db.setSetting('resMode', modo.dataset.rmode); ACT_SEL = null; refresh(); return; }
+    if (ev.target.closest('[data-x="act-fora-toggle"]')) { db.setSetting('actShowFora', !db.setting('actShowFora', true)); return refresh(); }
+    const mv = ev.target.closest('.act-moved[data-pid]');
+    if (mv && mv.dataset.pid) { close && close(); return openProject(mv.dataset.pid); }
+    const all = ev.target.closest('[data-x="res-all"], [data-x="res-proj"]');
+    if (all) {
+      ev.preventDefault();
+      if (all.dataset.p && all.dataset.p !== selfProject) { if (all.dataset.x === 'res-proj') close && close(); openProject(all.dataset.p, 'time'); }
+      return;
+    }
+    if (ACT_SEL) return;   // enquanto marca trechos, o clique só serve para arrastar
+    const fileEl = ev.target.closest('[data-x="res-file"]');
+    if (fileEl) return openActGroup(getIds(), fileEl.dataset.g, reabrir);
+    const chipEl = ev.target.closest('[data-x="res-prog"]');
+    if (chipEl) return menuPrograma(chipEl.dataset.g, chipEl.dataset.label);
+    const seg = ev.target.closest('.res-strip .act-b[data-g]');
+    if (seg) {
+      const chip = Array.from(box.querySelectorAll('[data-x="res-prog"]')).find(c => c.dataset.g === seg.dataset.g);
+      if (chip) menuPrograma(chip.dataset.g, chip.dataset.label, seg.dataset.a ? { a: +seg.dataset.a, b: +seg.dataset.b } : null);
+    }
+  });
+}
 /* Lista de sessões do Resumo: Cronológico (uma a uma) ou Aglomerado (por tarefa, com total e quantidade). */
+/* Nome clicável: abre a janela do projeto (dados + timesheet de tudo o que já foi feito). */
+const resAllLink = (e) => e.project_id
+  ? `<a href="#" class="res-all" data-x="res-all" data-p="${esc(e.project_id)}" data-tip="Abrir o projeto">${esc(entryTitle(e))}</a>`
+  : esc(entryTitle(e));
 function resumoSessionsHTML(es, mode) {
   const row = (t, dur) => `<div class="row between small res-row">${t}<span class="mono">${dur}</span></div>`;
-  if (mode !== 'agl') return es.map(e => row(`<span><span class="mono">${fmtTime(entryStart(e))}–${fmtTime(entryEnd(e))}</span> · ${esc(entryTitle(e))}</span>`, fmtDur(entryMs(e)))).join('');
+  if (mode !== 'agl') return es.map(e => row(`<span><span class="mono">${fmtTime(entryStart(e))}–${fmtTime(entryEnd(e))}</span> · ${resAllLink(e)}</span>`, fmtDur(entryMs(e)))).join('');
   const m = new Map();
   es.forEach(e => { const k = `${entryTitle(e)}|${entrySub(e)}`; if (!m.has(k)) m.set(k, []); m.get(k).push(e); });
   return [...m.values()].map(list => {
     const first = list.reduce((a, e) => (new Date(entryStart(e)) < new Date(a) ? entryStart(e) : a), entryStart(list[0]));
     const last = list.reduce((a, e) => (new Date(entryEnd(e)) > new Date(a) ? entryEnd(e) : a), entryEnd(list[0]));
     const total = list.reduce((s, e) => s + entryMs(e), 0);
-    return row(`<span><span class="mono">${fmtTime(first)}–${fmtTime(last)}</span> · ${esc(entryTitle(list[0]))} <span class="faint">${list.length} ${list.length === 1 ? 'sessão' : 'sessões'}</span></span>`, fmtDur(total));
+    return row(`<span><span class="mono">${fmtTime(first)}–${fmtTime(last)}</span> · ${resAllLink(list[0])} <span class="faint">${list.length} ${list.length === 1 ? 'sessão' : 'sessões'}</span></span>`, fmtDur(total));
   }).join('');
 }
 
-function resumoHTML(title, es) {
+function resumoBodyHTML(es, opts = {}) {
+  const title = opts.title || '';
   const key = actSelKey(es.map(e => e.id));
   const mode = db.setting('resMode', 'cron');
   const tagged = es.flatMap((e, i) => actList(e.id).map(r => ({ ...r, _i: i })));
@@ -242,15 +258,28 @@ function resumoHTML(title, es) {
   const fileChips = fileAn.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="res-file" data-g="${esc(g.id)}" style="--tb:${g.color}"${g.id === 'outros' ? fileMembers(g) : ` data-tip="${esc(actTip(g) + '\nClique para separar, agrupar, mudar a cor ou mover')}"`}><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('');
   const legendHTML = `<div class="lbl" style="margin-top:14px">Programas</div><div class="act-chips">${legendChips || '<span class="muted small">Sem registros de programa.</span>'}</div><div class="lbl" style="margin-top:8px">Arquivo / site</div>${mode === 'cron' ? fileCron() : ''}<div class="act-chips">${fileChips || '<span class="muted small">Sem arquivos ou sites registrados.</span>'}</div><div class="lbl" style="margin-top:8px">Pausas</div><div class="act-chips">${pauseChips || '<span class="muted small">Sem pausas.</span>'}</div>`;
   const sessions = resumoSessionsHTML(es, mode);
-  return `<div class="dh"><div class="grow"><span class="small muted">Resumo</span><h2 style="margin-top:2px">${esc(title)}</h2></div>${toggles}<button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
-  <div class="db stack" style="gap:12px">
+  const top = opts.embed ? `<div class="row between" style="gap:8px"><span class="lbl">Timesheet</span>${toggles}</div>` : '';
+  return `${top}
     <div class="small muted"><span data-tip="${esc(`Bruto ${fmtDur(totalBruto)}\nDo início ao fim de cada sessão, sem contar duas vezes o mesmo horário. Inclui as pausas.`)}">Bruto ${fmtDur(totalBruto)}</span> · <span data-tip="${esc(`Trabalho ${fmtDur(totalTrab)}\nSó o tempo trabalhado (bruto menos pausas).\nCom registro de programa: ${fmtDur(Math.max(0, totalTrab - actUnspecMs(es)))}\nNão especificado: ${fmtDur(actUnspecMs(es))}`)}">trabalho ${fmtDur(totalTrab)}</span> · <span data-tip="${esc(`Pausas ${fmtDur(totalPausa)}\n${Object.entries(pauseByWhy).map(([k, ms]) => pauseLabel(k) + ': ' + fmtDur(ms)).join('\n')}`)}">pausas ${fmtDur(totalPausa)}</span> · ${es.length} sessão(ões)</div>
     ${prodMiniHTML(es)}
     ${taskBar}
     ${actForaToggleHTML(es)}
     ${actSelBarHTML(key)}
     <div class="act-sec">${bar}<div class="muted" style="font-size:.78em;line-height:1.5;margin-top:6px">${note}</div>${legendHTML}</div>
-    <div><div class="lbl">Sessões</div>${sessions}</div>
-  </div>`;
+    <div><div class="lbl">Sessões</div>${sessions}</div>`;
+}
+function resumoHTML(title, es) {
+  const mode = db.setting('resMode', 'cron');
+  const toggles = `<div class="row" style="gap:6px"><button class="btn sm ${mode === 'cron' ? 'primary' : ''}" data-rmode="cron">Cronológico</button><button class="btn sm ${mode === 'agl' ? 'primary' : ''}" data-rmode="agl">Aglomerado</button></div>`;
+  const pids = [...new Set(es.map(e => e.project_id).filter(Boolean))];
+  const projBtn = pids.length === 1 ? `<button class="btn" data-x="res-proj" data-p="${esc(pids[0])}">Abrir projeto</button>` : '';
+  return `<div class="dh"><div class="grow"><span class="small muted">Resumo</span><h2 style="margin-top:2px">${esc(title)}</h2></div>${projBtn}${toggles}<button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+  <div class="db stack" style="gap:12px">${resumoBodyHTML(es, { title })}</div>`;
+}
+/* Timesheet completo (mesma barra do Resumo) para embutir nas janelas de projeto, cliente e agência. */
+function resumoEmbedHTML(es) {
+  const done = es.filter(e => e.state === 'done').sort((a, b) => new Date(entryStart(a)) - new Date(entryStart(b)));
+  if (!done.length) return '';
+  return `<div class="panel res-embed res-wrap"><div class="panel-b stack" style="gap:12px">${resumoBodyHTML(done, { embed: true })}</div></div>`;
 }
 

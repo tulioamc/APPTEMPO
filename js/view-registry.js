@@ -124,7 +124,7 @@ function openParty(kind, id) {
       const ps = partyProjects(kind, id); const ms = ps.reduce((s, p) => s + projectMs(p.id), 0);
       const sum = (fn) => ps.reduce((s, p) => s + (fn(p) || 0), 0);
       const ag = kind === 'client' ? db.get('tempo_agencies', x.agency_id) : null;
-      return `<div class="dh"><div class="grow"><div class="small muted">${kind === 'agency' ? 'Agência contratante' : 'Cliente' + (ag ? ' · ' + esc(ag.name) : ' direto')}</div>${kind === 'agency'
+      return `<div class="dh"><div class="grow"><div class="small muted">${kind === 'agency' ? 'Agência contratante' : 'Cliente' + (ag ? ` · <a href="#" data-x="open-agency" data-id="${ag.id}">${esc(ag.name)}</a>` : ' direto')}</div>${kind === 'agency'
   ? `<h2 class="party-name">${esc(x.name)}</h2><button type="button" class="party-color row" style="gap:8px" data-act="party-color" data-kind="${kind}" data-id="${id}" title="Mudar cor" aria-label="Mudar cor">${tag(x.name, x.color, { upper: true, fg: partyFg(kind, id) })}<span class="tag tg abbr mono small" style="${cssTb(x.color)}${partyFg(kind, id) ? ';color:' + partyFg(kind, id) : ''}">${esc(agencyAbbr(x))}</span></button>`
   : `<h2 class="row" style="gap:8px;margin-top:2px"><button type="button" class="party-color" data-act="party-color" data-kind="${kind}" data-id="${id}" title="Mudar cor" aria-label="Mudar cor">${clientTag(x)}</button></h2>`}</div><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
       <div class="db">
@@ -132,6 +132,7 @@ function openParty(kind, id) {
         <div class="props"><span class="k">CNPJ</span><span class="mono">${esc(x.cnpj || '—')}</span><span class="k">Contato</span><span>${esc(x.contact || '—')}</span><span class="k">Endereço</span><span>${esc(x.address || '—')}</span><span class="k">Observações</span><span class="muted">${esc(x.notes || '—')}</span><span class="k">Cadastrado em</span><span>${fmtDate(x.created_at)}</span></div>
         ${kind === 'agency' ? `<div class="stack" style="gap:6px"><div class="row between"><span class="lbl">Clientes</span><button class="btn sm" data-x="new-client">${icon('plus')} Cliente desta agência</button></div><div class="row">${clients(id).map(c => `<button class="btn sm ghost" data-x="open-client" data-id="${c.id}" style="padding:2px">${clientTag(c)}</button>`).join('') || '<span class="small muted">Nenhum cliente vinculado.</span>'}</div></div>` : ''}
         ${feeHTML(kind, id, ps)}
+        ${resumoEmbedHTML(db.where('tempo_time_entries', e => ps.some(p => p.id === e.project_id)))}
         ${partyChartsHTML(ps)}
         <div class="panel"><div class="panel-h"><h3>Relatório do mês</h3><span class="small muted">horas e entregas, sem valores</span><span class="grow"></span><input type="month" class="input sm" style="max-width:160px" data-rc-ym value="${ymd(new Date()).slice(0, 7)}" aria-label="Mês do relatório"><button class="btn sm" data-act="rel-cliente" data-kind="${kind}" data-id="${id}">${icon('doc')} PDF</button></div></div>
         <div class="panel"><div class="panel-h"><h3>Projetos</h3><span class="grow"></span>${kind === 'client' ? `<button class="btn sm" data-act="proj-new" data-client="${id}">${icon('plus')} Criar projeto</button>` : ''}</div><div class="panel-b tight">${ps.length ? `<div class="list">${ps.sort((a, b) => b.created_at.localeCompare(a.created_at)).map(p => `<div class="li" data-x="open-proj" data-id="${p.id}"><div class="grow"><div class="t">${esc(p.name)}</div><div class="meta">${kind === 'agency' ? esc(clientOf(p)?.name || '') + ' · ' : ''}${fmtH(projectMs(p.id))}${p.deadline ? ' · prazo ' + fmtDate(p.deadline) : ''}</div></div><div class="meta">${statusTag(p.status_id)}${statusTag(p.payment_status_id, false)}<span class="mono">${fmtMoney(p.budget)}</span></div></div>`).join('')}</div>` : '<div class="empty small">Nenhum projeto.</div>'}</div></div>
@@ -140,11 +141,14 @@ function openParty(kind, id) {
     }
   });
   l.live = true;
+  bindResumoClicks(l.box, () => { const pids = new Set(partyProjects(kind, id).map(p => p.id)); return db.where('tempo_time_entries', e => pids.has(e.project_id) && e.state === 'done').map(e => e.id); },
+    { refresh: () => l.refresh(), reabrir: () => l.refresh() });
   l.box.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-x]'); if (!b) return; const x = db.get(T, id);
     if (b.dataset.x === 'edit') openPartyForm(kind, id);
     if (b.dataset.x === 'open-proj') openProject(b.dataset.id);
     if (b.dataset.x === 'open-client') openParty('client', b.dataset.id);
+    if (b.dataset.x === 'open-agency') { e.preventDefault(); openParty('agency', b.dataset.id); }
     if (b.dataset.x === 'new-client') openPartyForm('client', null, null, { agency_id: id });
     if (b.dataset.x === 'arch') { db.update(T, id, { archived: !x.archived }); toast(x.archived ? 'Arquivado' : 'Desarquivado'); }
     if (b.dataset.x === 'del') {
