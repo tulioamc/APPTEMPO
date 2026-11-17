@@ -95,3 +95,15 @@ test('proposta em PDF: itens por etapa somam o total e condições padrão', () 
   const html = m.propHTML(m.propEstado(x));
   assert.ok(html.includes('DM Mono') && html.includes('Orçamento') && html.includes('10.000'));
 });
+
+test('relatório do mês do cliente: horas por projeto e tarefa', () => {
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/orcamento.js', 'js/proposta.js', 'js/relatorio-cliente.js'], ['db', 'relClienteDados', 'relClienteHTML'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty();
+  m.db.data.tempo_clients = [{ id: 'c', name: 'Bem Brasil' }];
+  m.db.data.tempo_projects = [{ id: 'p', name: 'Vinheta', client_id: 'c', sent_at: '2026-11-10T12:00:00Z' }];
+  m.db.data.tempo_tasks = [{ id: 't', project_id: 'p', name: 'Animação' }];
+  m.db.data.tempo_time_entries = [{ id: 'e', project_id: 'p', task_id: 't', segments: [{ s: '2026-11-05T12:00:00Z', e: '2026-11-05T15:00:00Z' }] }];
+  const d = m.relClienteDados('client', 'c', '2026-11');
+  assert.equal(d.total, 3 * 36e5); assert.equal(d.linhas[0].entregue, true);
+  assert.ok(m.relClienteHTML('client', 'c', '2026-11').includes('Animação'));
+});
