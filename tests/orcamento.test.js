@@ -49,7 +49,7 @@ test('total das etapas se espalha na proporção (6/18/6 → 8/24/8)', () => {
 });
 
 test('proposta abre com a calculadora; proposta antiga abre no simplificado', () => {
-  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/table.js', 'js/view-projects.js', 'js/orcamento.js', 'js/view-tasks-quotes.js'], ['db', 'openQuote'],
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/table.js', 'js/view-projects.js', 'js/orcamento.js', 'js/view-tasks-quotes.js', 'js/proposta.js'], ['db', 'openQuote', 'propNome'],
     { VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: { quote: { q: '', status: '' } }, openBtn: () => '' });
   m.db.data = m.db.empty(); m.db.loaded = true;
   let render = null;
@@ -139,4 +139,13 @@ test('vários projetos na proposta: horas por projeto, paralelo não conta, reor
   // reordenar e mudar de projeto
   const nome = st.lines[0].name; m.moveEtapa(st, 0, 6, st.grupos[1].id);
   assert.equal(st.lines[5].name, nome); assert.equal(st.lines[5].grp, st.grupos[1].id);
+});
+
+test('nome do arquivo do orçamento: NÚMERO_Agência_Cliente_ANO_MÊS', () => {
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/orcamento.js', 'js/proposta.js'], ['db', 'propNome'], { VIEWS: {}, ACTIONS: {}, CHANGES: {} });
+  m.db.data = m.db.empty();
+  m.db.data.tempo_agencies = [{ id: 'a', name: 'BRENDA' }, { id: 'd', name: 'Cliente Direto' }];
+  m.db.data.tempo_clients = [{ id: 'c', name: 'BEM BRASIL', agency_id: 'a' }, { id: 'k', name: 'AmiGo', agency_id: 'd' }];
+  assert.equal(m.propNome({ num: 1021, data: '2026-11-17' }, { client_id: 'c' }), '1021_BRENDA_BEM-BRASIL_2026_NOV');
+  assert.equal(m.propNome({ num: 1022, data: '2026-12-02' }, { client_id: 'k' }), '1022_AmiGo_2026_DEZ');
 });

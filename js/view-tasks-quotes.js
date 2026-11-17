@@ -179,6 +179,8 @@ function openQuote(id, preset = {}) {
   const rates = precoBase();
   const perfis = db.setting('clientePreco', {}) || {};
   const st = calcDaProposta(v.calc) || calcNovo();
+  // textos da proposta (vão para o PDF): só o que foi editado fica guardado; o resto sai do padrão
+  const pp = { ...((x?.calc?.proposta) || {}) };
   let modo = preset.modo || (x ? (calcDaProposta(x.calc) ? 'calc' : 'simples') : 'calc');
   const q = { name: v.name || '', client_id: v.client_id || '', status_id: v.status_id || statuses('quote')[0]?.id, sent_at: v.sent_at || ymd(new Date()), valid_until: v.valid_until || '',
     notes: v.notes || '', value: v.value ?? null, est_hours: v.est_hours ?? '', work_type_id: v.work_type_id || '', revisions_included: v.revisions_included ?? 2, extra_revision_price: v.extra_revision_price ?? null };
@@ -268,6 +270,18 @@ function openQuote(id, preset = {}) {
       </div></div>
 `;
 
+  /* Texto da proposta (cliente, contato, descrição e condições): já vem preenchido e pode ser editado; vai para o PDF. */
+  const ppPadrao = () => { const d = collect(); return propEstado({ ...d, calc: d.calc ? { ...d.calc, proposta: null } : null }); };
+  const textoPropostaHTML = () => {
+    const def = ppPadrao(); const val = (k) => pp[k] ?? def[k];
+    return `<div class="panel"><div class="panel-h"><h3>Texto da proposta</h3><span class="small muted">vai para o PDF${pp.num ? ` · orçamento nº ${pp.num}` : ` · ganha o nº ${propProximoNum()} ao salvar`}</span></div><div class="panel-b stack" style="gap:10px">
+      <div class="grid2"><div class="field"><label for="pp-cli">Cliente</label><input id="pp-cli" class="input" data-pp="cliente" value="${esc(val('cliente'))}" placeholder="Nome que aparece na proposta"></div>
+        <div class="field"><label for="pp-ct">Contato</label><input id="pp-ct" class="input" data-pp="contato" value="${esc(val('contato'))}" placeholder="Quem pediu o orçamento"></div></div>
+      <div class="field"><label for="pp-ds">Descrição do escopo</label><textarea id="pp-ds" class="input" rows="4" data-pp="desc">${esc(val('desc'))}</textarea></div>
+      <div class="field"><label for="pp-cd">Condições <span class="faint">(uma por linha)</span></label><textarea id="pp-cd" class="input" rows="6" data-pp="cond">${esc((val('cond') || []).join('\n'))}</textarea>
+        ${pp.cond || pp.desc ? '<button type="button" class="btn sm ghost" style="align-self:flex-start;margin-top:4px" data-pp-padrao>Voltar ao texto padrão</button>' : ''}</div>
+    </div></div>`;
+  };
   // resumo à direita: acompanha o scroll e se atualiza enquanto digita
   const resumoCalc = (c) => `<div class="panel qf-resumo"><div class="panel-h"><h3>Resumo</h3><span class="grow"></span><b class="mono" data-tot-topo>${fmtMoney0(c.total)}</b></div><div class="panel-b stack" style="gap:12px">${calcSummaryHTML(c, st)}
       <div data-parecidos>${parecidosHTML(q.name, st.modelo, c.total, x?.id)}</div>
@@ -281,7 +295,8 @@ function openQuote(id, preset = {}) {
     <form class="db${modo === 'calc' ? ' qf-2col' : ''}" id="qf"><div class="qf-esq">
       ${camposTopo()}
       ${modo === 'calc' ? camposCalc(c) : camposSimples()}
-      <div class="field"><label for="qf-o">Observações</label><textarea id="qf-o" class="input" data-q="notes">${esc(q.notes)}</textarea></div>
+      ${textoPropostaHTML()}
+      <div class="field"><label for="qf-o">Observações internas</label><textarea id="qf-o" class="input" data-q="notes">${esc(q.notes)}</textarea></div>
       ${x ? `<div class="stack" style="gap:8px"><span class="lbl">Follow-up</span>
         ${(x.followups || []).length ? `<div class="timeline">${x.followups.map(fu => `<div class="tl"><span class="w">${fmtDate(fu.date)}</span><span class="b"></span><span>${esc(fu.note)}</span></div>`).join('')}</div>` : '<span class="small muted">Nenhum contato registrado.</span>'}
         <div class="row"><input type="date" class="input" style="max-width:170px" id="fu-d" value="${ymd(new Date())}" aria-label="Data do contato"><input class="input grow" id="fu-n" placeholder="O que foi conversado" aria-label="Contato"><button type="button" class="btn" data-x="fu">Registrar contato</button></div></div>` : ''}
@@ -295,7 +310,7 @@ function openQuote(id, preset = {}) {
   const l = openLayer({ wide: true, render: draw });
   const tamanho = () => l.box.classList.toggle('xl', modo === 'calc'); tamanho();
   l.box.addEventListener('submit', e => e.preventDefault());
-  const keyOf = (i) => i && ((i.dataset.q && 'q' + i.dataset.q) || (i.dataset.gnome && 'g' + i.dataset.gnome) || (i.dataset.pb && 'pb') || (i.dataset.pbm && 'pbm' + i.dataset.pbm) || i.dataset.st || i.dataset.encp || (i.dataset.line ? 'l' + i.dataset.line + i.dataset.k : null) || (i.dataset.ext ? 'e' + i.dataset.ext + i.dataset.k : null));
+  const keyOf = (i) => i && ((i.dataset.pp && 'pp' + i.dataset.pp) || (i.dataset.q && 'q' + i.dataset.q) || (i.dataset.gnome && 'g' + i.dataset.gnome) || (i.dataset.pb && 'pb') || (i.dataset.pbm && 'pbm' + i.dataset.pbm) || i.dataset.st || i.dataset.encp || (i.dataset.line ? 'l' + i.dataset.line + i.dataset.k : null) || (i.dataset.ext ? 'e' + i.dataset.ext + i.dataset.k : null));
   const redraw = (focusKey) => { const a = document.activeElement; const key = focusKey || keyOf(a); l.refresh(); if (key) { const el = $$('input,select,textarea', l.box).find(i => keyOf(i) === key); if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} } } };
 
   let salvaRates = null;
@@ -304,6 +319,7 @@ function openQuote(id, preset = {}) {
   /* O Safari/app do Mac não dispara "change" em campo de dinheiro (reformatado a cada tecla): o estado é lido no "input". */
   const apply = (t) => {
     if (t.dataset.q) { q[t.dataset.q] = t.dataset.money !== undefined ? moneyVal(t) : t.value; return 'q'; }
+    if (t.dataset.pp) { const k = t.dataset.pp; pp[k] = k === 'cond' ? t.value.split('\n') : t.value; return 'q'; }
     if (t.dataset.gnome) { const g = gruposDe(st).find(x => x.id === t.dataset.gnome); if (g) g.nome = t.value; return 'q'; }
     if (t.dataset.pb) { rates.hora = moneyVal(t); salvar(); }
     else if (t.dataset.pbm) { const k = t.dataset.pbm; rates[k][st[k]] = numIn(t.value) ?? 1; salvar(); }
@@ -372,7 +388,7 @@ function openQuote(id, preset = {}) {
     redraw();
   };
   /* Dados da proposta a salvar. Com calculadora: valor, horas e rodadas vêm da conta. */
-  const collect = () => {
+  function collect() {   // declaração (não const): a tela usa antes desta linha
     const c = db.get('tempo_clients', q.client_id);
     const base = { name: q.name.trim(), client_id: q.client_id || null, agency_id: c?.agency_id || null, status_id: q.status_id, sent_at: q.sent_at || null, valid_until: q.sent_at ? validadeAte() : null, notes: q.notes };
     if (modo !== 'calc') return { ...base, value: numIn(q.value), est_hours: numIn(q.est_hours), work_type_id: q.work_type_id || null, revisions_included: numIn(q.revisions_included), extra_revision_price: numIn(q.extra_revision_price) };
@@ -380,12 +396,20 @@ function openQuote(id, preset = {}) {
     return { ...base, value: Math.round(k.total * 100) / 100, est_hours: Math.round(k.h * 10) / 10, work_type_id: st.lines.map(ln => ln.wt).find(Boolean) || null,
       revisions_included: numIn(st.revInc), extra_revision_price: st.revExtra ?? (k.r ? Math.round(k.r * 4) : null),
       calc: { ...clone(st), cliente: q.client_id || '', computed: Math.round(k.total * 100) / 100, rate: k.r, h: k.h, M: k.M, urg: k.urg, desc: st.desc, descValor: k.desc, mine: k.Mf, B: k.B, C: k.C, D: k.D, horaEf: k.horaEf, total: k.total } };
+  }
+
+  /* Junta os textos da proposta e o número (ganha o próximo na primeira vez que salva). */
+  const comProposta = (data) => {
+    const num = pp.num || propProximoNum(); pp.num = num;
+    if (num > Number(db.setting('propostaNum', 1020))) db.setSetting('propostaNum', num);
+    const prop = { ...pp, num, data: data.sent_at || ymd(new Date()) };
+    return { ...data, calc: { ...(data.calc || {}), proposta: prop } };
   };
   /* Proposta aprovada → projeto. Com calculadora: uma tarefa por etapa (horas da etapa nas notas). */
   const criaProjeto = (qid, data) => {
     const won = statusByCat('quote', 'won');
-    const k = data.calc ? calcQuote({ ...data.calc }, rates) : null;
-    const gs = data.calc ? gruposDe(data.calc).filter(g => data.calc.lines.some(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h)))) : [];
+    const k = data.calc?.lines ? calcQuote({ ...data.calc }, rates) : null;
+    const gs = data.calc?.lines ? gruposDe(data.calc).filter(g => data.calc.lines.some(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h)))) : [];
     const varios = gs.length > 1;
     const novos = (gs.length ? gs : [null]).map((g, gi) => {
       const pg = g && k ? k.porGrupo.find(x => x.id === g.id) : null;
@@ -409,14 +433,15 @@ function openQuote(id, preset = {}) {
     return novos[0];
   };
   const textoConverter = (data) => {
-    const gs = data.calc ? gruposDe(data.calc).filter(g => data.calc.lines.some(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h)))) : [];
+    const gs = data.calc?.lines ? gruposDe(data.calc).filter(g => data.calc.lines.some(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h)))) : [];
     const cli = esc(db.get('tempo_clients', data.client_id)?.name || '');
     if (gs.length > 1) return `Cria <b>${gs.length} projetos</b> para ${cli} (${gs.map((g, i) => esc(g.nome || 'Projeto ' + (i + 1))).join(', ')}), cada um com as suas etapas como tarefas e a sua parte do valor (${fmtMoney(data.value)} no total). A proposta fica marcada como aprovada.`;
-    return `Cria o projeto <b>${esc(data.name)}</b> para ${cli} com orçamento ${fmtMoney(data.value) || '—'}, ${data.est_hours || 0} h estimadas e ${data.revisions_included ?? 0} rodadas incluídas${data.calc ? `, com uma tarefa para cada etapa (${data.calc.lines.filter(ln => (ln.name || '').trim() || Number(ln.h)).map(ln => esc(ln.name || 'Etapa')).join(', ')})` : ''}. A proposta fica marcada como aprovada.`;
+    return `Cria o projeto <b>${esc(data.name)}</b> para ${cli} com orçamento ${fmtMoney(data.value) || '—'}, ${data.est_hours || 0} h estimadas e ${data.revisions_included ?? 0} rodadas incluídas${data.calc?.lines ? `, com uma tarefa para cada etapa (${data.calc.lines.filter(ln => (ln.name || '').trim() || Number(ln.h)).map(ln => esc(ln.name || 'Etapa')).join(', ')})` : ''}. A proposta fica marcada como aprovada.`;
   };
 
   l.box.addEventListener('click', async (e) => {
     const cb = e.target.closest('[data-cli-busca]'); if (cb) { openCombo(cb, { kind: 'client', value: q.client_id, onPick: escolheCliente }); return; }
+    if (e.target.closest('[data-pp-padrao]')) { delete pp.desc; delete pp.cond; redraw(); return; }
     const md = e.target.closest('[data-modo]'); if (md) { modo = md.dataset.modo; tamanho(); redraw(); return; }
     const mo = e.target.closest('[data-modelo]'); if (mo) {
       const k = mo.dataset.modelo, nome = MODELOS[k].nome;
@@ -470,8 +495,9 @@ function openQuote(id, preset = {}) {
     if (k === 'pdf') {   // salva a proposta (nova ou não) e abre a tela do PDF
       const data = collect(); if (!data.name || !data.client_id) return toast('Preencha nome e cliente para criar o PDF.');
       const atual = x ? db.get('tempo_quotes', x.id) : null;
-      const calc = data.calc ? { ...data.calc, proposta: atual?.calc?.proposta } : atual?.calc || null;
-      const qid = atual ? (db.update('tempo_quotes', atual.id, { ...data, calc }, true), atual.id) : db.insert('tempo_quotes', { ...data, calc, followups: [], project_id: null }, true).id;
+      const dados = comProposta(data);
+      if (atual?.calc?.proposta?.itens) dados.calc.proposta.itens = atual.calc.proposta.itens;
+      const qid = atual ? (db.update('tempo_quotes', atual.id, dados, true), atual.id) : db.insert('tempo_quotes', { ...dados, followups: [], project_id: null }, true).id;
       db.emit(); l.close(); openPropostaPDF(qid); return;
     }
     const data = collect();
@@ -493,20 +519,23 @@ function openQuote(id, preset = {}) {
       return;
     }
     if (k === 'save') {
-      const qid = x ? x.id : db.insert('tempo_quotes', { ...data, followups: [], project_id: null, calc: data.calc || null }, true).id;
-      if (x) db.update('tempo_quotes', x.id, data, true);
+      const dados = comProposta(data);
+      const qid = x ? x.id : db.insert('tempo_quotes', { ...dados, followups: [], project_id: null }, true).id;
+      if (x) db.update('tempo_quotes', x.id, dados, true);
+      const gravou = propSalvaArquivo(qid, false);
       // virou aprovada agora e ainda não tem projeto: oferece criar com as tarefas
       if (statusCat(data.status_id) === 'won' && !linkedProject(db.get('tempo_quotes', qid))
-        && await confirmBox({ title: 'Proposta aprovada: criar o projeto?', body: textoConverter(data), ok: 'Criar projeto', no: 'Só salvar' })) {
-        const p = criaProjeto(qid, data); db.emit(); l.close(); toast('Proposta salva e projeto criado'); openProject(p.id); return;
+        && await confirmBox({ title: 'Proposta aprovada: criar o projeto?', body: textoConverter(dados), ok: 'Criar projeto', no: 'Só salvar' })) {
+        const p = criaProjeto(qid, dados); db.emit(); l.close(); toast(`Proposta nº ${dados.calc.proposta.num} salva e projeto criado`); openProject(p.id); return;
       }
-      db.emit(); l.close(); toast(x ? 'Proposta atualizada' : 'Proposta criada'); if (S.route !== 'quotes') go('quotes');
+      db.emit(); l.close(); toast(`${x ? 'Proposta atualizada' : 'Proposta criada'} · nº ${dados.calc.proposta.num}${gravou ? ' · PDF salvo na pasta Orçamento' : ''}`); if (S.route !== 'quotes') go('quotes');
     }
     if (k === 'convert') {
       if (linkedProject(x)) { toast('Essa proposta já virou projeto. Use “Atualizar projeto”.'); return; }
-      db.update('tempo_quotes', x.id, data, true);
-      if (!await confirmBox({ title: 'Converter em projeto?', body: textoConverter(data), ok: 'Criar projeto' })) return;
-      const p = criaProjeto(x.id, data);
+      const dados = comProposta(data);
+      db.update('tempo_quotes', x.id, dados, true);
+      if (!await confirmBox({ title: 'Converter em projeto?', body: textoConverter(dados), ok: 'Criar projeto' })) return;
+      const p = criaProjeto(x.id, dados);
       db.emit(); l.close(); toast('Projeto criado a partir da proposta'); openProject(p.id);
     }
   });

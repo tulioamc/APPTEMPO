@@ -16,12 +16,13 @@ final class PDFExport: NSObject, WKNavigationDelegate {
         return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents/Tempo/\(sub)")
     }
 
-    static func gerar(html: String, nome: String, pasta sub: String = "Análises", done: @escaping (URL?) -> Void) {
+    /// dir: pasta absoluta escolhida pelo site (ex.: ~/BAQUER Dropbox/.../Orçamento); sem ela, iCloud/Tempo/<sub>.
+    static func gerar(html: String, nome: String, pasta sub: String = "Análises", dir absoluto: String? = nil, done: @escaping (URL?) -> Void) {
         let e = PDFExport()
         e.euMesmo = e
         e.done = done
         let limpo = nome.components(separatedBy: CharacterSet(charactersIn: "/:\\")).joined(separator: "-")
-        let dir = pasta(sub)
+        let dir = (absoluto?.isEmpty == false) ? URL(fileURLWithPath: (absoluto! as NSString).expandingTildeInPath) : pasta(sub)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         e.destino = dir.appendingPathComponent((limpo.isEmpty ? "Analise" : limpo) + ".pdf")
         let w = WKWebView(frame: NSRect(x: 0, y: 0, width: 794, height: 1123))

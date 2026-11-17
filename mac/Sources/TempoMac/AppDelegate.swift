@@ -225,8 +225,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         guard let html = d["html"] as? String, !html.isEmpty else { return }
         let nome = (d["nome"] as? String) ?? "Analise"
         let sub = ((d["pasta"] as? String) ?? "").isEmpty ? "Análises" : (d["pasta"] as! String)
-        PDFExport.gerar(html: html, nome: nome, pasta: sub) { [weak self] url in
-            if let url = url { NSWorkspace.shared.open(url) }
+        let abrir = (d["abrir"] as? Bool) ?? true
+        PDFExport.gerar(html: html, nome: nome, pasta: sub, dir: d["dir"] as? String) { [weak self] url in
+            if let url = url, abrir { NSWorkspace.shared.open(url) }
             else { self?.showNotice("Tempo", "Não consegui gerar o PDF.") }
             let ok = url != nil
             self?.web.evaluateJavaScript("window.TempoBridge && window.TempoBridge.pdfDone && window.TempoBridge.pdfDone(\(ok))", completionHandler: nil)

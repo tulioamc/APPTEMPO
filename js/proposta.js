@@ -97,17 +97,28 @@ function propHTML(e) {
   <div class="pe"><div><img src="${ass}" alt="">${rod.linhas.map(l => esc(l)).join('<br>')}</div><div class="cargo">${esc(rod.cargo)}</div></div>
 </div></body></html>`;
 }
+/* Nome do arquivo: NÚMERO_Agência_Cliente_ANO_MÊS (ex.: 1021_BRENDA_Bem-Brasil_2026_NOV); cliente direto fica sem agência. */
 const propNome = (e, x) => {
-  const limpa = (s) => String(s || '').normalize('NFC').replace(/[\/\\:]+/g, '-').replace(/\s*\/\/\s*/g, '_').replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-  const cli = db.get('tempo_clients', x.client_id)?.name || '';
-  return `${e.num}_${limpa(cli)}_${limpa(x.name)}`.slice(0, 120);
+  const limpa = (t) => String(t || '').normalize('NFC').replace(/[\/\\:*?"<>|]+/g, '-').trim().replace(/\s+/g, '-');
+  const cli = db.get('tempo_clients', x.client_id); const ag = cli?.agency_id ? db.get('tempo_agencies', cli.agency_id) : null;
+  const d = new Date((e.data || ymd(new Date())) + 'T12:00:00');
+  return [e.num, ag && !isDirectAgency(ag) ? limpa(ag.name) : '', limpa(cli?.name), d.getFullYear(), PROP_MESES[d.getMonth()]].filter(Boolean).join('_');
 };
-
+const PROP_PASTA = '~/BAQUER Dropbox/Tulio Couceiro/_TULIO COUCEIRO LTDA/_ADMIN/Orçamento';
+const propPasta = () => db.setting('propostaPasta', null) || PROP_PASTA;
+/* Grava o PDF da proposta na pasta de orçamentos (app do Mac). abrir=false: salva calado (ao salvar a proposta). */
+function propSalvaArquivo(qid, abrir = false) {
+  const x = db.get('tempo_quotes', qid); if (!x || !isMacApp()) return false;
+  const e = propEstado(x); if (!e.num) return false;
+  try { window.webkit.messageHandlers.tempo.postMessage({ type: 'pdf', html: propHTML(e), nome: propNome(e, x), dir: propPasta(), abrir }); return true; } catch (err) { return false; }
+}
+/* Próximo número de orçamento (o último feito à mão foi 1020). */
+const propProximoNum = () => Number(db.setting('propostaNum', 1020)) + 1;
 /* Tela da proposta em PDF: edita os textos, mostra a prévia e gera o arquivo. */
 function openPropostaPDF(qid) {
   const x = db.get('tempo_quotes', qid); if (!x) return;
   const e = propEstado(x);
-  if (!e.num) e.num = Number(db.setting('propostaNum', 1020)) + 1;
+  if (!e.num) e.num = propProximoNum();
   const prev = () => `<iframe class="prop-prev" title="Prévia da proposta" srcdoc="${esc(propHTML(e))}"></iframe>`;
   const draw = () => `<div class="dh">${icon('doc')}<h2>Proposta em PDF · ${esc(x.name)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db"><div class="prop-grid">
@@ -148,7 +159,7 @@ function openPropostaPDF(qid) {
       guarda();
       const html = propHTML(e), nome = propNome(e, x);
       if (isMacApp()) {
-        try { window.webkit.messageHandlers.tempo.postMessage({ type: 'pdf', html, nome, pasta: 'Propostas' }); toast('Gerando a proposta…'); }
+        try { window.webkit.messageHandlers.tempo.postMessage({ type: 'pdf', html, nome, dir: propPasta(), abrir: true }); toast('Gerando a proposta na pasta Orçamento…'); }
         catch (err) { toast('Não consegui gerar o PDF.'); }
         return;
       }
