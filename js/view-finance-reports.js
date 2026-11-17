@@ -25,6 +25,7 @@ VIEWS.finance = () => {
     <div class="panel"><div class="panel-h"><h3>Pagamentos recebidos</h3><span class="grow"></span><span class="mono small">${fmtMoney0(pays.reduce((s, x) => s + Number(x.amount), 0))}</span></div><div class="panel-b tight" style="max-height:260px;overflow:auto">${pays.length ? gridTable({ id: 'finpays', cls: 'fin', cols: PAYCOLS, rows: pays, defSort: null, sortable: false, footer: false, rowAttrs: x => `data-act="fin-open" data-id="${x.project_id}"`, rowById: (id) => db.get('tempo_payments', id) }) : '<div class="empty small">Nenhum pagamento no período.</div>'}</div></div>
   </div>
   ${finFlowHTML()}
+  ${contadorHTML()}
   <div class="panel"><div class="panel-h"><h3>Projetos</h3><span class="grow"></span>${colsBtn('finance')}<button class="btn sm" data-act="csv-copy" data-kind="finance">${icon('copy')} Copiar CSV</button></div><div class="panel-b tight">${list.length ? gridTable({ id: 'finance', cls: 'fin', cols: FCOLS, rows: list, defHidden: ['status'], defSort: null, rowAttrs: p => `data-act="fin-open" data-id="${p.id}"`, rowById: (id) => db.get('tempo_projects', id) }) : `<div class="empty">${icon('money')}<b>Nenhum projeto com esses filtros</b></div>`}</div></div>`;
   return { title: 'Financeiro PJ', actions: '', html };
 };
@@ -220,3 +221,30 @@ ACTIONS['csv-copy'] = async (el) => {
   try { await navigator.clipboard.writeText(csv); toast(`${rows.length - 1} linha(s) copiadas. Cole no Excel, Numbers ou Google Sheets.`); }
   catch (e) { const l = openLayer({ wide: true, html: `<div class="dh"><h2>CSV</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer">${icon('x')}</button></div><div class="db"><p class="small muted" style="margin:0">Selecione e copie o texto abaixo.</p><textarea class="input mono" style="min-height:300px;font-size:.8em">${esc(csv)}</textarea></div>` }); $('textarea', l.box).select(); }
 };
+
+/* Pacote do mês para o contador: entradas da PJ (extrato, sem transferências internas), de quem, e projetos pagos sem nota. */
+function contadorDados(ym) {
+  const ins = ((typeof BANK !== 'undefined' && BANK.all?.pj) || []).filter(t => t.flow === 'in' && t.scope !== 'interna' && String(t.posted_on || '').slice(0, 7) === ym)
+    .sort((a, b) => String(a.posted_on).localeCompare(String(b.posted_on)));
+  const pagosMes = new Set(db.all('tempo_payments').filter(x => String(x.date || '').slice(0, 7) === ym).map(x => x.project_id));
+  const semNota = projects().filter(p => !p.invoice_at && (pagosMes.has(p.id) || String(p.paid_at || '').slice(0, 7) === ym));
+  return { ins, semNota, total: ins.reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0) };
+}
+function contadorTexto(ym) {
+  const d = contadorDados(ym); const [a, m] = ym.split('-');
+  const linhas = [`Resumo PJ de ${m}/${a}`, '', `Entradas: ${fmtMoney(d.total)} (${d.ins.length} lançamento(s))`,
+    ...d.ins.map(t => `- ${fmtDate(t.posted_on)} · ${t.counterpart || t.memo || '—'} · ${fmtMoney(Math.abs(Number(t.amount)))}`)];
+  if (d.semNota.length) linhas.push('', 'Notas a emitir:', ...d.semNota.map(p => `- ${clientOf(p)?.name || ''} · ${p.name} · ${fmtMoney(p.budget)}`));
+  return linhas.join('\n');
+}
+function contadorHTML() {
+  const ym = S.contYm || (() => { const x = new Date(); x.setDate(1); x.setMonth(x.getMonth() - 1); return ymd(x).slice(0, 7); })();
+  const d = contadorDados(ym);
+  return `<div class="panel"><div class="panel-h"><h3>Para o contador</h3><span class="small muted">entradas da PJ e notas a emitir no mês</span><span class="grow"></span><input type="month" class="input sm" style="max-width:160px" value="${ym}" data-on="cont-ym" aria-label="Mês"><button class="btn sm" data-act="cont-copia" data-ym="${ym}">${icon('copy')} Copiar resumo</button></div>
+    <div class="panel-b stack" style="gap:10px"><div>Entradas: <b>${fmtMoney0(d.total)}</b> em ${d.ins.length} lançamento(s)${d.ins.length ? '' : ' <span class="faint small">(nenhuma no extrato carregado)</span>'}</div>
+    ${d.ins.length ? `<div class="calc-sum4"><span class="lbl">De quem</span><span class="lbl v">Data</span><span class="lbl v">Valor</span><span></span>${d.ins.map(t => `<span>${esc(t.counterpart || t.memo || '—')}</span><span class="v small">${fmtDate(t.posted_on)}</span><span class="v">${fmtMoney0(Math.abs(Number(t.amount)))}</span><span></span>`).join('')}</div>` : ''}
+    ${d.semNota.length ? `<div><b>Notas a emitir</b> (pagos sem nota): ${d.semNota.map(p => `${esc(p.name)} <span class="faint small">${esc(clientOf(p)?.name || '')}</span>`).join(' · ')}</div>` : '<div class="small muted">Nenhum projeto pago no mês sem nota.</div>'}
+    </div></div>`;
+}
+CHANGES['cont-ym'] = (el) => { S.contYm = el.value; render(); };
+ACTIONS['cont-copia'] = async (el) => { try { await navigator.clipboard.writeText(contadorTexto(el.dataset.ym)); toast('Resumo copiado para mandar ao contador'); } catch (e) { toast('Não consegui copiar.'); } };

@@ -20,8 +20,9 @@ test('valor-hora: 200 × porte × mercado (grande nacional = 450)', () => {
 });
 test('duração (mín. 30 s), complexidade e 1 h de reunião por aprovação', () => {
   const m = setup(); const pb = m.precoBase();
-  assert.equal(m.calcQuote(ST({ duracao: 2, cx: 'padrao', aprov: 3 }), pb).h, 20 * 2 * 1.3 + 3);
-  assert.equal(m.calcQuote(ST({ duracao: 0.2 }), pb).h, 10);
+  assert.equal(m.calcQuote(ST({ modelo: 'motion2d', duracao: 2, cx: 'padrao', aprov: 3 }), pb).h, 20 * 2 * 1.3 + 3);
+  assert.equal(m.calcQuote(ST({ modelo: 'motion2d', duracao: 0.2 }), pb).h, 10);
+  assert.equal(m.calcQuote(ST({ duracao: 3 }), pb).h, 20, 'fora de modelo de vídeo a duração não conta');
 });
 test('urgência = prazo fechado ÷ pedido, teto 2×', () => {
   const m = setup(); const pb = m.precoBase();   // 40 h = 5 dias

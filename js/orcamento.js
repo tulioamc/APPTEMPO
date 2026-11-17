@@ -54,7 +54,7 @@ function aplicaModelo(st, chave, tipos = []) {
 /* Prazo das etapas (dias úteis): fechado = soma das etapas em sequência × duração; provável = + ajuste de 40% do prazo
    de cada etapa com aprovação (o mínimo combinado). Sem prazos nas etapas, vale horas ÷ 8 h. */
 function prazosEtapas(st, h) {
-  const dur = durMult(st.duracao);
+  const dur = MODELOS[st.modelo]?.video ? durMult(st.duracao) : 1;
   const temPrazo = st.lines.some(x => Number(x.prazo) > 0);
   if (!temPrazo) { const f = h ? Math.max(1, Math.ceil(h / HORAS_DIA)) : 0; return { fechado: f, provavel: f, doModelo: false }; }
   const seq = st.lines.filter(x => !x.par).reduce((s, x) => s + (Number(x.prazo) || 0), 0) * dur;
@@ -77,7 +77,8 @@ const durMult = (min) => { const d = Number(min); return d > 0 ? Math.max(0.5, d
 function calcQuote(st, pb) {
   const r = calcRate(st, pb);
   const hEtapas = st.lines.reduce((s, x) => s + (Number(x.h) || 0), 0);
-  const dur = durMult(st.duracao), cx = cxMult(st.cx);
+  // duração só vale nos modelos de vídeo (horas do modelo são por minuto); fora deles, 1×
+  const dur = MODELOS[st.modelo]?.video ? durMult(st.duracao) : 1, cx = cxMult(st.cx);
   // reuniões de aprovação somam horas (não multiplicam): quantidade × horas por reunião (padrão 1 h)
   const reun = Math.max(0, Number(st.aprov) || 0) * (st.hAprov === '' || st.hAprov == null ? 1 : Math.max(0, Number(st.hAprov) || 0));
   const h = hEtapas * dur * cx + reun;

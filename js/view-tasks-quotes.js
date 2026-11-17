@@ -223,7 +223,7 @@ function openQuote(id, preset = {}) {
       </div></div>
       <div class="panel"><div class="panel-h"><h3>Horas</h3></div><div class="panel-b stack">
         <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
-          <div class="field" style="max-width:170px"><label for="cc-dur">Duração do vídeo (min)</label><input id="cc-dur" type="number" step="0.5" min="0" class="input" data-st="duracao" value="${st.duracao}" placeholder="não é vídeo"></div>
+          ${MODELOS[st.modelo]?.video ? `<div class="field" style="max-width:200px"><label for="cc-dur">Duração do vídeo (min)</label><input id="cc-dur" type="number" step="0.5" min="0.5" class="input" data-st="duracao" value="${st.duracao}" title="As horas do modelo são para 1 minuto de vídeo: 2 min = o dobro de horas e de prazo; 30 s = metade (mínimo)"></div>` : ''}
           <div class="field"><span class="lbl">Complexidade</span><div class="seg">${COMPLEXIDADES.map(([k, nome, m]) => `<button type="button" class="${st.cx === k ? 'on' : ''}" data-cx="${k}">${nome} <span class="faint">${fmtX(m)}</span></button>`).join('')}</div></div>
           <div class="field" style="max-width:260px"><label for="cc-ap">Reuniões de aprovação</label><div class="row" style="flex-wrap:nowrap;gap:6px;align-items:center"><input id="cc-ap" type="number" min="0" class="input" style="width:80px" data-st="aprov" value="${st.aprov}" placeholder="0" aria-label="Quantidade de reuniões"><span class="small muted">×</span><input type="number" min="0" step="0.5" class="input" style="width:80px" data-st="hAprov" value="${st.hAprov ?? 1}" aria-label="Horas por reunião"><span class="small muted">h</span></div></div>
         </div>
