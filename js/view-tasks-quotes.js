@@ -88,7 +88,7 @@ ACTIONS['tk-new'] = (el) => {
       <div class="field"><label for="tkf-p">Projeto *</label><select id="tkf-p" class="input" name="project_id">${options(tkProjectsSorted(), S.task.project, { empty: true, emptyLabel: 'Selecione…', label: p => tkProjectLabel(p) })}</select></div>
       <div class="field"><label for="tkf-par">Subtarefa de (opcional)</label><select id="tkf-par" class="input" name="parent_id"><option value="">É uma tarefa principal</option></select></div>
       <div class="field"><label for="tkf-n">Nome *</label><input id="tkf-n" class="input" name="name"></div>
-      <div class="grid2"><div class="field"><label for="tkf-wt">Tipo de trabalho</label><select id="tkf-wt" class="input" name="work_type_id">${options(workTypes(), '', { empty: true, emptyLabel: 'Sem tipo' })}</select></div><div class="field"><label for="tkf-dl">Prazo</label><input id="tkf-dl" type="date" class="input" name="deadline"></div></div>
+      <div class="grid2"><div class="field"><label for="tkf-wt">Tipo de trabalho</label><select id="tkf-wt" class="input" name="work_type_id">${options(workTypes(), '', { empty: true, emptyLabel: 'Sem tipo' })}</select></div><div class="field" data-dias-wrap><label for="tkf-dl">Prazo</label><input id="tkf-dl" type="date" class="input" name="deadline">${emDiasHTML(false)}</div></div>
     </form><div class="df"><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="save">Criar tarefa</button></div>`
   });
   const fill = () => { const pid = $('#tkf-p', l.box).value; $('#tkf-par', l.box).innerHTML = '<option value="">É uma tarefa principal</option>' + (pid ? options(tasksOf(pid), '') : ''); };

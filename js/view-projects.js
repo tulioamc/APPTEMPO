@@ -212,7 +212,7 @@ function openProjectForm(id, clientId, onCreated) {
         <div class="field"><label for="pf-st">Status</label><select id="pf-st" class="input" name="status_id">${options(statuses('work'), p?.status_id || statusByCat('work', 'todo')?.id)}</select></div>
         <div class="field"><label for="pf-pay">Pagamento</label><select id="pf-pay" class="input" name="payment_status_id">${options(statuses('payment'), p?.payment_status_id || statuses('payment')[0]?.id)}</select></div>
         <div class="field" id="pf-fee-wrap">${feeFieldInner(p, p?.client_id || clientId)}</div>
-        <div class="field"><label for="pf-dl">Prazo</label><input id="pf-dl" type="date" class="input" name="deadline" value="${p?.deadline || ''}"></div>
+        <div class="field" data-dias-wrap><label for="pf-dl">Prazo</label><input id="pf-dl" type="date" class="input" name="deadline" value="${p?.deadline || ''}">${emDiasHTML(false)}</div>
         <div class="field"><label for="pf-est">Horas estimadas</label><input id="pf-est" type="number" min="0" step="0.5" class="input" name="estimated_hours" value="${p?.estimated_hours ?? ''}"></div>
         <div class="field"><label for="pf-bud">Orçamento</label><input id="pf-bud" class="input mono" name="budget" ${moneyAttrs(p?.budget)}></div>
         <div class="field"><label for="pf-rev">Rodadas de ajuste incluídas</label><input id="pf-rev" type="number" min="0" step="1" class="input" name="revisions_included" value="${p?.revisions_included ?? 2}"></div>

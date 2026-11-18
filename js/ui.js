@@ -195,3 +195,20 @@ function btpLineHTML(bruto, trab, pausa, { cap = false, extra = '' } = {}) {
   const w = (t) => (cap ? t[0].toUpperCase() + t.slice(1) : t);
   return `<span data-tip="${esc(`Bruto ${fmtDur(bruto)}\nDo início ao fim das sessões, sem contar duas vezes o mesmo horário. Inclui as pausas.`)}">${w('bruto')} ${fmtDur(bruto)}</span> · <span data-tip="${esc(`Trabalho ${fmtDur(trab)} · ${pct(trab)} do bruto\nSó o tempo trabalhado: bruto menos as pausas.${extra}`)}">trabalho ${fmtDur(trab)}</span> · <span data-tip="${esc(`Pausas ${fmtDur(pausa)} · ${pct(pausa)} do bruto\nParado, tela bloqueada, Mac dormindo, WhatsApp e pausas manuais. Pausa nunca é trabalho.`)}">pausas ${fmtDur(pausa)}</span>`;
 }
+
+/* Prazo rápido: "Hoje", "Amanhã" (só no To-Do) e "em X dias" ao lado de qualquer campo de data de prazo.
+   O bloco fica dentro de um elemento com data-dias-wrap, junto do input type="date" que ele preenche
+   (hoje + X dias corridos). Dispara input e change para cada tela salvar do seu jeito. */
+function emDiasHTML(atalhos) {
+  return `<span class="em-dias">${atalhos ? `<button type="button" class="btn sm" data-dias="0">Hoje</button><button type="button" class="btn sm" data-dias="1">Amanhã</button>` : ''}<span class="em-dias-x small muted">em <input type="number" min="0" max="999" step="1" class="input sm" data-dias-n aria-label="Prazo em quantos dias a partir de hoje" data-tip="Prazo em X dias a partir de hoje (dias corridos)" placeholder="X"> dias</span></span>`;
+}
+function emDiasSet(from, n) {
+  const w = from.closest('[data-dias-wrap]'); const inp = w && w.querySelector('input[type="date"]'); if (!inp) return;
+  const d = new Date(); d.setDate(d.getDate() + n); const v = ymd(d);
+  if (inp.value === v) return;
+  inp.value = v; inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true }));
+}
+function emDiasApply(el) { const n = parseInt(el.value, 10); if (Number.isFinite(n) && n >= 0) emDiasSet(el, n); }
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-dias]'); if (b) { e.preventDefault(); emDiasSet(b, Number(b.dataset.dias)); } });
+document.addEventListener('change', (e) => { const el = e.target.closest && e.target.closest('[data-dias-n]'); if (el) emDiasApply(el); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-dias-n]')) { e.preventDefault(); emDiasApply(e.target); } });

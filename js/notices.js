@@ -407,8 +407,8 @@ ACTIONS['todo-save'] = (el) => {
   const keep = p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {};
   const mudou = p.due !== old.due || (alarm && !old.alarm);
   const data = { ...old, ...keep, ...(p.due ? {} : { due: undefined, deadline: undefined, end: undefined }) };
-  // empurrou: a data antiga já tinha passado e foi trocada por outra
-  if (old.due && old.due.slice(0, 10) < todoToday() && p.due && p.due.slice(0, 10) !== old.due.slice(0, 10)) data.adiou = (old.adiou || 0) + 1;
+  // adiado: a data foi trocada para um dia depois do que estava
+  if (todoAdiou(old.due, p.due)) data.adiou = (old.adiou || 0) + 1;
   if (!p.due) { delete data.due; delete data.deadline; delete data.end; }
   if (!data.taskId && !data.link_manual) { delete data.project_id; delete data.client_id; Object.assign(data, todoFindLink(p.title)); }
   if (alarm && p.due) { data.alarm = true; if (mudou) data.alarm_criado = false; } else { delete data.alarm; delete data.alarm_criado; }
@@ -432,11 +432,14 @@ function openTodoModal(id) {
     render: () => `<div class="dh"><h2>Editar to-do</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
       <div class="db stack" style="gap:12px">
         <div class="field"><label for="td-t">Tarefa</label><input id="td-t" class="input" value="${esc(n.title)}" autocomplete="off"></div>
+        <div class="stack" style="gap:6px" data-dias-wrap>
         <div class="row gap-s" style="flex-wrap:wrap;align-items:flex-end">
           <div class="field"><label for="td-d">Dia</label><input id="td-d" type="date" class="input" value="${dia}"></div>
           <div class="field"><label for="td-h">Hora</label><input id="td-h" type="time" class="input" value="${hora || ''}"></div>
           <div class="field"><label for="td-f">Até (fim)</label><input id="td-f" type="time" class="input" value="${d.end || ''}"></div>
           <label class="check small" style="margin-bottom:8px" data-tip="Aparece como &quot;até hoje 18h&quot;: é um limite, não um horário marcado"><input type="checkbox" id="td-prazo" ${d.deadline ? 'checked' : ''}> É prazo</label>
+        </div>
+        ${emDiasHTML(true)}
         </div>
         <div class="field"><label for="td-l">Projeto ou cliente</label><select id="td-l" class="input">${opt('', 'Nenhum')}
           ${projs.length ? `<optgroup label="Projetos">${projs.map(p => { const c = db.get('tempo_clients', p.client_id); return opt('p:' + p.id, p.name + (c ? ' · ' + c.name : '')); }).join('')}</optgroup>` : ''}
@@ -446,7 +449,7 @@ function openTodoModal(id) {
           <label class="check small" style="margin-bottom:8px" data-tip="Cria um lembrete com alarme no app Lembretes (Mac e iPhone). Precisa de dia e hora."><input type="checkbox" id="td-a" ${d.alarm ? 'checked' : ''}> Alarme</label>
         </div>
         <div class="field"><label for="td-n">Anotação</label><textarea id="td-n" class="input" rows="3">${esc(n.body || '')}</textarea></div>
-        ${d.adiou ? `<span class="small muted">Adiada ${d.adiou}x.</span>` : ''}
+        ${d.adiou ? `<span class="small muted">Adiado ${d.adiou}x.</span>` : ''}
       </div>
       <div class="df"><button class="btn danger" data-x="del">Excluir</button><span class="grow"></span><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="ok">Salvar</button></div>`,
     onMount: (ly) => {
@@ -455,7 +458,7 @@ function openTodoModal(id) {
         if (ev.target.closest('[data-x="ok"]')) { salvar(ly.box); ly.close(); }
         else if (ev.target.closest('[data-x="del"]')) { ly.close(); ACTIONS['todo-del']({ dataset: { id: n.id } }); }
       });
-      ly.box.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.tagName === 'INPUT') { ev.preventDefault(); salvar(ly.box); ly.close(); } });
+      ly.box.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.tagName === 'INPUT') { ev.preventDefault(); if (ev.target.matches('[data-dias-n]')) emDiasApply(ev.target); salvar(ly.box); ly.close(); } });
     },
   });
 }
@@ -467,8 +470,8 @@ function todoSalvarModal(id, box) {
   const due = dia ? `${dia}T${hora || '20:00'}` : null;
   if (due) { data.due = due; data.end = fim || null; data.deadline = v('#td-prazo').checked && !fim; }
   else { delete data.due; delete data.end; delete data.deadline; }
-  // empurrou: a data antiga já tinha passado e foi trocada por outra
-  if (old.due && old.due.slice(0, 10) < todoToday() && due && due.slice(0, 10) !== old.due.slice(0, 10)) data.adiou = (old.adiou || 0) + 1;
+  // adiado: a data foi trocada para um dia depois do que estava
+  if (todoAdiou(old.due, due)) data.adiou = (old.adiou || 0) + 1;
   const lig = v('#td-l').value;
   delete data.project_id; delete data.client_id;
   if (lig.startsWith('p:')) data.project_id = lig.slice(2); else if (lig.startsWith('c:')) data.client_id = lig.slice(2);
@@ -488,7 +491,7 @@ function todoItemHTML(t) {
   const estTxt = est ? `<span class="todo-due">${real ? fmtDur(real) + ' / ' : 'est. '}${fmtDur(est * 60000)}</span>` : '';
   const lig = t.data?.project_id ? db.get('tempo_projects', t.data.project_id) : (t.data?.client_id ? db.get('tempo_clients', t.data.client_id) : null);
   const ligTxt = lig && !t.data?.taskId ? `<span class="todo-due todo-lig" data-act="todo-modal" data-id="${t.id}" data-tip="${t.data.project_id ? 'Projeto' : 'Cliente'} ligado${t.data.link_manual ? '' : ' pelo texto'}. Clique para trocar.">${esc(lig.name)}</span>` : '';
-  return `<div class="todo ${t.status === 'done' ? 'done' : ''}" data-tid="${t.id}" ${t.status === 'done' || todoSortMode() === 'alpha' || S.todoEdit === t.id ? '' : 'draggable="true"'}><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" oninput="todoAlarmPeek(this,'todo-edit-alarm-wrap','todo-edit-alarm')" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-cancel']()"><label id="todo-edit-alarm-wrap" class="row gap-s small" onmousedown="event.preventDefault()" style="display:${parseTodoText(todoEditRaw(t)).due ? 'inline-flex' : 'none'};align-items:center;white-space:nowrap"><input type="checkbox" id="todo-edit-alarm" ${t.data?.alarm ? 'checked' : ''}> Alarme</label>` : `<span class="grow todo-title" data-act="todo-modal" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${ligTxt}${estTxt}${t.data?.adiou ? `<span class="todo-due">adiou ${t.data.adiou}x</span>` : ''}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="btn sm icon ghost" data-act="todo-play" data-id="${t.id}" aria-label="Começar registro" title="Começar registro">${icon('play')}</button><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`;
+  return `<div class="todo ${t.status === 'done' ? 'done' : ''}" data-tid="${t.id}" ${t.status === 'done' || todoSortMode() === 'alpha' || S.todoEdit === t.id ? '' : 'draggable="true"'}><input type="checkbox" data-act="todo-toggle" data-id="${t.id}" ${t.status === 'done' ? 'checked' : ''}>${S.todoEdit === t.id ? `<input id="todo-edit" class="input grow" data-id="${t.id}" value="${esc(todoEditRaw(t))}" oninput="todoAlarmPeek(this,'todo-edit-alarm-wrap','todo-edit-alarm')" onkeydown="ACTIONS['todo-key'](event)" onblur="ACTIONS['todo-cancel']()"><label id="todo-edit-alarm-wrap" class="row gap-s small" onmousedown="event.preventDefault()" style="display:${parseTodoText(todoEditRaw(t)).due ? 'inline-flex' : 'none'};align-items:center;white-space:nowrap"><input type="checkbox" id="todo-edit-alarm" ${t.data?.alarm ? 'checked' : ''}> Alarme</label>` : `<span class="grow todo-title" data-act="todo-modal" data-id="${t.id}" title="Clique para editar">${esc(t.title)}</span>`}${ligTxt}${estTxt}${t.data?.adiou ? `<span class="todo-due" data-tip="Vezes que a data foi trocada para depois">adiado ${t.data.adiou}x</span>` : ''}${t.data?.due ? `<span class="todo-due ${t.status !== 'done' && new Date(t.data.end ? t.data.due.slice(0, 10) + 'T' + t.data.end : t.data.due) < new Date() ? 'late' : ''}">${esc(todoDueLabel(t.data))}</span>` : ''}<button class="btn sm icon ghost" data-act="todo-play" data-id="${t.id}" aria-label="Começar registro" title="Começar registro">${icon('play')}</button><button class="icon-btn ghost" data-act="todo-del" data-id="${t.id}" title="Remover">×</button></div>`;
 }
 /* Abertos primeiro; concluídos agrupados por dia da resolução, mais recentes primeiro.
    recentDays: mostra só os concluídos dos últimos N dias (o painel usa 7). */
@@ -532,11 +535,12 @@ const TODO_DAYS = { dom: 0, seg: 1, ter: 2, qua: 3, qui: 4, sex: 5, sab: 6 };
 const TODO_DAY_NAMES = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
 const todoToday = () => ymd(new Date());
 const todoSetSilent = (key, value) => { const st = db.data.tempo_settings.find(r => r.key === key); if (st) db.update('tempo_settings', st.id, { value }, true); else db.insert('tempo_settings', { key, value }, true); };
+const todoAdiou = (antes, depois) => !!(antes && depois && depois.slice(0, 10) > antes.slice(0, 10));
 const todoDueDay = (n) => n.data?.due ? n.data.due.slice(0, 10) : null;
 const todoIsLate = (n) => n.status !== 'done' && !!n.data?.due && new Date(n.data.end ? n.data.due.slice(0, 10) + 'T' + n.data.end : n.data.due) < new Date();
 
-/* "adiou" conta quantas vezes o to-do foi empurrado: a data já tinha passado e você trocou para outra data.
-   Não sobe sozinho com o tempo. Uma vez, zera os contadores antigos (que subiam a cada dia). */
+/* "adiou" conta quantas vezes o to-do foi adiado: a data foi trocada para um dia depois do que estava
+   (vencida ou não). Trazer para antes não conta. Não sobe sozinho com o tempo. Uma vez, zera os contadores antigos (que subiam a cada dia). */
 function todoCarry() {
   if (db.setting('todoAdiouV2', false)) return;
   db.all('tempo_notices').filter(n => n.kind === 'todo' && n.data?.adiou).forEach(n => db.update('tempo_notices', n.id, { data: { ...(n.data || {}), adiou: 0 } }, true));

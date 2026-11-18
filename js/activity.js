@@ -515,7 +515,7 @@ function actSectionHTML(e) {
   const fileSec = `<div class="act-sec"><div class="row between"><span class="lbl">${ACT_FV_LBL[fv]}</span><span class="row" style="gap:4px">${fvBtns}</span></div>${actStripHTML(e, file, fv)}${actChipsHTML(file, fv)}</div>`;
   const toggle = actForaToggleHTML([e]);
   const secP = `<div class="act-sec"><div class="row between"><span class="lbl">Por programa</span></div>${actStripHTML(e, prog, 'program')}${actChipsHTML(prog, 'program').replace(/<\/div>$/, actUnspecChipHTML(actUnspecMs([e])) + '</div>')}</div>`;
-  return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${secP}${fileSec}<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div><span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
+  return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${secP}${fileSec}${actHidePausas() ? '' : `<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div>`}<span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
 }
 
 /* Log discreto no fim do formulário da sessão: cada registro de atividade (programa e arquivo) e cada pausa, por horário.
@@ -524,7 +524,7 @@ function actLogFootHTML(e, legacyLines) {
   const rows = (legacyLines || []).map(l => ({ k: l.slice(0, 5), line: l }));
   actList(e.id).forEach(r => rows.push({ k: fmtTime(r.from), line: `${fmtTime(r.from)}–${fmtTime(r.to)}  ${r.app}${r.doc ? ' · ' + r.doc : ''}` }));
   const segs = e.segments || [];
-  for (let i = 0; i < segs.length - 1; i++) {
+  for (let i = 0; i < segs.length - 1 && !actHidePausas(); i++) {
     const a = segs[i].e, b = segs[i + 1].s;
     if (a && b && new Date(b) > new Date(a)) rows.push({ k: fmtTime(a), line: `${fmtTime(a)}–${fmtTime(b)}  pausa · ${pauseWhy(segs[i].why)}` });
   }

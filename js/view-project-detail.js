@@ -39,7 +39,7 @@ function pdOverview(p) {
   <div class="props">
     <span class="k">Status</span><div>${comboBtn('work', p.status_id, 'proj-status', p.id)} <span class="small faint">propaga para tarefas que herdam</span></div>
     <span class="k">Pagamento</span><div>${comboBtn('payment', p.payment_status_id, 'proj-pay', p.id)}</div>
-    <span class="k">Prazo atual</span><div class="row"><input type="date" class="input sm" style="width:auto" value="${p.deadline || ''}" data-pd="deadline"> ${deadlineCell(p)}</div>
+    <span class="k">Prazo atual</span><div class="row" data-dias-wrap><input type="date" class="input sm" style="width:auto" value="${p.deadline || ''}" data-pd="deadline">${emDiasHTML(false)} ${deadlineCell(p)}</div>
     <span class="k">Prazo original</span><div class="row"><input type="date" class="input sm" style="width:auto" value="${p.deadline_original || ''}" data-pd="orig" aria-label="Prazo original"> ${changes.length ? `<span class="small muted">· ${changes.length} adiamento(s)</span>` : ''}</div>
     <span class="k">Entrega</span><div>${p.sent_at ? fmtDateTime(p.sent_at) : '—'} ${del ? (del.late ? `<span class="tag c-red">${del.days} dia(s) de atraso</span>` : `<span class="tag c-green">no prazo</span>`) : ''}</div>
     <span class="k">Observação</span><div class="muted">${esc(p.notes || '—')}</div>
@@ -62,7 +62,7 @@ function pdTasks(p) {
     ${comboBtn('work', t.status_id, 'task-status', t.id)}
     ${t.status_inherited !== false ? '<span class="inh" title="Acompanha o status do projeto">H</span>' : `<button class="btn sm ghost" data-x="inherit" data-id="${t.id}" title="Voltar a acompanhar o status do projeto">${icon('undo')} herdar</button>`}
     ${!isSub ? comboBtn('wt', t.work_type_id, 'task-wt', t.id, { cls: 'hide-sm' }) : ''}
-    <input type="date" class="input sm" style="width:auto" value="${t.deadline || ''}" data-pd="tdl" data-id="${t.id}" aria-label="Prazo">
+    <span class="row" style="gap:4px" data-dias-wrap><input type="date" class="input sm" style="width:auto" value="${t.deadline || ''}" data-pd="tdl" data-id="${t.id}" aria-label="Prazo">${emDiasHTML(false)}</span>
     <input class="input sm" style="width:130px" value="${esc(t.owner || '')}" placeholder="Responsável" data-pd="owner" data-id="${t.id}" aria-label="Responsável">
     <span class="mono small faint" style="min-width:52px;text-align:right" title="Líquido">${fmtDur(isSub ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : taskMs(t.id))}</span><span class="mono small faint" style="min-width:52px;text-align:right" title="Bruto (com pausas)">${fmtDur(db.where('tempo_time_entries', e => (isSub ? e.task_id === t.id : (e.task_id === t.id || subtasksOf(t.id).some(x => x.id === e.task_id)))).reduce((s, e) => s + entryBrutoMs(e), 0))}</span>
     ${!t.owner || t.owner === 'Eu' ? `<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` : '<span class="faint small" title="Terceiro: sem apontamento de horas">terceiro</span>'}
