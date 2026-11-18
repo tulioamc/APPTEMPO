@@ -140,9 +140,20 @@ function actList(entryId) {
   const memoKey = (db.setRev || 0) + '|' + (db.data.tempo_settings || []).length + '|' + JSON.stringify(e.segments) + (aberto ? '|' + Math.floor(Date.now() / 30e3) : '');
   const m = ACT_LIST_MEMO.get(entryId); if (m && m.k === memoKey) return m.v;
   const v = [];
+  // buraco curto (menos que o limite de parado, 2 min) entre dois registros: você estava lendo/pensando no mesmo
+  // programa, ou trocou rápido de app (menos de 10 s não entra no registro). O tempo fica com o programa de antes.
+  const lim = (typeof idleLimit === 'function' ? idleLimit() : 2) * 60e3;
   (e.segments || []).forEach(s => {
     if (!s.s) return;
-    actPoolBetween(new Date(s.s).getTime(), s.e ? new Date(s.e).getTime() : Date.now()).forEach(r => { if ((!(typeof pausaRec === 'function' && pausaRec(r)) || actWaTrabalho(r)) && !/spotify/i.test(String(r.app || ''))) v.push(r); });
+    const sa = new Date(s.s).getTime(), sb = s.e ? new Date(s.e).getTime() : Date.now();
+    const rs = [];
+    actPoolBetween(sa, sb).forEach(r => { if ((!(typeof pausaRec === 'function' && pausaRec(r)) || actWaTrabalho(r)) && !/spotify/i.test(String(r.app || ''))) rs.push(r); });
+    rs.sort((p, q) => new Date(p.from) - new Date(q.from));
+    rs.forEach((r, i) => {
+      const fim = new Date(r.to).getTime();
+      const prox = i < rs.length - 1 ? new Date(rs[i + 1].from).getTime() : (s.e ? sb : null);
+      v.push(prox && prox > fim && prox - fim < lim ? { ...r, to: new Date(prox).toISOString(), _estendido: true } : r);
+    });
   });
   if (ACT_LIST_MEMO.size > 400) ACT_LIST_MEMO.clear();
   ACT_LIST_MEMO.set(entryId, { k: memoKey, v });
@@ -386,7 +397,7 @@ const isAppPause = (why) => !!why && (why === 'app' || (db.setting('pauseApps', 
    ociosidade = azul bem claro · WhatsApp (e apps de mensagem) = verde claro · Telegram = azul escuro · outros = cinza */
 /* Cores das faixas (Preferências › Cores das faixas): cada item listrado tem a cor da listra (a) e a do fundo (b). */
 const FAIXA_CORES = {
-  unspec: { nome: 'Não especificado', dica: 'Trabalho sem registro de programa', a: '#F59E0B', b: '#FEF3C7' },
+  unspec: { nome: 'Em uso agora / Não especificado', dica: 'Trabalho ainda sem programa registrado', a: '#F59E0B', b: '#FEF3C7' },
   idle: { nome: 'Pausa: parado', dica: 'Ocioso, sono, sem registro, tela bloqueada', a: '#60A5FA', b: '#DBEAFE' },
   other: { nome: 'Pausa: outras', dica: 'Pausa manual e demais motivos', a: '#A1A1AA', b: '#E4E4E7' },
   whatsapp: { nome: 'WhatsApp Distração', dica: 'Pausa: conversa com amigos', a: '#6CF1AE', b: '#15803D' },
@@ -455,12 +466,18 @@ function actUnspecOf(e, at = Date.now(), { min = 60e3, emenda = 15e3 } = {}) {
   return out.filter(([a, b]) => b - a >= min && b > a);
 }
 const actUnspecMs = (list) => list.reduce((t, e) => t + actUnspecOf(e, Date.now(), { min: 0, emenda: 0 }).reduce((s, [a, b]) => s + (b - a), 0), 0);
-const ACT_UNSPEC_TIP = 'Trabalho não especificado\nTempo da sessão sem registro de programa. Trechos de 2 min ou mais viram pausa sozinhos quando o computador volta a registrar.';
+const ACT_UNSPEC_TIP = 'Trabalho ainda sem programa: normalmente o programa em uso agora (só entra no registro quando você troca de app). Parado menos de 2 min fica com o programa de antes; 2 min ou mais vira pausa.';
 function actUnspecSpanHTML(a, b, x, w) {
-  return `<span class="seg-b unspec" data-g="unspec" style="left:${x}%;width:${w}%" data-tip="${esc(`Não especificado ${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())} · ${fmtDur(b - a)}\nSem registro do computador. Com 2 min ou mais, vira pausa quando o computador volta a registrar.`)}"></span>`;
+  const agora = Date.now() - b < 30e3;   // trecho que vai até agora: é o programa em uso, ainda não registrado
+  const nome = agora ? 'Em uso agora' : 'Não especificado';
+  const dica = agora ? 'Programa que você está usando agora: entra no registro quando você trocar de app.' : 'Trabalho sem programa registrado.';
+  return `<span class="seg-b unspec" data-g="unspec" style="left:${x}%;width:${w}%" data-tip="${esc(`${nome} ${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())} · ${fmtDur(b - a)}\n${dica}`)}"></span>`;
 }
-function actUnspecChipHTML(ms) {
-  return ms > 0 ? `<span class="act-chip act-unspec" data-g="unspec" style="--tb:var(--fx-unspec-a)" data-tip="${esc(ACT_UNSPEC_TIP + '\nTotal: ' + fmtDur(ms))}"><i></i>* Não especificado <span class="faint">${fmtDur(ms)}</span></span>` : '';
+/* Chip do trabalho sem programa: com sessão rodando, é quase sempre o programa em uso agora. */
+function actUnspecChipHTML(ms, list = []) {
+  const agora = list.some(e => (e.segments || []).some(s => s.s && !s.e));
+  const nome = agora ? 'Em uso agora' : 'Não especificado';
+  return ms > 0 ? `<span class="act-chip act-unspec" data-g="unspec" style="--tb:var(--fx-unspec-a)" data-tip="${esc(ACT_UNSPEC_TIP + '\nTotal: ' + fmtDur(ms))}"><i></i>${nome} <span class="faint">${fmtDur(ms)}</span></span>` : '';
 }
 
 /* Checkbox "Mostrar trabalho em outros projetos": aparece só se houver espaços "fora" nas sessões. Igual na revisão e no resumo. */
@@ -606,7 +623,7 @@ function actSectionHTML(e) {
   const fvBtns = ['file', 'site'].map(v => `<button class="btn sm ${fv === v || fv === 'both' ? 'primary' : ''}" data-act="act-fview" data-v="${v}" aria-pressed="${fv === v || fv === 'both'}">${ACT_FV_LBL[v]}</button>`).join('');
   const fileSec = `<div class="act-sec"><div class="row between"><span class="lbl">${ACT_FV_LBL[fv]}</span><span class="row" style="gap:4px">${fvBtns}</span></div>${actStripHTML(e, file, fv)}${actChipsHTML(file, fv)}</div>`;
   const toggle = actForaToggleHTML([e], true);
-  const secP = `<div class="act-sec"><div class="row between"><span class="lbl">Por programa</span></div>${actStripHTML(e, prog, 'program')}${actChipsHTML(prog, 'program').replace(/<\/div>$/, (actHidePausas() ? '' : actUnspecChipHTML(actUnspecMs([e]))) + '</div>')}</div>`;
+  const secP = `<div class="act-sec"><div class="row between"><span class="lbl">Por programa</span></div>${actStripHTML(e, prog, 'program')}${actChipsHTML(prog, 'program').replace(/<\/div>$/, (actHidePausas() ? '' : actUnspecChipHTML(actUnspecMs([e]), [e])) + '</div>')}</div>`;
   return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${secP}${fileSec}${actSemParado() ? '' : `<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div>`}<span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
 }
 

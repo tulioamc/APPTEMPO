@@ -118,6 +118,7 @@ function pzRever(e, at = Date.now()) {
   const ultimo = Math.max(...recs.map(r => r.b));
   const p1 = aberta ? Math.min(at, ultimo) : fim;
   if (!(p1 > p0)) return 0;
+  // parado = mouse E teclado sem uso por 2 min (Preferências); menos que isso (lendo, pensando) conta como trabalho
   const T = (typeof idleLimit === 'function' ? idleLimit() : 2) * 60e3;
   const r = pzReconciliar(e.segments, recs, { T, at, p0, p1, aberta });
   const marcar = () => { marcas[e.id] = p1; db.setSetting('pausasAte', { ...marcas }); };
