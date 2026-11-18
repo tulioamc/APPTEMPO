@@ -390,7 +390,7 @@ const FAIXA_CORES = {
   idle: { nome: 'Pausa: parado', dica: 'Ocioso, sono, sem registro, tela bloqueada', a: '#60A5FA', b: '#DBEAFE' },
   other: { nome: 'Pausa: outras', dica: 'Pausa manual e demais motivos', a: '#A1A1AA', b: '#E4E4E7' },
   whatsapp: { nome: 'WhatsApp Distração', dica: 'Pausa: conversa com amigos', a: '#6CF1AE', b: '#15803D' },
-  waCli: { nome: 'WhatsApp Produtivo', dica: 'Trabalho: contato ou grupo de cliente', a: '#47BD86', b: '#FFFFFF' },
+  waCli: { nome: 'WhatsApp Produtivo', dica: 'Trabalho: contato ou grupo de cliente (liso, não é pausa)', a: '#A7F3D0', b: '#A7F3D0', liso: true },
   instagram: { nome: 'Instagram', dica: 'Pausa', a: '#F9A8D4', b: '#FCE7F3' },
   telegram: { nome: 'Telegram', dica: 'Pausa', a: '#1E40AF', b: '#93C5FD' },
 };

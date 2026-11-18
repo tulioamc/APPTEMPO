@@ -782,7 +782,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 .act-sec.focus .act-chip:not(.on) { opacity: .6; }
 .act-sec.focus .act-chip.on { background: color-mix(in oklab, var(--tb) 34%, var(--surface)); }
 /* pausas: mesma listra na linha do tempo principal e nas faixas da sessão (cor vem de --ph) */
-.day-strip .seg-b.pausa, .act-strip .seg-b.pausa { background: repeating-linear-gradient(0deg, var(--ph, #d1d1d1) 0 4px, var(--pg, color-mix(in oklab, var(--ph, #d1d1d1) 35%, var(--surface))) 4px 8px); box-shadow: none; opacity: .9; }
+.seg-b.pausa, .day-strip .seg-b.pausa, .act-strip .seg-b.pausa { background: repeating-linear-gradient(0deg, var(--ph, #d1d1d1) 0 4px, var(--pg, color-mix(in oklab, var(--ph, #d1d1d1) 35%, var(--surface))) 4px 8px); box-shadow: none; opacity: .9; }
 
 .strip-tip { position: fixed; z-index: 450; display: none; pointer-events: none; background: var(--fg); color: var(--bg); padding: 6px 9px; border-radius: 6px; font-size: .8em; line-height: 1.4; white-space: pre-line; box-shadow: var(--shadow); max-width: 280px; }
 .strip-tip .tip-h { font-weight: 700; font-size: calc(1em + 5pt); line-height: 1.25; margin-bottom: 3px; }
@@ -1038,7 +1038,7 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .prod-seg.act-hl { box-shadow: inset 0 0 0 2px #1E293B; }
 
 /* Uso de programas: trecho de pausas (listrado), com chip e hover como os demais */
-.usage-seg.usage-pausa { background: repeating-linear-gradient(45deg, #CBD5E1 0 6px, #E2E8F0 6px 8px); color: #334155; }
+.usage-seg.usage-pausa { background: repeating-linear-gradient(0deg, var(--fx-idle-a, #60A5FA) 0 4px, var(--fx-idle-b, #DBEAFE) 4px 8px); color: #334155; }
 
 /* Relatório Produtividade: Produtivo verde claro, Distração vermelho claro, Ocioso amarelo, Descanso cinza */
 .prod-p { background: #4ADE80; }
@@ -1184,7 +1184,8 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 /* Trabalho não especificado: trabalhado sem registro de programa (não é pausa) */
 .seg-b.unspec { background: repeating-linear-gradient(135deg, var(--fx-unspec-a, #F59E0B) 0 3px, var(--fx-unspec-b, #FEF3C7) 3px 6px); }
 /* WhatsApp Produtivo (contato de cliente): listrado nas faixas e no quadradinho do chip */
-.act-b[data-g="p:WhatsApp Cliente"], .act-b[data-wa="1"], .act-chip[data-g="p:WhatsApp Cliente"] i { background: repeating-linear-gradient(135deg, var(--fx-waCli-a, #47BD86) 0 4px, var(--fx-waCli-b, #FFFFFF) 4px 8px) !important; }
+.act-b[data-g="p:WhatsApp Cliente"], .act-b[data-wa="1"] { --tb: var(--fx-waCli-a, #A7F3D0) !important; background: var(--fx-waCli-a, #A7F3D0) !important; }
+.act-chip[data-g="p:WhatsApp Cliente"] { --tb: var(--fx-waCli-a, #A7F3D0) !important; }
 .cores-faixa .row { align-items: center; gap: 10px; }
 .cores-faixa input[type="color"] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
 .cores-faixa .amostra { width: 70px; height: 18px; border-radius: 4px; }
