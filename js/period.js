@@ -86,7 +86,7 @@ function pauseBucketsOf(items) {
   });
   return ['whatsapp', 'instagram', 'other'].map(k => ({ kind: k, ...B[k] })).filter(b => b.ms > 0);
 }
-const pauseBucketChip = (b) => `<span class="act-chip act-chip-total" data-hl="pk:${b.kind}" style="--tb:${b.color}" title="${esc((b.detail || []).join('\n'))}"><i></i>${b.kind === 'other' ? `Pausa <span class="act-more">+${b.n}</span>` : esc(b.label)} <span class="faint">${fmtDur(b.ms)}</span></span>`;
+const pauseBucketChip = (b) => `<span class="act-chip act-chip-total" data-hl="pk:${b.kind}" style="--tb:${b.color}" data-tip="${esc((b.kind === 'whatsapp' && (b.detail || []).length ? 'Conversas que mais tomaram tempo\n' : '') + (b.detail || []).join('\n'))}"><i></i>${b.kind === 'other' ? `Pausa <span class="act-more">+${b.n}</span>` : esc(b.label)} <span class="faint">${fmtDur(b.ms)}</span></span>`;
 
 /* Caixa "Relatório do Time Sheet". */
 /* Aglomerado: uma barra por projeto e outra por tarefa, somando o tempo bruto do período (início ao fim, com pausas). */

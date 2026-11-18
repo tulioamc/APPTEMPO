@@ -262,7 +262,7 @@ function resumoBodyHTML(es, opts = {}) {
     note = 'Tudo junto: cada programa soma o tempo de todas as sessões, e as pausas ficam por categoria. A barra inteira é o bruto.';
   }
   const legendChips = an.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="res-prog"${g.id === 'outros' ? ' data-hl="outros"' + actOthMembersAttr(an) : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-label="${esc(g.label)}" style="--tb:${g.color}"${g.id === 'outros' ? '' : ` data-tip="${esc(actTip(g) + '\nClique para mover, agrupar ou mudar a cor')}"`}><i></i>${esc(g.label)} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('') + (actHidePausas() ? "" : actUnspecChipHTML(actUnspecMs(es)));
-  const pauseChips = pauseBucketChip && !actHidePausas() ? pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).map(pauseBucketChip).join('') : '';
+  const pauseChips = pauseBucketChip && !actHidePausas() ? pauseBucketsOf(Object.entries(pauseByWhy).map(([k, ms]) => ({ key: k, label: pauseLabel(k), ms }))).map(b => b.kind === 'whatsapp' ? { ...b, detail: waDistracaoTop(es) } : b).map(pauseBucketChip).join('') : '';
   const fileMembers = (g) => {
     const arr = g.id === 'outros' ? fileAn.groups.filter(x => x.parent === 'outros').map(x => ({ l: x.label, ms: x.ms, c: x.color }))
       : (g.items || []).slice(0, 15).map(it => ({ l: it.doc || it.app, ms: it.ms, c: g.color }));

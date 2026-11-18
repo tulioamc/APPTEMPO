@@ -578,7 +578,22 @@ function pauseChipsHTML(e) {
   const items = pauseGapsOf([e]).map(g => ({ key: g.why || 'manual', label: pauseLabel(g.why || 'manual'), ms: new Date(g.e) - new Date(g.s) })).filter(x => x.ms > 0);
   if (!items.length) return '';
   const total = items.reduce((t, x) => t + x.ms, 0);
-  return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#64748B">Pausas <span class="faint">${fmtDur(total)}</span></span>${pauseBucketsOf(items).map(pauseBucketChip).join('')}</div>`;
+  return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#64748B">Pausas <span class="faint">${fmtDur(total)}</span></span>${pauseBucketsOf(items).map(b => b.kind === 'whatsapp' ? { ...b, detail: waDistracaoTop([e]) } : b).map(pauseBucketChip).join('')}</div>`;
+}
+/* Conversas de WhatsApp (não de trabalho) que mais tomaram tempo nas sessões: para o balãozinho do chip. */
+function waDistracaoTop(es, n = 8) {
+  const by = {};
+  es.forEach(e => {
+    const segs = (e.segments || []).filter(s => s.s); if (!segs.length) return;
+    const a = new Date(segs[0].s).getTime(), b = Math.max(...segs.map(s => s.e ? new Date(s.e).getTime() : Date.now()));
+    actPoolBetween(a, b).forEach(r => {
+      if (!/whatsapp/i.test(String(r.app || '')) || actWaTrabalho(r)) return;
+      const k = String(r.doc || '(sem conversa)').replace(/[\u200e\u200f]/g, '').trim() || '(sem conversa)';
+      by[k] = (by[k] || 0) + (new Date(r.to) - new Date(r.from));
+    });
+  });
+  const l = Object.entries(by).sort((x, y) => y[1] - x[1]);
+  return l.slice(0, n).map(([k, ms]) => `${k} · ${fmtDur(ms)}`).concat(l.length > n ? [`+${l.length - n} conversas`] : []);
 }
 
 /* Bloco da tela "Revisar sessão": uma faixa por programa e uma por arquivo. */
