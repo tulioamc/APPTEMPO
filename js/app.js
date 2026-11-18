@@ -199,7 +199,8 @@ function uncoveredGap(a, fromMs, toMs) {
 function suggestPause(fromMs, toMs, source, app) {
   if (!isMacApp()) return;   // navegador e celular não criam pausa sozinhos
   // app de distração (WhatsApp de amigo, Instagram…): conta a partir de 10 s, que é o mínimo que o Mac registra
-  const minMs = source === 'app' ? 10000 : idleLimit() * 60000;
+  // tela bloqueada também: qualquer bloqueio é pausa, mesmo curto (antes, menos de 2 min contava como trabalho)
+  const minMs = source === 'app' || app === 'Tela bloqueada' ? 10000 : idleLimit() * 60000;
   const a = activeEntry(); if (!a || toMs - fromMs < minMs) return;
   // só dentro do tempo trabalhado: o maior trecho de intervalo trabalhado que cai no período (antes, cortava pelo
   // início do último intervalo e perdia o buraco quando outra pausa, ex.: sono, já tinha entrado depois dele)

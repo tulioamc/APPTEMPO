@@ -129,11 +129,17 @@ function actList(entryId) {
   const v = [];
   (e.segments || []).forEach(s => {
     if (!s.s) return;
-    actPoolBetween(new Date(s.s).getTime(), s.e ? new Date(s.e).getTime() : Date.now()).forEach(r => { if (!(typeof pausaRec === 'function' && pausaRec(r)) && !/spotify/i.test(String(r.app || ''))) v.push(r); });
+    actPoolBetween(new Date(s.s).getTime(), s.e ? new Date(s.e).getTime() : Date.now()).forEach(r => { if ((!(typeof pausaRec === 'function' && pausaRec(r)) || actWaTrabalho(r)) && !/spotify/i.test(String(r.app || ''))) v.push(r); });
   });
   if (ACT_LIST_MEMO.size > 400) ACT_LIST_MEMO.clear();
   ACT_LIST_MEMO.set(entryId, { k: memoKey, v });
   return v;
+}
+
+/* WhatsApp com contato ou grupo de trabalho conta como trabalho: entra nas faixas (antes ficava como "Não especificado"). */
+function actWaTrabalho(r) {
+  if (!/^whatsapp$/i.test(String(r.app || '').trim()) || typeof waContato !== 'function' || typeof waEhTrabalho !== 'function') return false;
+  const c = waContato(r.doc); return !!(c && waEhTrabalho(c));
 }
 
 /* A atividade já está na lista única (log do dia): a sessão enxerga sozinha o que cai nos intervalos dela. */
