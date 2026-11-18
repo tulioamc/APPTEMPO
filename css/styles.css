@@ -1354,3 +1354,7 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .em-dias-x { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .em-dias-x input { width: 58px; text-align: center; }
 .field > .em-dias { margin-top: 6px; }
+/* "+ Novo …" no seletor: roxo quando liberado, apagado até escolher o nível anterior */
+.popt.pk-new .n { color: var(--accent); }
+.popt.pk-new.off .n { color: var(--fg-3); }
+.popt.pk-new.off { cursor: not-allowed; }

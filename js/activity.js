@@ -427,12 +427,26 @@ function actUnspecChipHTML(ms) {
 
 /* Checkbox "Mostrar trabalho em outros projetos": aparece só se houver espaços "fora" nas sessões. Igual na revisão e no resumo. */
 /* Chaves do timesheet: alternância em outro projeto (só se houver) e esconder pausas. As duas vêm desligadas. */
+/* Esconder pausas/tempo ocioso: tira das faixas as pausas e o "Não especificado" (o tempo continua salvo).
+   Aglomerar: cada programa/arquivo vira um bloco só, somando o tempo. Corrido: tira os espaços parados e junta os blocos
+   na ordem em que aconteceram. Só na tela da sessão; tudo vem desligado. */
 const actHidePausas = () => !!db.setting('actHidePausas', false);
-function actForaToggleHTML(ents) {
+const actAglomerar = () => !!db.setting('actAglomerar', false);
+const actCorrido = () => !!db.setting('actCorrido', false);
+const actSemParado = () => actHidePausas() || actCorrido();
+function actForaToggleHTML(ents, layout = false) {
+  const ck = (x, on, lab, tip) => `<label class="row small" style="gap:6px;cursor:pointer"${tip ? ` data-tip="${esc(tip)}"` : ''}><input type="checkbox" data-x="${x}" ${on ? 'checked' : ''}> ${lab}</label>`;
   const alt = ents.some(e => (e.segments || []).some(x => x.why === 'moved'))
-    ? `<label class="row small" style="gap:6px;cursor:pointer"><input type="checkbox" data-x="act-fora-toggle" ${db.setting('actShowAlt', false) ? 'checked' : ''}> Mostrar alternância em outro projeto</label>` : '';
-  const pz = `<label class="row small" style="gap:6px;cursor:pointer"><input type="checkbox" data-x="act-pausa-toggle" ${actHidePausas() ? 'checked' : ''}> Esconder pausas</label>`;
-  return `<div class="row" style="gap:18px;flex-wrap:wrap">${alt}${pz}</div>`;
+    ? ck('act-fora-toggle', db.setting('actShowAlt', false), 'Mostrar alternância em outro projeto') : '';
+  const pz = ck('act-pausa-toggle', actHidePausas(), 'Esconder pausas/tempo ocioso', 'Tira das faixas as pausas e o "Não especificado". O tempo continua salvo.');
+  const lay = layout ? ck('act-agl-toggle', actAglomerar(), 'Aglomerar', 'Cada programa ou arquivo vira um bloco só, somando o tempo da sessão.')
+    + ck('act-cor-toggle', actCorrido(), 'Corrido', 'Tira os espaços parados (pausas e sem registro) e junta os blocos, na ordem em que aconteceram.') : '';
+  return `<div class="row" style="gap:18px;flex-wrap:wrap">${alt}${pz}${lay}</div>`;
+}
+/* Clique nas chaves das faixas (sessão e resumo). Devolve true se tratou. */
+function actToggleClick(x) {
+  const k = { 'act-pausa-toggle': 'actHidePausas', 'act-agl-toggle': 'actAglomerar', 'act-cor-toggle': 'actCorrido', 'act-fora-toggle': 'actShowAlt' }[x];
+  if (!k) return false; db.setSetting(k, !db.setting(k, false)); return true;
 }
 function actStripHTML(e, A, mode = '') {
   const now = Date.now();
@@ -445,6 +459,8 @@ function actStripHTML(e, A, mode = '') {
   const pct = (t) => (Math.min(Math.max(t, t0), t1) - t0) / span * 100;
   const hhmm = (t) => fmtTime(new Date(t).toISOString());
   const byId = Object.fromEntries(A.groups.map(g => [g.id, g]));
+  // Aglomerar / Corrido: faixa só com os blocos de programa/arquivo, sem os espaços parados
+  if (actAglomerar() || actCorrido()) return actStripJuntoHTML(e, A, mode, byId, t0, t1);
   let pauses = '';
   for (let i = 1; i < segs.length && !actHidePausas(); i++) {
     const a = segs[i - 1].b, b = segs[i].a;
@@ -467,12 +483,35 @@ function actStripHTML(e, A, mode = '') {
     bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}"${g.parent ? ` data-par="${esc(g.parent)}" data-tbc="${esc(g.color)}"` : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" style="--tb:${g.parent ? '#94A3B8' : g.color};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(actTip(g))}"></span>`;
   });
   // trabalhado mas sem registro de programa: "Não especificado" (não é pausa)
-  actUnspecOf(e).forEach(([a, b]) => { const x = pct(a), y = pct(b); if (y > x) bars += actUnspecSpanHTML(a, b, x, Math.max(.3, y - x)); });
+  if (!actHidePausas()) actUnspecOf(e).forEach(([a, b]) => { const x = pct(a), y = pct(b); if (y > x) bars += actUnspecSpanHTML(a, b, x, Math.max(.3, y - x)); });
   // trechos marcados para mover (seleção em andamento nesta sessão)
   if (mode === 'program' && ACT_SEL && ACT_SEL.key === e.id) {
     ACT_SEL.ranges.concat(ACT_SEL.drag ? [ACT_SEL.drag] : []).forEach(r => { const x = pct(r.a), y = pct(r.b); if (y > x) bars += `<span class="res-sel-range" style="left:${x}%;width:${Math.max(.3, y - x)}%"></span>`; });
   }
   return `<div class="act-strip" data-ent="${esc(e.id)}" data-mode="${mode}" data-t0="${t0}" data-span="${span}" style="position:relative">${pauses}${bars}</div>`;
+}
+
+/* Faixa aglomerada (um bloco por grupo, somado) ou corrida (blocos na ordem, sem os espaços parados). Sem pausas. */
+function actStripJuntoHTML(e, A, mode, byId, t0, t1) {
+  const recs = A.records.map(r => ({ r, g: byId[r.gid], a: Math.max(t0, new Date(r.from).getTime()), b: Math.min(t1, new Date(r.to).getTime()) }))
+    .filter(x => x.g && x.b > x.a).sort((p, q) => p.a - q.a);
+  if (!recs.length) return `<div class="act-strip" data-ent="${esc(e.id)}" data-mode="${mode}" style="position:relative"></div>`;
+  const bar = (g, l, w, tip) => `<span class="seg-b fill act-b" data-g="${esc(g.id)}"${g.parent ? ` data-par="${esc(g.parent)}" data-tbc="${esc(g.color)}"` : ''} style="--tb:${g.parent ? '#94A3B8' : g.color};left:${l}%;width:${Math.max(.3, w)}%" data-tip="${esc(tip)}"></span>`;
+  let bars = '';
+  if (actAglomerar()) {
+    // soma por grupo, na ordem da primeira aparição
+    const ord = []; const ms = {};
+    recs.forEach(x => { if (!(x.g.id in ms)) { ms[x.g.id] = 0; ord.push(x.g); } ms[x.g.id] += x.b - x.a; });
+    const tot = Object.values(ms).reduce((t, v) => t + v, 0) || 1; let off = 0;
+    ord.forEach(g => { const w = ms[g.id] / tot * 100; bars += bar(g, off, w, `${g.label} · ${fmtDur(ms[g.id])}`); off += w; });
+  } else {
+    // corrido: só o tempo coberto por registros; os buracos entre eles somem
+    const cov = []; recs.forEach(x => { const c = cov[cov.length - 1]; if (c && x.a <= c[1]) c[1] = Math.max(c[1], x.b); else cov.push([x.a, x.b]); });
+    const tot = cov.reduce((t, [a, b]) => t + b - a, 0) || 1;
+    const map = (t) => { let acc = 0; for (const [a, b] of cov) { if (t <= a) break; acc += Math.min(t, b) - a; } return acc / tot * 100; };
+    recs.forEach(x => { const l = map(x.a), r = map(x.b); if (r > l) bars += bar(x.g, l, r - l, actTip(x.g)); });
+  }
+  return `<div class="act-strip" data-ent="${esc(e.id)}" data-mode="${mode}" style="position:relative">${bars}</div>`;
 }
 
 const ACT_FV_MODES = ["file", "site", "both"];
@@ -513,9 +552,9 @@ function actSectionHTML(e) {
   const file = actAnalyze(e.id, fv);
   const fvBtns = ['file', 'site'].map(v => `<button class="btn sm ${fv === v || fv === 'both' ? 'primary' : ''}" data-act="act-fview" data-v="${v}" aria-pressed="${fv === v || fv === 'both'}">${ACT_FV_LBL[v]}</button>`).join('');
   const fileSec = `<div class="act-sec"><div class="row between"><span class="lbl">${ACT_FV_LBL[fv]}</span><span class="row" style="gap:4px">${fvBtns}</span></div>${actStripHTML(e, file, fv)}${actChipsHTML(file, fv)}</div>`;
-  const toggle = actForaToggleHTML([e]);
-  const secP = `<div class="act-sec"><div class="row between"><span class="lbl">Por programa</span></div>${actStripHTML(e, prog, 'program')}${actChipsHTML(prog, 'program').replace(/<\/div>$/, actUnspecChipHTML(actUnspecMs([e])) + '</div>')}</div>`;
-  return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${secP}${fileSec}${actHidePausas() ? '' : `<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div>`}<span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
+  const toggle = actForaToggleHTML([e], true);
+  const secP = `<div class="act-sec"><div class="row between"><span class="lbl">Por programa</span></div>${actStripHTML(e, prog, 'program')}${actChipsHTML(prog, 'program').replace(/<\/div>$/, (actHidePausas() ? '' : actUnspecChipHTML(actUnspecMs([e]))) + '</div>')}</div>`;
+  return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${secP}${fileSec}${actSemParado() ? '' : `<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div>`}<span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
 }
 
 /* Log discreto no fim do formulário da sessão: cada registro de atividade (programa e arquivo) e cada pausa, por horário.

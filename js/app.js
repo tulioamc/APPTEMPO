@@ -201,7 +201,11 @@ function suggestPause(fromMs, toMs, source, app) {
   // app de distração (WhatsApp de amigo, Instagram…): conta a partir de 10 s, que é o mínimo que o Mac registra
   const minMs = source === 'app' ? 10000 : idleLimit() * 60000;
   const a = activeEntry(); if (!a || toMs - fromMs < minMs) return;
-  const segStart = new Date(a.segments[a.segments.length - 1].s).getTime(); fromMs = Math.max(fromMs, segStart);
+  // só dentro do tempo trabalhado: o maior trecho de intervalo trabalhado que cai no período (antes, cortava pelo
+  // início do último intervalo e perdia o buraco quando outra pausa, ex.: sono, já tinha entrado depois dele)
+  const work = (a.segments || []).map(s => [Math.max(fromMs, new Date(s.s).getTime()), Math.min(toMs, s.e ? new Date(s.e).getTime() : Infinity)])
+    .filter(([x, y]) => y > x).sort((p, q) => (q[1] - q[0]) - (p[1] - p[0]));
+  if (!work.length) return; [fromMs, toMs] = work[0];
   // inatividade não pode cobrir uso de app: a pausa vai só para o maior trecho sem atividade registrada
   if (source !== 'app') [fromMs, toMs] = uncoveredGap(a, fromMs, toMs);
   if (toMs - fromMs < minMs) return;

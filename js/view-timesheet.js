@@ -467,11 +467,11 @@ function pickerHTML(sel, q = '') {
     <div class="row" style="gap:8px"><div class="grow" style="position:relative"><input id="pk-q" class="input" placeholder="Buscar projeto ou tarefa…" value="${esc(q)}" data-input="pk-q" autocomplete="off"></div><div class="seg" style="display:flex;gap:4px"><button type="button" class="btn sm ${situ === 'active' ? 'primary' : ''}" data-act="pk-situ" data-v="active">Ativos</button><button type="button" class="btn sm ${situ === 'all' ? 'primary' : ''}" data-act="pk-situ" data-v="all">Todos</button></div>${Object.values(sel).some(Boolean) ? '<button type="button" class="btn sm ghost" data-act="pk-clear">Limpar seleção</button>' : ''}</div>
     ${results}
     <div class="picker">
-      ${col('Agência', ags, 'agency_id', sel.agency_id, `<button type="button" class="popt none ${sel.agency_id === '__none' ? 'on' : ''}" data-act="pk" data-k="agency_id" data-v="__none"><span class="n">Sem agência (direto)</span></button>`)}
-      ${col('Cliente', cls, 'client_id', sel.client_id)}
-      ${col('Projeto', prs, 'project_id', sel.project_id, sel.client_id ? `<button type="button" class="popt" data-act="pk-newproj" style="color:var(--accent)"><span class="n">+ Novo projeto</span></button>` : '')}
-      ${col('Tarefa', tks, 'task_id', sel.task_id)}
-      ${col('Subtarefa <span style="text-transform:none;letter-spacing:0">(opcional)</span>', sbs, 'sub_id', sel.sub_id)}
+      ${col('Agência', ags, 'agency_id', sel.agency_id, pkNovoBtn('agency', true) + `<button type="button" class="popt none ${sel.agency_id === '__none' ? 'on' : ''}" data-act="pk" data-k="agency_id" data-v="__none"><span class="n">Sem agência (direto)</span></button>`)}
+      ${col('Cliente', cls, 'client_id', sel.client_id, pkNovoBtn('client', !!sel.agency_id))}
+      ${col('Projeto', prs, 'project_id', sel.project_id, pkNovoBtn('project', !!sel.client_id))}
+      ${col('Tarefa', tks, 'task_id', sel.task_id, pkNovoBtn('task', !!sel.project_id))}
+      ${col('Subtarefa <span style="text-transform:none;letter-spacing:0">(opcional)</span>', sbs, 'sub_id', sel.sub_id, pkNovoBtn('sub', !!sel.task_id))}
     </div>
     <div class="timer-path small">${pathHTML(selPath(sel))}</div>
   </div>`;
@@ -490,6 +490,41 @@ function pickApply(sel, k, v) {
   if (['task_id', 'project_id'].includes(k) || sel.project_id) { const p = db.get('tempo_projects', sel.project_id); if (p) { sel.client_id = p.client_id; } }
   if (sel.client_id) { const c = db.get('tempo_clients', sel.client_id); sel.agency_id = c?.agency_id || '__none'; }
 }
+/* "+ Novo …" no topo de cada coluna do seletor. Só fica clicável (roxo) quando o nível anterior está escolhido;
+   antes disso, o clique avisa o que falta escolher. */
+const PK_NOVO = {
+  agency: ['+ Nova agência', ''], client: ['+ Novo cliente', 'agência (ou "Sem agência")'],
+  project: ['+ Novo projeto', 'cliente'], task: ['+ Nova tarefa', 'projeto'], sub: ['+ Nova subtarefa', 'tarefa'],
+};
+function pkNovoBtn(kind, ok) {
+  const [lab, falta] = PK_NOVO[kind];
+  return `<button type="button" class="popt pk-new ${ok ? '' : 'off'}" data-act="pk-new" data-kind="${kind}" ${ok ? '' : `data-falta="${esc(falta)}" data-tip="${esc('Selecione ' + falta + ' antes')}"`}><span class="n">${lab}</span></button>`;
+}
+function pkNovo(btn, sel, draw) {
+  const kind = btn.dataset.kind;
+  if (btn.dataset.falta) return toast(`Necessário selecionar ${btn.dataset.falta} antes.`);
+  if (kind === 'agency') return openPartyForm('agency', null, (a) => { if (a) pickApply(sel, 'agency_id', a.id); draw(); });
+  if (kind === 'client') return openPartyForm('client', null, (c) => { if (c) pickApply(sel, 'client_id', c.id); draw(); }, sel.agency_id && sel.agency_id !== '__none' ? { agency_id: sel.agency_id } : {});
+  if (kind === 'project') return openProjectForm(null, sel.client_id, (p) => { pickApply(sel, 'project_id', p.id); draw(); });
+  const sub = kind === 'sub'; const p = db.get('tempo_projects', sel.project_id); if (!p) return;
+  const pai = sub ? db.get('tempo_tasks', sel.task_id) : null;
+  const l = openLayer({
+    html: `<div class="dh"><h2>${sub ? 'Nova subtarefa' : 'Nova tarefa'}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db stack" style="gap:10px"><div class="small muted">${esc(p.name)}${pai ? ' › ' + esc(pai.name) : ''}</div>
+      <div class="field"><label for="pkn-n">Nome</label><input id="pkn-n" class="input" autocomplete="off"></div></div>
+    <div class="df"><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="ok">Criar</button></div>`
+  });
+  const criar = () => {
+    const nome = l.box.querySelector('#pkn-n').value.trim(); if (!nome) return toast('Dê um nome.');
+    const t = db.insert('tempo_tasks', { project_id: p.id, parent_id: pai ? pai.id : null, name: nome, status_id: newTaskStatusId(p.id), status_inherited: true, deadline: null, notes: '', order: 99, work_type_id: pai?.work_type_id || null }, true);
+    reopenProjectIfDone(p.id);
+    logEvent('task', p.id, 'created', `${sub ? 'Subtarefa' : 'Tarefa'} “${nome}” criada`, null, null, { project_id: p.id });
+    l.close(); if (t) pickApply(sel, sub ? 'sub_id' : 'task_id', t.id); db.emit(); draw();
+  };
+  setTimeout(() => l.box.querySelector('#pkn-n')?.focus(), 30);
+  l.box.addEventListener('click', (e) => { if (e.target.closest('[data-x="ok"]')) criar(); });
+  l.box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); criar(); } });
+}
 function bindPicker(layer, sel, rerender) {
   let q = '';
   const host = layer.box.querySelector('[data-picker]');
@@ -498,8 +533,8 @@ function bindPicker(layer, sel, rerender) {
     const b = e.target.closest('[data-act="pk"]'); const c = e.target.closest('[data-act="pk-clear"]');
     const si = e.target.closest('[data-act="pk-situ"]'); if (si) { e.stopPropagation(); db.setSetting('pkSitu', si.dataset.v); draw(); return; }
     if (c) { e.stopPropagation(); Object.keys(sel).forEach(k => sel[k] = ''); q = ''; draw(); return; }
-    const np = e.target.closest('[data-act="pk-newproj"]');
-    if (np) { e.stopPropagation(); openProjectForm(null, sel.client_id, (p) => { pickApply(sel, 'project_id', p.id); draw(); }); return; }
+    const np = e.target.closest('[data-act="pk-new"]');
+    if (np) { e.stopPropagation(); pkNovo(np, sel, draw); return; }
     if (!b) return; e.stopPropagation(); pickApply(sel, b.dataset.k, b.dataset.v);
     if (['project_id', 'task_id', 'sub_id'].includes(b.dataset.k)) q = '';
     draw();
@@ -670,8 +705,7 @@ function openEntryModal(id, startIso = null, endIso = null) {
     }
     const b = ev.target.closest('[data-x]'); if (!b) return;
     const x = b.dataset.x;
-    if (x === 'act-pausa-toggle') { db.setSetting('actHidePausas', !actHidePausas()); return redraw(); }
-    if (x === 'act-fora-toggle') { db.setSetting('actShowAlt', !db.setting('actShowAlt', false)); return redraw(); }
+    if (actToggleClick(x)) return redraw();
     if (x === 'edit-seg') { const i = Number(b.dataset.i); openSeg = openSeg === i ? null : i; redraw(); return; }
     if (x === 'pick') { showPicker = true; redraw(); }
     if (x === "act-chip") { if ((b.dataset.mode !== "program")) openActGroup(e.id, b.dataset.g, redraw); else openProgChoice([e.id], b.dataset.g, b.dataset.label || 'Programa', { redraw }); return; }
