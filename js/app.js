@@ -135,6 +135,7 @@ function restoreScroll(k) {
   window.scrollTo(0, k.win);
 }
 function render() {
+  try { faixaCoresAplicar(); } catch (e) { /* antes do activity.js carregar */ }
   const view = VIEWS[S.route] || VIEWS.timesheet;
   const v = view();
   const scrollKeep = keepScroll();
@@ -222,6 +223,8 @@ function suggestPause(fromMs, toMs, source, app) {
 }
 /* Atualiza os dados a cada minuto e ao voltar para a janela, para o Mac enxergar a sessão iniciada em outro lugar. */
 setInterval(() => db.refresh(), 60000);
+setInterval(() => { try { pzReverTudo(); } catch (e) { console.warn('pausas', e); } }, 60000);
+setTimeout(() => { try { pzReverTudo(); } catch (e) { console.warn('pausas', e); } }, 15000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') db.refresh(); });
 /* Ponte do app de Mac. O app guarda os eventos numa fila e só tira da fila quando esta função roda. */
 window.TempoBridge = {
@@ -310,6 +313,8 @@ async function suggestActivity(seg) {
     .map(r => new Date(r.to).getTime()).filter(t => t <= fromMs + 1000).reduce((m, t) => Math.max(m, t), 0);
   // o log do dia recebe tudo, com ou sem sessão ativa
   const logged = logAppend(seg);
+  // revisão das pausas pelo registro (pega o que um evento de ociosidade/sono deixou passar)
+  setTimeout(() => { try { pzReverTudo(); } catch (e) { console.warn('pausas', e); } }, 1500);
   trackUnsaved(seg, toMs - fromMs);
   const a = activeEntry();
   const pauseApps = (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);

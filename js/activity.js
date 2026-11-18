@@ -71,8 +71,21 @@ function groupColor(gid, i) {
   if (gid.startsWith('app:')) return actColorMap()[gid] || toolColor(gid.slice(4));
   return actColorMap()[gid] || ACT_COLORS[i % ACT_COLORS.length];
 }
+/* O programa manda nos arquivos/sites dele: mudar a cor do programa tira as cores próprias dos arquivos daquele
+   programa (eles passam a herdar). Mudar a cor de um arquivo não mexe no programa. */
+function actLimparCoresArquivos(m, nome) {
+  const n = String(nome || '').toLowerCase(); if (!n) return m;
+  Object.keys(m).forEach(k => {
+    let app = null;
+    if (k.startsWith('a:')) app = k.slice(2).split('|')[0];
+    else if (k.startsWith('app:')) app = k.slice(4);
+    if (app !== null && String(shortProgram(app)).toLowerCase() === n) delete m[k];
+  });
+  return m;
+}
 function actSetColor(gid, color) {
   const key = colorKeyOf(gid); const m = { ...actColorMap() };
+  if (key.startsWith('n:')) actLimparCoresArquivos(m, key.slice(2));
   if (color) m[key] = color; else delete m[key];
   db.setSetting('actColors', m); db.emit();
 }
@@ -371,10 +384,27 @@ const pauseWhy = (why) => PAUSE_WHY[why] || why || 'Intervalo manual';
 const isAppPause = (why) => !!why && (why === 'app' || (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).some(x => String(x).trim().toLowerCase() === String(why).trim().toLowerCase()));
 /* Cor da listra de cada tipo de pausa (igual na linha do tempo principal e nas faixas da sessão):
    ociosidade = azul bem claro · WhatsApp (e apps de mensagem) = verde claro · Telegram = azul escuro · outros = cinza */
-const PAUSE_HATCH = { idle: '#b2deff', whatsapp: '#6cf1ae', telegram: '#1E40AF', instagram: '#F9A8D4', other: '#d1d1d1' };
-/* Cor do espaço entre as listras: par da cor da listra (WhatsApp e demais pausas); os outros usam a própria cor, clareada. */
-const PAUSE_GAP = { '#6cf1ae': '#9ef5c7', '#d1d1d1': '#dfdfdf', '#b2deff': '#cae8ff' };
-const pauseGapOf = (c) => PAUSE_GAP[c] || (c && c.length === 7 ? c + '52' : 'transparent');
+/* Cores das faixas (Preferências › Cores das faixas): cada item listrado tem a cor da listra (a) e a do fundo (b). */
+const FAIXA_CORES = {
+  unspec: { nome: 'Não especificado', dica: 'Trabalho sem registro de programa', a: '#F59E0B', b: '#FEF3C7' },
+  idle: { nome: 'Pausa: parado', dica: 'Ocioso, sono, sem registro, tela bloqueada', a: '#60A5FA', b: '#DBEAFE' },
+  other: { nome: 'Pausa: outras', dica: 'Pausa manual e demais motivos', a: '#A1A1AA', b: '#E4E4E7' },
+  whatsapp: { nome: 'WhatsApp Distração', dica: 'Pausa: conversa com amigos', a: '#6CF1AE', b: '#15803D' },
+  waCli: { nome: 'WhatsApp Produtivo', dica: 'Trabalho: contato ou grupo de cliente', a: '#47BD86', b: '#FFFFFF' },
+  instagram: { nome: 'Instagram', dica: 'Pausa', a: '#F9A8D4', b: '#FCE7F3' },
+  telegram: { nome: 'Telegram', dica: 'Pausa', a: '#1E40AF', b: '#93C5FD' },
+};
+const faixaCor = (k) => { const d = FAIXA_CORES[k] || FAIXA_CORES.other; const m = (db.setting('faixaCores', {}) || {})[k] || {}; return { a: m.a || d.a, b: m.b || d.b }; };
+/* As faixas leem as cores por variáveis de CSS (não precisa redesenhar cada tela ao mudar). */
+function faixaCoresAplicar() {
+  if (typeof document === 'undefined' || !document.documentElement?.style?.setProperty) return;
+  const st = document.documentElement.style;
+  Object.keys(FAIXA_CORES).forEach(k => { const c = faixaCor(k); st.setProperty(`--fx-${k}-a`, c.a); st.setProperty(`--fx-${k}-b`, c.b); });
+}
+const PAUSE_HATCH = {};
+['idle', 'whatsapp', 'telegram', 'instagram', 'other'].forEach(k => Object.defineProperty(PAUSE_HATCH, k, { get: () => faixaCor(k).a, enumerable: true }));
+/* Cor do espaço entre as listras: o fundo escolhido para o mesmo tipo de pausa. */
+const pauseGapOf = (c) => { for (const k of ['idle', 'whatsapp', 'telegram', 'instagram', 'other']) { const x = faixaCor(k); if (x.a === c) return x.b; } return c && c.length === 7 ? c + '52' : 'transparent'; };
 const pauseKind = (why) => {
   const w = String(why || '').trim().toLowerCase();
   if (!w) return 'other';
@@ -410,9 +440,11 @@ function actMovedSpanHTML(seg, x, w, gapEnd = null) {
 }
 /* Trabalho sem registro de programa: intervalos trabalhados da sessão que nenhum registro de atividade cobre
    (app do Mac fechado, trabalho fora do computador, celular). Conta como trabalho, não como pausa. Só trechos de 1 min ou mais. */
-function actUnspecOf(e, at = Date.now()) {
+/* Trabalho sem registro de programa. Na faixa: trechos de 1 min ou mais (emendando registros a até 15 s).
+   No total (chip): tudo o que não tem programa, sem emendar e sem mínimo, para os chips somarem o Produtivo. */
+function actUnspecOf(e, at = Date.now(), { min = 60e3, emenda = 15e3 } = {}) {
   const rec = actList(e.id).map(r => [new Date(r.from).getTime(), new Date(r.to).getTime()]).filter(([a, b]) => b > a).sort((p, q) => p[0] - q[0]);
-  const cov = []; rec.forEach(([a, b]) => { const l = cov[cov.length - 1]; if (l && a <= l[1] + 15e3) l[1] = Math.max(l[1], b); else cov.push([a, b]); });
+  const cov = []; rec.forEach(([a, b]) => { const l = cov[cov.length - 1]; if (l && a <= l[1] + emenda) l[1] = Math.max(l[1], b); else cov.push([a, b]); });
   const out = [];
   (e.segments || []).forEach(s => {
     if (!s.s) return;
@@ -420,15 +452,15 @@ function actUnspecOf(e, at = Date.now()) {
     cov.forEach(([c, d]) => { if (d <= a || c >= b) return; if (c > a) out.push([a, c]); a = Math.max(a, d); });
     if (b > a) out.push([a, b]);
   });
-  return out.filter(([a, b]) => b - a >= 60e3);
+  return out.filter(([a, b]) => b - a >= min && b > a);
 }
-const actUnspecMs = (list) => list.reduce((t, e) => t + actUnspecOf(e).reduce((s, [a, b]) => s + (b - a), 0), 0);
+const actUnspecMs = (list) => list.reduce((t, e) => t + actUnspecOf(e, Date.now(), { min: 0, emenda: 0 }).reduce((s, [a, b]) => s + (b - a), 0), 0);
 const ACT_UNSPEC_TIP = 'Trabalho não especificado\nTempo da sessão sem registro de programa. Trechos de 2 min ou mais viram pausa sozinhos quando o computador volta a registrar.';
 function actUnspecSpanHTML(a, b, x, w) {
   return `<span class="seg-b unspec" data-g="unspec" style="left:${x}%;width:${w}%" data-tip="${esc(`Não especificado ${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())} · ${fmtDur(b - a)}\nSem registro do computador. Com 2 min ou mais, vira pausa quando o computador volta a registrar.`)}"></span>`;
 }
 function actUnspecChipHTML(ms) {
-  return ms > 0 ? `<span class="act-chip act-unspec" data-g="unspec" style="--tb:#94A3B8" data-tip="${esc(ACT_UNSPEC_TIP + '\nTotal: ' + fmtDur(ms))}"><i></i>* Não especificado <span class="faint">${fmtDur(ms)}</span></span>` : '';
+  return ms > 0 ? `<span class="act-chip act-unspec" data-g="unspec" style="--tb:var(--fx-unspec-a)" data-tip="${esc(ACT_UNSPEC_TIP + '\nTotal: ' + fmtDur(ms))}"><i></i>* Não especificado <span class="faint">${fmtDur(ms)}</span></span>` : '';
 }
 
 /* Checkbox "Mostrar trabalho em outros projetos": aparece só se houver espaços "fora" nas sessões. Igual na revisão e no resumo. */
@@ -486,7 +518,7 @@ function actStripHTML(e, A, mode = '') {
     const g = byId[r.gid]; if (!g) return;
     const x = pct(new Date(r.from).getTime()), y = pct(new Date(r.to).getTime());
     if (y <= x) return;
-    bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}"${g.parent ? ` data-par="${esc(g.parent)}" data-tbc="${esc(g.color)}"` : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" style="--tb:${g.parent ? '#94A3B8' : g.color};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(actTip(g))}"></span>`;
+    bars += `<span class="seg-b fill act-b" data-g="${esc(g.id)}"${actWaTrabalho(r) ? ' data-wa="1"' : ''}${g.parent ? ` data-par="${esc(g.parent)}" data-tbc="${esc(g.color)}"` : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" style="--tb:${g.parent ? '#94A3B8' : g.color};left:${x}%;width:${Math.max(.3, y - x)}%" data-tip="${esc(actTip(g))}"></span>`;
   });
   // trabalhado mas sem registro de programa: "Não especificado" (não é pausa)
   if (!actHidePausas()) actUnspecOf(e).forEach(([a, b]) => { const x = pct(a), y = pct(b); if (y > x) bars += actUnspecSpanHTML(a, b, x, Math.max(.3, y - x)); });
