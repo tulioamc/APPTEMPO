@@ -71,6 +71,21 @@ function groupColor(gid, i) {
   if (gid.startsWith('app:')) return actColorMap()[gid] || toolColor(gid.slice(4));
   return actColorMap()[gid] || ACT_COLORS[i % ACT_COLORS.length];
 }
+/* Cor de um grupo pelo que ele contém: cor escolhida para o próprio grupo; senão, site do Chrome com a cor do site;
+   senão, a cor do programa do item principal (o arquivo/site herda do programa mãe, qualquer que seja o agrupamento:
+   pasta, prefixo, separado, juntado à mão). */
+function actCorDoGrupo(gid, items, i) {
+  const m = actColorMap(); const ck = colorKeyOf(gid);
+  if (gid.startsWith('p:')) return groupColor(gid, i);
+  if (m[gid]) return m[gid];
+  if (ck !== gid && m[ck]) return m[ck];
+  const it = (items || [])[0];
+  if (!it) return groupColor(gid, i);
+  const app = String(it.app || '').replace(/[\u200e\u200f]/g, '').trim();
+  if (/whatsapp/i.test(app)) return toolColor(waToolName(it.doc));
+  if (isChromeSite(app, it.doc)) return toolColor(it.doc);
+  return toolColor(toolAlias(app));
+}
 /* O programa manda nos arquivos/sites dele: mudar a cor do programa tira as cores próprias dos arquivos daquele
    programa (eles passam a herdar). Mudar a cor de um arquivo não mexe no programa. */
 function actLimparCoresArquivos(m, nome) {
@@ -258,8 +273,8 @@ const list = list0.filter(x => mode === "site" ? ACT_BROWSER_RE.test(String(x.ap
       label = docPre(items[0].doc) + (exts.length === 1 ? exts[0] : '');
     } else label = names.length <= 2 ? names.map(n => shortName(n)).join(' · ') : `${names.slice(0, 2).map(n => shortName(n)).join(' · ')} +${names.length - 2}`;
     if (g.id === 'outros') return { id: 'outros', items, ms: g.ms, label: 'Outros', color: '#94A3B8' };
-    if (g.parent) return { id: g.id, items, ms: g.ms, label, color: groupColor(g.id, i), parent: g.parent, hidden: true };
-    const color = termOnly ? '#374151' : groupColor(g.id, i);
+    if (g.parent) return { id: g.id, items, ms: g.ms, label, color: actCorDoGrupo(g.id, items, i), parent: g.parent, hidden: true };
+    const color = termOnly ? '#374151' : actCorDoGrupo(g.id, items, i);
     return { id: g.id, items, ms: g.ms, label, color };
   });
   // "Outros" fica sempre por último, em todas as listas e barras
