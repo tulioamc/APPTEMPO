@@ -75,11 +75,12 @@ function groupColor(gid, i) {
    programa (eles passam a herdar). Mudar a cor de um arquivo não mexe no programa. */
 function actLimparCoresArquivos(m, nome) {
   const n = String(nome || '').toLowerCase(); if (!n) return m;
+  const curto = String(shortProgram(nome) || '').toLowerCase();   // "Adobe Illustrator 2027 (Beta)" e "Illustrator" são o mesmo programa
   Object.keys(m).forEach(k => {
     let app = null;
     if (k.startsWith('a:')) app = k.slice(2).split('|')[0];
     else if (k.startsWith('app:')) app = k.slice(4);
-    if (app !== null && String(shortProgram(app)).toLowerCase() === n) delete m[k];
+    if (app !== null) { const a = String(app).replace(/[\u200e\u200f]/g, '').trim(); if (a.toLowerCase() === n || String(shortProgram(a)).toLowerCase() === curto) delete m[k]; }
     // WhatsApp Cliente / Distração: as conversas daquele tipo seguem a cor nova
     if (k.startsWith('a:') && /whatsapp/i.test(String(app || '')) && String(waToolName(k.split('|').pop())).toLowerCase() === n) delete m[k];
   });
@@ -235,7 +236,8 @@ const list = list0.filter(x => mode === "site" ? ACT_BROWSER_RE.test(String(x.ap
   // Também vão para "Outros" os que somam pouco (menos de 5 min), fora os 4 maiores de cada lista.
   let arr = Object.values(groups);
   const topIds = new Set([...arr].sort((a, b) => b.ms - a.ms).slice(0, 4).map(g => g.id));
-  const isOther = (g) => { const its = Object.values(g.items); return its.length > 0 && (its.every(it => OTHERS_RE.test(String(it.app || '').trim())) || (!topIds.has(g.id) && g.ms < 5 * 60e3)); };
+  const semOutros = new Set(db.setting('actSemOutros', []) || []);   // separados de "Outros" à mão: ficam fora sempre
+  const isOther = (g) => { const its = Object.values(g.items); if (its.some(it => semOutros.has(it.key))) return false; return its.length > 0 && (its.every(it => OTHERS_RE.test(String(it.app || '').trim())) || (!topIds.has(g.id) && g.ms < 5 * 60e3)); };
   const oth = arr.filter(isOther);
   if (oth.length) {
     const ids = new Set(oth.map(g => g.id));
@@ -268,6 +270,12 @@ function actUngroup(g) {
   const links = { ...(db.setting('actLinks', {}) || {}) };
   g.items.forEach(i => { links[i.key] = 'solo:' + i.key; });
   db.setSetting('actLinks', links); db.emit();
+}
+/* Tira um grupo da pasta "Outros" de vez (antes, separava mas ele voltava por ter menos de 5 min). */
+function actTirarDeOutros(g) {
+  const set = new Set(db.setting('actSemOutros', []) || []);
+  Object.values(g.items || {}).forEach(i => set.add(i.key));
+  db.setSetting('actSemOutros', [...set]); db.emit();
 }
 /* Separa só os arquivos marcados: cada um vira um grupo próprio. */
 function actSplit(keys) {
@@ -1000,7 +1008,7 @@ function openOthersPanel(entryIds, mode, redraw) {
     onMount: (ly) => ly.box.addEventListener('click', (ev) => {
       const b = ev.target.closest('[data-x="oth-split"]'); if (!b) return;
       const g = mem.find(x => x.id === b.dataset.g); if (!g) return;
-      actUngroup(g); toast(`${g.label} separado de Outros`); ly.close(); if (redraw) redraw();
+      actTirarDeOutros(g); toast(`${g.label} separado de Outros`); ly.close(); if (redraw) redraw();
     }),
   });
 }
