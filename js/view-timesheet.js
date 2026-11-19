@@ -604,6 +604,21 @@ function openStartModal(preset, startMs = null) {
   });
 }
 
+/* Projeto sugerido para uma sessão sem projeto: 1) pasta do arquivo aberto já ligada a um projeto (o mais recente);
+   2) a última sessão com projeto. Devolve { sel, motivo } ou null. */
+function sugestaoProjeto(e) {
+  const recs = (typeof actList === 'function' ? actList(e.id) : []).slice().sort((a, b) => new Date(b.from) - new Date(a.from));
+  for (const r of recs) {
+    const rule = r.folder ? folderRule(r.folder) : null; const p = rule && db.get('tempo_projects', rule.project_id);
+    if (p) { const sel = blankSel(); pickApply(sel, 'project_id', p.id); return { sel, motivo: `(pelo arquivo ${shortProgram(r.app)}${r.doc ? ' · ' + r.doc : ''})` }; }
+  }
+  const ini = new Date(entryStart(e)).getTime();
+  const prev = db.where('tempo_time_entries', x => x.id !== e.id && x.project_id && new Date(entryStart(x)).getTime() < ini)
+    .sort((a, b) => new Date(entryStart(b)) - new Date(entryStart(a)))[0];
+  if (prev) return { sel: entrySel(prev), motivo: `(pela última sessão, ${fmtTime(entryStart(prev))})` };
+  return null;
+}
+
 /* ---------- editar / apontamento manual ---------- */
 function openEntryModal(id, startIso = null, endIso = null) {
   const e = id ? db.get('tempo_time_entries', id) : null;
@@ -613,6 +628,13 @@ function openEntryModal(id, startIso = null, endIso = null) {
     ? [{ s: startIso, e: endIso || new Date(Math.max(Date.now(), new Date(startIso).getTime() + 60000)).toISOString() }]
     : [{ s: new Date(`${today}T09:00`).toISOString(), e: new Date(`${today}T10:00`).toISOString() }];
   let showPicker = !e;
+  // sessão sem projeto: já abre o seletor com uma sugestão marcada (pela pasta do arquivo aberto ou pela última sessão)
+  let sugTxt = '';
+  if (e && !e.project_id) {
+    showPicker = true;
+    const sg = sugestaoProjeto(e);
+    if (sg) { Object.assign(sel, sg.sel); sugTxt = sg.motivo; }
+  }
   const LOG_RE = /^\d{2}:\d{2}–\d{2}:\d{2} .+$/;
   const allLines = (e?.notes || '').split('\n');
   const logLines = allLines.filter(l => LOG_RE.test(l));
@@ -639,6 +661,7 @@ function openEntryModal(id, startIso = null, endIso = null) {
     const items = [];
     segs.forEach((s, i) => {
       if (i > 0 && segs[i - 1].e && s.s && new Date(s.s) > new Date(segs[i - 1].e)) items.push({ gap: true, from: segs[i - 1].e, to: s.s, day: ymd(new Date(segs[i - 1].e)) });
+      if (s.e && s.s === s.e) return;   // intervalo de duração zero: só separa duas pausas de motivos diferentes
       items.push({ i, day: ymd(new Date(s.s)) });
     });
     const days = [...new Set(items.map(x => x.day))];
@@ -652,7 +675,7 @@ function openEntryModal(id, startIso = null, endIso = null) {
     const total = segs.reduce((s, x) => s + ((x.e ? new Date(x.e) : Date.now()) - new Date(x.s)), 0);
     return `<div class="dh">${icon(e ? 'edit' : 'plus')}<h2>${e ? (e.state === 'done' ? 'Editar sessão' : 'Sessão atual') : 'Apontamento manual'}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db">
-      ${showPicker ? '<div data-picker></div>' : `<div class="row subtle-box"><div class="timer-path grow">${selPathLinksHTML(sel)}</div><button class="btn sm" data-x="pick">Alterar</button></div>`}
+      ${showPicker ? `${sugTxt && sel.project_id ? `<div class="banner info small" style="margin-bottom:8px">${icon('bell')} Sugestão já marcada ${esc(sugTxt)}. Se estiver certo, é só salvar; senão, escolha outro.</div>` : ''}<div data-picker></div>` : `<div class="row subtle-box"><div class="timer-path grow">${selPathLinksHTML(sel)}</div><button class="btn sm" data-x="pick">Alterar</button></div>`}
       <div class="grid2">
         <div class="field"><label for="em-wt">Tipo de trabalho</label><select id="em-wt" class="input" name="work_type_id">${options(workTypes(), e?.work_type_id || defaultWorkType(sel), { empty: true, emptyLabel: 'Sem tipo' })}</select></div>
         <div class="field"><label for="em-rev">Rodada de revisão</label><select id="em-rev" class="input" name="revision_id" ${revs.length ? '' : 'disabled'}>${options(revs, e?.revision_id, { empty: true, emptyLabel: revs.length ? 'Não é revisão' : 'Projeto sem rodadas', label: r => `Rodada ${r.number} — ${r.description.slice(0, 40)}` })}</select></div>

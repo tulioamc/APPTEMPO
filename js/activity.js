@@ -54,7 +54,7 @@ const colorKeyOf = (gid) => {
   }
   return gid;
 };
-const toolColor = (name) => actColorMap()['n:' + name] || (name === WA_DISTRACAO ? PAUSE_HATCH.whatsapp : null) || programFor(name)?.color || actDefaultColor(name);
+const toolColor = (name) => actColorMap()['n:' + name] || (name === WA_DISTRACAO ? PAUSE_HATCH.whatsapp : name === WA_CLIENTE ? faixaCor('waCli').a : null) || programFor(name)?.color || actDefaultColor(name);
 /* Cor de um grupo na faixa:
    - programa e site do Chrome: a cor da ferramenta (global, 'n:<nome>');
    - arquivo de um programa: herda a cor do programa (a não ser que a cor do próprio arquivo tenha sido escolhida);
@@ -80,6 +80,8 @@ function actLimparCoresArquivos(m, nome) {
     if (k.startsWith('a:')) app = k.slice(2).split('|')[0];
     else if (k.startsWith('app:')) app = k.slice(4);
     if (app !== null && String(shortProgram(app)).toLowerCase() === n) delete m[k];
+    // WhatsApp Cliente / Distração: as conversas daquele tipo seguem a cor nova
+    if (k.startsWith('a:') && /whatsapp/i.test(String(app || '')) && String(waToolName(k.split('|').pop())).toLowerCase() === n) delete m[k];
   });
   return m;
 }
@@ -397,7 +399,7 @@ const isAppPause = (why) => !!why && (why === 'app' || (db.setting('pauseApps', 
    ociosidade = azul bem claro · WhatsApp (e apps de mensagem) = verde claro · Telegram = azul escuro · outros = cinza */
 /* Cores das faixas (Preferências › Cores das faixas): cada item listrado tem a cor da listra (a) e a do fundo (b). */
 const FAIXA_CORES = {
-  unspec: { nome: 'Em uso agora / Não especificado', dica: 'Trabalho ainda sem programa registrado', a: '#F59E0B', b: '#FEF3C7' },
+  unspec: { nome: 'Em uso agora / Não especificado', dica: 'Trabalho ainda sem programa registrado (liso)', a: '#CBD5E1', b: '#CBD5E1', liso: true },
   idle: { nome: 'Pausa: parado', dica: 'Ocioso, sono, sem registro, tela bloqueada', a: '#60A5FA', b: '#DBEAFE' },
   other: { nome: 'Pausa: outras', dica: 'Pausa manual e demais motivos', a: '#A1A1AA', b: '#E4E4E7' },
   whatsapp: { nome: 'WhatsApp Distração', dica: 'Pausa: conversa com amigos', a: '#6CF1AE', b: '#15803D' },

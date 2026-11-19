@@ -1182,10 +1182,9 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .pm-lbl { display: inline-flex; align-items: center; gap: 5px; cursor: default; }
 .pm-lbl i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
 /* Trabalho não especificado: trabalhado sem registro de programa (não é pausa) */
-.seg-b.unspec { background: repeating-linear-gradient(135deg, var(--fx-unspec-a, #F59E0B) 0 3px, var(--fx-unspec-b, #FEF3C7) 3px 6px); }
+.seg-b.unspec { background: var(--fx-unspec-a, #CBD5E1); }
 /* WhatsApp Produtivo (contato de cliente): listrado nas faixas e no quadradinho do chip */
-.act-b[data-g="p:WhatsApp Cliente"], .act-b[data-wa="1"] { --tb: var(--fx-waCli-a, #A7F3D0) !important; background: var(--fx-waCli-a, #A7F3D0) !important; }
-.act-chip[data-g="p:WhatsApp Cliente"] { --tb: var(--fx-waCli-a, #A7F3D0) !important; }
+/* WhatsApp Produtivo: cor vem do grupo (toolColor), sem forçar por CSS, para a troca de cor funcionar */
 .cores-faixa .row { align-items: center; gap: 10px; }
 .cores-faixa input[type="color"] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
 .cores-faixa .amostra { width: 70px; height: 18px; border-radius: 4px; }
