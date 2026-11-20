@@ -570,12 +570,16 @@ function lastSessionText(sel) {
 function openStartModal(preset, startMs = null) {
   if (activeEntry()) { toast('Já existe uma sessão ativa. Encerre ou pause antes de iniciar outra.'); go('timesheet'); return; }
   const sel = Object.assign(blankSel(), preset || {});
+  // sem nada escolhido: já vem com a sugestão marcada (pasta do arquivo aberto desde a última sessão, ou a última sessão)
+  let sugTxt = '';
+  if (!preset || !Object.values(preset).some(Boolean)) { const sg = sugestaoProjeto(null); if (sg) { Object.assign(sel, sg.sel); sugTxt = sg.motivo; } }
   const now = new Date(); const nightOrWeekend = now.getDay() === 0 || now.getDay() === 6 || now.getHours() >= 22 || now.getHours() < 8;
   const ctxRule = db.all('tempo_reminders').find(r => r.kind === 'context' && r.nightWeekendOnly);
   const l = openLayer({
     wide: true,
     html: `<div class="dh">${icon('play')}<h2>Iniciar registro</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db">
+      ${sugTxt && sel.project_id ? `<div class="banner info small" style="margin-bottom:8px">${icon('bell')} Sugestão já marcada ${esc(sugTxt)}. Se estiver certo, é só iniciar; senão, escolha outro.</div>` : ''}
       <div data-picker></div>
       <div id="st-last" class="small muted"></div>
       <div class="grid2">
@@ -607,13 +611,17 @@ function openStartModal(preset, startMs = null) {
 /* Projeto sugerido para uma sessão sem projeto: 1) pasta do arquivo aberto já ligada a um projeto (o mais recente);
    2) a última sessão com projeto. Devolve { sel, motivo } ou null. */
 function sugestaoProjeto(e) {
-  const recs = (typeof actList === 'function' ? actList(e.id) : []).slice().sort((a, b) => new Date(b.from) - new Date(a.from));
+  // sem sessão (Iniciar registro): o registro do computador desde o fim da última sessão (até 3 h atrás)
+  const agora = Date.now();
+  const desde = e ? null : Math.max(agora - 3 * 3600e3, ...db.all('tempo_time_entries').map(x => new Date(entryEnd(x) || 0).getTime()).filter(t => t <= agora));
+  const base = e ? (typeof actList === 'function' ? actList(e.id) : []) : (typeof actPoolBetween === 'function' ? actPoolBetween(desde, agora) : []);
+  const recs = base.slice().sort((a, b) => new Date(b.from) - new Date(a.from));
   for (const r of recs) {
     const rule = r.folder ? folderRule(r.folder) : null; const p = rule && db.get('tempo_projects', rule.project_id);
     if (p) { const sel = blankSel(); pickApply(sel, 'project_id', p.id); return { sel, motivo: `(pelo arquivo ${shortProgram(r.app)}${r.doc ? ' · ' + r.doc : ''})` }; }
   }
-  const ini = new Date(entryStart(e)).getTime();
-  const prev = db.where('tempo_time_entries', x => x.id !== e.id && x.project_id && new Date(entryStart(x)).getTime() < ini)
+  const ini = e ? new Date(entryStart(e)).getTime() : agora;
+  const prev = db.where('tempo_time_entries', x => (!e || x.id !== e.id) && x.project_id && new Date(entryStart(x)).getTime() < ini)
     .sort((a, b) => new Date(entryStart(b)) - new Date(entryStart(a)))[0];
   if (prev) return { sel: entrySel(prev), motivo: `(pela última sessão, ${fmtTime(entryStart(prev))})` };
   return null;
