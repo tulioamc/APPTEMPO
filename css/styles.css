@@ -1540,3 +1540,33 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 /* criar arrastando */
 .pl-grade { cursor: crosshair; }
 .pl-novo { position: absolute; left: calc(33.333% + 1px); width: calc(33.333% - 3px); background: color-mix(in oklab, var(--accent) 25%, transparent); border: 1.5px solid var(--accent); border-radius: 4px; font: 600 11px var(--font-mono, monospace); color: var(--accent); padding: 2px 5px; pointer-events: none; z-index: 9; }
+/* ---------- Semana legível + estilo Calendário da Apple ---------- */
+.pl-semana-h > .pl-dia { width: var(--plw, 158px) !important; }
+.pl-semscroll { scroll-snap-type: x mandatory; }
+.pl-semana-h > .pl-dia.seg { scroll-snap-align: start; scroll-margin-left: 50px; border-left: 0 !important; padding-left: 0 !important; }
+.pl-semana-h .pl-grade { background-image: none; }
+.pl-dia.off .pl-grade { background: repeating-linear-gradient(45deg, transparent 0 10px, color-mix(in oklab, var(--line) 35%, transparent) 10px 11px) !important; }
+.pl-estica { opacity: 0; transition: opacity .15s; }
+.pl-dia:hover .pl-estica { opacity: 1; }
+/* blocos: cantos 6 px, fundo claro na cor, título num tom mais escuro, sem borda nem listra */
+.pl-grade > .pl-bloco, .pl-grade > .pl-feito, .pl-grade > .pl-evento:not(.todo):not(.google):not(.bloqueio), .pl-grade > .pl-naofeito { border-radius: 6px !important; }
+.pl-grade > .pl-feito, .pl-grade > .pl-bloco { border: 0 !important; background: color-mix(in oklab, var(--fc) 22%, var(--surface-1, #fff)) !important; color: color-mix(in oklab, var(--fc) 62%, #000) !important; box-shadow: none; outline: 0; }
+.pl-grade > .pl-bloco { background: color-mix(in oklab, var(--fc) 34%, var(--surface-1, #fff)) !important; }
+.pl-grade > .pl-bloco.late { box-shadow: inset 0 0 0 1.5px var(--danger) !important; }
+.pl-grade > .pl-feito .pl-tx b, .pl-grade > .pl-bloco .pl-tx b { font-weight: 700; }
+.pl-grade > .pl-feito .pl-tx em, .pl-grade > .pl-bloco .pl-tx em { opacity: .75; }
+.pl-grade > .pl-evento, .pl-grade > .pl-fixo { border-radius: 6px !important; }
+.pl-grade > .pl-evento.google { border: 0 !important; background: color-mix(in oklab, #4285F4 18%, var(--surface-1, #fff)) !important; color: #1A4FB4; }
+.pl-grade > .pl-evento.bloqueio { border: 0 !important; background: color-mix(in oklab, #64748B 16%, var(--surface-1, #fff)) !important; }
+.pl-grade > .pl-evento.todo { border: 0 !important; background: color-mix(in oklab, var(--accent) 14%, var(--surface-1, #fff)) !important; }
+.pl-grade > .pl-fixo { border-left: 0 !important; }
+.pl-grade > .pl-naofeito { border: 1.5px dashed color-mix(in oklab, var(--fc) 70%, transparent) !important; }
+/* rotina como fundo (Semana) */
+.pl-grade > .pl-fixo.fundo { background: color-mix(in oklab, var(--surface-2) 75%, transparent) !important; color: var(--fg-3); z-index: 0; font-size: .66em; padding: 1px 4px !important; }
+.pl-grade > .pl-fixo.fundo .pl-tx em { display: none; }
+.pl-grade > .pl-fixo.fundo.real { background: color-mix(in oklab, #94A3B8 18%, transparent) !important; }
+.pl-grade > .pl-bloco, .pl-grade > .pl-feito, .pl-grade > .pl-evento, .pl-grade > .pl-naofeito { z-index: 2; }
+/* to-do na Semana: marcador na borda direita */
+.pl-marc { position: absolute; right: 2px; transform: translateY(-50%); z-index: 4; display: inline-flex; gap: 3px; align-items: center; font: 600 10px/1 var(--font-mono, monospace); background: var(--surface-1, #fff); border: 1px solid color-mix(in oklab, var(--accent) 45%, transparent); color: var(--accent); border-radius: 999px; padding: 2px 5px; cursor: pointer; }
+.pl-marc i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.pl-marc.feito { opacity: .55; text-decoration: line-through; }
