@@ -43,7 +43,10 @@ const waTipoNome = (c) => { const o = c && c.tipo_id ? db.get('tempo_status_opti
 const waNorm = (t) => ' ' + String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
 function waSugestaoCrua(c) {
   const nome = waNorm(c.name); if (nome.trim().length < 2) return null;
-  const bate = (t, min = 3) => { const n = waNorm(t); return n.trim().length >= min && nome.includes(n); };
+  // contato salvo só com o número (+55 81 9…): não sugere nada (o 55 do Brasil batia com nomes como "551")
+  if ((String(c.name || '').match(/\d/g) || []).length >= 6 && !/[a-zà-ú]{3,}/i.test(String(c.name || ''))) return null;
+  // e nunca casa por número: o trecho que bate precisa ter letra
+  const bate = (t, min = 3) => { const n = waNorm(t); return n.trim().length >= min && /[a-z]/.test(n) && nome.includes(n); };
   if (c.tipo === 'grupo') {
     const p = (db.all('tempo_projects') || []).filter(x => !x.archived && bate(x.name, 4)).sort((a, b) => String(b.name).length - String(a.name).length)[0];
     if (p) { const cl = db.get('tempo_clients', p.client_id); return { tipo: 'Cliente', client_id: p.client_id || null, project_id: p.id, label: `Projeto · ${p.name}${cl ? ` (${cl.name})` : ''}` }; }

@@ -467,7 +467,7 @@ function actMovedSpanHTML(seg, x, w, gapEnd = null) {
   const tarefa = dEnt?.task_id ? db.get('tempo_tasks', dEnt.task_id)?.name : null;
   const nome = dst ? tkProjectLabel(dst) + (tarefa ? ' › ' + tarefa : '') : null;
   const quando = seg.e && gapEnd ? `\n${fmtTime(seg.e)}–${fmtTime(gapEnd)} · ${fmtDur(new Date(gapEnd) - new Date(seg.e))}` : '';
-  const cor = (dst && (clientOf(dst)?.color || dst.color)) || '#94A3B8';
+  const cor = dst ? hexOf(dst.color || clientOf(dst)?.color || 'gray') : '#94A3B8';
   const texto = recebido ? 'Trabalho em ' + (nome || 'outro projeto') : (nome ? 'Movido → ' + nome : 'Movido');
   const dica = recebido ? texto + quando + '\nClique para abrir'
     : (nome ? 'Movido para ' + nome + quando + '\nClique para abrir'
@@ -516,8 +516,7 @@ const actCorrido = () => !!db.setting('actCorrido', false);
 const actSemParado = () => actHidePausas() || actCorrido();
 function actForaToggleHTML(ents, layout = false) {
   const ck = (x, on, lab, tip) => `<label class="row small" style="gap:6px;cursor:pointer"${tip ? ` data-tip="${esc(tip)}"` : ''}><input type="checkbox" data-x="${x}" ${on ? 'checked' : ''}> ${lab}</label>`;
-  const alt = ents.some(e => (e.segments || []).some(x => x.why === 'moved'))
-    ? ck('act-fora-toggle', db.setting('actShowAlt', false), 'Mostrar alternância em outro projeto') : '';
+  const alt = '';   // trecho em outro projeto aparece sempre (meio cinza, meio na cor do projeto); não conta em nada
   const pz = ck('act-pausa-toggle', actHidePausas(), 'Esconder pausas/tempo ocioso', 'Tira das faixas as pausas e o "Não especificado". O tempo continua salvo.');
   const lay = layout ? ck('act-agl-toggle', actAglomerar(), 'Aglomerar', 'Cada programa ou arquivo vira um bloco só, somando o tempo da sessão.')
     + ck('act-cor-toggle', actCorrido(), 'Corrido', 'Tira os espaços parados (pausas e sem registro) e junta os blocos, na ordem em que aconteceram.') : '';
@@ -549,7 +548,7 @@ function actStripHTML(e, A, mode = '') {
   }
   let bars = '';
   // trechos que saíram desta sessão para outro projeto: lacuna clicável com o destino
-  const mostrarFora = db.setting('actShowAlt', false);
+  const mostrarFora = true;   // sempre: o trecho em outro projeto aparece com a estética de movido
   for (let i = 0; i < segs.length - 1 && mostrarFora; i++) {
     const a = e.segments[i].e, b = e.segments[i + 1].s;
     if (e.segments[i].why !== 'moved' || !a || !b || new Date(b) <= new Date(a)) continue;
@@ -615,12 +614,20 @@ function actChipsHTML(A, mode) {
   return `<div class="act-chips">${A.groups.filter(g => !g.hidden).map(g => `<button type="button" class="act-chip" data-x="act-chip"${g.id === 'outros' ? ' data-hl="outros"' + actOthMembersAttr(A) : ''} data-g="${esc(g.id)}" data-ms="${g.ms}" data-mode="${mode}" data-label="${esc(g.label)}" style="--tb:${g.color}" data-tip="${esc(actTip(g))}"><i></i>${esc(g.label)}${mode !== "site" && g.items.length > 1 ? ` <span class="act-more" title="Ver os ${g.items.length} arquivos">+${g.items.length}</span>` : ''} <span class="faint">${fmtDur(g.ms)}</span></button>`).join('')}</div>`;
 }
 
+/* Tempo "fora" da sessão (trechos movidos para outro projeto ou troca de projeto): só para mostrar. */
+function actForaMs(e) {
+  const sg = e.segments || []; let t = 0;
+  for (let i = 0; i < sg.length - 1; i++) if (isForaWhy(sg[i].why) && sg[i].e && sg[i + 1].s) t += Math.max(0, new Date(sg[i + 1].s) - new Date(sg[i].e));
+  return t;
+}
 /* Pausas da sessão em caixinhas: o total, e dentro dele ócio, bloqueada, WhatsApp, Telegram e manual, com o tempo de cada um. */
 function pauseChipsHTML(e) {
   const items = pauseGapsOf([e]).map(g => ({ key: g.why || 'manual', label: pauseLabel(g.why || 'manual'), ms: new Date(g.e) - new Date(g.s) })).filter(x => x.ms > 0);
-  if (!items.length) return '';
+  if (!items.length && !actForaMs(e)) return '';
   const total = items.reduce((t, x) => t + x.ms, 0);
-  return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#64748B">Pausas <span class="faint">${fmtDur(total)}</span></span>${pauseBucketsOf(items).map(b => b.kind === 'whatsapp' ? { ...b, detail: waDistracaoTop([e]) } : b).map(pauseBucketChip).join('')}</div>`;
+  const fora = actForaMs(e);
+  const foraChip = fora > 0 ? `<span class="act-chip act-chip-fora" data-tip="${esc('Tempo desta sessão que foi registrado em outro projeto (movido ou troca de projeto).\nSó aparece aqui: não conta como pausa, nem como trabalho, nem no bruto desta sessão.')}"><i></i>Outro projeto <span class="faint">${fmtDur(fora)}</span></span>` : '';
+  return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#64748B">Pausas <span class="faint">${fmtDur(total)}</span></span>${foraChip}${pauseBucketsOf(items).map(b => b.kind === 'whatsapp' ? { ...b, detail: waDistracaoTop([e]) } : b).map(pauseBucketChip).join('')}</div>`;
 }
 /* Conversas de WhatsApp (não de trabalho) que mais tomaram tempo nas sessões: para o balãozinho do chip. */
 function waDistracaoTop(es, n = 8) {

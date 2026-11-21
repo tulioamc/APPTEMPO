@@ -195,7 +195,7 @@ function parseTodoText(text) {
   const h = hh === null ? 20 : hh, m = hh === null ? 0 : mi;
   // duração com horário de início vira o fim ("de 1 h às 14h" → 14h às 15h), se couber no mesmo dia
   if (!end && dur && hh !== null) { const fim = hh * 60 + mi + dur; if (fim < 24 * 60) end = `${pad(Math.floor(fim / 60))}:${pad(fim % 60)}`; }
-  return { title, due: `${ymd(d)}T${pad(h)}:${pad(m)}`, deadline: deadline && !end, end, dur };
+  return { title, due: `${ymd(d)}T${pad(h)}:${pad(m)}`, deadline: deadline && !end, end, dur, semHora: hh === null };
 }
 function todoDueLabel(data) {
   const [ds, ts] = data.due.split('T'); const [h, m] = ts.split(':').map(Number);
@@ -239,7 +239,7 @@ function todoAddRaw(raw, alarm = false, auto = false) {
   const est = em ? Number(em[1]) * (em[2].toLowerCase() === 'h' ? 60 : 1) : (p.dur || null);
   const withAlarm = !!(alarm && p.due);
   const lig = todoFindLink(p.title);
-  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: { ...(auto ? { auto: true } : {}), ...(p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {}), ...(est ? { est } : {}), ...lig, ...(withAlarm ? { alarm: true, alarm_criado: false } : {}) }, decision: '', decided_at: null, snooze_until: null }, true);
+  db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: p.title, body: '', data: { ...(auto ? { auto: true } : {}), ...(p.due ? { due: p.due, deadline: p.deadline, end: p.end || null, semHora: !!p.semHora } : {}), ...(est ? { est } : {}), ...lig, ...(withAlarm ? { alarm: true, alarm_criado: false } : {}) }, decision: '', decided_at: null, snooze_until: null }, true);
   db.emit(); todoAlarmSync(); return true;
 }
 /* To-do ligado sozinho: se o texto cita um projeto aberto (ou, sem projeto, um cliente), guarda o vínculo.
@@ -404,7 +404,7 @@ ACTIONS['todo-save'] = (el) => {
   const alarm = !!document.getElementById('todo-edit-alarm')?.checked || TODO_ALARM_RE.test(raw0); const raw = raw0.replace(TODO_ALARM_RE, '').trim();
   const p = parseTodoText(raw);
   const old = cur.data || {};
-  const keep = p.due ? { due: p.due, deadline: p.deadline, end: p.end || null } : {};
+  const keep = p.due ? { due: p.due, deadline: p.deadline, end: p.end || null, semHora: !!p.semHora } : {};
   const mudou = p.due !== old.due || (alarm && !old.alarm);
   const data = { ...old, ...keep, ...(p.due ? {} : { due: undefined, deadline: undefined, end: undefined }) };
   // adiado: a data foi trocada para um dia depois do que estava
@@ -421,7 +421,7 @@ ACTIONS['todo-save'] = (el) => {
 function openTodoModal(id) {
   const n = db.get('tempo_notices', id); if (!n) return;
   const d = n.data || {};
-  const [dia, hora] = d.due ? d.due.split('T') : ['', ''];
+  const [dia, hora0] = d.due ? d.due.split('T') : ['', '']; const hora = todoSemHora(d) ? '' : hora0;
   const ativo = (p) => !p.archived && !['done', 'closed', 'cancelled'].includes(db.get('tempo_status_options', p.status_id)?.category);
   const projs = db.all('tempo_projects').filter(ativo).sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR'));
   const cls = db.all('tempo_clients').filter(c => !c.archived).sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR'));
@@ -468,8 +468,8 @@ function todoSalvarModal(id, box) {
   const old = n.data || {}; const data = { ...old };
   const dia = v('#td-d').value, hora = v('#td-h').value, fim = v('#td-f').value;
   const due = dia ? `${dia}T${hora || '20:00'}` : null;
-  if (due) { data.due = due; data.end = fim || null; data.deadline = v('#td-prazo').checked && !fim; }
-  else { delete data.due; delete data.end; delete data.deadline; }
+  if (due) { data.due = due; data.end = fim || null; data.deadline = v('#td-prazo').checked && !fim; data.semHora = !hora; }
+  else { delete data.due; delete data.end; delete data.deadline; delete data.semHora; }
   // adiado: a data foi trocada para um dia depois do que estava
   if (todoAdiou(old.due, due)) data.adiou = (old.adiou || 0) + 1;
   const lig = v('#td-l').value;
@@ -536,6 +536,8 @@ const TODO_DAY_NAMES = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
 const todoToday = () => ymd(new Date());
 const todoSetSilent = (key, value) => { const st = db.data.tempo_settings.find(r => r.key === key); if (st) db.update('tempo_settings', st.id, { value }, true); else db.insert('tempo_settings', { key, value }, true); };
 const todoAdiou = (antes, depois) => !!(antes && depois && depois.slice(0, 10) > antes.slice(0, 10));
+/* To-do só com data (sem hora): guardado às 20h com semHora; os antigos (sem a marca) às 20h e sem fim contam igual. */
+const todoSemHora = (d) => !!d && !!d.due && (d.semHora === true || (d.semHora === undefined && d.due.slice(11, 16) === '20:00' && !d.end));
 const todoDueDay = (n) => n.data?.due ? n.data.due.slice(0, 10) : null;
 const todoIsLate = (n) => n.status !== 'done' && !!n.data?.due && new Date(n.data.end ? n.data.due.slice(0, 10) + 'T' + n.data.end : n.data.due) < new Date();
 

@@ -238,7 +238,7 @@ function resumoBodyHTML(es, opts = {}) {
       slices.push({ e: x.e.id, l: base, w: wS, st: x.st, span: x.span });
       const pos = (a, b) => ({ l: base + Math.max(0, a - x.st) / x.span * wS, w: Math.max(.3, (Math.min(x.span, b - x.st) - Math.max(0, a - x.st)) / x.span * wS) });
       an.records.filter(r => r._i === i).forEach(r => { const q = pos(new Date(r.from).getTime(), new Date(r.to).getTime()); parts += `<span class="seg-b act-b" data-g="${esc(r.gid)}"${parentOf[r.gid] ? ` data-par="${esc(parentOf[r.gid])}" data-tbc="${esc(colorOf[r.gid])}"` : ''}${parentOf[r.gid] === 'outros' ? othAttr : ''} data-a="${new Date(r.from).getTime()}" data-b="${new Date(r.to).getTime()}" data-tip="${esc(`${shortProgram(r.app)} · ${fmtTime(r.from)}–${fmtTime(r.to)} · ${fmtDur(new Date(r.to) - new Date(r.from))}${r.doc ? '\n' + actItemName(r) : ''}`)}" style="--tb:${parentOf[r.gid] ? '#94A3B8' : (colorOf[r.gid] || 'var(--accent)')};left:${q.l}%;width:${q.w}%"></span>`; });
-      if (db.setting('actShowAlt', false)) (x.e.segments || []).forEach((sg, k, arr) => {
+      if (true) (x.e.segments || []).forEach((sg, k, arr) => {
         if (sg.why !== 'moved' || k >= arr.length - 1 || !sg.e || !arr[k + 1].s) return;
         const q = pos(new Date(sg.e).getTime(), new Date(arr[k + 1].s).getTime()); if (q.w > 0) parts += actMovedSpanHTML(sg, q.l, q.w, arr[k + 1].s);
       });

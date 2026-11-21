@@ -11,6 +11,48 @@ const RF_MES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'jul
 const RF_NOME = { T: 'Túlio', A: 'Amanda', M: 'Maria Adélia (mãe do Túlio)', X: 'Troca' };
 const rafaWd = (y, m, d) => (new Date(y, m - 1, d).getDay() + 6) % 7; /* 0 = segunda */
 
+/* ---------- Escala automática (decidida em 20/11/2026) ----------
+   Segunda e quarta = T; terça e quinta = A; sexta alterna T/A semana sim, semana não (âncora 'rafaSextaRef' = uma
+   sexta T). Sábado e domingo não são preenchidos sozinhos. O app só preenche dia vazio ou que ele mesmo preencheu
+   (auto = true); o que você marcou à mão nunca é mexido, e mexer num dia vale só para aquele dia. */
+const rafaDiaDe = (dia) => db.all('tempo_rafa_days').find(x => x.day === dia) || null;
+const rafaQuem = (dia) => rafaDiaDe(dia)?.who || null;
+function rafaSextaRef() {
+  const ref = db.setting('rafaSextaRef', null); if (ref) return ref;
+  // primeira vez: parte da sexta mais recente marcada (T ou A)
+  const sx = db.all('tempo_rafa_days').filter(r => (r.who === 'T' || r.who === 'A') && new Date(r.day + 'T12:00:00').getDay() === 5).sort((a, b) => b.day.localeCompare(a.day))[0];
+  if (!sx) return null;
+  const d = new Date(sx.day + 'T12:00:00'); if (sx.who === 'A') d.setDate(d.getDate() + 7);
+  return ymd(d);
+}
+function rafaQuemAuto(dia) {
+  const wd = new Date(dia + 'T12:00:00').getDay();
+  if (wd === 1 || wd === 3) return 'T';
+  if (wd === 2 || wd === 4) return 'A';
+  if (wd === 5) { const ref = rafaSextaRef(); if (!ref) return null; const sem = Math.round((new Date(dia + 'T12:00:00') - new Date(ref + 'T12:00:00')) / (7 * 864e5)); return ((sem % 2) + 2) % 2 === 0 ? 'T' : 'A'; }
+  return null;
+}
+let _rafaAutoEm = 0;
+/* Preenche de hoje até ~4 meses. Grava calado (sem redesenhar a tela). */
+function rafaAutoPreencher(forcar = false) {
+  if (!forcar && Date.now() - _rafaAutoEm < 10 * 60e3) return 0;
+  _rafaAutoEm = Date.now();
+  let n = 0; const d = new Date(); d.setHours(12, 0, 0, 0);
+  for (let i = 0; i < 125; i++, d.setDate(d.getDate() + 1)) {
+    const dia = ymd(d); const q = rafaQuemAuto(dia); const r = rafaDiaDe(dia);
+    if (r && !r.auto) continue;                       // à mão: não mexe
+    if (!q) { if (r && r.auto && r.who) { db.update('tempo_rafa_days', r.id, { who: null }, true); n++; } continue; }
+    if (!r) { db.insert('tempo_rafa_days', { day: dia, who: q, auto: true }, true); n++; }
+    else if (r.who !== q) { db.update('tempo_rafa_days', r.id, { who: q }, true); n++; }
+  }
+  return n;
+}
+/* Marca um dia à mão (o app não mexe mais nele). */
+function rafaMarcar(dia, patch) {
+  const r = rafaDiaDe(dia);
+  if (r) db.update('tempo_rafa_days', r.id, { ...patch, auto: false }, true); else db.insert('tempo_rafa_days', { day: dia, ...patch, auto: false }, true);
+}
+
 function rafaMap() {
   const map = {};
   db.all('tempo_rafa_days').forEach(r => { map[r.day] = r; });
@@ -72,11 +114,19 @@ ACTIONS['rafa-save'] = (el) => {
     horario: document.getElementById('rf-hora').value.trim() || null,
     note: document.getElementById('rf-obs').value.trim() || null,
   };
-  const row = db.all('tempo_rafa_days').find(x => x.day === iso);
-  if (row) db.update('tempo_rafa_days', row.id, patch);
-  else db.insert('tempo_rafa_days', { day: iso, ...patch });
+  rafaMarcar(iso, patch); db.emit();
   document.querySelector('[data-act="close-layer"]')?.click();
+  rafaPerguntarFimDeSemana(iso, patch.who);
 };
+/* Domingo T → "marcar o sábado como A?" (e o contrário; vale para sábado → domingo também). */
+async function rafaPerguntarFimDeSemana(iso, who) {
+  if (who !== 'T' && who !== 'A') return;
+  const d = new Date(iso + 'T12:00:00'); const wd = d.getDay(); if (wd !== 0 && wd !== 6) return;
+  const par = new Date(d); par.setDate(d.getDate() + (wd === 0 ? -1 : 1)); const pdia = ymd(par);
+  const outro = who === 'T' ? 'A' : 'T'; if (rafaQuem(pdia) === outro) return;
+  const nome = wd === 0 ? 'sábado' : 'domingo';
+  if (await confirmBox({ title: `Marcar o ${nome} como ${outro}?`, body: `${nome[0].toUpperCase() + nome.slice(1)}, ${par.getDate()}/${par.getMonth() + 1}: ${RF_NOME[outro]}.`, ok: `Marcar ${outro}` })) { rafaMarcar(pdia, { who: outro }); db.emit(); }
+}
 
 ACTIONS['rafa-nav'] = (el) => {
   const [y, m] = RF.ym.split('-').map(Number);
@@ -88,6 +138,7 @@ ACTIONS['rafa-nav'] = (el) => {
 ACTIONS['rafa-today'] = () => { RF.ym = ymd(new Date()).slice(0, 7); render(); };
 
 VIEWS.rafa = () => {
+  rafaAutoPreencher();
   const ym = RF.ym || ymd(new Date()).slice(0, 7);
   RF.ym = ym;
   const [y, m] = ym.split('-').map(Number);
@@ -113,8 +164,8 @@ VIEWS.rafa = () => {
     const who = r.who || null;
     const we = rafaWd(dt.getFullYear(), dt.getMonth() + 1, dt.getDate()) >= 5 ? ' rf-we' : '';
     const off = inMes ? '' : ' rf-off';
-    const tip = [who ? RF_NOME[who] : 'Sem marcação', r.horario, r.note].filter(Boolean).join(' · ');
-    return `<button type="button" class="rf-cell rf-${who || 'none'}${we}${off}" data-act="rafa-open" data-day="${iso}" title="${esc(tip)}">
+    const tip = [who ? RF_NOME[who] : 'Sem marcação', r.auto && who ? 'marcado pelo app' : '', r.horario, r.note].filter(Boolean).join(' · ');
+    return `<button type="button" class="rf-cell rf-${who || 'none'}${we}${off}${r.auto && who ? ' rf-auto' : ''}" data-act="rafa-open" data-day="${iso}" title="${esc(tip)}">
       <span class="rf-top"><span class="rf-n">${dt.getDate()}</span>${r.horario ? `<span class="rf-hr">${esc(r.horario)}</span>` : ''}</span>
       <span class="rf-w">${who === 'X' ? 'T/A' : (who || '·')}</span>
       ${r.note ? `<span class="rf-obs">${esc(r.note)}</span>` : ''}</button>`;
@@ -161,7 +212,7 @@ VIEWS.rafa = () => {
   <div class="panel"><div class="panel-b">
     <div class="row between" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
       <b>${mesTitulo}</b>
-      <span class="small muted">T = Túlio (azul) · A = Amanda (rosa) · M = Maria Adélia (verde) · T/A = troca no dia · clique num dia para editar</span>
+      <span class="small muted">T = Túlio (azul) · A = Amanda (rosa) · M = Maria Adélia (verde) · T/A = troca no dia · mais claro = preenchido pelo app (seg/qua T, ter/qui A, sexta alterna) · clique num dia para editar</span>
     </div>
     <div class="rf-head">${RF_WD.map(d => `<div>${d}</div>`).join('')}<div>Semana</div></div>
     ${weekRows}

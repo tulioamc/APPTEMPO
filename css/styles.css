@@ -1438,3 +1438,78 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 @media (max-width: 800px) { .pl-rot-cab { display: none; } .pl-rot-l { grid-template-columns: 1fr 1fr; } }
 .pl-scroll { max-height: 74vh; overflow-y: auto; overscroll-behavior: contain; position: relative; }
 .pl-scroll .pl-cab { position: sticky; top: 0; z-index: 6; background: var(--surface-1, #fff); padding-bottom: 4px; }
+.pl-evento.todo { border: 1px solid var(--accent); border-left-width: 3px; background: color-mix(in oklab, var(--accent) 10%, var(--surface-1, #fff)); color: var(--fg); cursor: grab; touch-action: none; z-index: 3; }
+.pl-evento.todo.feito { opacity: .5; text-decoration: line-through; cursor: pointer; }
+.pl-td-res { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
+.pl-topo { display: flex; flex-direction: column; gap: 2px; margin-bottom: 2px; overflow: hidden; }
+.pl-chip { display: flex; gap: 4px; align-items: center; font-size: .72em; border-radius: 5px; padding: 1px 6px; height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg-2); text-align: left; cursor: pointer; }
+.pl-chip svg { width: 11px; height: 11px; flex: none; }
+.pl-chip.todo { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 12%, var(--surface-1, #fff)); color: var(--fg); }
+.pl-chip.todo.feito { opacity: .5; text-decoration: line-through; }
+.pl-chip.google { border-color: #4285F4; color: #1A4FB4; }
+.pl-mc-ev.todo { border: 1px solid var(--accent); color: var(--fg); }
+.pl-sd { gap: 6px; } .pl-sd span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Rafa: dia preenchido pelo app fica um pouco mais claro */
+.rf-cell.rf-auto .rf-w { opacity: .8; }
+.rf-cell.rf-auto { border-style: dashed; }
+/* letra do Rafa no planejamento (mesmas cores do Dias de Rafa) */
+.pl-rf { border: 0; background: none; padding: 0 2px; font-weight: 800; font-size: .9em; cursor: pointer; line-height: 1; }
+.pl-rf.T { color: #3B6FD8; } .pl-rf.A { color: #E0558C; } .pl-rf.M { color: #2E9E6B; } .pl-rf.X { color: #8E6BD8; }
+.pl-rf.auto { opacity: .8; }
+/* ---------- Planejamento v3: lado a lado, chips do registrado, puxadores, semana rolando, janela do mês ---------- */
+.pl-grade > .pl-bloco, .pl-grade > .pl-feito, .pl-grade > .pl-evento, .pl-grade > .pl-fixo { right: auto; box-sizing: border-box; }
+.pl-tx { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.pl-tx b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.pl-tx em { font-style: normal; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .92em; }
+/* registrado = chip (bolinha na cor do projeto, fundo claro e borda na cor) */
+.pl-feito { border-radius: 999px; border: 1.5px solid var(--fc); border-left-width: 1.5px; background: color-mix(in oklab, var(--fc) 16%, var(--surface-1, #fff)); padding: 1px 8px; display: flex; align-items: center; }
+.pl-feito .pl-tx { flex-direction: row; align-items: center; gap: 5px; flex-wrap: wrap; }
+.pl-feito .pl-tx i { width: 8px; height: 8px; border-radius: 50%; background: var(--fc); flex: none; }
+.pl-feito[style*="height:8px"], .pl-feito[style*="height:9px"] { padding: 0 6px; }
+/* planejado colocado pelo app: um pouco mais claro que o fixado à mão */
+.pl-bloco.auto { opacity: .8; }
+.pl-fixo.real { border-left: 3px solid #94A3B8; background: color-mix(in oklab, var(--surface-2) 70%, #94A3B8 12%); }
+/* puxadores de cima e de baixo */
+[data-dg] { touch-action: none; user-select: none; }
+[data-dg] .dg-t, [data-dg] .dg-b { position: absolute; left: 0; right: 0; height: 6px; cursor: ns-resize; z-index: 2; }
+[data-dg] .dg-t { top: 0; } [data-dg] .dg-b { bottom: 0; }
+[data-dg]:hover .dg-t, [data-dg]:hover .dg-b { background: rgba(0,0,0,.12); }
+[data-dg].arrastando { z-index: 8 !important; box-shadow: 0 6px 18px rgba(0,0,0,.2); opacity: .95; }
+.pl-dg-tip { position: fixed; z-index: 1000; background: #111827; color: #fff; font: 600 12px/1.2 var(--font-mono, monospace); padding: 5px 8px; border-radius: 6px; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+.pl-td-res { display: none; }
+/* semana: seg a dom, várias semanas lado a lado com rolagem horizontal */
+.pl-semscroll { overflow: auto; max-height: 76vh; }
+.pl-semana-h { display: flex !important; gap: 6px; width: max-content; }
+.pl-semana-h > .pl-dia { width: 158px; flex: none; }
+.pl-semana-h > .pl-dia.seg { border-left: 2px solid var(--line); padding-left: 6px; }
+.pl-regua-col { position: sticky; left: 0; z-index: 7; background: var(--surface-1, #fff); width: 44px; flex: none; }
+.pl-regua-col .pl-horas { margin-top: 0 !important; }
+.pl-cab-vazio { height: 58px; }
+.pl-scroll .pl-cab { height: 58px; margin-bottom: 0; flex-direction: column; align-items: stretch; justify-content: flex-end; flex-wrap: nowrap; gap: 2px; }
+.pl-cab-l1, .pl-cab-l2 { display: flex; align-items: center; gap: 4px; min-height: 22px; }
+.pl-cab-l2 .pl-estica { margin-left: auto; }
+.pl-sem-rot { font-size: .7em; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.pl-um { display: grid !important; grid-template-columns: 44px minmax(0, 1fr) !important; gap: 6px; }
+/* mês */
+.pl-mes-scroll { position: relative; }
+.pl-mc-d { display: inline-flex; align-items: baseline; gap: 4px; }
+.pl-mc-h { font-family: var(--font-mono); font-size: .9em; color: var(--fg-3); }
+.pl-mc-h.late { color: var(--warn, #B45309); font-weight: 600; }
+.pl-pop { position: fixed; z-index: 900; width: 420px; max-width: calc(100vw - 16px); background: var(--surface-1, #fff); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 10px 12px; pointer-events: none; }
+.pl-pop-t { font-weight: 700; margin-bottom: 8px; display: flex; gap: 6px; align-items: baseline; }
+.pl-pop-c { display: grid; grid-template-columns: 150px 1fr; gap: 10px; }
+.pl-pop-g { position: relative; border-left: 1px solid var(--line); margin-left: 24px; }
+.pl-pop-h { position: absolute; left: -26px; font-size: 9px; color: var(--fg-3); transform: translateY(-50%); font-family: var(--font-mono); }
+.pl-pop-area { position: absolute; inset: 0 0 0 4px; }
+.pl-pop-b { position: absolute; border-radius: 2px; background: var(--c); }
+.pl-pop-b.feito { background: color-mix(in oklab, var(--c) 25%, #fff); border: 1px solid var(--c); border-radius: 6px; }
+.pl-pop-b.plano { opacity: .8; }
+.pl-pop-b.fixo { background: #E2E8F0; }
+.pl-pop-lista { max-height: 171px; overflow: hidden; display: flex; flex-direction: column; gap: 2px; }
+.pl-pop-l { display: grid; grid-template-columns: 78px 1fr auto; gap: 6px; font-size: .72em; align-items: baseline; }
+.pl-pop-l span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-pop-l em { font-style: normal; color: var(--fg-3); font-size: .9em; }
+.pl-pop-l.feito span:nth-child(2) { font-weight: 600; }
+.pl-rot-cab, .pl-rot-l { grid-template-columns: minmax(130px, 2fr) auto 86px 86px 130px 96px 130px 30px !important; }
+.act-chip-fora i { background: linear-gradient(to bottom, #64748B 50%, #CBD5E1 50%) !important; }
+.act-chip-fora { border-style: dashed; }

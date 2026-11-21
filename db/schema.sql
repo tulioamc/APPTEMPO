@@ -392,3 +392,6 @@ create trigger tempo_touch before update on public.tempo_wa_daily for each row e
 -- migração: alter table tempo_wa_contacts add column if not exists project_id uuid references tempo_projects(id) on delete set null, add column if not exists last_in timestamptz, add column if not exists last_out timestamptz, add column if not exists resp_med_s int, add column if not exists resp_n int;
 
 -- migração (V2.06.05): alter table tempo_wa_contacts add column if not exists msgs_7d int, add column if not exists fora_30d int;
+
+-- 21/11/2026: dia marcado pelo app (automático) × à mão
+alter table tempo_rafa_days add column if not exists auto boolean not null default false;

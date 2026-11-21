@@ -336,6 +336,7 @@ window.DB_COLUMNS = {
   "note",
   "horario",
   "created_at",
-  "updated_at"
+  "updated_at",
+  "auto"
  ]
 };
