@@ -1363,3 +1363,12 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .popt.pk-new .n { color: var(--accent); }
 .popt.pk-new.off .n { color: var(--fg-3); }
 .popt.pk-new.off { cursor: not-allowed; }
+
+/* Planejamento: bloco fixado à mão, dia esticado, Rafa na sexta */
+.pl-bloco { touch-action: none; user-select: none; }
+.pl-bloco.pin { box-shadow: inset 3px 0 0 rgba(0,0,0,.35); }
+.pl-unpin { position: absolute; top: 2px; right: 3px; border: 0; background: rgba(0,0,0,.18); color: inherit; border-radius: 4px; width: 16px; height: 16px; line-height: 14px; padding: 0; font-size: 12px; cursor: pointer; }
+.pl-dia.esticado .pl-grade { background: color-mix(in oklab, var(--warn, #F59E0B) 9%, var(--surface-1, #fff)); }
+.pl-dia.esticado .pl-cab .small { color: var(--warn, #B45309); font-weight: 600; }
+.pl-rafa { padding: 0 6px; min-height: 22px; }
+.pl-rafa.on { color: var(--accent); font-weight: 600; }

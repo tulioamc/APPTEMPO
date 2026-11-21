@@ -27,3 +27,23 @@ test('segunda tem o bloco do Rafa; a tela abre', () => {
   assert.deepEqual(jan, [[9, 11.5], [14, 19]]);
   assert.ok(m.VIEWS.plano().html.includes('Semana de'));
 });
+test('bloco arrastado fica no horário escolhido e o resto se encaixa em volta', () => {
+  const m = setup();
+  const p1 = { id: 'a', name: 'A', deadline: '2026-11-30' }, p2 = { id: 'b', name: 'B', deadline: '2026-11-19' };
+  m.db.setSetting('planoPins', [{ id: 'x', dia: '2026-11-17', pid: 'a', ini: 9, h: 2 }]);
+  const { porDia } = m.planejar([{ p: p2, falta: 4, prazo: p2.deadline }, { p: p1, falta: 6, prazo: p1.deadline }], new Date(2026, 10, 17, 8, 0));
+  const bl = porDia['2026-11-17'].blocos;
+  assert.deepEqual([bl[0].pid, bl[0].ini, bl[0].fim, bl[0].pin], ['a', 9, 11, 'x']);
+  assert.ok(bl.slice(1).every(b => b.ini >= 11), 'o resto vem depois do bloco fixado');
+  assert.equal(bl[1].pid, 'b');
+});
+test('horários fixos: jantar todo dia útil, Rafa seg/qua 19h e sexta alternada', () => {
+  const m = setup();
+  const nomes = (d) => m.planoJanelas(d).fixos.map(f => f[2]);
+  assert.ok(nomes('2026-11-18').includes('Buscar o Rafa') && nomes('2026-11-18').includes('Jantar'));   // quarta
+  assert.ok(!nomes('2026-11-27').includes('Buscar o Rafa'));   // sexta sem referência
+  m.db.setSetting('planoSextaRef', '2026-11-27');
+  assert.ok(nomes('2026-11-27').includes('Buscar o Rafa'));
+  assert.ok(!nomes('2026-12-04').includes('Buscar o Rafa'));
+  assert.ok(nomes('2026-12-11').includes('Buscar o Rafa'));
+});
