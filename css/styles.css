@@ -1513,3 +1513,30 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .pl-rot-cab, .pl-rot-l { grid-template-columns: minmax(130px, 2fr) auto 86px 86px 130px 96px 130px 30px !important; }
 .act-chip-fora i { background: linear-gradient(to bottom, #64748B 50%, #CBD5E1 50%) !important; }
 .act-chip-fora { border-style: dashed; }
+/* Estilo Google Agenda: cantos de poucos pixels, texto no canto de cima à esquerda */
+.pl-grade > .pl-bloco, .pl-grade > .pl-feito, .pl-grade > .pl-evento, .pl-grade > .pl-fixo { border-radius: 4px !important; padding: 2px 6px !important; font-size: .74em; line-height: 1.25; text-align: left; align-items: flex-start !important; justify-content: flex-start !important; overflow: hidden; }
+.pl-grade > .pl-feito { border: 1px solid color-mix(in oklab, var(--fc) 55%, transparent) !important; border-left: 3px solid var(--fc) !important; background: color-mix(in oklab, var(--fc) 14%, var(--surface-1, #fff)) !important; }
+.pl-grade > .pl-feito .pl-tx { flex-direction: row; align-items: baseline; gap: 4px; flex-wrap: wrap; text-align: left; justify-content: flex-start; }
+.pl-grade > .pl-feito .pl-tx i { display: none; }
+.pl-grade > .pl-fixo { border-top: 0 !important; border-bottom: 0 !important; border-left: 3px solid #CBD5E1; }
+.pl-grade > .pl-evento { border-width: 1px; }
+.pl-chip, .pl-mc-ev, .pl-mc-l i { border-radius: 4px; }
+/* registrado na 1ª terça parte da coluna; agenda nos outros dois terços */
+.pl-grade { background-image: linear-gradient(to right, transparent calc(33.333% - .5px), var(--line) calc(33.333% - .5px), var(--line) calc(33.333% + .5px), transparent calc(33.333% + .5px)); }
+.pl-grade > .pl-feito { padding: 1px 5px !important; background: color-mix(in oklab, var(--fc) 30%, var(--surface-1, #fff)) !important; border: 0 !important; border-left: 3px solid var(--fc) !important; }
+.pl-colrot { display: grid; grid-template-columns: 50px 1fr 2fr; font-size: .72em; color: var(--fg-3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+.pl-evento.todo.grupo { cursor: default; }
+/* número do dia e letra do Rafa maiores */
+.pl-cab-dia { font-size: 1.05em !important; }
+.pl-rf { font-size: 1.15em !important; padding: 0 3px; }
+.pl-mc-n b { font-size: 1.25em !important; }
+.pl-mc-n .pl-rf { font-size: 1.05em !important; }
+.pl-pop-t .pl-rf { font-size: 1.1em !important; }
+/* plano × real */
+.pl-pvr { font-family: var(--font-mono); font-size: .72em; font-weight: 700; border-radius: 4px; padding: 0 4px; }
+.pl-pvr.ok { background: #DCFCE7; color: #166534; } .pl-pvr.meio { background: #FEF3C7; color: #92400E; } .pl-pvr.baixo { background: #FEE2E2; color: #991B1B; }
+.pl-pvr-box { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.pl-grade > .pl-naofeito { position: absolute; border: 1.5px dashed var(--fc); border-radius: 4px; background: transparent; padding: 2px 6px; font-size: .72em; color: var(--fg-3); overflow: hidden; }
+/* criar arrastando */
+.pl-grade { cursor: crosshair; }
+.pl-novo { position: absolute; left: calc(33.333% + 1px); width: calc(33.333% - 3px); background: color-mix(in oklab, var(--accent) 25%, transparent); border: 1.5px solid var(--accent); border-radius: 4px; font: 600 11px var(--font-mono, monospace); color: var(--accent); padding: 2px 5px; pointer-events: none; z-index: 9; }

@@ -58,7 +58,8 @@ function planoFlexAjusta(dia, ini, fim) {
   if (w1 > c) vaos.push([c, w1]);
   const cob = (v) => Math.max(0, Math.min(v[1], fim) - Math.max(v[0], ini));
   const melhor = vaos.filter(v => cob(v) > 0).sort((a, b) => cob(b) - cob(a))[0];
-  return melhor ? melhor : null;   // null = trabalhou o horário todo: o bloco não aconteceu
+  // o bloco só se espreme dentro do próprio horário (não cresce para fora dele)
+  return melhor ? [Math.max(melhor[0], ini), Math.min(melhor[1], fim)] : null;   // null = trabalhou o horário todo: o bloco não aconteceu
 }
 /* Blocos fixos do dia: [ini, fim, nome, { grupo, rid, ajustado, flex }] com os ajustes daquele dia. */
 function planoFixosDoDia(dia) {
@@ -200,18 +201,52 @@ function planoRafaLetraHTML(dia) {
   return `<button class="pl-rf ${r.who}${r.auto ? ' auto' : ''}" data-act="pl-rafa-ir" data-dia="${dia}" title="${esc((RF_NOME?.[r.who] || r.who) + (r.auto ? ' · marcado pelo app' : '') + ' · abrir Dias de Rafa')}">${r.who === 'X' ? 'T/A' : r.who}</button>`;
 }
 
+/* Foto do plano: na primeira abertura de cada dia, guarda o que estava planejado para hoje (o plano em si é refeito
+   a cada abertura e não guarda o passado). Serve para comparar plano × real depois. 'planoFoto' = { dia: [{pid, ini, fim}] } */
+const planoFotos = () => db.setting('planoFoto', {}) || {};
+function planoFotoDoDia(porDia) {
+  const hoje = ymd(new Date()); const f = planoFotos(); if (f[hoje]) return;
+  const bl = (porDia[hoje]?.blocos || []).map(b => ({ pid: b.pid, ini: b.ini, fim: b.fim }));
+  const novo = { ...f, [hoje]: bl };
+  Object.keys(novo).sort().slice(0, -180).forEach(k => delete novo[k]);   // guarda ~6 meses
+  db.setSetting('planoFoto', novo);
+}
+/* Plano × real do dia: horas planejadas (foto) e quanto delas virou registro do mesmo projeto. */
+function planoVsReal(dia) {
+  const foto = planoFotos()[dia]; if (!foto || !foto.length) return null;
+  const feitos = planoFeitosDoDia(dia);
+  const plan = foto.reduce((t, b) => t + (b.fim - b.ini), 0);
+  const cumprido = (b) => feitos.filter(f => f.pid === b.pid).reduce((t, f) => t + Math.max(0, Math.min(f.fim, b.fim) - Math.max(f.ini, b.ini)), 0);
+  const porProj = {}; foto.forEach(b => { porProj[b.pid] = (porProj[b.pid] || 0) + (b.fim - b.ini); });
+  const reg = Object.keys(porProj).reduce((t, pid) => t + Math.min(porProj[pid], feitos.filter(f => f.pid === pid).reduce((s, f) => s + (f.fim - f.ini), 0)), 0);
+  return { plan, reg, pct: plan ? Math.round(reg / plan * 100) : 0, blocos: foto.map(b => ({ ...b, ok: cumprido(b) >= (b.fim - b.ini) * 0.5 })) };
+}
 /* Itens de um dia na grade, todos no mesmo formato: { a, b (horas), k (tipo), ... }.
    Tipos: fixo (rotina), evento (bloqueio/Google), todo, feito (registro), plano (planejado). */
 function planoItensDoDia(dia, porDia) {
   const it = [];
   planoFixosDoDia(dia).forEach(([a, b, n, m]) => it.push({ k: 'fixo', a, b, n, m }));
-  planoEventos(dia).filter(e => !e.diaTodo).forEach(e => it.push({ k: e.origem === 'todo' ? 'todo' : 'evento', a: e.ini, b: e.fim, e }));
+  const evs = planoEventos(dia).filter(e => !e.diaTodo);
+  // 3 ou mais to-dos no mesmo horário viram um bloco só ("7 to-dos"), com a lista no hover
+  const porHora = {}; evs.filter(e => e.origem === 'todo').forEach(e => { (porHora[e.ini + '|' + e.fim] ||= []).push(e); });
+  evs.forEach(e => {
+    if (e.origem === 'todo') { const g = porHora[e.ini + '|' + e.fim]; if (g.length >= 3) { if (g[0] === e) it.push({ k: 'todos', a: e.ini, b: e.fim, lista: g }); return; } }
+    it.push({ k: e.origem === 'todo' ? 'todo' : 'evento', a: e.ini, b: e.fim, e });
+  });
   planoFeitosDoDia(dia).forEach(f => it.push({ k: 'feito', a: f.ini, b: f.fim, f }));
   (porDia[dia]?.blocos || []).forEach(bl => it.push({ k: 'plano', a: bl.ini, b: bl.fim, bl }));
+  if (dia <= ymd(new Date())) { const pr = planoVsReal(dia); (pr?.blocos || []).filter(b => !b.ok && (dia < ymd(new Date()) || b.fim <= new Date().getHours() + new Date().getMinutes() / 60)).forEach(b => it.push({ k: 'naofeito', a: b.ini, b: b.fim, bl: b })); }
   return it.filter(x => x.b > x.a);
 }
 /* Lado a lado: itens que se sobrepõem dividem a largura (colunas por grupo de sobreposição). */
 function planoFaixas(itens) {
+  // registrado fica sempre na primeira terça parte da coluna; o resto divide os outros dois terços (cada bloco no máximo 1/3)
+  const reg = itens.filter(x => x.k === 'feito'); const resto = planoFaixasLivre(itens.filter(x => x.k !== 'feito'));
+  reg.forEach(x => { x._left = 0; x._w = 100 / 3; });
+  resto.forEach(x => { const w = Math.min(100 / 3, (200 / 3) / x._n); x._left = 100 / 3 + x._l * w; x._w = w; });
+  return [...resto, ...reg];
+}
+function planoFaixasLivre(itens) {
   const ord = itens.slice().sort((x, y) => x.a - y.a || (y.b - y.a) - (x.b - x.a));
   let grupo = [], fimG = -1;
   const fecha = () => { const n = Math.max(1, ...grupo.map(x => x._l + 1)); grupo.forEach(x => { x._n = n; }); grupo = []; };
@@ -228,7 +263,7 @@ function planoFaixas(itens) {
 const PL_PUX = '<i class="dg-t" title="Puxe para mudar o começo"></i><i class="dg-b" title="Puxe para mudar o fim"></i>';
 function planoItemHTML(x, dia, { alt, unico, auto }) {
   const y = x.a * alt, h = (x.b - x.a) * alt;
-  const pos = `top:${y}px;height:${Math.max(x.k === 'feito' ? 8 : 14, h - 2)}px;left:calc(${(x._l / x._n * 100).toFixed(3)}% + 2px);width:calc(${(100 / x._n).toFixed(3)}% - 4px)`;
+  const pos = `top:${y}px;height:${Math.max(x.k === 'feito' ? 3 : 14, h - (x.k === 'feito' ? 1 : 2))}px;left:calc(${(x._left ?? 0).toFixed(3)}% + 1px);width:calc(${(x._w ?? 100).toFixed(3)}% - 3px)`;
   const curto = h < 30;
   if (x.k === 'fixo') { const { n, m } = x;
     return `<div class="pl-fixo${m.ajustado ? ' ajustado' : ''}${m.real ? ' real' : ''}" data-dg="fixo" data-dia="${dia}" data-g="${esc(m.grupo)}" data-ini="${x.a}" data-fim="${x.b}" style="${pos}" data-tip="${esc(`${n}\n${planoHora(x.a)}–${planoHora(x.b)}${m.real ? '\nAjustado ao que aconteceu (bloco flexível)' : ''}${m.ajustado ? '\nMudado só neste dia' : ''}\nArraste ou puxe as bordas: muda só neste dia`)}"><span class="pl-tx"><b>${esc(n)}</b>${curto ? '' : `<em>${planoHora(x.a)}–${planoHora(x.b)}</em>`}</span><span class="pl-fx-bt">${m.ajustado ? `<button data-act="pl-fixo-reset" data-dia="${dia}" data-g="${esc(m.grupo)}" title="Voltar ao horário da rotina" aria-label="Voltar ao padrão">↺</button>` : ''}<button data-act="pl-fixo-off" data-dia="${dia}" data-g="${esc(m.grupo)}" title="Tirar só deste dia" aria-label="Tirar deste dia">×</button></span>${PL_PUX}</div>`; }
@@ -236,8 +271,12 @@ function planoItemHTML(x, dia, { alt, unico, auto }) {
     return `<div class="pl-evento ${e.origem}"${bloq ? ` data-dg="bloq" data-dia="${dia}" data-id="${e.id}" data-ini="${x.a}" data-fim="${x.b}"` : ''} style="${pos}" data-tip="${esc(`${e.origem === 'google' ? 'Google Agenda' + (e.agenda ? ' · ' + e.agenda : '') : 'Bloqueio'}\n${e.titulo}\n${planoHora(e.ini)}–${planoHora(e.fim)}`)}">${icon(e.origem === 'google' ? 'calendar' : 'clock')}<span class="pl-tx"><b>${esc(e.titulo)}</b>${curto ? '' : `<em>${planoHora(e.ini)}–${planoHora(e.fim)}</em>`}</span>${bloq ? PL_PUX : ''}</div>`; }
   if (x.k === 'todo') { const e = x.e;
     return `<div class="pl-evento todo${e.feito ? ' feito' : ''}"${e.feito ? '' : ` data-dg="todo" data-dia="${dia}" data-id="${e.id}" data-ini="${x.a}" data-fim="${x.b}"`} style="${pos}" data-act="todo-modal" data-id="${e.id}" data-tip="${esc(`To-do: ${e.titulo}\n${planoHora(e.ini)}–${planoHora(e.fim)}${e.feito ? '\nFeito' : '\nArraste para mudar a hora; puxe as bordas para mudar a duração'}`)}">${icon('check')}<span class="pl-tx"><b>${esc(e.titulo)}</b></span>${e.feito ? '' : PL_PUX}</div>`; }
+  if (x.k === 'naofeito') { const p = db.get('tempo_projects', x.bl.pid); const c = planoCor(x.bl.pid);
+    return `<div class="pl-naofeito" style="${pos};--fc:${c}" data-tip="${esc(`Planejado e não aconteceu: ${p?.name || ''}\n${planoHora(x.a)}–${planoHora(x.b)} (plano da manhã)`)}"><span class="pl-tx"><b>${esc(p?.name || '')}</b>${curto ? '' : '<em>não aconteceu</em>'}</span></div>`; }
+  if (x.k === 'todos') { const l = x.lista;
+    return `<div class="pl-evento todo grupo" style="${pos}" data-tip="${esc(`${l.length} to-dos às ${planoHora(x.a)}\n` + l.map(e => (e.feito ? '✓ ' : '• ') + e.titulo).join('\n'))}">${icon('check')}<span class="pl-tx"><b>${l.length} to-dos</b>${curto ? '' : `<em>${l.filter(e => e.feito).length} feitos</em>`}</span></div>`; }
   if (x.k === 'feito') { const f = x.f; const pr = db.get('tempo_projects', f.pid);
-    return `<div class="pl-feito" style="${pos};--fc:${planoCor(f.pid)}" data-tip="${esc(`Registrado: ${pr?.name || 'Sem projeto'}${pr ? '\n' + (clientOf(pr)?.name || '') : ''}\n${planoHora(f.ini)}–${planoHora(f.fim)} · ${fmtH(f.ms)} trabalhado`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"` : ''}><span class="pl-tx"><i></i><b>${esc(pr?.name || 'Sem projeto')}</b>${h >= 34 ? `<em>${unico && pr ? esc(clientOf(pr)?.name || '') + ' · ' : ''}${fmtH(f.ms)}</em>` : ''}</span></div>`; }
+    return `<div class="pl-feito" style="${pos};--fc:${planoCor(f.pid)}" data-tip="${esc(`Registrado: ${pr?.name || 'Sem projeto'}${pr ? '\n' + (clientOf(pr)?.name || '') : ''}\n${planoHora(f.ini)}–${planoHora(f.fim)} · ${fmtH(f.ms)} trabalhado`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"` : ''}>${h >= 15 ? `<span class="pl-tx"><b>${esc(pr?.name || 'Sem projeto')}</b>` : '<span class="pl-tx">'}${h >= 34 ? `<em>${unico && pr ? esc(clientOf(pr)?.name || '') + ' · ' : ''}${fmtH(f.ms)}</em>` : ''}</span></div>`; }
   const b = x.bl; const p = db.get('tempo_projects', b.pid); const c = planoCor(b.pid);
   return `<div class="pl-bloco${b.atrasado ? ' late' : ''}${b.pin ? ' pin' : ' auto'}" data-dg="plano" data-dia="${dia}" data-pid="${b.pid}" data-ini="${b.ini}" data-fim="${b.fim}" style="${pos};background:${c};color:${textOn(c)}" data-act="proj-open" data-id="${b.pid}" data-tip="${esc(`Planejado: ${p?.name}\n${clientOf(p)?.name || ''}\n${planoHora(b.ini)}–${planoHora(b.fim)} · ${fmtH(b.h * 36e5)}${b.atrasado ? '\nDepois do prazo' : ''}${b.pin ? '\nFixado à mão' : '\nColocado pelo app · arraste para mudar o horário ou o dia'}`)}"><span class="pl-tx"><b>${esc(p?.name || '')}</b>${curto ? '' : `<em>${planoHora(b.ini)} · ${fmtH(b.h * 36e5)}${unico && p ? ' · ' + esc(clientOf(p)?.name || '') : ''}</em>`}</span>${b.pin ? `<button class="pl-unpin" data-act="pl-unpin" data-id="${b.pin}" title="Soltar: o app volta a encaixar este bloco sozinho" aria-label="Soltar bloco">×</button>` : ''}${PL_PUX}</div>`;
 }
@@ -250,7 +289,7 @@ function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0
   const wd = new Date(dia + 'T12:00:00').getDay();
   const sexta = wd === 5 ? `<button class="btn sm ghost pl-rafa${planoSextaRafa(dia) ? ' on' : ''}" data-act="pl-sexta" data-dia="${dia}" title="Sexta com o Rafa (T) ou com a Amanda (A)? Clique para trocar só esta sexta (muda também no Dias de Rafa).">Rafa ${planoSextaRafa(dia) ? '✓' : '–'}</button>` : '';
   const cab = !cabecalho ? '' : `<div class="pl-cab">${semana ? `<span class="pl-sem-rot">${esc(semana)}</span>` : ''}<span class="pl-cab-l1"><button class="pl-cab-dia" data-act="pl-ir-dia" data-dia="${dia}" title="Ver o dia">${new Date(dia + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</button>${planoRafaLetraHTML(dia)}</span>
-      <span class="pl-cab-l2"><span class="small ${h > cfg.horasDia + 0.05 ? 'late' : 'muted'}">${util ? `${fmtH(h * 36e5)}${est ? ` de ${est} h` : ''}` : (fer ? esc(fer.nome) : 'folga')}</span>${sexta}${util ? `<span class="pl-estica"><button class="btn sm ghost" data-act="pl-dia" data-dia="${dia}" data-d="-1" aria-label="Encurtar o dia" title="Encurtar o dia em 1 h">−</button><button class="btn sm ghost" data-act="pl-dia" data-dia="${dia}" data-d="1" aria-label="Esticar o dia" title="Esticar o dia em 1 h">+</button></span>` : ''}</span></div>`;
+      <span class="pl-cab-l2">${(() => { const pr = dia <= hoje ? planoVsReal(dia) : null; return pr ? `<span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}" data-tip="${esc(`Plano × real: ${fmtH(pr.reg * 36e5)} registrados das ${fmtH(pr.plan * 36e5)} planejadas de manhã (mesmo projeto)`)}">${pr.pct}%</span>` : ''; })()}<span class="small ${h > cfg.horasDia + 0.05 ? 'late' : 'muted'}">${util ? `${fmtH(h * 36e5)}${est ? ` de ${est} h` : ''}` : (fer ? esc(fer.nome) : 'folga')}</span>${sexta}${util ? `<span class="pl-estica"><button class="btn sm ghost" data-act="pl-dia" data-dia="${dia}" data-d="-1" aria-label="Encurtar o dia" title="Encurtar o dia em 1 h">−</button><button class="btn sm ghost" data-act="pl-dia" data-dia="${dia}" data-d="1" aria-label="Esticar o dia" title="Esticar o dia em 1 h">+</button></span>` : ''}</span></div>`;
   const todoDia = planoEventos(dia).filter(e => e.diaTodo);
   const topo = linhasTopo ? `<div class="pl-topo" style="height:${linhasTopo * 20}px">${todoDia.map(e => e.origem === 'todo'
     ? `<button class="pl-chip todo${e.feito ? ' feito' : ''}" data-act="todo-modal" data-id="${e.id}" title="To-do do dia (sem hora)">${icon('check')}${esc(e.titulo)}</button>`
@@ -307,10 +346,10 @@ function planoPopHTML(dia) {
   const porDia = PLANO.porDia || {}; const alt = 9; const ini = 5, fim = 24;
   const itens = planoFaixas(planoItensDoDia(dia, porDia)).filter(x => x.b > ini);
   const mini = itens.map(x => { const a = Math.max(x.a, ini), b = Math.min(x.b, fim); if (b <= a) return '';
-    const cor = x.k === 'plano' ? planoCor(x.bl.pid) : x.k === 'feito' ? planoCor(x.f.pid) : x.k === 'todo' ? 'var(--accent)' : x.k === 'evento' && x.e.origem === 'google' ? '#4285F4' : '#CBD5E1';
-    return `<span class="pl-pop-b ${x.k}" style="top:${(a - ini) * alt}px;height:${Math.max(2, (b - a) * alt - 1)}px;left:${(x._l / x._n * 100).toFixed(2)}%;width:${(100 / x._n).toFixed(2)}%;--c:${cor}"></span>`; }).join('');
-  const nome = (x) => x.k === 'fixo' ? x.n : x.k === 'evento' || x.k === 'todo' ? x.e.titulo : x.k === 'feito' ? (db.get('tempo_projects', x.f.pid)?.name || 'Sem projeto') : (db.get('tempo_projects', x.bl.pid)?.name || '');
-  const rot = { fixo: 'rotina', evento: 'compromisso', todo: 'to-do', feito: 'registrado', plano: 'planejado' };
+    const cor = x.k === 'plano' ? planoCor(x.bl.pid) : x.k === 'feito' ? planoCor(x.f.pid) : x.k === 'todo' || x.k === 'todos' ? 'var(--accent)' : x.k === 'evento' && x.e.origem === 'google' ? '#4285F4' : '#CBD5E1';
+    return `<span class="pl-pop-b ${x.k}" style="top:${(a - ini) * alt}px;height:${Math.max(2, (b - a) * alt - 1)}px;left:${(x._left ?? 0).toFixed(2)}%;width:${(x._w ?? 100).toFixed(2)}%;--c:${cor}"></span>`; }).join('');
+  const nome = (x) => x.k === 'todos' ? `${x.lista.length} to-dos` : x.k === 'fixo' ? x.n : x.k === 'evento' || x.k === 'todo' ? x.e.titulo : x.k === 'feito' ? (db.get('tempo_projects', x.f.pid)?.name || 'Sem projeto') : (db.get('tempo_projects', x.bl.pid)?.name || '');
+  const rot = { fixo: 'rotina', evento: 'compromisso', todo: 'to-do', todos: 'to-dos', feito: 'registrado', plano: 'planejado' };
   const lista = planoFaixas(planoItensDoDia(dia, porDia)).map(x => `<div class="pl-pop-l ${x.k}"><span class="mono">${planoHora(x.a)}–${planoHora(x.b)}</span><span>${esc(nome(x))}</span><em>${rot[x.k]}</em></div>`).join('');
   const t = new Date(dia + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   return `<div class="pl-pop-t">${esc(t.replace(/^./, c => c.toUpperCase()))} ${planoRafaLetraHTML(dia)}</div>
@@ -329,6 +368,7 @@ function planoDiaHTML(dia, porDia) {
   const lado = `<div class="stack" style="gap:12px">
     ${fer ? `<div class="banner info small">${esc(fer.nome)} (feriado)</div>` : ''}
     ${(() => { const r = typeof rafaDiaDe === 'function' ? rafaDiaDe(dia) : null; return r?.who ? `<div class="small">Rafa: ${planoRafaLetraHTML(dia)} ${esc(RF_NOME?.[r.who] || '')}${r.auto ? ' <span class="faint">(marcado pelo app)</span>' : ''}${r.horario ? ' · ' + esc(r.horario) : ''}</div>` : ''; })()}
+    ${(() => { const pr = planoVsReal(dia); return pr ? `<div class="pl-pvr-box"><b>${fmtH(pr.reg * 36e5)} de ${fmtH(pr.plan * 36e5)} planejadas</b> <span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}">${pr.pct}%</span><div class="small muted">Comparado com o plano do começo do dia; o que não aconteceu aparece tracejado.</div></div>` : ''; })()}
     <div><div class="lbl">Projetos do dia</div>${linhas ? `<div class="bars">${linhas}</div>` : '<div class="small muted">Nada registrado nem planejado.</div>'}</div>
     ${prz.length ? `<div><div class="lbl">Prazos</div>${prz.map(p => `<div class="small">${icon('flag')} ${esc(p.name)}</div>`).join('')}</div>` : ''}
     <div><div class="lbl">Compromissos</div>${ev.length ? ev.map(e => `<div class="small row between"><span>${e.diaTodo ? 'Dia todo' : planoHora(e.ini) + '–' + planoHora(e.fim)} · ${esc(e.titulo)} <span class="faint">${e.origem === 'google' ? 'Google' : e.origem === 'todo' ? 'to-do' : 'bloqueio'}</span></span>${e.origem === 'bloqueio' ? `<button class="btn sm ghost" data-act="pl-bloq-del" data-id="${e.id}" aria-label="Remover bloqueio">${icon('x')}</button>` : ''}</div>`).join('') : '<div class="small muted">Nenhum. Os eventos do Google Agenda vão aparecer aqui quando a integração for ligada.</div>'}
@@ -336,7 +376,7 @@ function planoDiaHTML(dia, porDia) {
     ${sd.length ? `<div><div class="lbl">To-do sem data <span class="faint">(${sd.length})</span></div>${sd.slice(0, 12).map(n => `<div class="small row between pl-sd"><span data-act="todo-modal" data-id="${n.id}" style="cursor:pointer">${esc(n.title)}</span><button class="btn sm ghost" data-act="pl-encaixar" data-id="${n.id}" data-dia="${dia}" title="Põe no primeiro horário livre deste dia (15 min, ou a estimativa)">Encaixar</button></div>`).join('')}${sd.length > 12 ? `<div class="small muted">+${sd.length - 12}</div>` : ''}</div>` : ''}
   </div>`;
   const lt = planoEventos(dia).filter(e => e.diaTodo).length;
-  return `<div class="pl-diaview"><div class="pl-scroll" data-pl-scroll><div class="pl-semana pl-um"><div class="pl-regua-col">${lt ? `<div style="height:${lt * 20}px"></div>` : ''}${planoRegua()}</div>${planoColHTML(dia, porDia, { unico: true, linhasTopo: lt, cabecalho: false })}</div></div>${lado}</div>`;
+  return `<div class="pl-diaview"><div><div class="pl-colrot"><span></span><span>Registrado</span><span>Agenda · planejado, rotina, to-dos e compromissos</span></div><div class="pl-scroll" data-pl-scroll><div class="pl-semana pl-um"><div class="pl-regua-col">${lt ? `<div style="height:${lt * 20}px"></div>` : ''}${planoRegua()}</div>${planoColHTML(dia, porDia, { unico: true, linhasTopo: lt, cabecalho: false })}</div></div></div>${lado}</div>`;
 }
 
 VIEWS.plano = () => {
@@ -344,6 +384,7 @@ VIEWS.plano = () => {
   const lista = planoProjetos(); const cfg = planoCfg(); const modo = planoModo();
   const { porDia, estouro } = planejar(lista, new Date(), modo === 'mes' ? 220 : 100);
   PLANO.porDia = porDia;
+  planoFotoDoDia(porDia);
   const hoje = ymd(new Date()); const dia = PLANO.dia || hoje;
   const semEst = projects().filter(p => ['todo', 'active'].includes(statusCat(p.status_id)) && !(Number(p.estimated_hours) > 0));
   const seg = `<div class="seg">${[['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']].map(([k, l]) => `<button class="${modo === k ? 'on' : ''}" data-act="pl-modo" data-m="${k}">${l}</button>`).join('')}</div>`;
@@ -571,3 +612,52 @@ ACTIONS['pl-encaixar'] = (el) => {
   });
   document.addEventListener('scroll', fecha, true);
 })();
+
+/* ---------- Criar arrastando no vazio (como no Google Agenda) ----------
+   Clique e arraste num horário livre da grade: abre o menu para criar bloqueio, to-do ou bloco de projeto.
+   Clique simples cria 30 min. */
+(function () {
+  if (typeof document === 'undefined' || !document.addEventListener) return;
+  let c = null;
+  const hDe = (grade, y) => Math.max(0, Math.min(24, Math.round(((y - grade.getBoundingClientRect().top) / PL_ALT) * 4) / 4));
+  document.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !e.target.classList || !e.target.classList.contains('pl-grade')) return;
+    const col = e.target.closest('[data-pl-col]'); if (!col) return;
+    const h0 = hDe(e.target, e.clientY);
+    const fx = document.createElement('div'); fx.className = 'pl-novo'; e.target.appendChild(fx);
+    c = { grade: e.target, dia: col.dataset.plCol, h0, fx, y0: e.clientY };
+    const pinta = (a, b) => { fx.style.top = (a * PL_ALT) + 'px'; fx.style.height = Math.max(6, (b - a) * PL_ALT) + 'px'; fx.textContent = `${planoHora(a)}–${planoHora(b)}`; };
+    c.pinta = pinta; pinta(h0, h0 + 0.5);
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!c) return; const h = hDe(c.grade, e.clientY);
+    const a = Math.min(c.h0, h), b = Math.max(c.h0, h); c.a = a; c.b = Math.abs(e.clientY - c.y0) < 5 ? c.h0 + 0.5 : Math.max(a + 0.25, b);
+    c.pinta(c.a, c.b);
+  });
+  document.addEventListener('pointerup', () => {
+    if (!c) return; const x = c; c = null;
+    const a = x.a ?? x.h0, b = x.b ?? x.h0 + 0.5;
+    planoCriarMenu(x.dia, a, b, () => x.fx.remove());
+  });
+})();
+function planoCriarMenu(dia, a, b, fim) {
+  const projs = projects().filter(p => ['todo', 'active'].includes(statusCat(p.status_id))).sort((x, y) => String(x.name).localeCompare(String(y.name), 'pt-BR'));
+  const l = openLayer({
+    html: `<div class="dh"><h2>${fmtDate(dia)} · ${planoHora(a)}–${planoHora(b)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db stack" style="gap:10px">
+      <div class="field"><label for="pn-t">Nome</label><input id="pn-t" class="input" placeholder="Para bloqueio ou to-do" autocomplete="off"></div>
+      <div class="field"><label for="pn-p">Projeto (para bloco de trabalho)</label><select id="pn-p" class="input"><option value="">—</option>${projs.map(p => `<option value="${p.id}">${esc(p.name)}${clientOf(p) ? ' · ' + esc(clientOf(p).name) : ''}</option>`).join('')}</select></div>
+    </div>
+    <div class="df"><button class="btn" data-pn="bloq">${icon('clock')} Bloqueio</button><button class="btn" data-pn="todo">${icon('check')} To-do</button><button class="btn primary" data-pn="proj">Bloco de projeto</button></div>`,
+    onClose: fim,
+  });
+  setTimeout(() => l.box.querySelector('#pn-t')?.focus(), 30);
+  l.box.addEventListener('click', (e) => {
+    const bt = e.target.closest('[data-pn]'); if (!bt) return;
+    const nome = l.box.querySelector('#pn-t').value.trim(), pid = l.box.querySelector('#pn-p').value;
+    if (bt.dataset.pn === 'bloq') db.setSetting('planoBloqueios', [...planoBloqueios(), { id: uid(), dia, ini: a, fim: b, nome: nome || 'Bloqueio' }]);
+    else if (bt.dataset.pn === 'todo') { if (!nome) return toast('Escreva o nome do to-do.'); db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: nome, body: '', data: { due: `${dia}T${planoHora(a)}`, end: b < 24 ? planoHora(b) : null, semHora: false }, decision: '', decided_at: null, snooze_until: null }, true); }
+    else { if (!pid) return toast('Escolha o projeto.'); db.setSetting('planoPins', [...planoPins(), { id: uid(), dia, pid, ini: a, h: b - a }]); }
+    l.close(); db.emit(); render(); toast('Criado');
+  });
+}
