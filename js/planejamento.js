@@ -108,7 +108,21 @@ VIEWS.plano = () => {
     const v = porDia[dia]; const util = planoDiaUtil(dia);
     const { fixos } = planoJanelas(dia, cfg);
     const est = planoEsticados()[dia];
-    const cor = (pid) => hexOf(clientOf(db.get('tempo_projects', pid))?.color);
+    const cor = (pid) => { const pr = db.get('tempo_projects', pid); return hexOf(pr?.color || clientOf(pr)?.color || 'gray'); };
+    // o que foi registrado no dia (intervalos trabalhados, sem as pausas), com a cor do projeto
+    const d0 = new Date(dia + 'T00:00:00').getTime(), d1 = d0 + 864e5;
+    const brutos = [];
+    db.all('tempo_time_entries').forEach(e => (e.segments || []).forEach(sg => {
+      if (!sg.s) return; const a = Math.max(d0, new Date(sg.s).getTime()), b = Math.min(d1, sg.e ? new Date(sg.e).getTime() : Date.now());
+      if (b > a) brutos.push({ pid: e.project_id || null, a, b });
+    }));
+    brutos.sort((x, y) => x.a - y.a);
+    // emenda trechos do mesmo projeto separados por pausas curtas (menos de 10 min), para ficar legível
+    const feitos = [];
+    brutos.forEach(x => { const l = feitos[feitos.length - 1]; if (l && l.pid === x.pid && x.a - l.b < 10 * 60e3) { l.b = Math.max(l.b, x.b); l.ms += x.b - x.a; } else feitos.push({ ...x, ms: x.b - x.a }); });
+    const hDe = (t) => (t - d0) / 36e5;
+    const fe = feitos.map(f => { const a = Math.max(hDe(f.a), top), b = Math.min(hDe(f.b), bot); if (b <= a) return ''; const pr = db.get('tempo_projects', f.pid); const c = f.pid ? cor(f.pid) : '#94A3B8';
+      return `<div class="pl-feito" style="top:${(a - top) * altura}px;height:${Math.max(6, (b - a) * altura - 1)}px;--fc:${c}" data-tip="${esc(`Feito: ${pr?.name || 'Sem projeto'}${pr ? '\n' + (clientOf(pr)?.name || '') : ''}\n${planoHora(hDe(f.a))}–${planoHora(hDe(f.b))} · ${fmtH(f.ms)} trabalhado`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"` : ''}>${(b - a) * altura >= 30 ? `<b>${esc(pr?.name || 'Sem projeto')}</b><span>${fmtH(f.ms)}</span>` : ''}</div>`; }).join('');
     const bl = (v?.blocos || []).map(b => { const p = db.get('tempo_projects', b.pid); return `<div class="pl-bloco${b.atrasado ? ' late' : ''}${b.pin ? ' pin' : ''}" data-pl-pid="${b.pid}" data-pl-dia="${dia}" data-pl-ini="${b.ini}" data-pl-h="${b.h}" style="top:${(b.ini - top) * altura}px;height:${Math.max(16, b.h * altura - 2)}px;background:${cor(b.pid)};color:${textOn(cor(b.pid))}" data-tip="${esc(`${p?.name}\n${clientOf(p)?.name || ''}\n${planoHora(b.ini)}–${planoHora(b.fim)} · ${fmtH(b.h * 36e5)}${b.atrasado ? '\nDepois do prazo' : ''}`)}" data-act="proj-open" data-id="${b.pid}"><b>${esc(p?.name || '')}</b><span>${planoHora(b.ini)} · ${fmtH(b.h * 36e5)}${b.pin ? ' · fixado' : ''}</span>${b.pin ? `<button class="pl-unpin" data-act="pl-unpin" data-id="${b.pin}" title="Soltar: o app volta a encaixar este bloco sozinho" aria-label="Soltar bloco">×</button>` : ''}</div>`; }).join('');
     const fx = fixos.map(([a0, b0, n]) => { const a = Math.max(a0, top), b = Math.min(b0, bot); return b > a ? `<div class="pl-fixo" style="top:${(a - top) * altura}px;height:${(b - a) * altura - 2}px">${esc(n || 'Bloqueio')}</div>` : ''; }).join('');
     const h = v?.horas || 0;
@@ -117,7 +131,7 @@ VIEWS.plano = () => {
     return `<div class="pl-dia${dia === hoje ? ' hoje' : ''}${!util ? ' off' : ''}${(v?.cap || 0) > cfg.horasDia + 0.05 ? ' esticado' : ''}" data-pl-col="${dia}"><div class="pl-cab"><b>${new Date(dia + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</b>
       <span class="small ${h > cfg.horasDia + 0.05 ? 'late' : 'muted'}">${util ? `${fmtH(h * 36e5)}${est ? ` de ${est} h` : ''}` : 'folga'}</span>
       ${sexta}${util ? `<span class="pl-estica"><button class="btn sm ghost" data-act="pl-dia" data-dia="${dia}" data-d="-1" aria-label="Encurtar o dia" title="Encurtar o dia em 1 h">−</button><button class="btn sm ghost" data-act="pl-dia" data-dia="${dia}" data-d="1" aria-label="Esticar o dia" title="Esticar o dia em 1 h">+</button></span>` : ''}</div>
-      <div class="pl-grade" style="height:${(bot - top) * altura}px">${fx}${bl}</div></div>`;
+      <div class="pl-grade" style="height:${(bot - top) * altura}px">${fx}${fe}${bl}</div></div>`;
   };
   const horas = Array.from({ length: Math.ceil(bot - top) }, (_, i) => Math.ceil(top) + i).map(h => `<div class="pl-h" style="top:${(h - top) * altura}px">${String(h).padStart(2, '0')}h</div>`).join('');
   const planHoje = {}; (porDia[hoje]?.blocos || []).forEach(b => { planHoje[b.pid] = (planHoje[b.pid] || 0) + b.h; });
@@ -128,7 +142,7 @@ VIEWS.plano = () => {
     ${hojeHTML}
     <div class="panel"><div class="panel-h"><button class="btn sm" data-act="pl-sem" data-d="-1" aria-label="Semana anterior">${icon('chevL')}</button><h3>Semana de ${fmtDate(dias[0])}</h3><button class="btn sm" data-act="pl-sem" data-d="1" aria-label="Próxima semana">${icon('chevR')}</button>${PLANO.semana ? '<button class="btn sm ghost" data-act="pl-sem" data-d="0">Hoje</button>' : ''}<span class="grow"></span><button class="btn sm" data-act="pl-bloq">${icon('plus')} Bloqueio</button></div>
       <div class="panel-b"><div class="pl-semana"><div class="pl-horas" style="height:${(bot - top) * altura}px;margin-top:46px">${horas}</div>${dias.map(col).join('')}</div>
-      <div class="small muted" style="margin-top:8px">${lista.length} projeto(s) com horas a fazer, distribuídas por prazo até ${cfg.horasDia} h por dia útil (9h–19h, almoço 12h–14h; segunda 11h30–14h com o Rafa; jantar 20h–21h; Rafa 19h–20h seg, qua e sexta alternada). Arraste um bloco para mudar o horário ou o dia; o × solta. Feriados e férias ficam fora.${semEst.length ? ` ${semEst.length} projeto(s) ativo(s) sem horas estimadas não entram.` : ''}</div></div></div>
+      <div class="small muted" style="margin-top:8px">${lista.length} projeto(s) com horas a fazer, distribuídas por prazo até ${cfg.horasDia} h por dia útil (9h–19h, almoço 12h–14h; segunda 11h30–14h com o Rafa; jantar 20h–21h; Rafa 19h–20h seg, qua e sexta alternada). Arraste um bloco para mudar o horário ou o dia; o × solta. Blocos claros com borda = o que já foi registrado, na cor do projeto. Feriados e férias ficam fora.${semEst.length ? ` ${semEst.length} projeto(s) ativo(s) sem horas estimadas não entram.` : ''}</div></div></div>
     ${planoBloqueios().filter(b => b.dia >= hoje).length ? `<div class="panel"><div class="panel-h"><h3>Bloqueios</h3></div><div class="panel-b stack" style="gap:4px">${planoBloqueios().filter(b => b.dia >= hoje).sort((a, b) => (a.dia + a.ini).localeCompare(b.dia + b.ini)).map(b => `<div class="row between small"><span>${fmtDate(b.dia)} · ${planoHora(b.ini)}–${planoHora(b.fim)} · ${esc(b.nome || 'Bloqueio')}</span><button class="btn sm ghost" data-act="pl-bloq-del" data-id="${b.id}" aria-label="Remover bloqueio">${icon('x')}</button></div>`).join('')}</div></div>` : ''}`;
   return { title: 'Planejamento', actions: '', html };
 };
