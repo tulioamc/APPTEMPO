@@ -77,3 +77,12 @@ test('declaração do Simples alimenta a conferência; tela abre e lista faltant
   const v = m.VIEWS.notas();
   assert.ok(v.html.includes('Conferência com o Simples') && v.html.includes('NF34'));
 });
+test('partes e ordens diferentes do mesmo cliente no mesmo dia não viram substituição', () => {
+  const m = setup();
+  m.nfReport([
+    { id: 'a', arquivo: '/p/NF 16.pdf', texto: nacional(16, { valor: '19.200,00', data: '24/02/2026', desc: 'OC 5313 2013182 | PO 4500875444 | PP 5285' }) },
+    { id: 'b', arquivo: '/p/NF 17.pdf', texto: nacional(17, { valor: '2.400,00', data: '24/02/2026', desc: 'OC 5862 2013182 | PO 4500874244 | PP 5828' }) },
+    { id: 'c', arquivo: '/p/NF 39.pdf', texto: nacional(39, { valor: '10.000,00', data: '30/06/2025', desc: 'Ajuste de Identidade Visual e KV (parcela 02 de 03)' }) },
+    { id: 'd', arquivo: '/p/NF 40.pdf', texto: nacional(40, { valor: '10.000,00', data: '30/06/2025', desc: 'Ajuste de Identidade Visual e KV (parcela 03 de 03)' }) }], []);
+  m.db.all('tempo_invoices').forEach(n => assert.equal(m.nfStatus(n), 'emitida', 'NF' + n.numero));
+});

@@ -1582,6 +1582,14 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .nf-chip:hover { filter: brightness(.95); text-decoration: underline; }
 .nf-chip.nf-cancelada, .nf-chip.nf-substituida { text-decoration: line-through; opacity: .75; }
 .nf-tab tr.nf-off td { opacity: .55; }
-.nf-tab select.input.sm { padding: 2px 6px; font-size: 12px; max-width: 140px; }
-.nf-tab .nf-tom { min-width: 260px; }
+.nf-tab { table-layout: fixed; width: 100%; }
+.nf-tab td { vertical-align: middle; overflow: hidden; }
+.nf-tab select.input.sm { padding: 2px 6px; font-size: 12px; width: 100%; min-width: 0; }
+.nf-tab .nf-tom .row > select { flex: 1 1 0; }
+.nf-cut { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nf-cut a { white-space: nowrap; }
 td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
+
+/* Despesas: total em aberto no topo do mês */
+.ex-aberto { margin-left: auto; font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--surface-2, #f3f4f6); }
+.ex-aberto b { color: var(--danger, #c0392b); }

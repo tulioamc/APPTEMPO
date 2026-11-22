@@ -158,10 +158,14 @@ function nfRegras(force) {
     const a = nfArquivoStatus(n); if (a?.por) set(n, 'substituida_por', a.por);
   });
   // mesma descrição, mesmo tomador, até 3 dias depois: a nova substituiu a antiga
-  const chaveDesc = (n) => nfNorm(n.descricao).replace(/[^a-z]+/g, '');
+  // números contam (OC 5313 ≠ OC 5862; Parte 01 ≠ Parte 02); valor parecido (±10%); uma descrição pode conter a outra
+  const chaveDesc = (n) => nfNorm(n.descricao).replace(/[^a-z0-9]+/g, '');
+  const mesmaDesc = (a, b) => { const x = chaveDesc(a), y = chaveDesc(b); return x.length >= 15 && y.length >= 15 && (x === y || x.includes(y) || y.includes(x)); };
+  const valorPerto = (a, b) => a.valor && b.valor && Math.abs(Number(a.valor) - Number(b.valor)) <= 0.1 * Math.max(Number(a.valor), Number(b.valor));
   notas.forEach(x => {
     if (x.substituida_por || x.status_manual === 'valida' || !chaveDesc(x)) return;
-    const y = notas.find(o => o.id !== x.id && o.serie === x.serie && o.numero > x.numero && o.tomador_doc && o.tomador_doc === x.tomador_doc && chaveDesc(o) === chaveDesc(x) && o.emitida_em && x.emitida_em && Math.abs(new Date(o.emitida_em) - new Date(x.emitida_em)) <= 3 * 864e5);
+    if (/parcela|parte/i.test(x.descricao || '')) return;   // parcelas e partes de um mesmo job não se substituem
+    const y = notas.find(o => o.id !== x.id && o.serie === x.serie && o.numero > x.numero && o.tomador_doc && o.tomador_doc === x.tomador_doc && mesmaDesc(o, x) && valorPerto(o, x) && o.emitida_em && x.emitida_em && Math.abs(new Date(o.emitida_em) - new Date(x.emitida_em)) <= 3 * 864e5);
     if (y) set(x, 'substituida_por', y.numero);
   });
   notas.forEach(n => { if (n.vinculo_manual) return; const p = nfPartido({ ...n, ...(mud[n.id] || {}) }); set(n, 'agency_id', p.agency_id); set(n, 'client_id', p.client_id); });
@@ -287,17 +291,17 @@ VIEWS.notas = () => {
     return `<tr class="${nfValida(n) ? '' : 'nf-off'}">
       <td>${nfChip(n)}${n.serie === 'municipal' ? ' <span class="faint small">Recife</span>' : ''}</td>
       <td>${fmtDate(n.emitida_em)}</td>
-      <td class="nf-tom"><div class="row" style="gap:4px;flex-wrap:nowrap"><select class="input sm" data-on="nf-ag" data-id="${n.id}" aria-label="Agência">${opts(ags, n.agency_id)}</select><select class="input sm" data-on="nf-cl" data-id="${n.id}" aria-label="Cliente">${opts(cls, n.client_id)}</select></div><div class="small faint ellipsis" title="${esc(n.tomador_nome || '')}">${esc(n.tomador_nome || '')}</div></td>
+      <td class="nf-tom"><div class="row" style="gap:4px;flex-wrap:nowrap"><select class="input sm" data-on="nf-ag" data-id="${n.id}" aria-label="Agência">${opts(ags, n.agency_id)}</select><select class="input sm" data-on="nf-cl" data-id="${n.id}" aria-label="Cliente">${opts(cls, n.client_id)}</select></div><div class="small faint nf-cut" title="${esc(n.tomador_nome || '')}">${esc(n.tomador_nome || '')}</div></td>
       <td class="money">${fmtMoney(n.valor)}</td>
-      <td class="small ellipsis" style="max-width:280px" title="${esc(n.descricao || '')}">${esc(n.descricao || '')}</td>
+      <td class="small nf-cut" title="${esc(n.descricao || '')}">${esc(n.descricao || '')}</td>
       <td><select class="input sm" data-on="nf-st" data-id="${n.id}" aria-label="Situação"><option value="" ${!n.status_manual ? 'selected' : ''}>${esc(nfStLabel({ ...n, status_manual: null }))} (auto)</option><option value="valida" ${n.status_manual === 'valida' ? 'selected' : ''}>Válida</option><option value="paga" ${n.status_manual === 'paga' ? 'selected' : ''}>Paga</option><option value="cancelada" ${n.status_manual === 'cancelada' ? 'selected' : ''}>Cancelada</option><option value="substituida" ${n.status_manual === 'substituida' ? 'selected' : ''}>Substituída</option></select></td>
       <td>${nfValida(n) ? `<button class="btn sm ${n.enviada_em ? 'primary' : 'ghost'}" data-act="nf-enviada" data-id="${n.id}" data-tip="${n.enviada_em ? 'Enviada em ' + fmtDate(n.enviada_em) + '. Clique para desmarcar.' : 'Marcar como enviada ao cliente'}">${n.enviada_em ? 'Enviada' : 'Enviar?'}</button>` : ''}</td>
-      <td class="small">${pay ? `<a href="#" data-act="fin-open" data-id="${pay.project_id}">${fmtDate(pay.date)} · ${esc(pr?.name || '')}</a>` : st === 'cancelada' || st === 'substituida' ? '' : '<span class="faint">sem pagamento</span>'}</td></tr>`;
+      <td class="small nf-cut">${pay ? `<a href="#" data-act="fin-open" data-id="${pay.project_id}" title="${esc(pr?.name || '')}">${fmtDate(pay.date)} · ${esc(pr?.name || '')}</a>` : st === 'cancelada' || st === 'substituida' ? '' : '<span class="faint">sem pagamento</span>'}</td></tr>`;
   }).join('');
   const html = `${kpis}
     <div class="panel"><div class="panel-h"><h3>Conferência com o Simples</h3></div><div class="panel-b tight">${simples}</div></div>
     <div class="panel"><div class="panel-h"><h3>Notas</h3><span class="grow"></span><select class="input sm" data-on="nf-ano" style="width:auto">${[...anos, 'todos'].map(a => `<option value="${a}" ${a === ano ? 'selected' : ''}>${a === 'todos' ? 'Todos os anos' : a}</option>`).join('')}</select></div>
-    <div class="panel-b tight">${lista.length ? `<table class="grid static compact nf-tab"><thead><tr><th>Nota</th><th>Emissão</th><th>Agência · cliente</th><th class="money">Valor</th><th>Descrição</th><th>Situação</th><th>Envio</th><th>Pagamento</th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="empty">${icon('doc')}<b>Nenhuma nota ainda</b><span>O app do Mac lê a pasta FINANCEIRO/NOTAS FISCAIS do iCloud.</span></div>`}</div></div>`;
+    <div class="panel-b tight">${lista.length ? `<table class="grid static compact nf-tab"><colgroup><col style="width:80px"><col style="width:100px"><col style="width:300px"><col style="width:120px"><col><col style="width:190px"><col style="width:92px"><col style="width:220px"></colgroup><thead><tr><th>Nota</th><th>Emissão</th><th>Agência · cliente</th><th class="money">Valor</th><th>Descrição</th><th>Situação</th><th>Envio</th><th>Pagamento</th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="empty">${icon('doc')}<b>Nenhuma nota ainda</b><span>O app do Mac lê a pasta FINANCEIRO/NOTAS FISCAIS do iCloud.</span></div>`}</div></div>`;
   const actions = isMacApp() ? `<button class="btn sm" data-act="nf-reler">${icon('undo')} Reler pasta</button>` : '';
   return { title: 'Notas fiscais', actions, html };
 };

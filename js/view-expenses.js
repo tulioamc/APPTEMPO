@@ -3,7 +3,7 @@
    Uma tabela por mês, com entradas em cima (+) e saídas embaixo (−).
    O valor é sempre positivo; o sinal vem do tipo da linha.
    Ao começar um mês novo, copia o anterior: mesmo dia de vencimento,
-   status "Não pago" / "Não recebido", "Paga em" vazio. Linhas "Não teve"
+   status "Não pago" / "Não recebido", "Paga em" vazio, anotação vazia. Linhas "Não teve"
    não são copiadas; parcelas que terminaram também não.
    ===================================================================== */
 
@@ -38,7 +38,7 @@ function exCopyMonth(target, src) {
     if (r.kind === 'in' && !exInRepete(r)) return;
     if (r.inst_total && (r.inst_no || 1) >= r.inst_total) return;
     db.insert('tempo_expenses', {
-      month: target, kind: r.kind, name: r.name || '', cat: r.cat || '', note: r.note || '', amount: null, amount_sug: r.amount ?? r.amount_sug ?? null,
+      month: target, kind: r.kind, name: r.name || '', cat: r.cat || '', note: '', amount: null, amount_sug: r.amount ?? r.amount_sug ?? null,
       due_date: r.due_date ? exDateIn(target, exDayOf(r.due_date)) : null, paid_on: null, status: EX_OPEN[r.kind],
       inst_no: r.inst_total ? (r.inst_no || 1) + 1 : null, inst_total: r.inst_total || null, order: r.order ?? 0
     }, true);
@@ -130,7 +130,8 @@ function exMonthTotals(ym) {
   const live = (rows) => rows.filter(r => r.status !== EX_OFF);
   return {
     inPrev: exSum(live(ins)), inDone: exSum(ins.filter(r => r.status === EX_DONE.in)),
-    outPrev: exSum(live(outs)), outDone: exSum(outs.filter(r => r.status === EX_DONE.out))
+    outPrev: exSum(live(outs)), outDone: exSum(outs.filter(r => r.status === EX_DONE.out)),
+    outOpen: exSum(outs.filter(r => r.status === EX_OPEN.out && r.amount != null)), outOpenN: outs.filter(r => r.status === EX_OPEN.out && r.amount != null && Number(r.amount) > 0).length
   };
 }
 /* opções das listas de Despesas (categoria e status), para a tabela e o seletor */
@@ -255,6 +256,7 @@ function exSectionHTML(ym, kind) {
 }
 
 VIEWS.expenses = () => {
+  exReembSync();
   const { from, to } = exRange(); S.exFrom = from; S.exTo = to;
   const now = exNow();
   const existing = exMonths().filter(m => m >= from && m <= to); // mais recente primeiro
@@ -295,6 +297,7 @@ VIEWS.expenses = () => {
       <div class="ex-month-h">
         <span class="ex-title">${rbLabel(ym)}</span>
         <span class="small muted">previsto ${fmtMoney0(t.inPrev - t.outPrev)} · realizado ${fmtMoney0(t.inDone - t.outDone)}</span>
+        <span class="ex-aberto" data-tip="Saídas com valor já definido que ainda não foram pagas (sem as que estão como Não teve).">Despesas em aberto: <b>${fmtMoney(t.outOpen)}</b>${t.outOpenN ? ` <span class="faint small">(${t.outOpenN})</span>` : ''}</span>
       </div>
       <div class="ex-box">${exSectionHTML(ym, 'in')}${exSectionHTML(ym, 'out')}</div>
     </section>`;
@@ -312,3 +315,26 @@ VIEWS.expenses = () => {
       <p class="small faint">Valores sempre positivos: entradas com + e saídas com −. Previsto = todas as linhas exceto "Não teve". Realizado = só o que já foi recebido ou pago.</p>`
   };
 };
+
+/* Linha que existe nas duas tabelas (ex.: Dentista em Reembolsos e em Despesas, mesmo mês e mesmo nome):
+   pago de um lado vira pago do outro, com a mesma data; valor que só um lado tem passa para o outro. */
+function exReembSync() {
+  if (!db.loaded || typeof rbStatusId !== 'function') return;
+  const pagoId = rbStatusId('reimb_pay', 'Pago'); if (!pagoId) return;
+  const nome = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  db.all('tempo_reimb_rows').forEach(r => {
+    if (!r.name) return;
+    const e = db.all('tempo_expenses').find(x => x.kind === 'out' && x.month === r.month && nome(x.name) === nome(r.name)); if (!e) return;
+    const rPago = r.pay_id === pagoId || !!r.paid_on, ePago = e.status === EX_DONE.out;
+    const ue = {}, ur = {};
+    if (rPago && !ePago) { ue.status = EX_DONE.out; ue.paid_on = r.paid_on || e.paid_on || null; }
+    if (ePago && !rPago) { ur.pay_id = pagoId; ur.paid_on = e.paid_on || null; }
+    if (r.paid_on && ePago && !e.paid_on) ue.paid_on = r.paid_on;
+    if (e.paid_on && rPago && !r.paid_on) ur.paid_on = e.paid_on;
+    if (rPago && r.pay_id !== pagoId) ur.pay_id = pagoId;
+    if (r.amount != null && e.amount == null) { ue.amount = Number(r.amount); ue.amount_sug = null; }
+    if (e.amount != null && r.amount == null) { ur.amount = Number(e.amount); ur.suggested_amount = null; }
+    if (Object.keys(ue).length) db.update('tempo_expenses', e.id, ue, true);
+    if (Object.keys(ur).length) db.update('tempo_reimb_rows', r.id, ur, true);
+  });
+}

@@ -212,7 +212,8 @@ async function bankAutoPJ() {
   const cl = db.adapter.client; const learned = {}; const lastFee = {};
   (BANK.every || []).forEach(t => {
     if (t.flow !== 'in' || !t.counterpart || !bankIsPJ(t)) return;
-    if (t.payment_id) { const p = db.get('tempo_payments', t.payment_id); if (p && !learned[t.counterpart]) learned[t.counterpart] = p.project_id; }
+    // aprende todos os vínculos da contraparte (valor → projeto), não só o primeiro
+    if (t.payment_id) { const p = db.get('tempo_payments', t.payment_id); if (p) (learned[bankCpKey(t.counterpart)] ||= []).push({ pid: p.project_id, amt: Math.abs(Number(t.amount)) }); }
     if (t.category === 'Fee' && (t.posted_on || '') > (lastFee[t.counterpart] || '')) lastFee[t.counterpart] = t.posted_on;
   });
   // Fee só vale enquanto a contraparte ainda paga fee (último fee nos últimos 60 dias).
@@ -229,8 +230,11 @@ async function bankAutoPJ() {
       if (error) { toast('Erro: ' + error.message); break; }
       t.category = 'Fee'; did = true; continue;
     }
-    const pid = learned[t.counterpart]; if (!pid) continue;
     const amt = Math.abs(Number(t.amount));
+    // projeto: o mais usado por essa contraparte para um valor parecido (±6%); sem valor parecido, o mais usado no geral
+    const hist = learned[bankCpKey(t.counterpart)]; if (!hist) continue;
+    const top = (l) => { const c = {}; l.forEach(x => { c[x.pid] = (c[x.pid] || 0) + 1; }); return Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0]; };
+    const pid = top(hist.filter(x => Math.abs(x.amt - amt) <= Math.max(5, x.amt * 0.06))) || top(hist); if (!pid) continue;
     let p = db.all('tempo_payments').find(x => x.project_id === pid && !taken.has(x.id) && (x.date == null || x.date === t.posted_on) && x.amount != null && Math.abs(Number(x.amount) - amt) <= Math.max(5, Number(x.amount) * 0.06));
     let created = null;
     if (!p) { p = db.insert('tempo_payments', { project_id: pid, amount: amt, date: t.posted_on, note: 'Extrato' }); created = p.id; }
@@ -242,6 +246,35 @@ async function bankAutoPJ() {
   }
   return did;
 }
+// Fatura do cartão paga no mês → linha "Cartão…" de Despesas do mesmo mês. Duas faturas no mês somam.
+// Sem linha de cartão no mês, cria "Cartão Nubank". Lançamento que você ligou à mão a outra coisa fica como está.
+async function bankAutoCartao() {
+  const cl = db.adapter?.client; if (!cl) return false;
+  const fat = (BANK.every || []).filter(t => t.flow === 'out' && t.scope === 'cartao' && /fatura/i.test(t.counterpart || '') && t.posted_on);
+  if (!fat.length) return false;
+  const porMes = {}; fat.forEach(t => (porMes[t.posted_on.slice(0, 7)] ||= []).push(t));
+  let did = false;
+  for (const [ym, lista] of Object.entries(porMes)) {
+    const rows = db.all('tempo_expenses').filter(e => e.kind === 'out' && e.month === ym && /cart[aã]o|fatura/i.test(e.name || ''));
+    let e = rows.find(x => lista.some(t => t.expense_id === x.id)) || rows.find(x => /nubank/i.test(x.name)) || rows[0];
+    const ultimo = lista.map(t => t.posted_on).sort().pop();
+    if (!e) {
+      e = db.insert('tempo_expenses', { month: ym, kind: 'out', name: 'Cartão Nubank', cat: 'PESSOAL/Cartão e dívidas', note: '', amount: 0, amount_sug: null, due_date: null, paid_on: ultimo, status: 'Pago', inst_no: null, inst_total: null, order: db.all('tempo_expenses').filter(x => x.month === ym).length });
+      did = true;
+    }
+    for (const t of lista) {
+      if (t.expense_id) continue;
+      const { error } = await cl.from('tempo_bank_txns').update({ expense_id: e.id, updated_at: new Date().toISOString() }).eq('id', t.id);
+      if (error) { toast('Erro: ' + error.message); return did; }
+      t.expense_id = e.id; did = true;
+    }
+    const soma = Math.round(lista.filter(t => t.expense_id === e.id).reduce((x, t) => x + Math.abs(Number(t.amount)), 0) * 100) / 100;
+    if (soma && (Math.abs(Number(e.amount || 0) - soma) > 0.004 || e.status !== 'Pago' || e.paid_on !== ultimo || e.amount_sug != null)) {
+      db.update('tempo_expenses', e.id, { amount: soma, amount_sug: null, status: 'Pago', paid_on: ultimo }); did = true;
+    }
+  }
+  return did;
+}
 async function bankLoadTxns() {
   await bankLoadRaw();
   let changed = await bankAutoTherapy();
@@ -249,6 +282,7 @@ async function bankLoadTxns() {
   if (await bankAutoIof()) changed = true;
   if (await bankAutoCategory()) changed = true;
   if (await bankAutoReimb()) changed = true;
+  if (await bankAutoCartao()) changed = true;
   if (await bankAutoFixed()) changed = true;
   if (await bankAutoPJ()) changed = true;
   if (changed) await bankLoadRaw();

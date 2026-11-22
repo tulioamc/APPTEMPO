@@ -95,6 +95,7 @@ const rbSum = (rows) => rows.reduce((t, r) => t + (Number(r.amount) || 0), 0);
 const rbN = (rows) => `${rows.length} linha${rows.length === 1 ? '' : 's'}`;
 
 VIEWS.reimb = () => {
+  if (typeof exReembSync === 'function') exReembSync();
   const all = db.all('tempo_reimb_rows');
   const months = rbMonths();
   const nm = (kind, r) => rbName(kind, r[kind === 'reimb_pay' ? 'pay_id' : kind === 'reimb_refund' ? 'refund_id' : 'req_id']);

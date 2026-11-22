@@ -334,9 +334,17 @@ function scanAlerts() {
     addNotice({ kind: 'orcamento', key: `orc:${q.id}:${q.valid_until}`, title: `Orçamento vence em ${d === 0 ? 'hoje' : d + ' dia(s)'}: ${q.name}`, body: 'Faça o follow-up com o cliente.', entity: 'quote', entity_id: q.id, data: {} }, true);
   });
   /* despesas com vencimento passado e ainda não pagas/recebidas */
-  db.all('tempo_expenses').filter(r => r.month === today.slice(0, 7) && r.due_date && r.due_date < today && !['Pago', 'Recebido', 'Não teve'].includes(r.status)).forEach(r => {
-    const inc = r.kind === 'in';
-    addNotice({ kind: inc ? 'cobranca' : 'conta', key: `ex:${r.id}`, title: `${inc ? 'Recebimento atrasado' : 'Conta vencida'}: ${r.name || 'sem nome'}`, body: `Venceu em ${fmtDate(r.due_date)}${r.amount ? ` · ${fmtMoney(r.amount)}` : ''}.`, entity: 'expense', entity_id: r.id, data: {} }, true);
+  const limiteAtraso = ymd(new Date(Date.now() - 90 * 864e5));
+  db.all('tempo_expenses').filter(r => r.due_date && r.due_date < today && r.due_date >= limiteAtraso && !['Pago', 'Recebido', 'Não teve'].includes(r.status)).forEach(r => {
+    const inc = r.kind === 'in'; const v = r.amount ?? r.amount_sug;
+    const titulo = `${inc ? 'Recebimento atrasado' : 'Conta vencida'}: ${r.name || 'sem nome'}`, corpo = `Venceu em ${fmtDate(r.due_date)}${v ? ` · ${fmtMoney(v)}` : ''}.`;
+    addNotice({ kind: inc ? 'cobranca' : 'conta', key: `ex:${r.id}`, title: titulo, body: corpo, entity: 'expense', entity_id: r.id, data: {} }, true);
+    // alarme: notificação do Mac uma vez por dia enquanto a conta estiver atrasada
+    if (!inc && typeof notifyNative === 'function') {
+      const k = `alarmeConta:${r.id}`;
+      let ultimo = null; try { ultimo = localStorage.getItem(k); } catch (e) {}
+      if (ultimo !== today) { try { localStorage.setItem(k, today); } catch (e) {} notifyNative(titulo, corpo); }
+    }
   });
   /* Conversa longa com amigos no WhatsApp: um aviso por dia quando passa do limite que você definiu (Contatos). */
   if (!FERIAS_HOJE) { const ms = waAmigosHojeMs(today), lim = waAmigosLimiteMin();
