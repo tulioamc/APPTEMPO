@@ -3,7 +3,7 @@ import PDFKit
 import Vision
 import CryptoKit
 
-/// Notas fiscais EMITIDAS por você (NFS-e da sua empresa), guardadas no iCloud em FINANCEIRO/NOTAS FISCAIS.
+/// Notas fiscais EMITIDAS por você (NFS-e da sua empresa), guardadas no iCloud em _FINANCEIRO/NOTAS FISCAIS.
 /// - Lê a pasta (com subpastas) de 10 em 10 minutos e manda o texto de cada PDF novo para o site
 ///   (window.TempoBridge.reportNotasEmitidas). O site devolve os recebidos e, se for o caso, nomes novos para os arquivos.
 /// - Nota que chega pelo WhatsApp (ex.: conversa da contabilidade) e é sua: salva uma cópia na pasta, se ainda não tiver.
@@ -13,7 +13,11 @@ final class NotasEmitidas {
     static var pasta: URL {
         let custom = UserDefaults.standard.string(forKey: "nfPasta")
         if let c = custom, !c.isEmpty { return URL(fileURLWithPath: (c as NSString).expandingTildeInPath) }
-        return ICloudTerapias.root.appendingPathComponent("FINANCEIRO").appendingPathComponent("NOTAS FISCAIS")
+        // _FINANCEIRO/NOTAS FISCAIS (a antiga FINANCEIRO/NOTAS FISCAIS só vale se a nova ainda não existir)
+        let nova = ICloudTerapias.root.appendingPathComponent("_FINANCEIRO").appendingPathComponent("NOTAS FISCAIS")
+        let antiga = ICloudTerapias.root.appendingPathComponent("FINANCEIRO").appendingPathComponent("NOTAS FISCAIS")
+        if !FileManager.default.fileExists(atPath: nova.path) && FileManager.default.fileExists(atPath: antiga.path) { return antiga }
+        return nova
     }
     /// (itens, inventário, resposta) -> o site devolve ids recebidos e renomeações [{de, para}]
     var enviar: (([[String: Any]], [[String: String]], @escaping ([String], [[String: String]]) -> Void) -> Void)?

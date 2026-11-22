@@ -1,7 +1,7 @@
 /* =====================================================================
    NOTAS FISCAIS EMITIDAS (NFS-e da sua empresa)
    ---------------------------------------------------------------------
-   Fonte: pasta do iCloud FINANCEIRO/NOTAS FISCAIS. O app do Mac lê cada PDF e manda o texto
+   Fonte: pasta do iCloud _FINANCEIRO/NOTAS FISCAIS. O app do Mac lê cada PDF e manda o texto
    (TempoBridge.reportNotasEmitidas). Nota que chega pelo WhatsApp também vai para a pasta.
    Aqui: lê os campos, liga agência/cliente e pagamento, marca canceladas/substituídas sozinho,
    confere com o Simples (receita declarada e DAS) e mostra o chip [NF36] em todo o app.
@@ -252,7 +252,7 @@ function nfMesesSimples() {
 }
 function nfFaltando() {
   const out = [];
-  ['nacional', 'municipal'].forEach(serie => {
+  ['nacional'].forEach(serie => {   // a série de Recife é antiga e já resolvida: só a nacional conta
     const nums = nfTodas().filter(n => n.serie === serie).map(n => n.numero).sort((a, b) => a - b);
     if (!nums.length) return; const set = new Set(nums); const falta = [];
     for (let i = 1; i < nums[nums.length - 1]; i++) if (!set.has(i)) falta.push(i);
@@ -270,14 +270,19 @@ VIEWS.notas = () => {
   const lista = todas.filter(n => ano === 'todos' || (n.emitida_em || '').startsWith(ano)).sort((a, b) => (b.emitida_em || '').localeCompare(a.emitida_em || '') || b.numero - a.numero);
   const val = lista.filter(nfValida); const soma = (l) => l.reduce((s, n) => s + Number(n.valor || 0), 0);
   const aReceber = val.filter(n => nfStatus(n) !== 'paga');
-  const falt = nfFaltando();
   const ym = ymd(new Date()).slice(0, 7);
   const mesAtual = todas.filter(n => nfValida(n) && (n.emitida_em || '').startsWith(ym));
+  // média mensal: do primeiro mês com nota (no período escolhido) até este mês (ou dezembro, se o ano já passou)
+  const nMeses = (de, ate) => { const [y1, m1] = de.split('-').map(Number), [y2, m2] = ate.split('-').map(Number); return Math.max(1, (y2 - y1) * 12 + m2 - m1 + 1); };
+  const primeiroMes = val.map(n => (n.emitida_em || '').slice(0, 7)).filter(Boolean).sort()[0];
+  const ultimoMes = ano === 'todos' || ano === ym.slice(0, 4) ? ym : `${ano}-12`;
+  const media = primeiroMes ? soma(val) / nMeses(primeiroMes, ultimoMes) : 0;
+  const mediaTxt = primeiroMes ? `média ${fmtMoney0(media)}/mês` : '';
+  const vsMedia = media > 0 && ano !== 'todos' && ano === ym.slice(0, 4) ? Math.round((soma(mesAtual) / media - 1) * 100) : null;
   const kpis = `<div class="kpis">
-    <div class="kpi"><span class="k">Emitidas ${ano === 'todos' ? '' : 'em ' + ano}</span><span class="v">${fmtMoney0(soma(val))}</span><span class="s">${val.length} válidas · ${lista.length - val.length} canceladas/substituídas</span></div>
-    <div class="kpi"><span class="k">Este mês</span><span class="v">${fmtMoney0(soma(mesAtual))}</span><span class="s">${mesAtual.length} nota(s)</span></div>
-    <div class="kpi"><span class="k">Ainda sem pagamento</span><span class="v">${fmtMoney0(soma(aReceber))}</span><span class="s">${aReceber.length} nota(s)</span></div>
-    <div class="kpi"><span class="k">Faltando na pasta</span><span class="v">${falt.reduce((s, f) => s + f.falta.length, 0)}</span><span class="s">${falt.map(f => (f.serie === 'nacional' ? 'nacional: ' : 'Recife: ') + f.falta.join(', ')).join(' · ') || 'nenhuma'}</span></div></div>`;
+    <div class="kpi"><span class="k">Emitidas ${ano === 'todos' ? '' : 'em ' + ano}</span><span class="v">${fmtMoney0(soma(val))}</span><span class="s">${mediaTxt ? mediaTxt + ' · ' : ''}${val.length} válidas · ${lista.length - val.length} canceladas/substituídas</span></div>
+    <div class="kpi"><span class="k">Este mês</span><span class="v">${fmtMoney0(soma(mesAtual))}</span><span class="s">${mesAtual.length} nota(s)${mediaTxt ? ' · ' + mediaTxt + (vsMedia != null && mesAtual.length ? ` (${vsMedia >= 0 ? '+' : ''}${vsMedia}%)` : '') : ''}</span></div>
+    <div class="kpi"><span class="k">Ainda sem pagamento</span><span class="v">${fmtMoney0(soma(aReceber))}</span><span class="s">${aReceber.length} nota(s)</span></div></div>`;
   const ms = nfMesesSimples().filter(m => ano === 'todos' || m.ym.startsWith(ano));
   const simples = ms.length ? `<table class="grid static compact"><thead><tr><th>Mês</th><th class="money">Notas válidas</th><th class="money">Declarado no Simples</th><th class="money">Diferença</th><th class="money">DAS</th><th class="money">% de imposto</th></tr></thead><tbody>${ms.map(m => {
     const dif = m.declarado == null ? null : m.declarado - m.notas;
@@ -295,7 +300,7 @@ VIEWS.notas = () => {
       <td class="money">${fmtMoney(n.valor)}</td>
       <td class="small nf-cut" title="${esc(n.descricao || '')}">${esc(n.descricao || '')}</td>
       <td><select class="input sm" data-on="nf-st" data-id="${n.id}" aria-label="Situação"><option value="" ${!n.status_manual ? 'selected' : ''}>${esc(nfStLabel({ ...n, status_manual: null }))} (auto)</option><option value="valida" ${n.status_manual === 'valida' ? 'selected' : ''}>Válida</option><option value="paga" ${n.status_manual === 'paga' ? 'selected' : ''}>Paga</option><option value="cancelada" ${n.status_manual === 'cancelada' ? 'selected' : ''}>Cancelada</option><option value="substituida" ${n.status_manual === 'substituida' ? 'selected' : ''}>Substituída</option></select></td>
-      <td>${nfValida(n) ? `<button class="btn sm ${n.enviada_em ? 'primary' : 'ghost'}" data-act="nf-enviada" data-id="${n.id}" data-tip="${n.enviada_em ? 'Enviada em ' + fmtDate(n.enviada_em) + '. Clique para desmarcar.' : 'Marcar como enviada ao cliente'}">${n.enviada_em ? 'Enviada' : 'Enviar?'}</button>` : ''}</td>
+      <td>${nfValida(n) && st !== 'paga' ? `<button class="btn sm ${n.enviada_em ? 'primary' : 'ghost'}" data-act="nf-enviada" data-id="${n.id}" data-tip="${n.enviada_em ? 'Enviada em ' + fmtDate(n.enviada_em) + '. Clique para desmarcar.' : 'Marcar como enviada ao cliente'}">${n.enviada_em ? 'Enviada' : 'Enviar?'}</button>` : ''}</td>
       <td class="small nf-cut">${pay ? `<a href="#" data-act="fin-open" data-id="${pay.project_id}" title="${esc(pr?.name || '')}">${fmtDate(pay.date)} · ${esc(pr?.name || '')}</a>` : st === 'cancelada' || st === 'substituida' ? '' : '<span class="faint">sem pagamento</span>'}</td></tr>`;
   }).join('');
   const html = `${kpis}
@@ -345,7 +350,7 @@ function nfCtxItems(t) {
   const n = db.get('tempo_invoices', t.id); if (!n) return [];
   const out = []; const add = (label, run, o = {}) => out.push({ label, run, ...o });
   add('Abrir PDF', () => ACTIONS['nf-open']({ dataset: { id: n.id } }));
-  if (nfValida(n)) add(n.enviada_em ? 'Desmarcar enviada' : 'Marcar como enviada', () => ACTIONS['nf-enviada']({ dataset: { id: n.id } }));
+  if (nfValida(n) && nfStatus(n) !== 'paga') add(n.enviada_em ? 'Desmarcar enviada' : 'Marcar como enviada', () => ACTIONS['nf-enviada']({ dataset: { id: n.id } }));
   if (nfValida(n) && n.status_manual !== 'paga') add('Marcar como paga', () => db.update('tempo_invoices', n.id, { status_manual: 'paga' }));
   add('Marcar como cancelada', () => db.update('tempo_invoices', n.id, { status_manual: 'cancelada' }));
   add('Marcar como substituída', () => db.update('tempo_invoices', n.id, { status_manual: 'substituida' }));

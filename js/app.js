@@ -26,6 +26,10 @@ function pendingOf(id) {
   if (id === 'reimb') {
     return db.all('tempo_reimb_rows').filter(r => r.refund_id !== rbStatusId('reimb_refund', 'Feito!')).map(r => ({ label: r.name || '(sem nome)', why: `${r.month} · ${fmtMoney(r.amount) || 'sem valor'} · reembolso ainda não feito`, route: 'reimb' }));
   }
+  if (id === 'notas') {
+    if (typeof nfFaltando !== 'function' || !db.data?.tempo_invoices) return [];
+    return nfFaltando().flatMap(f => f.falta.map(x => ({ label: `NF ${String(x).padStart(2, '0')} falta na pasta`, why: 'a numeração pula essa nota: ponha o PDF na pasta de notas fiscais', route: 'notas' })));
+  }
   if (id === 'notices') {
     return db.all('tempo_notices').filter(n => n.status === 'pending' && n.kind !== 'todo').map(n => ({ label: PEND_KIND[n.kind] || n.kind, why: n.created_at ? 'desde ' + fmtDate(n.created_at) : 'aguardando sua decisão', route: 'notices' }));
   }
@@ -35,10 +39,7 @@ const NAV = [
   { id: 'timesheet', label: 'Time Sheet', icon: 'clock' },
   { id: 'todo', label: 'To-do', icon: 'check' },
   { id: 'plano', label: 'Planejamento', icon: 'cal' },
-  { id: 'productivity', label: 'Relatório Produtividade', icon: 'chart' },
-  { id: 'metas', label: 'Metas', icon: 'check' },
-  { id: 'analises', label: 'Análises', icon: 'chart' },
-  { id: 'usage', label: 'Uso de programas', icon: 'chart' },
+  { id: 'relatorios', label: 'Relatórios', icon: 'chart' },
   { group: 'PJ' },
   { id: 'registry', label: 'Agências e clientes', icon: 'users' },
   { id: 'contacts', label: 'Contatos', icon: 'users' },
@@ -46,13 +47,11 @@ const NAV = [
   { id: 'tasks', label: 'Tarefas', icon: 'check' },
   { id: 'quotes', label: 'Orçamentos', icon: 'doc' },
   { id: 'finance', label: 'Financeiro PJ', icon: 'money' },
-  { id: 'notas', label: 'Notas fiscais', icon: 'doc' },
-  { id: 'reports', label: 'Relatórios PJ', icon: 'chart' },
+  { id: 'notas', label: 'Notas fiscais', icon: 'doc', pend: true },
   { group: 'PF' },
   { id: 'financepf', label: 'Financeiro PF', icon: 'money' },
   { id: 'expenses', label: 'Despesas', icon: 'money', pend: true },
   { id: 'reimb', label: 'Reembolsos', icon: 'layers', pend: true },
-  { id: 'reportspf', label: 'Relatórios PF', icon: 'chart' },
   { group: 'Filho' },
   { id: 'shared', label: 'Despesas Rafa', icon: 'users' },
   { id: 'rafa', label: 'Dias de Rafa', icon: 'users' },
@@ -62,8 +61,13 @@ const NAV = [
   { id: 'prefs', label: 'Configurações', icon: 'gear' }
 ];
 const VIEWS = {};
+/* Relatórios: uma seção só, com abas. Cada aba continua sendo a sua tela (rota própria). */
+const REL_TABS = [['productivity', 'Produtividade'], ['usage', 'Uso de programas'], ['reports', 'PJ'], ['reportspf', 'PF'], ['metas', 'Metas'], ['analises', 'Análises']];
+const relTab = (r) => REL_TABS.some(([k]) => k === r);
+const navOn = (id) => S.route === id || (id === 'relatorios' && relTab(S.route));
 
 function go(route) {
+  if (route === 'relatorios') route = relTab(db.setting('relTab', '')) ? db.setting('relTab', '') : 'productivity';
   S.route = route; S.navOpen = false; $('.app')?.classList.remove('nav-open'); $$('.colorpop,.combo-pop,.colmenu').forEach(x => x.remove());
   try { history.replaceState(null, '', '#' + route); } catch (e) {}
   render(); window.scrollTo(0, 0);
@@ -88,7 +92,7 @@ function sidebarNavHTML() {
   NAV.forEach(n => {
     if (n.group) { cur = n.group; const f = folded.includes(n.group); out.push(`<button class="nav-group nav-fold" data-act="nav-fold" data-g="${n.group}" aria-expanded="${!f}">${n.group}${icon(f ? 'chevR' : 'chevD')}</button>`); return; }
     if (cur && folded.includes(cur)) return;
-    out.push(`<button class="nav-btn ${S.route === n.id ? 'active' : ''}" data-act="go" data-route="${n.id}" ${S.route === n.id ? 'aria-current="page"' : ''}>${icon(n.icon)}<span>${n.label}</span>${n.pend && pendingOf(n.id).length ? `<span class="count pend-count" data-act="pend" data-id="${n.id}" role="button" tabindex="0" title="Ver o que está pendente">${pendingOf(n.id).length}</span>` : ''}</button>`);
+    out.push(`<button class="nav-btn ${navOn(n.id) ? 'active' : ''}" data-act="go" data-route="${n.id}" ${navOn(n.id) ? 'aria-current="page"' : ''}>${icon(n.icon)}<span>${n.label}</span>${n.pend && pendingOf(n.id).length ? `<span class="count pend-count" data-act="pend" data-id="${n.id}" role="button" tabindex="0" title="Ver o que está pendente">${pendingOf(n.id).length}</span>` : ''}</button>`);
   });
   return out.join('');
 }
@@ -137,15 +141,21 @@ function restoreScroll(k) {
 }
 function render() {
   try { faixaCoresAplicar(); } catch (e) { /* antes do activity.js carregar */ }
+  if (S.route === 'relatorios') S.route = relTab(db.setting('relTab', '')) ? db.setting('relTab', '') : 'productivity';
   const view = VIEWS[S.route] || VIEWS.timesheet;
-  const v = view();
+  const v = { ...view() };
+  if (relTab(S.route)) {
+    if (db.setting('relTab', '') !== S.route) { const r = S.route; setTimeout(() => db.setSetting('relTab', r), 0); }
+    v.html = `<div class="seg rel-tabs" role="tablist">${REL_TABS.map(([k, l]) => `<button role="tab" aria-selected="${k === S.route}" class="${k === S.route ? 'on' : ''}" data-act="go" data-route="${k}">${l}</button>`).join('')}</div>` + v.html;
+    v.title = 'Relatórios';
+  }
   const scrollKeep = keepScroll();
   // preserva foco/cursor quando a tela é redesenhada durante a digitação
   const ae = document.activeElement; const fid = ae && ae.id && $('.content')?.contains(ae) ? ae.id : null; const sel = fid && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null; const fval = fid ? ae.value : null;
   const fresh = lastRoute !== S.route; lastRoute = S.route;   // tela nova: monta do zero; mesma tela: mexe só no que mudou
   paint($('.sidebar'), sidebarHTML());
   $('.page-title').textContent = v.title;
-  $('.crumb').textContent = NAV.find(n => n.id === S.route) ? (['registry', 'import', 'prefs'].includes(S.route) ? 'Cadastros' : 'Workspace') : '';
+  $('.crumb').textContent = NAV.find(n => navOn(n.id)) ? (['registry', 'import', 'prefs'].includes(S.route) ? 'Cadastros' : 'Workspace') : '';
   paint($('.top-actions'), (v.actions || '') + topTimerHTML(), fresh);
   const demo = db.setting('demo', false);
   const banner = demo ? `<div class="banner info">${icon('db', 'ico')}<span class="grow"><b>Dados fictícios</b> para testar as telas. Nada é salvo: ao recarregar, o app volta a este exemplo.</span><button class="btn sm" data-act="demo-clear">Começar vazio</button></div>` : '';
@@ -562,7 +572,7 @@ async function boot() {
   if (!online && !db.all('tempo_projects').length && !db.setting('startedEmpty', false)) seedDemo();
   const now = new Date().toISOString();
   db.all('tempo_reminders').forEach(r => { if (r.freq === 'interval' && !r.lastFired) remState[r.id] = now; });
-  const h = (location.hash || '').slice(1); if (NAV.some(n => n.id === h)) S.route = h;
+  const h = (location.hash || '').slice(1); if (NAV.some(n => n.id === h) || relTab(h)) S.route = h;
   applyAppearance();
   db.subscribe(applyAppearance);
   // quando uma despesa, projeto ou orçamento muda, reavalia os avisos (com pequena folga para agrupar mudanças)

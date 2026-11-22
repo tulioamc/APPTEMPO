@@ -6,11 +6,20 @@ import CryptoKit
 import ImageIO
 
 /// Arquivos de Terapias na pasta do iCloud:
-/// <iCloud>/Terapias/<Ano_Mes>/NotaFiscal_<Ano_Mes>_<Terapeuta>.pdf e Comprovante_<Ano_Mes>_<Terapeuta>.png
+/// <iCloud>/_RAFAEL/_Terapias/<Ano_Mes>/ (antes: <iCloud>/Terapias)
+/// NotaFiscal_<Ano_Mes>_<Terapeuta>.pdf e Comprovante_<Ano_Mes>_<Terapeuta>.png
 enum ICloudTerapias {
     static let root = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
     static var disponivel: Bool { FileManager.default.fileExists(atPath: root.path) }
+    /// Pasta das terapias: _RAFAEL/_Terapias (a antiga Terapias só vale se a nova ainda não existir).
+    static var terapias: URL {
+        let nova = root.appendingPathComponent("_RAFAEL").appendingPathComponent("_Terapias")
+        let antiga = root.appendingPathComponent("Terapias")
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: nova.path) && fm.fileExists(atPath: antiga.path) { return antiga }
+        return nova
+    }
 
     /// 'Aloma Silva' -> 'AlomaSilva' (só letras, números e _).
     static func nomeTerapeuta(_ texto: String) -> String {
@@ -41,7 +50,7 @@ enum ICloudTerapias {
     /// Uma vez por abertura do app: renomeia para o formato novo os arquivos que ainda estão no antigo. Nunca sobrescreve.
     static func renomearAntigos() {
         let fm = FileManager.default
-        let base = root.appendingPathComponent("Terapias")
+        let base = terapias
         guard let meses = try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: nil) else { return }
         for mes in meses {
             guard let arqs = try? fm.contentsOfDirectory(at: mes, includingPropertiesForKeys: nil) else { continue }
@@ -80,7 +89,7 @@ enum ICloudTerapias {
         return CGImageDestinationFinalize(dest) ? jpg : nil
     }
 
-    static func pasta(_ anoMes: String) -> URL { root.appendingPathComponent("Terapias").appendingPathComponent(anoMes) }
+    static func pasta(_ anoMes: String) -> URL { terapias.appendingPathComponent(anoMes) }
 
     /// O mesmo arquivo já está na pasta do mês (de uma leitura anterior)? Evita cópias "(2)".
     static func jaSalvo(anoMes: String, nome: String, sha: String) -> URL? {
@@ -473,7 +482,7 @@ final class WhatsAppMonitor {
     }
 
     /// Procura notas (PDF/foto) e comprovantes (PNG/JPG) novos nas conversas de terapia. Cada arquivo é lido uma vez:
-    /// guarda uma cópia no iCloud (Terapias/Ano_Mes) e deixa o item na fila até o site confirmar o recebimento.
+    /// guarda uma cópia no iCloud (_RAFAEL/_Terapias/Ano_Mes) e deixa o item na fila até o site confirmar o recebimento.
     @discardableResult
     private func lerNotas(desde: Double, reler: Bool = false) -> Int {
         let linhas = lerMidia(desde: desde)

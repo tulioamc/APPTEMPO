@@ -125,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         whatsapp.start()
     }
 
-    /// Notas fiscais emitidas (pasta FINANCEIRO/NOTAS FISCAIS no iCloud) -> TempoBridge.reportNotasEmitidas.
+    /// Notas fiscais emitidas (pasta _FINANCEIRO/NOTAS FISCAIS no iCloud) -> TempoBridge.reportNotasEmitidas.
     private func setupNotas() {
         notas.aviso = { [weak self] t, b in self?.showNotice(t, b) }
         notas.enviar = { [weak self] itens, inventario, done in
@@ -269,7 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         try? FileManager.default.moveItem(at: a, to: b)
     }
 
-    /// Grava nota fiscal (PDF) ou comprovante (PNG) em iCloud/Terapias/<Ano_Mes>, a pedido do site.
+    /// Grava nota fiscal (PDF) ou comprovante (PNG) em iCloud/_RAFAEL/_Terapias/<Ano_Mes>, a pedido do site.
     private func handleTerapia(_ d: [String: Any]) {
         guard let tipo = d["tipo"] as? String, let anoMes = d["anoMes"] as? String, let terapeuta = d["terapeuta"] as? String,
               let b64 = d["base64"] as? String, let dados = Data(base64Encoded: b64), ICloudTerapias.disponivel,

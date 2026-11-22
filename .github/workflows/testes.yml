@@ -7,6 +7,8 @@ on:
 jobs:
   testes:
     runs-on: ubuntu-latest
+    env:
+      TZ: America/Recife   # os testes de agenda usam o horário de Recife
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

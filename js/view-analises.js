@@ -15,7 +15,7 @@ const AN_TIPOS = [
   { id: 'sem', label: '6 meses', prefix: 'relSemestral:', quando: 'em 1º de janeiro e 1º de julho' },
   { id: 'ano', label: 'Ano', prefix: 'relAnual:', quando: 'em 1º de janeiro' },
 ];
-const AN_CORES = ['#3B5BDB', '#2F9E44', '#E8590C', '#9C36B5', '#1098AD', '#C2255C'];
+const AN_CORES = ['#2E43D6', '#22a06b', '#d64545', '#b45309', '#7c3aed', '#0ea5a4'];   // mesma paleta dos gráficos do Financeiro
 const AN = { tipo: 'semana', key: null };
 
 function anLista(prefix) {

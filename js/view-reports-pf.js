@@ -23,28 +23,22 @@ const pfR = (v) => fmtMoney(v) || 'R$ 0';
 const pfPct = (a, b) => (b ? ((a - b) / b) * 100 : null);
 const pfPctTxt = (p) => p === null ? '—' : `${p > 0 ? '+' : ''}${p.toFixed(0)}%`;
 const PF_PALETTE = ['var(--accent)', 'var(--t-yellow-fg)', 'var(--ok)', 'var(--t-pink-fg)', 'var(--t-purple-fg)', 'var(--t-blue-fg)', 'var(--t-orange-fg)', 'var(--fg-3)'];
+const pfCor = (k, i) => (k === 'Outros' ? 'var(--fg-3)' : typeof chartCat === 'function' ? chartCat(k) : PF_PALETTE[i % PF_PALETTE.length]);
 const pfChip = (p) => `<span class="pf-chip ${p === null ? '' : p > 0 ? 'up' : p < 0 ? 'down' : ''}">${pfPctTxt(p)}</span>`;
 
+/* Dados de hoje: extrato da conta PF já categorizado (Financeiro PF), com estornos abatendo a categoria,
+   pagamento de fatura fora (as compras do cartão já entram uma a uma) e terapias fora (são reembolsadas). */
 function pfData(months) {
-  const rows = db.all('tempo_expenses').filter(r => months.includes(r.month) && r.status !== 'Não teve');
-  const byMonth = Object.fromEntries(months.map(m => [m, { out: 0, in: 0 }]));
-  const byCat = {}, scopeOf = {};
-  rows.forEach(r => {
-    const amt = Math.abs(Number(r.amount) || 0);
-    if (r.kind === 'in') byMonth[r.month].in += amt;
-    else if (r.kind === 'out') {
-      byMonth[r.month].out += amt;
-      const k = pfCat(r.cat), sc = pfScope(r.cat);
-      scopeOf[k] = scopeOf[k] && scopeOf[k] !== sc ? 'Pessoal e Empresa' : (scopeOf[k] || sc);
-      byCat[k] = byCat[k] || {};
-      byCat[k][r.month] = (byCat[k][r.month] || 0) + amt;
-    }
+  const byMonth = {}, byCat = {}, scopeOf = {};
+  months.forEach(m => {
+    const s = typeof monthSnap === 'function' ? monthSnap('pf', m) : { ent: 0, sai: 0, cats: {} };
+    byMonth[m] = { out: s.sai, in: s.ent };
+    Object.entries(s.cats).forEach(([k, v]) => { if (!v) return; (byCat[k] = byCat[k] || {})[m] = v; scopeOf[k] = 'PF'; });
   });
   return { byMonth, byCat, scopeOf };
 }
-function pfOutSum(months) {
-  return db.all('tempo_expenses').filter(r => r.kind === 'out' && months.includes(r.month) && r.status !== 'Não teve').reduce((s, r) => s + Math.abs(Number(r.amount) || 0), 0);
-}
+function pfOutSum(months) { return months.reduce((t, m) => t + (typeof monthSnap === 'function' ? monthSnap('pf', m).sai : 0), 0); }
+const pfTemDados = (m) => (BANK.all.pf || []).some(t => (t.posted_on || '').startsWith(m) && t.scope !== 'interna');
 
 /* Rosca SVG: top categorias + "Outros". */
 function pfDonut(items, total) {
@@ -52,10 +46,10 @@ function pfDonut(items, total) {
   const R = 70, C = 2 * Math.PI * R; let acc = 0;
   const arcs = items.map((it, i) => {
     const frac = it.total / total; const len = frac * C;
-    const seg = `<circle data-hk="${esc(it.k)}" r="${R}" cx="90" cy="90" fill="none" style="stroke:${PF_PALETTE[i % PF_PALETTE.length]}" stroke-width="28" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-acc}" transform="rotate(-90 90 90)"><title>${esc(it.k)}: ${pfR(it.total)}</title></circle>`;
+    const seg = `<circle data-hk="${esc(it.k)}" r="${R}" cx="90" cy="90" fill="none" style="stroke:${pfCor(it.k, i)}" stroke-width="28" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-acc}" transform="rotate(-90 90 90)"><title>${esc(it.k)}: ${pfR(it.total)}</title></circle>`;
     acc += len; return seg;
   }).join('');
-  const legend = items.map((it, i) => `<span class="act-chip" data-hk="${esc(it.k)}" data-hkv="${it.total}" style="--tb:${PF_PALETTE[i % PF_PALETTE.length]}"><i></i>${esc(it.k)} <span class="faint">${((it.total / total) * 100).toFixed(0)}% · ${esc(pfR(it.total))}</span></span>`).join('');
+  const legend = items.map((it, i) => `<span class="act-chip" data-hk="${esc(it.k)}" data-hkv="${it.total}" style="--tb:${pfCor(it.k, i)}"><i></i>${esc(it.k)} <span class="faint">${((it.total / total) * 100).toFixed(0)}% · ${esc(pfR(it.total))}</span></span>`).join('');
   return `<div class="pf-donut" data-hkroot data-hktot="${total}"><svg viewBox="0 0 180 180" width="180" height="180" role="img" aria-label="Distribuição das saídas por categoria">${arcs}<text x="90" y="86" text-anchor="middle" class="small" fill="currentColor">Total</text><text x="90" y="104" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">${esc(pfR(total))}</text></svg><div class="act-chips">${legend}</div></div>`;
 }
 
@@ -78,14 +72,18 @@ function pfInsights(months, byMonth, cats, totOut, totIn) {
 }
 
 VIEWS.reportspf = () => {
+  if (typeof bankRefresh === 'function') bankRefresh();
   const n = Number(db.setting('pfRange', 6)) || 6;
-  const months = pfMonths(n);
+  // só meses com extrato (o mês atual entra mesmo parcial)
+  const months = pfMonths(n).filter((m, i, a) => i === a.length - 1 || pfTemDados(m));
+  if (!months.length) months.push(pfMonths(1)[0]);
   const { byMonth, byCat, scopeOf } = pfData(months);
   const last = months[months.length - 1], prev = months[months.length - 2];
   const max = Math.max(1, ...months.map(m => byMonth[m].out));
   const totOut = months.reduce((s, m) => s + byMonth[m].out, 0);
   const totIn = months.reduce((s, m) => s + byMonth[m].in, 0);
-  const avgOut = totOut / n;
+  const fechados = months.slice(0, -1);   // média sem o mês atual, que ainda está correndo
+  const avgOut = fechados.length ? fechados.reduce((t, m) => t + byMonth[m].out, 0) / fechados.length : totOut;
   const reimbOpen = db.all('tempo_reimb_rows').filter(r => r.refund_id !== rbStatusId('reimb_refund', 'Feito!'));
   const reimbSum = reimbOpen.reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
@@ -114,8 +112,8 @@ VIEWS.reportspf = () => {
 
   const head = `<th>Categoria</th>${months.map(m => `<th class="num">${pfMonthLabel(m)}</th>`).join('')}<th class="num">Total</th><th class="num">Média/mês</th><th class="num" title="Quanto o último mês ficou acima (vermelho) ou abaixo (verde) da média dos meses anteriores">${pfMonthLabel(last)} vs média</th>`;
   const cmpCell = (delta, diff) => `<td class="num">${pfChip(delta)} <span class="small muted mono">${pfDiffTxt(diff)}</span></td>`;
-  const body = cats.map(c => `<tr><td>${esc(c.k)} <span class="pf-scope">${esc(c.scope)}</span></td>${c.vals.map(v => `<td class="num mono">${v ? pfR(v) : '<span class="faint">—</span>'}</td>`).join('')}
-    <td class="num mono"><b>${pfR(c.total)}</b></td><td class="num mono">${pfR(c.total / n)}</td>${cmpCell(c.delta, c.diff)}</tr>`).join('');
+  const body = cats.map(c => `<tr><td>${esc(c.k)}</td>${c.vals.map(v => `<td class="num mono">${v ? pfR(v) : '<span class="faint">—</span>'}</td>`).join('')}
+    <td class="num mono"><b>${pfR(c.total)}</b></td><td class="num mono">${pfR(c.total / months.length)}</td>${cmpCell(c.delta, c.diff)}</tr>`).join('');
   const totRow = `<tr class="tot"><td><b>Total de saídas</b></td>${months.map(m => `<td class="num mono"><b>${pfR(byMonth[m].out)}</b></td>`).join('')}<td class="num mono"><b>${pfR(totOut)}</b></td><td class="num mono"><b>${pfR(avgOut)}</b></td><td class="num">${pfChip(pfPct(byMonth[last].out, avgOut))} <span class="small muted mono">${pfDiffTxt(byMonth[last].out - avgOut)}</span></td></tr>`;
 
   const insights = pfInsights(months, byMonth, cats, totOut, totIn);
@@ -129,13 +127,14 @@ VIEWS.reportspf = () => {
       <div class="kpi"><span class="k">Mesmo período do ano passado</span><span class="v mono">${pfChip(yoy)}</span><span class="s">${pfR(prevYearOut)} → ${pfR(totOut)}</span></div>
       <div class="kpi"><span class="k">Reembolsos em aberto</span><span class="v mono">${pfR(reimbSum)}</span><span class="s">${reimbOpen.length} item(ns)</span></div>
     </div>
+    <div class="small muted">Do extrato da conta PF (como está no Financeiro PF): compras do cartão uma a uma, estornos abatendo a categoria, pagamento da fatura e terapias (reembolsadas) fora. ${fechados.length ? `Média dos meses fechados (${fechados.length}); ${pfMonthLabel(last)} ainda está correndo.` : ''}</div>
     <div class="panel"><div class="panel-h"><h3>Leitura do período</h3></div><div class="panel-b"><div class="pf-insights">${insights.map(t => `<div class="pf-insight">${t}</div>`).join('') || '<div class="muted">Ainda não há dados suficientes.</div>'}</div></div></div>
     <div class="grid2">
       <div class="panel"><div class="panel-h"><h3>Saídas por mês</h3></div><div class="panel-b">${pfHelp('Cada coluna é um mês: a altura é o total de saídas. Embaixo, o saldo do mês (entradas − saídas). Passe o mouse para ver entradas, saídas e saldo.')}<div class="pf-chart">${monthBars}</div></div></div>
       <div class="panel"><div class="panel-h"><h3>Onde o dinheiro foi</h3></div><div class="panel-b">${pfHelp('Quanto cada categoria pesou no total de saídas do período. Passe o mouse sobre um pedaço para ver o valor.')}${pfDonut(donutItems, totOut)}</div></div>
     </div>
     <div class="panel"><div class="panel-h"><h3>Saídas por categoria, mês a mês</h3></div>
-      <div class="panel-b tight">${pfHelp('Cada linha é uma categoria (ex.: Saúde); o escopo (Pessoal ou Empresa) aparece ao lado. Em “vs média”, o último mês é comparado com a média dos meses anteriores: <b>verde</b> = gastou menos (bom), <b>vermelho</b> = gastou mais.')}<div class="table-scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody>${body || '<tr><td colspan="99" class="empty">Sem saídas no período.</td></tr>'}${totRow}</tbody></table></div></div></div>
+      <div class="panel-b tight">${pfHelp('Cada linha é uma categoria do extrato PF (as mesmas do Financeiro PF). Em “vs média”, o último mês é comparado com a média dos meses anteriores: <b>verde</b> = gastou menos (bom), <b>vermelho</b> = gastou mais.')}<div class="table-scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody>${body || '<tr><td colspan="99" class="empty">Sem saídas no período.</td></tr>'}${totRow}</tbody></table></div></div></div>
   </div>` };
 };
 
