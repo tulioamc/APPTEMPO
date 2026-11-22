@@ -303,7 +303,7 @@ function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0
   const wd = new Date(dia + 'T12:00:00').getDay();
   const sexta = wd === 5 ? `<button class="btn sm ghost pl-rafa${planoSextaRafa(dia) ? ' on' : ''}" data-act="pl-sexta" data-dia="${dia}" title="Sexta com o Rafa (T) ou com a Amanda (A)? Clique para trocar só esta sexta (muda também no Dias de Rafa).">Rafa ${planoSextaRafa(dia) ? '✓' : '–'}</button>` : '';
   const cab = !cabecalho ? '' : `<div class="pl-cab">${semana ? `<span class="pl-sem-rot">${esc(semana)}</span>` : ''}<span class="pl-cab-l1"><button class="pl-cab-dia" data-act="pl-ir-dia" data-dia="${dia}" title="Ver o dia">${new Date(dia + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</button>${planoRafaLetraHTML(dia)}</span>
-      <span class="pl-cab-l2">${(() => { const pr = dia <= hoje ? planoVsReal(dia) : null; return pr ? `<span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}" data-tip="${esc(`Plano × real: ${fmtH(pr.reg * 36e5)} registrados das ${fmtH(pr.plan * 36e5)} planejadas de manhã (mesmo projeto)`)}">${pr.pct}%</span>` : ''; })()}<span class="small ${h > cfg.horasDia + 0.05 ? 'late' : 'muted'}">${util ? (h > 0.01 ? `${fmtH(h * 36e5)} plano${est ? ` de ${est} h` : ''}` : '') : (fer ? esc(fer.nome) : '')}</span>${sexta}</span></div>`;
+      <span class="pl-cab-l2">${(() => { const pr = dia <= hoje ? planoVsReal(dia) : null; return pr ? `<span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}" data-tip="${esc(`Plano × real: ${fmtH(pr.reg * 36e5)} registrados das ${fmtH(pr.plan * 36e5)} planejadas de manhã (mesmo projeto)`)}">${pr.pct}%</span>` : ''; })()}<span class="small ${h > cfg.horasDia + 0.05 ? 'late' : 'muted'}">${util ? (h > 0.01 ? `${fmtH(h * 36e5)} plano${est ? ` de ${est} h` : ''}` : '') : (fer ? '[FERIADO] ' + esc(fer.nome) : '')}</span>${sexta}</span></div>`;
   const todoDia = planoEventos(dia).filter(e => e.diaTodo);
   const topo = linhasTopo ? `<div class="pl-topo" style="height:${linhasTopo * 20}px">${todoDia.map(e => e.origem === 'todo'
     ? `<button class="pl-chip todo${e.feito ? ' feito' : ''}" data-act="todo-modal" data-id="${e.id}" title="To-do do dia (sem hora)">${icon('check')}${esc(e.titulo)}</button>`
@@ -324,6 +324,11 @@ function planoSemanaHTML(porDia) {
     <div class="pl-regua-col"><div class="pl-cab pl-cab-vazio"></div>${lt ? `<div style="height:${lt * 20}px"></div>` : ''}${planoRegua()}</div>${cols}</div></div>`;
 }
 
+/* Filtros do calendário (Mês): esconder Alice, Rafa, trabalho, to-dos ou rotina. Guardado em planoMesFiltro { k: false }. */
+const PL_FILTROS = [['alice', 'Alice'], ['rafa', 'Rafa'], ['trabalho', 'Trabalho'], ['todos', 'To-dos'], ['rotina', 'Rotina']];
+const planoMostra = (k) => (db.setting('planoMesFiltro', {}) || {})[k] !== false;
+CHANGES['pl-filtro'] = (el) => { const f = { ...(db.setting('planoMesFiltro', {}) || {}) }; f[el.dataset.k] = el.checked; db.setSetting('planoMesFiltro', f); db.emit(); };
+
 /* Um dia do calendário (Mês): número grande e chips à direita; feriado, compromissos do dia todo e observação;
    tempo trabalhado (ou planejado) por projeto; à direita, a lista de horários do dia, com rolagem própria. */
 function planoMesCelHTML(dia, porDia, hoje, cfg) {
@@ -334,32 +339,33 @@ function planoMesCelHTML(dia, porDia, hoje, cfg) {
   const tot = pids.reduce((t, k) => t + base[k], 0);
   const ev = planoEventos(dia); const prz = planoPrazos(dia);
   const rafa = typeof rafaDiaDe === 'function' ? rafaDiaDe(dia) : null;
-  const al = typeof aliceChipsHTML === 'function' ? aliceChipsHTML(dia) : '';
+  const al = planoMostra('alice') && typeof aliceChipsHTML === 'function' ? aliceChipsHTML(dia) : '';
+  const verRafa = planoMostra('rafa'), verTrab = planoMostra('trabalho'), verTodo = planoMostra('todos'), verRot = planoMostra('rotina');
   const topo = [
-    fer ? `<div class="pl-mc-tag fer" title="${esc(fer.nome)}">${esc(fer.nome)}</div>` : '',
+    fer ? `<div class="pl-mc-tag fer" title="${esc(fer.nome)}">[FERIADO] ${esc(fer.nome)}</div>` : '',
     ...prz.map(p => `<div class="pl-mc-tag prazo" title="Prazo: ${esc(p.name)}">${icon('flag')} ${esc(p.name)}</div>`),
-    ...ev.filter(e => e.diaTodo).map(e => `<div class="pl-mc-tag ev ${e.origem}${e.feito ? ' feito' : ''}" title="${esc(e.titulo)}">${esc(e.titulo)}</div>`),
-    ...(typeof rafaNotas === 'function' ? rafaNotas(dia) : (rafa && rafa.note ? [{ t: rafa.note, q: 'N' }] : [])).map(n => `<div class="pl-mc-tag obs nq-${n.q || 'N'}" title="${esc(n.t)}">${esc(n.t)}</div>`)
+    ...ev.filter(e => e.diaTodo && (verTodo || e.origem !== 'todo')).map(e => `<div class="pl-mc-tag ev ${e.origem}${e.feito ? ' feito' : ''}" title="${esc(e.titulo)}">${esc(e.titulo)}</div>`),
+    ...(!verRafa ? [] : typeof rafaNotas === 'function' ? rafaNotas(dia) : (rafa && rafa.note ? [{ t: rafa.note, q: 'N' }] : [])).map(n => `<div class="pl-mc-tag obs nq-${n.q || 'N'}" title="${esc(n.t)}">${esc(n.t)}</div>`)
   ].join('');
   // rotina (fixos) só na semana atual, para os meses seguintes não ficarem carregados; to-dos e projetos previstos sempre
   const semIni = (() => { const h = new Date(hoje + 'T12:00:00'); h.setDate(h.getDate() - ((h.getDay() + 6) % 7)); return ymd(h); })();
   const semanaAtual = dia >= semIni && dia <= (() => { const f = new Date(semIni + 'T12:00:00'); f.setDate(f.getDate() + 6); return ymd(f); })();
-  const previstos = dia >= hoje ? Object.keys(plan).filter(k => plan[k] > 0.001).sort((a, b) => plan[b] - plan[a]) : [];
+  const previstos = dia >= hoje && verTrab ? Object.keys(plan).filter(k => plan[k] > 0.001).sort((a, b) => plan[b] - plan[a]) : [];
   const horarios = [
-    ...(semanaAtual ? planoFixosDoDia(dia).map(f => ({ ini: f[0], titulo: f[2], cls: 'fixo' })) : []),
-    ...ev.filter(e => !e.diaTodo).map(e => ({ ini: e.ini, titulo: e.titulo, cls: e.origem + (e.feito ? ' feito' : '') }))
+    ...(semanaAtual && verRot ? planoFixosDoDia(dia).map(f => ({ ini: f[0], titulo: f[2], cls: 'fixo' })) : []),
+    ...ev.filter(e => !e.diaTodo && (verTodo || e.origem !== 'todo')).map(e => ({ ini: e.ini, titulo: e.titulo, cls: e.origem + (e.feito ? ' feito' : '') }))
   ].sort((x, y) => x.ini - y.ini);
   const proj = pids.map(pid => { const p = db.get('tempo_projects', pid);
     return `<div class="pl-mc-p" style="--fc:${planoCor(pid === '_' ? null : pid)}"><i></i><span>${esc(p?.name || 'Sem projeto')}</span><em>${fmtH(base[pid] * 36e5)}</em></div>`; }).join('');
   return `<div class="pl-mc${dt.getMonth() % 2 === 0 ? ' par' : ''}${dia === hoje ? ' hoje' : ''}${!util ? ' off' : ''}${dia < hoje ? ' passado' : ''}" data-act="pl-ir-dia" data-dia="${dia}" data-pl-pop="${dia}"${dia === hoje ? ' data-hoje="1"' : ''}>
     <div class="pl-mc-in">
       <div class="pl-mc-esq">
-        <div class="pl-mc-n"><b>${n === 1 ? dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '') : n}</b><span class="pl-mc-chips"><button class="pl-mc-nota" data-act="rafa-open" data-day="${dia}" title="Adicionar nota (as mesmas de Dias de Rafa)" aria-label="Adicionar nota">${icon('plus')}</button>${al}${planoRafaLetraHTML(dia)}</span></div>
+        <div class="pl-mc-n"><b>${n === 1 ? dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '') : n}</b><span class="pl-mc-chips"><button class="pl-mc-nota" data-act="rafa-open" data-day="${dia}" title="Adicionar nota (as mesmas de Dias de Rafa)" aria-label="Adicionar nota">${icon('plus')}</button>${al}${verRafa ? planoRafaLetraHTML(dia) : ''}</span></div>
         ${topo}
       </div>
       ${horarios.length || previstos.length ? `<div class="pl-mc-dir" data-pl-noclick>${previstos.map(pid => { const p = db.get('tempo_projects', pid); const ab = p && typeof agencyAbbr === 'function' ? agencyAbbr(agencyOf(p)) : ''; const nm = `${ab ? '[' + ab + '] ' : ''}${p?.name || 'Sem projeto'}`;
         return `<div class="pl-mc-prev${plan[pid] && dia === hoje ? ' hoje' : ''}" style="--fc:${planoCor(pid === '_' ? null : pid)}" title="${esc(`Previsto: ${nm} · ${fmtH(plan[pid] * 36e5)}`)}"><span>${esc(nm)}</span><em>${fmtH(plan[pid] * 36e5)}</em></div>`; }).join('')}${horarios.map(h => `<div class="pl-mc-hr ${h.cls}" title="${esc(planoHora(h.ini) + ' ' + h.titulo)}"><b>${planoHora(h.ini)}</b> ${esc(h.titulo)}</div>`).join('')}</div>` : ''}
-      ${pids.length ? `<div class="pl-mc-reg"><div class="pl-mc-tt"><span>Tempo trabalhado</span><em>${fmtH(tot * 36e5)}</em></div>${proj}</div>` : ''}
+      ${pids.length && verTrab ? `<div class="pl-mc-reg"><div class="pl-mc-tt"><span>Tempo trabalhado</span><em>${fmtH(tot * 36e5)}</em></div>${proj}</div>` : ''}
     </div>
   </div>`;
 }
@@ -405,7 +411,7 @@ function planoDiaHTML(dia, porDia) {
   const ev = planoEventos(dia), prz = planoPrazos(dia), fer = planoFer(dia);
   const sd = planoTodosSemData();
   const lado = `<div class="stack" style="gap:12px">
-    ${fer ? `<div class="banner info small">${esc(fer.nome)} (feriado)</div>` : ''}
+    ${fer ? `<div class="banner info small">[FERIADO] ${esc(fer.nome)}</div>` : ''}
     ${(() => { const r = typeof rafaDiaDe === 'function' ? rafaDiaDe(dia) : null; return r?.who ? `<div class="small">Rafa: ${planoRafaLetraHTML(dia)} ${esc(RF_NOME?.[r.who] || '')}${r.auto ? ' <span class="faint">(marcado pelo app)</span>' : ''}${r.horario ? ' · ' + esc(r.horario) : ''}</div>` : ''; })()}
     ${(() => { const pr = planoVsReal(dia); return pr ? `<div class="pl-pvr-box"><b>${fmtH(pr.reg * 36e5)} de ${fmtH(pr.plan * 36e5)} planejadas</b> <span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}">${pr.pct}%</span><div class="small muted">Comparado com o plano do começo do dia; o que não aconteceu aparece tracejado.</div></div>` : ''; })()}
     ${planoDiaUtil(dia) ? (() => { const cfg = planoCfg(); const est = planoEsticados()[dia]; const hd = est ?? cfg.horasDia; return `<div class="row between small"><span>Horas de trabalho neste dia <span class="faint" data-tip="Quanto o app pode planejar de trabalho neste dia. O padrão é ${cfg.horasDia} h; estique quando precisar virar a noite, ou encurte num dia mais leve.">(padrão ${cfg.horasDia} h)</span></span><span class="row" style="gap:4px"><button class="btn sm" data-act="pl-dia" data-dia="${dia}" data-d="-1" aria-label="Menos 1 hora">−</button><b class="mono">${hd} h</b><button class="btn sm" data-act="pl-dia" data-dia="${dia}" data-d="1" aria-label="Mais 1 hora">+</button></span></div>`; })() : ''}
@@ -429,13 +435,14 @@ VIEWS.plano = () => {
   const hoje = ymd(new Date()); const dia = PLANO.dia || hoje;
   const semEst = projects().filter(p => ['todo', 'active'].includes(statusCat(p.status_id)) && !(Number(p.estimated_hours) > 0));
   const seg = `<div class="seg">${[['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']].map(([k, l]) => `<button class="${modo === k ? 'on' : ''}" data-act="pl-modo" data-m="${k}">${l}</button>`).join('')}</div>`;
-  let titulo, nav, corpo;
+  let titulo, nav, corpo; let titulo2 = '';
   if (modo === 'dia') {
     titulo = new Date(dia + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, c => c.toUpperCase());
     nav = `<button class="btn sm" data-act="pl-nav" data-d="-1" aria-label="Dia anterior">${icon('chevL')}</button><button class="btn sm" data-act="pl-nav" data-d="1" aria-label="Próximo dia">${icon('chevR')}</button>${dia !== hoje ? '<button class="btn sm ghost" data-act="pl-nav" data-d="0">Hoje</button>' : ''}`;
     corpo = planoDiaHTML(dia, porDia);
   } else if (modo === 'mes') {
     titulo = 'Calendário'; nav = `<button class="btn sm ghost" data-act="pl-mes-hoje">Hoje</button>`;
+    titulo2 = `<div class="pl-filtros" role="group" aria-label="Mostrar no calendário">${PL_FILTROS.map(([k, l]) => `<label class="check small"><input type="checkbox" data-on="pl-filtro" data-k="${k}" ${planoMostra(k) ? 'checked' : ''}> ${l}</label>`).join('')}</div>`;
     corpo = planoMesHTML(porDia);
   } else {
     titulo = 'Semana'; nav = `<button class="btn sm" data-act="pl-sem" data-d="-1" aria-label="Semana anterior">${icon('chevL')}</button><button class="btn sm" data-act="pl-sem" data-d="1" aria-label="Próxima semana">${icon('chevR')}</button><button class="btn sm ghost" data-act="pl-sem" data-d="0">Hoje</button>`;
@@ -443,7 +450,7 @@ VIEWS.plano = () => {
   }
   const nota = `${lista.length} projeto(s) com horas a fazer, distribuídas por prazo até ${cfg.horasDia} h por dia útil. Cheio = planejado (mais claro = colocado pelo app; fixado à mão fica forte) · chip com bolinha = registrado · cinza = rotina · tracejado = compromisso (bloqueio ou Google Agenda). Arraste ou puxe as bordas do que não é registro; a janelinha mostra o horário novo.${semEst.length ? ` ${semEst.length} projeto(s) ativo(s) sem horas estimadas não entram.` : ''}`;
   const html = `${estouro.length ? `<div class="panel" style="border-color:var(--warn)"><div class="panel-b small"><b>Não cabe no prazo:</b> ${estouro.map(x => `${esc(x.p.name)} (faltam ${fmtH(x.horas * 36e5)} até ${fmtDate(x.p.deadline)})`).join(' · ')}. Estique algum dia (+) ou mude o prazo.</div></div>` : ''}
-    <div class="panel"><div class="panel-h">${seg}${nav}<h3>${esc(titulo)}</h3><span class="grow"></span><button class="btn sm" data-act="pl-bloq">${icon('plus')} Bloqueio</button></div>
+    <div class="panel"><div class="panel-h">${seg}${nav}<h3>${esc(titulo)}</h3>${titulo2}<span class="grow"></span><button class="btn sm" data-act="pl-bloq">${icon('plus')} Bloqueio</button></div>
       <div class="panel-b">${corpo}<div class="small muted" style="margin-top:8px">${nota}</div></div></div>
     ${planoRotinaHTML()}`;
   setTimeout(() => (modo === 'mes' ? planoMesRolar() : planoGradeRolar(modo === 'semana')), 0);

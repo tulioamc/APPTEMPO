@@ -1693,3 +1693,6 @@ td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
 .rf-nota textarea { min-height: 34px; resize: vertical; }
 .rf-nota.nq-T { border-left-color: #A100FF; } .rf-nota.nq-A { border-left-color: #DF6788; }
 .rf-nota .seg button { padding: 3px 8px; font-size: 12px; }
+.al-tg.on { outline: 2px solid var(--accent); outline-offset: 1px; background: var(--accent-soft); }
+.pl-filtros { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-left: 8px; }
+.pl-filtros .check { display: inline-flex; gap: 5px; align-items: center; color: var(--fg-2); }

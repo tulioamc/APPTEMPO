@@ -64,6 +64,7 @@ const RF_NQ = [['T', 'Tulio'], ['A', 'Amanda'], ['N', 'Neutro']];
 const rafaNotaLinhaHTML = (n) => `<div class="rf-nota nq-${n.q || 'N'}" data-q="${n.q || 'N'}"><textarea class="input" rows="1" placeholder="ex.: dentista às 16h10">${esc(n.t || '')}</textarea><div class="seg">${RF_NQ.map(([k, l]) => `<button type="button" class="${(n.q || 'N') === k ? 'on' : ''}" data-act="rafa-nq" data-q="${k}">${l}</button>`).join('')}</div><button type="button" class="icon-btn ghost" data-act="rafa-nota-del" title="Tirar nota" aria-label="Tirar nota">×</button></div>`;
 ACTIONS['rafa-nq'] = (el) => { const l = el.closest('.rf-nota'); if (!l) return; l.dataset.q = el.dataset.q; l.className = 'rf-nota nq-' + el.dataset.q; el.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === el)); };
 ACTIONS['rafa-nota-add'] = () => { const box = document.getElementById('rf-notas'); if (!box) return; box.insertAdjacentHTML('beforeend', rafaNotaLinhaHTML({ t: '', q: 'N' })); box.lastElementChild.querySelector('textarea').focus(); };
+ACTIONS['rafa-al'] = (el) => { const on = !el.classList.contains('on'); el.classList.toggle('on', on); el.setAttribute('aria-pressed', on); };
 ACTIONS['rafa-nota-del'] = (el) => el.closest('.rf-nota')?.remove();
 function rafaMap() {
   const map = {};
@@ -107,6 +108,8 @@ ACTIONS['rafa-open'] = (el) => {
       <div class="field" style="margin-top:10px"><span class="lbl">Notas do dia <span class="faint">(aparecem também no calendário do Planejamento)</span></span>
         <div id="rf-notas" class="stack" style="gap:6px">${rafaNotas(iso).map(rafaNotaLinhaHTML).join('')}</div>
         <button type="button" class="btn sm ghost" data-act="rafa-nota-add" style="align-self:flex-start;margin-top:4px">${icon('plus')} Adicionar nota</button></div>
+      ${typeof alMarcar === 'function' ? `<div class="field" style="margin-top:10px"><span class="lbl">Alice <span class="faint">(marcar à mão; o WhatsApp também marca sozinho)</span></span>
+        <div class="row" style="gap:6px">${[['M', 'AL:M · Menstruação', 'm'], ['C', 'AL:C · Cistite', 'c']].map(([k, l, c]) => `<button type="button" class="btn sm al-tg ${(alDias()[iso] || []).includes(k) ? 'on' : ''}" data-act="rafa-al" data-k="${k}" aria-pressed="${(alDias()[iso] || []).includes(k)}"><span class="al-chip ${c}">${l.split(' · ')[0]}</span> ${l.split(' · ')[1]}</button>`).join('')}</div></div>` : ''}
       <div class="row" style="justify-content:flex-end;gap:8px;margin-top:16px">
         <button class="btn ghost" data-act="close-layer">Cancelar</button>
         <button class="btn" data-act="rafa-save" data-day="${iso}">Salvar</button>
@@ -131,7 +134,9 @@ ACTIONS['rafa-save'] = (el) => {
   rafaMarcar(iso, patch);
   const todas = { ...(db.setting('diaNotas', {}) || {}) };
   if (notas.length) todas[iso] = notas; else delete todas[iso];
-  db.setSetting('diaNotas', todas); db.emit();
+  db.setSetting('diaNotas', todas);
+  if (typeof alMarcar === 'function') document.querySelectorAll('.al-tg').forEach(b => { const on = b.classList.contains('on'); if (on !== (alDias()[iso] || []).includes(b.dataset.k)) alMarcar(iso, b.dataset.k, on); });
+  db.emit();
   document.querySelector('[data-act="close-layer"]')?.click();
   rafaPerguntarFimDeSemana(iso, patch.who);
 };
