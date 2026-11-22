@@ -1740,3 +1740,5 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .seg.pl-filtros button:not(.on) { color: var(--fg-3); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--fg-3) 50%, transparent); }
 /* Dia: sem hachura no fim de semana */
 .pl-um .pl-dia.off .pl-grade, .pl-diaview .pl-dia.off .pl-grade { background-image: linear-gradient(to bottom, color-mix(in oklab, var(--line) 80%, transparent) 1px, transparent 1px) !important; background-size: 100% calc(100% / 24) !important; background-color: var(--surface-1, #fff) !important; }
+/* sem hachura em nenhum dia (Semana e Dia): fim de semana/feriado só um fundo levemente cinza, com as linhas das horas */
+.pl-dia.off .pl-grade { background-image: linear-gradient(to bottom, color-mix(in oklab, var(--line) 80%, transparent) 1px, transparent 1px) !important; background-size: 100% calc(100% / 24) !important; background-color: color-mix(in oklab, var(--surface-2) 45%, var(--surface-1, #fff)) !important; }

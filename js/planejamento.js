@@ -302,7 +302,7 @@ function planoNotasHTML(dia) {
   if (!planoMostra('rafa') || typeof rafaNotas !== 'function') return '';
   const l = rafaNotas(dia); return l.length ? `<div class="pl-notas">${l.map(n => `<div class="pl-mc-tag obs nq-${n.q || 'N'}" title="${esc(n.t)}">${esc(n.t)}</div>`).join('')}</div>` : '';
 }
-/* Semana: o registrado vira blocos de 15 min — cada quarto de hora fica com o projeto que mais teve tempo nele
+/* Semana e Dia: o registrado vira blocos de 15 min — cada quarto de hora fica com o projeto que mais teve tempo nele
    (quarto com menos de 5 min de registro fica vazio), e quartos seguidos do mesmo projeto se juntam. */
 function planoRegistro15(itens) {
   const feitos = itens.filter(x => x.k === 'feito'); if (!feitos.length) return itens;
@@ -320,7 +320,7 @@ function planoRegistro15(itens) {
 }
 function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0, cabecalho = true, semana = '' } = {}) {
   const cfg = planoCfg(); const v = porDia[dia]; const util = planoDiaUtil(dia); const hoje = ymd(new Date());
-  const itens = planoFaixas(unico ? planoItensDoDia(dia, porDia) : planoRegistro15(planoItensDoDia(dia, porDia)), unico).map(x => planoItemHTML(x, dia, { alt, unico })).join('');
+  const itens = planoFaixas(planoRegistro15(planoItensDoDia(dia, porDia)), unico).map(x => planoItemHTML(x, dia, { alt, unico })).join('');
   const agora = dia === hoje ? (() => { const n = new Date(); const h = n.getHours() + n.getMinutes() / 60; return `<div class="pl-agora" style="top:${h * alt}px"></div>`; })() : '';
   const h = v?.horas || 0, est = planoEsticados()[dia], fer = planoFer(dia);
   const wd = new Date(dia + 'T12:00:00').getDay();
