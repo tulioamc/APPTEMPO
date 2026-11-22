@@ -169,7 +169,12 @@ function resumoBodyHTML(es, opts = {}) {
   const title = opts.title || '';
   const key = actSelKey(es.map(e => e.id));
   const mode = db.setting('resMode', 'cron');
-  const tagged = es.flatMap((e, i) => actList(e.id).map(r => ({ ...r, _i: i })));
+  // janela de um projeto só: o que o registro do computador mostra de outro projeto/cliente (pasta ligada a outro projeto) fica de fora
+  const pidsUnicos = [...new Set(es.map(e => e.project_id).filter(Boolean))];
+  const soUm = pidsUnicos.length === 1 ? pidsUnicos[0] : null;
+  let foraMs = 0; const foraNomes = new Set();
+  const deOutro = (r) => { if (!soUm || !r.folder || typeof folderRule !== 'function') return false; const rule = folderRule(r.folder); if (!rule || !rule.project_id || rule.project_id === soUm) return false; foraMs += Math.max(0, new Date(r.to) - new Date(r.from)); const pp = db.get('tempo_projects', rule.project_id); if (pp) foraNomes.add(pp.name); return true; };
+  const tagged = es.flatMap((e, i) => actList(e.id).filter(r => !deOutro(r)).map(r => ({ ...r, _i: i })));
   const an = actAnalyzeList(tagged, 'program');
   const colorOf = Object.fromEntries(an.groups.map(g => [g.id, g.color]));
   const othAttr = actOthMembersAttr(an);
@@ -275,11 +280,11 @@ function resumoBodyHTML(es, opts = {}) {
   return `${top}
     <div class="small muted"><span data-tip="${esc(`Bruto ${fmtDur(totalBruto)}\nDo início ao fim de cada sessão, sem contar duas vezes o mesmo horário. Inclui as pausas.`)}">Bruto ${fmtDur(totalBruto)}</span> · <span data-tip="${esc(`Trabalho ${fmtDur(totalTrab)}\nSó o tempo trabalhado (bruto menos pausas).\nCom registro de programa: ${fmtDur(Math.max(0, totalTrab - actUnspecMs(es)))}\nNão especificado: ${fmtDur(actUnspecMs(es))}`)}">trabalho ${fmtDur(totalTrab)}</span> · <span data-tip="${esc(`Pausas ${fmtDur(totalPausa)}\n${Object.entries(pauseByWhy).map(([k, ms]) => pauseLabel(k) + ': ' + fmtDur(ms)).join('\n')}`)}">pausas ${fmtDur(totalPausa)}</span> · ${es.length} sessão(ões)</div>
     ${prodMiniHTML(es)}
-    ${taskBar}
     ${actForaToggleHTML(es)}
     ${actSelBarHTML(key)}
-    <div class="act-sec">${bar}<div class="muted" style="font-size:.78em;line-height:1.5;margin-top:6px">${note}</div>${legendHTML}</div>
-    <div><div class="lbl">Sessões</div>${sessions}</div>`;
+    <div class="act-sec">${bar}<div class="muted" style="font-size:.78em;line-height:1.5;margin-top:6px">${note}${foraMs > 60000 ? `<br>Fora desta conta: ${fmtDur(foraMs)} de arquivos de outro projeto (${esc([...foraNomes].slice(0, 4).join(', '))}).` : ''}</div>${legendHTML}</div>
+    ${taskBar}
+    <details class="res-sess"><summary class="lbl" style="cursor:pointer">Sessões <span class="faint">(${es.length} · ${fmtDur(es.reduce((t, e) => t + entryMs(e), 0))})</span></summary>${sessions}</details>`;
 }
 function resumoHTML(title, es) {
   const mode = db.setting('resMode', 'cron');

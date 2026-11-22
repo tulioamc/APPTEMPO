@@ -100,9 +100,22 @@ function pdRevisions(p) {
     <div><button class="btn primary">${icon('plus')} Registrar rodada ${rs.length + 1}</button></div></div></form>`;
 }
 
+/* Projeto não cobrado (pessoal, por conta própria): quanto teria custado pela hora de trabalho.
+   Guardado em projNaoCobrado { pid: { on, rate } }; a hora padrão é a do orçamento (precoBase), e mudar aqui vale só para o projeto. */
+const pdNcDe = (p) => { const m = (db.setting('projNaoCobrado', {}) || {})[p.id]; const pessoal = /pessoal/i.test(agencyOf(p)?.name || '') || /pessoal/i.test(clientOf(p)?.name || ''); return { on: m ? !!m.on : pessoal, rate: m && Number(m.rate) > 0 ? Number(m.rate) : null }; };
+const pdNcPadrao = () => (typeof precoBase === 'function' ? Number(precoBase().hora) || 0 : 0);
+function pdNaoCobradoHTML(p) {
+  const nc = pdNcDe(p); const ms = projectMs(p.id); const rate = nc.rate ?? pdNcPadrao(); const h = ms / 36e5;
+  const box = nc.on ? `<div class="panel"><div class="panel-h"><h3>Quanto teria custado</h3><span class="small muted">${fmtH(ms)} trabalhadas</span></div><div class="panel-b">
+      <div class="row" style="gap:16px;align-items:flex-end;flex-wrap:wrap">
+        <div class="field" style="max-width:190px;margin:0"><label for="pd-ncrate">Valor da hora</label><input id="pd-ncrate" class="input mono" type="number" step="1" min="0" value="${rate || ''}" data-x-nc="rate"><span class="hint">${nc.rate ? `só neste projeto · padrão ${fmtMoney(pdNcPadrao())}` : 'o padrão dos orçamentos (mude aqui só para este projeto)'}</span></div>
+        <div class="kpi" style="flex:1;min-width:220px"><span class="k">Se fosse cobrado</span><span class="v">${fmtMoney0(h * rate)}</span><span class="s">${fmtH(ms)} × ${fmtMoney(rate)}/h</span></div>
+      </div>${nc.rate ? `<button type="button" class="btn sm ghost" data-x="pd-ncpadrao" style="margin-top:8px">Voltar à hora padrão</button>` : ''}</div></div>` : '';
+  return `<label class="check small" style="margin-bottom:10px"><input type="checkbox" data-x="pd-naocob" ${nc.on ? 'checked' : ''}> Não cobrado <span class="faint">(projeto pessoal ou por conta própria)</span></label>${box}`;
+}
 function pdFinance(p) {
   const pays = paymentsOf(p.id); const rem = remainingOf(p);
-  return `<div class="kpis"><div class="kpi"><span class="k">Orçamento</span><span class="v">${fmtMoney(p.budget) || '—'}</span></div><div class="kpi"><span class="k">Valor pago</span><span class="v">${fmtMoney0(paidOf(p))}</span><span class="s">${pays.length} pagamento(s)</span></div><div class="kpi"><span class="k">Valor restante</span><span class="v">${rem === null ? '—' : fmtMoney0(rem)}</span><span class="s">${p.remaining_override !== null && p.remaining_override !== undefined && p.remaining_override !== '' ? 'definido manualmente' : 'orçamento − pago'}</span></div></div>
+  return `${pdNaoCobradoHTML(p)}<div class="kpis"><div class="kpi"><span class="k">Orçamento</span><span class="v">${fmtMoney(p.budget) || '—'}</span></div><div class="kpi"><span class="k">Valor pago</span><span class="v">${fmtMoney0(paidOf(p))}</span><span class="s">${pays.length} pagamento(s)</span></div><div class="kpi"><span class="k">Valor restante</span><span class="v">${rem === null ? '—' : fmtMoney0(rem)}</span><span class="s">${p.remaining_override !== null && p.remaining_override !== undefined && p.remaining_override !== '' ? 'definido manualmente' : 'orçamento − pago'}</span></div></div>
   <div class="grid2">
     <div class="field"><label for="pd-bud">Orçamento</label><input id="pd-bud" class="input mono" ${moneyAttrs(p.budget)} data-pd="budget"></div>
     <div class="field"><label for="pd-rem">Valor restante manual</label><input id="pd-rem" class="input mono" ${moneyAttrs(p.remaining_override)} placeholder="Automático" data-pd="remaining"><span class="hint">Use quando houver acordo diferente (ex.: valor líquido). Vazio = automático.</span></div>
@@ -154,10 +167,16 @@ function bindProjectDrawer(ly, id, st) {
       logEvent('task', t.id, 'deleted', `Tarefa “${t.name}” excluída`, null, null, { project_id: id }); db.emit();
     }
     if (x === 'open-entry') openEntryModal(bid);
+    if (x === 'pd-naocob' || x === 'pd-ncpadrao') { const m = { ...(db.setting('projNaoCobrado', {}) || {}) }; const cur = pdNcDe(p()); m[id] = x === 'pd-naocob' ? { ...(m[id] || {}), on: !cur.on, rate: cur.rate } : { ...(m[id] || {}), on: true, rate: null }; db.setSetting('projNaoCobrado', m); ly.refresh(); return; }
     if (x === 'rev-resent') { const r = db.get('tempo_revisions', bid); db.update('tempo_revisions', bid, { resent_at: nowISO() }, true); logEvent('revision', bid, 'resent', `Reenvio da rodada ${r.number}`, null, null, { project_id: id }); db.emit(); }
     if (x === 'rev-track') { const pr = p(); const c = clientOf(pr); ly.close(); openStartModal({ agency_id: c?.agency_id || '__none', client_id: pr.client_id, project_id: pr.id }); toast('Ao encerrar, abra a sessão e vincule à rodada.'); }
     if (x === 'rev-del') { if (!await confirmBox({ title: 'Excluir rodada?', body: 'As sessões vinculadas continuam, sem o vínculo.', ok: 'Excluir', danger: true })) return; db.where('tempo_time_entries', e => e.revision_id === bid).forEach(e => db.update('tempo_time_entries', e.id, { revision_id: null }, true)); db.remove('tempo_revisions', bid); }
     if (x === 'pay-del') { const pay = db.get('tempo_payments', bid); if (!await confirmBox({ title: 'Excluir pagamento?', body: `${fmtMoney(pay.amount)} de ${fmtDate(pay.date)}.`, ok: 'Excluir', danger: true })) return; db.remove('tempo_payments', bid, true); logEvent('payment', bid, 'payment_deleted', `Pagamento de ${fmtMoney(pay.amount)} excluído`, null, null, { project_id: id }); db.emit(); }
+  });
+  ly.box.addEventListener('change', (e) => {
+    if (e.target.id !== 'pd-ncrate') return;
+    const v = Number(e.target.value) || 0; const m = { ...(db.setting('projNaoCobrado', {}) || {}) };
+    m[id] = { ...(m[id] || {}), on: true, rate: v > 0 && v !== pdNcPadrao() ? v : null }; db.setSetting('projNaoCobrado', m); ly.refresh();
   });
   ly.box.addEventListener('submit', (e) => {
     e.preventDefault(); const form = e.target; const f = formData(form); const kind = form.dataset.form;
