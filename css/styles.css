@@ -1657,3 +1657,11 @@ td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
 .al-chip.f { color: #2B8A3E; }
 .al-chip.pm { color: #B08800; }
 .al-chip.c { color: #7048E8; }
+/* Nota do dia (Dias de Rafa e calendário): cor de quem escreveu — Tulio, Amanda ou neutro */
+.pl-mc-tag.obs.nq-T { background: color-mix(in oklab, #3B6FD8 12%, transparent); color: #2F5DBF; border-color: color-mix(in oklab, #3B6FD8 60%, transparent); }
+.pl-mc-tag.obs.nq-A { background: color-mix(in oklab, #E0558C 12%, transparent); color: #C2437A; border-color: color-mix(in oklab, #E0558C 60%, transparent); }
+.pl-mc-tag.obs.nq-N { background: var(--surface-2); color: var(--fg-2); border-color: var(--line); }
+.rf-obs.nq-T { color: #2F5DBF; } .rf-obs.nq-A { color: #C2437A; }
+.pl-mc-nota { border: 0; background: none; padding: 2px; color: var(--fg-3); opacity: 0; cursor: pointer; line-height: 0; }
+.pl-mc-nota svg { width: 12px; height: 12px; }
+.pl-mc:hover .pl-mc-nota { opacity: 1; }

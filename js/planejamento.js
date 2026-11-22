@@ -340,7 +340,7 @@ function planoMesCelHTML(dia, porDia, hoje, cfg) {
     fer ? `<div class="pl-mc-tag fer" title="${esc(fer.nome)}">${esc(fer.nome)}</div>` : '',
     ...prz.map(p => `<div class="pl-mc-tag prazo" title="Prazo: ${esc(p.name)}">${icon('flag')} ${esc(p.name)}</div>`),
     ...ev.filter(e => e.diaTodo).map(e => `<div class="pl-mc-tag ev ${e.origem}${e.feito ? ' feito' : ''}" title="${esc(e.titulo)}">${esc(e.titulo)}</div>`),
-    rafa && rafa.note ? `<div class="pl-mc-tag obs" title="${esc(rafa.note)}">Obs.: ${esc(rafa.note)}</div>` : ''
+    rafa && rafa.note ? `<div class="pl-mc-tag obs nq-${typeof rafaNotaQuem === 'function' ? rafaNotaQuem(dia) : 'N'}" title="${esc(rafa.note)}">Obs.: ${esc(rafa.note)}</div>` : ''
   ].join('');
   const horarios = [
     ...planoFixosDoDia(dia).map(f => ({ ini: f[0], titulo: f[2], cls: 'fixo' })),
@@ -351,7 +351,7 @@ function planoMesCelHTML(dia, porDia, hoje, cfg) {
   return `<div class="pl-mc${dt.getMonth() % 2 === 0 ? ' par' : ''}${dia === hoje ? ' hoje' : ''}${!util ? ' off' : ''}${dia < hoje ? ' passado' : ''}" data-act="pl-ir-dia" data-dia="${dia}" data-pl-pop="${dia}"${dia === hoje ? ' data-hoje="1"' : ''}>
     <div class="pl-mc-in">
       <div class="pl-mc-esq">
-        <div class="pl-mc-n"><b>${n === 1 ? dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '') : n}</b><span class="pl-mc-chips">${al}${planoRafaLetraHTML(dia)}</span></div>
+        <div class="pl-mc-n"><b>${n === 1 ? dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '') : n}</b><span class="pl-mc-chips"><button class="pl-mc-nota" data-act="rafa-open" data-day="${dia}" title="Nota do dia (a mesma de Dias de Rafa)" aria-label="Nota do dia">${icon('plus')}</button>${al}${planoRafaLetraHTML(dia)}</span></div>
         ${topo}
         ${pids.length ? `<div class="pl-mc-tt${!passado && tot > cfg.horasDia + 0.05 ? ' late' : ''}"><span>${passado ? 'Tempo trabalhado' : 'Planejado'}</span><em>${fmtH(tot * 36e5)}</em></div>${proj}` : ''}
       </div>

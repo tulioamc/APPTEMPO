@@ -53,6 +53,9 @@ function rafaMarcar(dia, patch) {
   if (r) db.update('tempo_rafa_days', r.id, { ...patch, auto: false }, true); else db.insert('tempo_rafa_days', { day: dia, ...patch, auto: false }, true);
 }
 
+/* De quem é a nota do dia: T (Tulio), A (Amanda) ou N (neutro, cinza). */
+const rafaNotaQuem = (dia) => (db.setting('rafaNotaQuem', {}) || {})[dia] || 'N';
+ACTIONS['rafa-nq'] = (el) => { const inp = document.getElementById('rf-nq'); if (inp) inp.value = el.dataset.q; el.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === el)); };
 function rafaMap() {
   const map = {};
   db.all('tempo_rafa_days').forEach(r => { map[r.day] = r; });
@@ -92,8 +95,10 @@ ACTIONS['rafa-open'] = (el) => {
       <input type="hidden" id="rf-who" value="${esc(cur)}">
       <div class="field" style="margin-top:14px"><span class="lbl">Horário</span>
         <input id="rf-hora" class="input" value="${esc(row.horario || '')}" placeholder="ex.: 8h às 18h"></div>
-      <div class="field" style="margin-top:10px"><span class="lbl">Observações</span>
-        <textarea id="rf-obs" class="input" rows="3" placeholder="ex.: dentista às 16h10">${esc(row.note || '')}</textarea></div>
+      <div class="field" style="margin-top:10px"><span class="lbl">Nota do dia <span class="faint">(aparece também no calendário do Planejamento)</span></span>
+        <textarea id="rf-obs" class="input" rows="3" placeholder="ex.: dentista às 16h10">${esc(row.note || '')}</textarea>
+        <div class="seg rf-nq" style="margin-top:6px">${[['T', 'Tulio'], ['A', 'Amanda'], ['N', 'Neutro']].map(([k, l]) => `<button type="button" class="${rafaNotaQuem(iso) === k ? 'on' : ''}" data-act="rafa-nq" data-q="${k}">${l}</button>`).join('')}</div>
+        <input type="hidden" id="rf-nq" value="${rafaNotaQuem(iso)}"></div>
       <div class="row" style="justify-content:flex-end;gap:8px;margin-top:16px">
         <button class="btn ghost" data-act="close-layer">Cancelar</button>
         <button class="btn" data-act="rafa-save" data-day="${iso}">Salvar</button>
@@ -114,7 +119,10 @@ ACTIONS['rafa-save'] = (el) => {
     horario: document.getElementById('rf-hora').value.trim() || null,
     note: document.getElementById('rf-obs').value.trim() || null,
   };
-  rafaMarcar(iso, patch); db.emit();
+  rafaMarcar(iso, patch);
+  const nq = { ...(db.setting('rafaNotaQuem', {}) || {}) }; const q = document.getElementById('rf-nq')?.value || 'N';
+  if (patch.note && q !== 'N') nq[iso] = q; else delete nq[iso];
+  db.setSetting('rafaNotaQuem', nq); db.emit();
   document.querySelector('[data-act="close-layer"]')?.click();
   rafaPerguntarFimDeSemana(iso, patch.who);
 };
@@ -168,7 +176,7 @@ VIEWS.rafa = () => {
     return `<button type="button" class="rf-cell rf-${who || 'none'}${we}${off}${r.auto && who ? ' rf-auto' : ''}" data-act="rafa-open" data-day="${iso}" title="${esc(tip)}">
       <span class="rf-top"><span class="rf-n">${dt.getDate()}</span>${r.horario ? `<span class="rf-hr">${esc(r.horario)}</span>` : ''}</span>
       <span class="rf-w">${who === 'X' ? 'T/A' : (who || '·')}</span>
-      ${r.note ? `<span class="rf-obs">${esc(r.note)}</span>` : ''}</button>`;
+      ${r.note ? `<span class="rf-obs nq-${rafaNotaQuem(iso)}">${esc(r.note)}</span>` : ''}</button>`;
   };
 
   const weekRows = weeks.map(w => {
