@@ -38,7 +38,7 @@ function exCopyMonth(target, src) {
     if (r.kind === 'in' && !exInRepete(r)) return;
     if (r.inst_total && (r.inst_no || 1) >= r.inst_total) return;
     db.insert('tempo_expenses', {
-      month: target, kind: r.kind, name: r.name || '', cat: r.cat || '', note: '', amount: null, amount_sug: r.amount ?? r.amount_sug ?? null,
+      month: target, kind: r.kind, name: r.name || '', cat: r.cat || '', note: '', amount: null, amount_sug: exPorDiaValor(r, target) ?? r.amount ?? r.amount_sug ?? null,
       due_date: r.due_date ? exDateIn(target, exDayOf(r.due_date)) : null, paid_on: null, status: EX_OPEN[r.kind],
       inst_no: r.inst_total ? (r.inst_no || 1) + 1 : null, inst_total: r.inst_total || null, order: r.order ?? 0
     }, true);
@@ -173,7 +173,7 @@ const EX_COLS = {
   cat: { label: 'Categoria', ico: 'layers', w: 170, cell: r => r.cat ? exCatTags(r.cat) : '<span class="faint">—</span>', edit: { type: 'combo', kind: 'ex_cat', allowEmpty: true, emptyLabel: 'Sem categoria', get: r => r.cat, set: (r, v) => db.update('tempo_expenses', r.id, { cat: v || null }) } },
   name: { label: 'Nome', ico: 'text', cls: 'name', sort: r => r.name || '', w: 220, cell: r => esc(r.name || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.name, set: (r, v) => db.update('tempo_expenses', r.id, { name: (v || '').trim() }) } },
   due_date: { label: 'Vencimento', ico: 'cal', w: 120, cell: r => r.due_date ? fmtDate(r.due_date) : '<span class="faint">—</span>', sort: r => r.due_date || '', edit: { type: 'date', get: r => r.due_date, set: (r, v) => db.update('tempo_expenses', r.id, { due_date: v || null }) } },
-  amount: { label: 'Valor', ico: 'money', sort: r => r.amount || 0, money: true, w: 130, cell: r => exIsSug(r) ? `<span class="ex-sug" title="Sugestão do mês anterior. Clique para confirmar ou mudar; até lá não entra na soma."><span class="ex-sign">${r.kind === 'in' ? '+' : '−'}</span> ${fmtMoney(r.amount_sug)}</span>` : `<span class="ex-sign">${r.kind === 'in' ? '+' : '−'}</span> ${fmtMoney(r.amount || 0)}`, val: r => (r.status === EX_OFF ? 0 : (r.amount || 0)), edit: { type: 'money', get: r => exIsSug(r) ? r.amount_sug : r.amount, confirm: exIsSug, set: (r, v) => db.update('tempo_expenses', r.id, { amount: Math.abs(v || 0), amount_sug: null }) } },
+  amount: { label: 'Valor', ico: 'money', sort: r => r.amount || 0, money: true, w: 130, cell: r => (exIsSug(r) ? `<span class="ex-sug" title="Sugestão do mês anterior. Clique para confirmar ou mudar; até lá não entra na soma."><span class="ex-sign">${r.kind === 'in' ? '+' : '−'}</span> ${fmtMoney(r.amount_sug)}</span>` : `<span class="ex-sign">${r.kind === 'in' ? '+' : '−'}</span> ${fmtMoney(r.amount || 0)}`) + (exPorDiaTxt(r) ? ` <span class="faint small" title="Valor por dia da semana (botão direito na linha para mudar)">${exPorDiaTxt(r)}</span>` : ''), val: r => (r.status === EX_OFF ? 0 : (r.amount || 0)), edit: { type: 'money', get: r => exIsSug(r) ? r.amount_sug : r.amount, confirm: exIsSug, set: (r, v) => db.update('tempo_expenses', r.id, { amount: Math.abs(v || 0), amount_sug: null }) } },
   status: { label: 'Status', ico: 'spin', w: 150, cell: r => { const c = exComboItems(r.kind === 'in' ? 'ex_in' : 'ex_out').find(x => x.id === r.status); return c ? c.html : esc(r.status || ''); }, edit: { type: 'combo', kind: r => r.kind === 'in' ? 'ex_in' : 'ex_out', get: r => r.status, set: (r, v) => exSetStatus(r, v) } },
   paid_on: { label: 'Paga em', ico: 'cal', w: 120, cell: r => r.paid_on ? fmtDate(r.paid_on) : '<span class="faint">—</span>', sort: r => r.paid_on || '', edit: { type: 'date', get: r => r.paid_on, set: (r, v) => db.update('tempo_expenses', r.id, { paid_on: v || null }) } },
   inst: { label: 'Parcela', ico: 'hash', w: 90, cell: r => exInstLabel(r) || '<span class="faint">—</span>', edit: { type: 'text', get: r => exInstLabel(r), set: (r, v) => { const m = String(v || '').match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/); db.update('tempo_expenses', r.id, m ? { inst_no: Number(m[1]), inst_total: Number(m[2]) } : { inst_no: null, inst_total: null }); } } },
@@ -257,6 +257,7 @@ function exSectionHTML(ym, kind) {
 
 VIEWS.expenses = () => {
   exReembSync();
+  exPorDiaSync();
   const { from, to } = exRange(); S.exFrom = from; S.exTo = to;
   const now = exNow();
   const existing = exMonths().filter(m => m >= from && m <= to); // mais recente primeiro
@@ -336,5 +337,38 @@ function exReembSync() {
     if (e.amount != null && r.amount == null) { ur.amount = Number(e.amount); ur.suggested_amount = null; }
     if (Object.keys(ue).length) db.update('tempo_expenses', e.id, ue, true);
     if (Object.keys(ur).length) db.update('tempo_reimb_rows', r.id, ur, true);
+  });
+}
+
+/* Valor por dia da semana: ex.: Diarista = R$ 160 por terça → o mês com 5 terças sugere R$ 800.
+   Guardado em exPorDia: { "<nome sem acento, minúsculo>": { dow: 0-6 (domingo = 0), valor } }. */
+const EX_DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+const exNomeKey = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+const exPorDiaDe = (r) => (r && r.kind === 'out' && (db.setting('exPorDia', {}) || {})[exNomeKey(r.name)]) || null;
+function exContaDia(ym, dow) { const [y, m] = ym.split('-').map(Number); const n = new Date(y, m, 0).getDate(); let c = 0; for (let d = 1; d <= n; d++) if (new Date(y, m - 1, d).getDay() === dow) c++; return c; }
+const exPorDiaValor = (r, ym) => { const q = exPorDiaDe(r); return q ? Math.round(q.valor * exContaDia(ym || r.month, q.dow) * 100) / 100 : null; };
+const exPorDiaTxt = (r) => { const q = exPorDiaDe(r); if (!q) return ''; const n = exContaDia(r.month, q.dow); return `${n} ${EX_DIAS[q.dow]}${n > 1 ? 's' : ''} × ${fmtMoney(q.valor)}`; };
+/* linha ainda sem valor confirmado: a sugestão segue a conta do mês */
+function exPorDiaSync() {
+  const regras = db.setting('exPorDia', {}) || {}; if (!Object.keys(regras).length) return;
+  db.all('tempo_expenses').forEach(r => {
+    if (r.amount != null || r.status !== EX_OPEN.out) return;
+    const v = exPorDiaValor(r); if (v != null && Number(r.amount_sug) !== v) db.update('tempo_expenses', r.id, { amount_sug: v }, true);
+  });
+}
+async function exPorDiaEditar(id) {
+  const r = db.get('tempo_expenses', id); if (!r) return;
+  const q = exPorDiaDe(r) || { dow: 2, valor: Number(r.amount ?? r.amount_sug ?? 0) / Math.max(1, exContaDia(r.month, 2)) };
+  const l = openLayer({ html: `<div class="dh"><h2>Valor por dia: ${esc(r.name || '')}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db"><div class="grid2"><div class="field"><label for="pd-dow">Dia da semana</label><select id="pd-dow" class="input">${EX_DIAS.map((d, i) => `<option value="${i}" ${i === q.dow ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
+    <div class="field"><label for="pd-v">Valor por dia</label><input id="pd-v" class="input mono" type="number" step="0.01" min="0" value="${q.valor || ''}"></div></div>
+    <span class="hint">O valor do mês vira (quantidade desse dia no mês) × valor. Vale para os próximos meses também.</span></div>
+    <div class="df">${exPorDiaDe(r) ? '<button class="btn ghost" data-x="tirar">Tirar regra</button>' : ''}<span class="grow"></span><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="ok">Salvar</button></div>` });
+  l.box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-x]'); if (!b) return;
+    const m = { ...(db.setting('exPorDia', {}) || {}) }; const k = exNomeKey(r.name);
+    if (b.dataset.x === 'tirar') delete m[k];
+    else { const v = Number(l.box.querySelector('#pd-v').value); if (!v) return toast('Informe o valor por dia.'); m[k] = { dow: Number(l.box.querySelector('#pd-dow').value), valor: v }; }
+    db.setSetting('exPorDia', m); exPorDiaSync(); l.close(); render();
   });
 }

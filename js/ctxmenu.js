@@ -123,6 +123,7 @@ function ctxItems(t) {
   if (t.kind === 'expense') {
     const r = db.get('tempo_expenses', t.id); if (!r) return out;
     add('Duplicar', () => { const { id: _x, ...rest } = r; db.insert('tempo_expenses', { ...rest, order: (r.order ?? 0) + 1 }, true); db.emit(); toast('Lançamento duplicado'); });
+    if (r.kind === 'out') add(typeof exPorDiaDe === 'function' && exPorDiaDe(r) ? 'Valor por dia da semana (editar)…' : 'Valor por dia da semana…', () => exPorDiaEditar(r.id));
     add('Excluir', async () => { if (await ctxConfirm('Excluir lançamento?', 'Esta linha será removida.')) ACTIONS['ex-del']({ dataset: { id: t.id } }); }, { danger: true });
   }
 
