@@ -258,13 +258,15 @@ const bankNextYm = (ym) => { const [y, m] = ym.split('-').map(Number); const d =
 const bankMonthsFor = (ym) => [ym, bankNextYm(ym)];
 const bankDone = (e) => e.status === 'Pago' || e.status === 'Recebido';
 const bankPickExp = (list, ym) => list.slice().sort((a, b) => (bankDone(a) - bankDone(b)) || ((a.month !== ym) - (b.month !== ym)))[0] || null;
+// Mesma pessoa escrita de jeitos diferentes no extrato ("HUDSON ALVES PINHEIRO" e "Hudson Alves Pinheiro (Transferência enviada)").
+const bankCpKey = (cp) => String(cp || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
 // Gasto fixo aprendido: a contraparte → nomes de gasto fixo que você já vinculou a ela.
 function bankFixedLearned() {
   const map = {};
   (BANK.every || []).forEach(t => {
     if (!t.expense_id || !t.counterpart) return;
     const e = db.get('tempo_expenses', t.expense_id); if (!e || !e.name) return;
-    const k = t.flow + '|' + t.counterpart; // entrada e saída aprendem separado (ex.: BRENDA → Salário)
+    const k = t.flow + '|' + bankCpKey(t.counterpart); // entrada e saída aprendem separado (ex.: BRENDA → Salário)
     (map[k] = map[k] || new Set()).add(e.name);
   });
   return map;
@@ -276,7 +278,7 @@ async function bankAutoFixed() {
   const expenses = db.all('tempo_expenses');
   const todo = [];
   (BANK.every || []).forEach(t => {
-    const lk = t.flow + '|' + t.counterpart;
+    const lk = t.flow + '|' + bankCpKey(t.counterpart);
     if (t.expense_id || t.scope === 'interna' || !t.counterpart || !learned[lk]) return;
     const ym = (t.posted_on || '').slice(0, 7), amt = Math.abs(Number(t.amount));
     const names = learned[lk]; const kind = t.flow === 'in' ? 'in' : 'out';
