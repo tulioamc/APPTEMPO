@@ -9,7 +9,7 @@ const PROD_GAP = 60e3; /* blocos de foco: pausas de até 1 min não quebram o fo
 const PROD_DOW = [1, 2, 3, 4, 5, 6, 0]; /* segunda primeiro */
 const PROD_DOW_LBL = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const PROD_NAME = { prod: "Produtivo", dist: "Distração", ocio: "Ocioso" };
-const PROD_COLOR = { prod: "#9FD6AE", dist: "#EFAFAF", ocio: "#EED9A0" };   /* tons pastel */
+const PROD_COLOR = { prod: "#9FD6AE", dist: "#EFAFAF", ocio: "#EED9A0" };   /* tons pastel (mesmas das barras) */
 const PROD_CLS = { prod: "prod-p", dist: "prod-d", ocio: "prod-y" };
 const PROD_KEYS = ["prod", "dist", "ocio"];
 const PROD_TYPE = { dist: "Distração", ocio: "Ocioso" };
@@ -342,8 +342,6 @@ VIEWS.productivity = () => {
       head: `Semana de ${d.toLocaleDateString('pt-BR')}`,
     };
   });
-  const weekRows = weeks.slice(-8).reverse().map(([k, r]) =>
-    `<tr><td>${esc(new Date(k).toLocaleDateString('pt-BR'))}</td><td class="mono small">${fmtDur(r.prod)}</td><td class="mono small">${fmtDur(r.dist)}</td><td class="mono small">${fmtDur(r.ocio)}</td><td class="mono small">${usePctTxt(weekPct(r))}</td></tr>`).join('');
   const dayRows = S.dayTable.slice(0, 10).map(d => `<tr><td>${esc(new Date(d.key).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }))}</td><td class="mono small">${fmtDur(d.prod)}</td><td class="mono small">${fmtDur(d.dist)}</td><td class="mono small">${fmtDur(d.ocio)}</td><td class="mono small">${d.n}</td><td class="mono small">${fmtDur(d.max)}</td></tr>`).join('');
   const periods = [['mes', 'Mês atual'], ['30d', 'Últimos 30 dias'], ['tudo', 'Tudo']];
 
@@ -379,13 +377,11 @@ VIEWS.productivity = () => {
 
       <section class="card stack" style="gap:10px;margin-top:14px"><h3>Tendência semanal</h3>
         ${weekItems.length ? `<div data-hkroot data-hktot="${prodTotal(weekItems)}" data-hkfmt="dur">${prodColsHTML(weekItems)}${prodLegendHTML(PROD_KEYS, weekItems)}</div>
-        <div class="usage-table-wrap"><table class="usage-table">
-          <thead><tr><th>Semana (segunda)</th><th>Produtivo</th><th>Distração</th><th>Ocioso</th><th>% produtivo</th></tr></thead>
-          <tbody>${weekRows}</tbody></table></div>` : '<div class="muted small">Sem semanas no período.</div>'}
+` : '<div class="muted small">Sem semanas no período.</div>'}
       </section>`;
 
   return {
-    title: 'Relatório Produtividade',
+    title: 'Produtividade',
     actions: `<select class="input sm" data-on="prod-period" aria-label="Período">${periods.map(([k, l]) => `<option value="${k}" ${PROD.period === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`,
     html: `<div class="stack" style="gap:14px">${body}${prodWhatsAppHTML()}${prodComparacoesHTML()}</div>`,
   };

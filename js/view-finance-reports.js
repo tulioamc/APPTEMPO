@@ -170,13 +170,6 @@ VIEWS.reports = () => {
     <div class="kpi"><span class="k">Reuniões</span><span class="v">${fmtH(d.entries.filter(e => db.get('tempo_work_types', e.work_type_id)?.name === 'Reunião').reduce((s, e) => s + entryMs(e), 0))}</span><span class="s">tipo “Reunião”</span></div>
   </div>
 
-  <div class="panel"><div class="panel-h"><h3>Horas por ${byMonth ? 'mês' : 'dia'}</h3></div><div class="panel-b">
-    ${tot ? `<div class="table-wrap"><div style="display:flex;align-items:flex-end;gap:${keys.length > 40 ? 2 : 4}px;height:160px;min-width:${Math.max(280, keys.length * (byMonth ? 36 : 14))}px;border-bottom:1px solid var(--line);position:relative">
-      ${[.5, 1].map(f => `<span style="position:absolute;left:0;right:0;bottom:${f * 140}px;border-top:1px dashed var(--line);font-size:.68em;color:var(--fg-3)" class="mono">${fmtH(maxS * f)}</span>`).join('')}
-      ${keys.map(k => { const v = series[k] || 0; const we = !byMonth && [0, 6].includes(parseYmd(k).getDay()); return `<button data-act="${byMonth ? '' : 'ts-day'}" data-day="${k}" title="${byMonth ? k : fmtDate(k)} · ${fmtDur(v)}" style="flex:1;min-width:0;border:0;padding:0;height:${Math.max(v ? 3 : 0, v / maxS * 140)}px;background:${we ? 'var(--accent-line)' : 'var(--accent)'};border-radius:3px 3px 0 0;cursor:${byMonth ? 'default' : 'pointer'}"></button>`; }).join('')}
-    </div><div class="day-axis" style="min-width:${Math.max(280, keys.length * (byMonth ? 36 : 14))}px">${keys.filter((_, i) => i % Math.ceil(keys.length / 8) === 0).map(k => `<span>${byMonth ? MONTHS[Number(k.slice(5)) - 1].slice(0, 3) + '/' + k.slice(2, 4) : fmtDateShort(k)}</span>`).join('')}</div></div>` : '<div class="muted small">Nenhuma hora registrada no período.</div>'}
-  </div></div>
-
   <div class="panel"><div class="panel-h"><h3>Onde o tempo foi</h3><span class="grow"></span><div class="seg">${Object.entries(GROUPS).map(([k, [l]]) => `<button class="${r.group === k ? 'on' : ''}" data-act="rep-set" data-k="group" data-v="${k}">${l}</button>`).join('')}</div></div>
     <div class="panel-b">${rows.length ? `<div class="bars">${rows.map(x => `<div class="bar-row"><span class="lab" title="${esc(x.n)}">${esc(x.n)}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf(x.c || 'gray')};width:${x.ms / maxG * 100}%"></div></div><span class="val">${fmtDur(x.ms)} <span class="faint">· ${Math.round(x.ms / tot * 100)}%</span></span></div>`).join('')}</div>` : '<div class="muted small">Sem dados no período.</div>'}</div></div>
 
