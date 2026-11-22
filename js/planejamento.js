@@ -339,7 +339,7 @@ function planoMesCelHTML(dia, porDia, hoje, cfg) {
     fer ? `<div class="pl-mc-tag fer" title="${esc(fer.nome)}">${esc(fer.nome)}</div>` : '',
     ...prz.map(p => `<div class="pl-mc-tag prazo" title="Prazo: ${esc(p.name)}">${icon('flag')} ${esc(p.name)}</div>`),
     ...ev.filter(e => e.diaTodo).map(e => `<div class="pl-mc-tag ev ${e.origem}${e.feito ? ' feito' : ''}" title="${esc(e.titulo)}">${esc(e.titulo)}</div>`),
-    rafa && rafa.note ? `<div class="pl-mc-tag obs nq-${typeof rafaNotaQuem === 'function' ? rafaNotaQuem(dia) : 'N'}" title="${esc(rafa.note)}">Obs.: ${esc(rafa.note)}</div>` : ''
+    ...(typeof rafaNotas === 'function' ? rafaNotas(dia) : (rafa && rafa.note ? [{ t: rafa.note, q: 'N' }] : [])).map(n => `<div class="pl-mc-tag obs nq-${n.q || 'N'}" title="${esc(n.t)}">${esc(n.t)}</div>`)
   ].join('');
   // rotina (fixos) só na semana atual, para os meses seguintes não ficarem carregados; to-dos e projetos previstos sempre
   const semIni = (() => { const h = new Date(hoje + 'T12:00:00'); h.setDate(h.getDate() - ((h.getDay() + 6) % 7)); return ymd(h); })();
@@ -354,7 +354,7 @@ function planoMesCelHTML(dia, porDia, hoje, cfg) {
   return `<div class="pl-mc${dt.getMonth() % 2 === 0 ? ' par' : ''}${dia === hoje ? ' hoje' : ''}${!util ? ' off' : ''}${dia < hoje ? ' passado' : ''}" data-act="pl-ir-dia" data-dia="${dia}" data-pl-pop="${dia}"${dia === hoje ? ' data-hoje="1"' : ''}>
     <div class="pl-mc-in">
       <div class="pl-mc-esq">
-        <div class="pl-mc-n"><b>${n === 1 ? dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '') : n}</b><span class="pl-mc-chips"><button class="pl-mc-nota" data-act="rafa-open" data-day="${dia}" title="Nota do dia (a mesma de Dias de Rafa)" aria-label="Nota do dia">${icon('plus')}</button>${al}${planoRafaLetraHTML(dia)}</span></div>
+        <div class="pl-mc-n"><b>${n === 1 ? dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '') : n}</b><span class="pl-mc-chips"><button class="pl-mc-nota" data-act="rafa-open" data-day="${dia}" title="Adicionar nota (as mesmas de Dias de Rafa)" aria-label="Adicionar nota">${icon('plus')}</button>${al}${planoRafaLetraHTML(dia)}</span></div>
         ${topo}
       </div>
       ${horarios.length || previstos.length ? `<div class="pl-mc-dir" data-pl-noclick>${previstos.map(pid => { const p = db.get('tempo_projects', pid); const ab = p && typeof agencyAbbr === 'function' ? agencyAbbr(agencyOf(p)) : ''; const nm = `${ab ? '[' + ab + '] ' : ''}${p?.name || 'Sem projeto'}`;

@@ -53,9 +53,18 @@ function rafaMarcar(dia, patch) {
   if (r) db.update('tempo_rafa_days', r.id, { ...patch, auto: false }, true); else db.insert('tempo_rafa_days', { day: dia, ...patch, auto: false }, true);
 }
 
-/* De quem é a nota do dia: T (Tulio), A (Amanda) ou N (neutro, cinza). */
+/* Notas do dia (várias), cada uma de Tulio (T), Amanda (A) ou neutra (N). Guardadas em diaNotas { dia: [{ t, q }] };
+   a nota antiga (campo note do dia + rafaNotaQuem) vale como a primeira enquanto o dia não for salvo de novo. */
 const rafaNotaQuem = (dia) => (db.setting('rafaNotaQuem', {}) || {})[dia] || 'N';
-ACTIONS['rafa-nq'] = (el) => { const inp = document.getElementById('rf-nq'); if (inp) inp.value = el.dataset.q; el.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === el)); };
+function rafaNotas(dia) {
+  const l = (db.setting('diaNotas', {}) || {})[dia]; if (Array.isArray(l)) return l;
+  const r = rafaDiaDe(dia); return r && r.note ? [{ t: r.note, q: rafaNotaQuem(dia) }] : [];
+}
+const RF_NQ = [['T', 'Tulio'], ['A', 'Amanda'], ['N', 'Neutro']];
+const rafaNotaLinhaHTML = (n) => `<div class="rf-nota nq-${n.q || 'N'}" data-q="${n.q || 'N'}"><textarea class="input" rows="1" placeholder="ex.: dentista às 16h10">${esc(n.t || '')}</textarea><div class="seg">${RF_NQ.map(([k, l]) => `<button type="button" class="${(n.q || 'N') === k ? 'on' : ''}" data-act="rafa-nq" data-q="${k}">${l}</button>`).join('')}</div><button type="button" class="icon-btn ghost" data-act="rafa-nota-del" title="Tirar nota" aria-label="Tirar nota">×</button></div>`;
+ACTIONS['rafa-nq'] = (el) => { const l = el.closest('.rf-nota'); if (!l) return; l.dataset.q = el.dataset.q; l.className = 'rf-nota nq-' + el.dataset.q; el.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === el)); };
+ACTIONS['rafa-nota-add'] = () => { const box = document.getElementById('rf-notas'); if (!box) return; box.insertAdjacentHTML('beforeend', rafaNotaLinhaHTML({ t: '', q: 'N' })); box.lastElementChild.querySelector('textarea').focus(); };
+ACTIONS['rafa-nota-del'] = (el) => el.closest('.rf-nota')?.remove();
 function rafaMap() {
   const map = {};
   db.all('tempo_rafa_days').forEach(r => { map[r.day] = r; });
@@ -95,10 +104,9 @@ ACTIONS['rafa-open'] = (el) => {
       <input type="hidden" id="rf-who" value="${esc(cur)}">
       <div class="field" style="margin-top:14px"><span class="lbl">Horário</span>
         <input id="rf-hora" class="input" value="${esc(row.horario || '')}" placeholder="ex.: 8h às 18h"></div>
-      <div class="field" style="margin-top:10px"><span class="lbl">Nota do dia <span class="faint">(aparece também no calendário do Planejamento)</span></span>
-        <textarea id="rf-obs" class="input" rows="3" placeholder="ex.: dentista às 16h10">${esc(row.note || '')}</textarea>
-        <div class="seg rf-nq" style="margin-top:6px">${[['T', 'Tulio'], ['A', 'Amanda'], ['N', 'Neutro']].map(([k, l]) => `<button type="button" class="${rafaNotaQuem(iso) === k ? 'on' : ''}" data-act="rafa-nq" data-q="${k}">${l}</button>`).join('')}</div>
-        <input type="hidden" id="rf-nq" value="${rafaNotaQuem(iso)}"></div>
+      <div class="field" style="margin-top:10px"><span class="lbl">Notas do dia <span class="faint">(aparecem também no calendário do Planejamento)</span></span>
+        <div id="rf-notas" class="stack" style="gap:6px">${rafaNotas(iso).map(rafaNotaLinhaHTML).join('')}</div>
+        <button type="button" class="btn sm ghost" data-act="rafa-nota-add" style="align-self:flex-start;margin-top:4px">${icon('plus')} Adicionar nota</button></div>
       <div class="row" style="justify-content:flex-end;gap:8px;margin-top:16px">
         <button class="btn ghost" data-act="close-layer">Cancelar</button>
         <button class="btn" data-act="rafa-save" data-day="${iso}">Salvar</button>
@@ -117,12 +125,13 @@ ACTIONS['rafa-save'] = (el) => {
   const patch = {
     who: document.getElementById('rf-who').value || null,
     horario: document.getElementById('rf-hora').value.trim() || null,
-    note: document.getElementById('rf-obs').value.trim() || null,
   };
+  const notas = [...document.querySelectorAll('#rf-notas .rf-nota')].map(l => ({ t: l.querySelector('textarea').value.trim(), q: l.dataset.q || 'N' })).filter(n => n.t);
+  patch.note = notas.map(n => n.t).join(' · ') || null;
   rafaMarcar(iso, patch);
-  const nq = { ...(db.setting('rafaNotaQuem', {}) || {}) }; const q = document.getElementById('rf-nq')?.value || 'N';
-  if (patch.note && q !== 'N') nq[iso] = q; else delete nq[iso];
-  db.setSetting('rafaNotaQuem', nq); db.emit();
+  const todas = { ...(db.setting('diaNotas', {}) || {}) };
+  if (notas.length) todas[iso] = notas; else delete todas[iso];
+  db.setSetting('diaNotas', todas); db.emit();
   document.querySelector('[data-act="close-layer"]')?.click();
   rafaPerguntarFimDeSemana(iso, patch.who);
 };
@@ -176,7 +185,7 @@ VIEWS.rafa = () => {
     return `<button type="button" class="rf-cell rf-${who || 'none'}${we}${off}${r.auto && who ? ' rf-auto' : ''}" data-act="rafa-open" data-day="${iso}" title="${esc(tip + (who ? ' · arraste para outro dia para trocar' : ''))}"${who ? ' draggable="true"' : ''} data-rf-drag="${iso}">
       <span class="rf-top"><span class="rf-n">${dt.getDate()}</span>${r.horario ? `<span class="rf-hr">${esc(r.horario)}</span>` : ''}</span>
       <span class="rf-w">${who === 'X' ? 'T/A' : (who || '·')}</span>
-      ${r.note ? `<span class="rf-obs nq-${rafaNotaQuem(iso)}">${esc(r.note)}</span>` : ''}</button>`;
+      ${rafaNotas(iso).map(n => `<span class="rf-obs nq-${n.q || 'N'}">${esc(n.t)}</span>`).join('')}</button>`;
   };
 
   const weekRows = weeks.map(w => {
