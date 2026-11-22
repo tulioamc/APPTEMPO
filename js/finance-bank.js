@@ -208,6 +208,30 @@ async function bankAutoCategory() {
 // Entrada da conta PJ: contraparte já ligada a um projeto vira pagamento daquele projeto (valor com folga de 6%; senão cria).
 // Contraparte marcada como Fee (sem projeto fixo) recebe a categoria Fee.
 const bankIsPJ = (t) => (BANK.all.pj || []).some(x => x.id === t.id);
+// Quem pagou indica o cliente/agência (aprendido dos vínculos anteriores); o projeto sai dos que ainda têm algo a receber.
+// Ordem: parcela prevista com esse valor › projeto cujo saldo bate › projeto recorrente (fee) com valores parecidos ›
+// único projeto em aberto que comporta o valor. Sem candidato claro, fica sem vínculo (não joga em projeto encerrado).
+function bankProjetoDoPix(hist, amt, dia, taken) {
+  if (!hist || !hist.length) return null;
+  const perto = (v) => v != null && Math.abs(Number(v) - amt) <= Math.max(5, Number(v) * 0.06);
+  const clis = new Set(), ags = new Set();
+  hist.forEach(h => { const pr = db.get('tempo_projects', h.pid); const c = pr && db.get('tempo_clients', pr.client_id); if (c) { clis.add(c.id); if (c.agency_id) ags.add(c.agency_id); } });
+  const cands = db.all('tempo_projects').filter(pr => {
+    if (pr.archived || statusCat(pr.status_id) === 'cancelled') return false;
+    const c = db.get('tempo_clients', pr.client_id); return c && (clis.has(c.id) || (c.agency_id && ags.has(c.agency_id)));
+  });
+  const ids = new Set(cands.map(x => x.id));
+  const prev = db.all('tempo_payments').filter(x => ids.has(x.project_id) && !taken.has(x.id) && x.date == null && perto(x.amount));
+  if (prev.length) return prev[0].project_id;
+  const rem = (pr) => { const r = remainingOf(pr); return r == null ? null : Number(r); };
+  const saldo = cands.filter(pr => perto(rem(pr))).sort((a, b) => String(a.deadline || '9').localeCompare(String(b.deadline || '9')));
+  if (saldo.length) return saldo[0].id;
+  const rec = {}; hist.filter(h => ids.has(h.pid) && perto(h.amt)).forEach(h => { rec[h.pid] = (rec[h.pid] || 0) + 1; });
+  const recTop = Object.entries(rec).filter(([pid, n]) => n >= 2 && rem(db.get('tempo_projects', pid)) !== 0).sort((a, b) => b[1] - a[1])[0];
+  if (recTop) return recTop[0];
+  const cabe = cands.filter(pr => { const r = rem(pr); return r != null && r >= amt * 0.94; });
+  return cabe.length === 1 ? cabe[0].id : null;
+}
 async function bankAutoPJ() {
   const cl = db.adapter.client; const learned = {}; const lastFee = {};
   (BANK.every || []).forEach(t => {
@@ -231,11 +255,9 @@ async function bankAutoPJ() {
       t.category = 'Fee'; did = true; continue;
     }
     const amt = Math.abs(Number(t.amount));
-    // projeto: o mais usado por essa contraparte para um valor parecido (±6%); sem valor parecido, o mais usado no geral
-    const hist = learned[bankCpKey(t.counterpart)]; if (!hist) continue;
-    const top = (l) => { const c = {}; l.forEach(x => { c[x.pid] = (c[x.pid] || 0) + 1; }); return Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0]; };
-    const pid = top(hist.filter(x => Math.abs(x.amt - amt) <= Math.max(5, x.amt * 0.06))) || top(hist); if (!pid) continue;
-    let p = db.all('tempo_payments').find(x => x.project_id === pid && !taken.has(x.id) && (x.date == null || x.date === t.posted_on) && x.amount != null && Math.abs(Number(x.amount) - amt) <= Math.max(5, Number(x.amount) * 0.06));
+    const pid = bankProjetoDoPix(learned[bankCpKey(t.counterpart)], amt, t.posted_on, taken); if (!pid) continue;
+    const perto = (v) => v != null && Math.abs(Number(v) - amt) <= Math.max(5, Number(v) * 0.06);
+    let p = db.all('tempo_payments').find(x => x.project_id === pid && !taken.has(x.id) && (x.date == null || x.date === t.posted_on) && perto(x.amount));
     let created = null;
     if (!p) { p = db.insert('tempo_payments', { project_id: pid, amount: amt, date: t.posted_on, note: 'Extrato' }); created = p.id; }
     else db.update('tempo_payments', p.id, { amount: amt, date: t.posted_on });
