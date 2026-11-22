@@ -84,7 +84,7 @@ function nfStatus(nf) {
     if (nf.situacao === 'cancelada' || a?.st === 'cancelada') return 'cancelada';
     if (nf.situacao === 'substituida' || a?.st === 'substituida' || nf.substituida_por) return 'substituida';
   }
-  if (nf.payment_id && db.get('tempo_payments', nf.payment_id)) return 'paga';
+  if (m === 'paga' || (nf.payment_id && db.get('tempo_payments', nf.payment_id))) return 'paga';
   if (nf.enviada_em) return 'enviada';
   return 'emitida';
 }
@@ -218,6 +218,7 @@ function nfReport(itens, inventario) {
         Object.entries(campos).forEach(([k, v]) => { if (v !== null && v !== undefined && JSON.stringify(ex[k] ?? null) !== JSON.stringify(v)) upd[k] = v; });
         // arquivo: fica o que tem o carimbo de cancelada/substituída, senão o mais recente
         if (!ex.arquivo || (nfArquivoStatus({ arquivo: it.arquivo }) && !nfArquivoStatus(ex))) { upd.arquivo = it.arquivo; upd.sha = it.id; }
+        else if (!ex.sha && nfBase(ex.arquivo) === nfBase(it.arquivo)) upd.sha = it.id;   // nota carregada antes: passa a acompanhar o arquivo
         if (Object.keys(upd).length) db.update('tempo_invoices', ex.id, upd, true);
       } else {
         const base = { serie: p.serie, numero: p.numero, ...campos, arquivo: it.arquivo, sha: it.id };
@@ -289,7 +290,7 @@ VIEWS.notas = () => {
       <td class="nf-tom"><div class="row" style="gap:4px;flex-wrap:nowrap"><select class="input sm" data-on="nf-ag" data-id="${n.id}" aria-label="Agência">${opts(ags, n.agency_id)}</select><select class="input sm" data-on="nf-cl" data-id="${n.id}" aria-label="Cliente">${opts(cls, n.client_id)}</select></div><div class="small faint ellipsis" title="${esc(n.tomador_nome || '')}">${esc(n.tomador_nome || '')}</div></td>
       <td class="money">${fmtMoney(n.valor)}</td>
       <td class="small ellipsis" style="max-width:280px" title="${esc(n.descricao || '')}">${esc(n.descricao || '')}</td>
-      <td><select class="input sm" data-on="nf-st" data-id="${n.id}" aria-label="Situação"><option value="" ${!n.status_manual ? 'selected' : ''}>${esc(nfStLabel({ ...n, status_manual: null }))} (auto)</option><option value="valida" ${n.status_manual === 'valida' ? 'selected' : ''}>Válida</option><option value="cancelada" ${n.status_manual === 'cancelada' ? 'selected' : ''}>Cancelada</option><option value="substituida" ${n.status_manual === 'substituida' ? 'selected' : ''}>Substituída</option></select></td>
+      <td><select class="input sm" data-on="nf-st" data-id="${n.id}" aria-label="Situação"><option value="" ${!n.status_manual ? 'selected' : ''}>${esc(nfStLabel({ ...n, status_manual: null }))} (auto)</option><option value="valida" ${n.status_manual === 'valida' ? 'selected' : ''}>Válida</option><option value="paga" ${n.status_manual === 'paga' ? 'selected' : ''}>Paga</option><option value="cancelada" ${n.status_manual === 'cancelada' ? 'selected' : ''}>Cancelada</option><option value="substituida" ${n.status_manual === 'substituida' ? 'selected' : ''}>Substituída</option></select></td>
       <td>${nfValida(n) ? `<button class="btn sm ${n.enviada_em ? 'primary' : 'ghost'}" data-act="nf-enviada" data-id="${n.id}" data-tip="${n.enviada_em ? 'Enviada em ' + fmtDate(n.enviada_em) + '. Clique para desmarcar.' : 'Marcar como enviada ao cliente'}">${n.enviada_em ? 'Enviada' : 'Enviar?'}</button>` : ''}</td>
       <td class="small">${pay ? `<a href="#" data-act="fin-open" data-id="${pay.project_id}">${fmtDate(pay.date)} · ${esc(pr?.name || '')}</a>` : st === 'cancelada' || st === 'substituida' ? '' : '<span class="faint">sem pagamento</span>'}</td></tr>`;
   }).join('');
@@ -341,6 +342,7 @@ function nfCtxItems(t) {
   const out = []; const add = (label, run, o = {}) => out.push({ label, run, ...o });
   add('Abrir PDF', () => ACTIONS['nf-open']({ dataset: { id: n.id } }));
   if (nfValida(n)) add(n.enviada_em ? 'Desmarcar enviada' : 'Marcar como enviada', () => ACTIONS['nf-enviada']({ dataset: { id: n.id } }));
+  if (nfValida(n) && n.status_manual !== 'paga') add('Marcar como paga', () => db.update('tempo_invoices', n.id, { status_manual: 'paga' }));
   add('Marcar como cancelada', () => db.update('tempo_invoices', n.id, { status_manual: 'cancelada' }));
   add('Marcar como substituída', () => db.update('tempo_invoices', n.id, { status_manual: 'substituida' }));
   if (n.status_manual) add('Voltar ao automático', () => db.update('tempo_invoices', n.id, { status_manual: null }));
