@@ -173,7 +173,7 @@ VIEWS.rafa = () => {
     const we = rafaWd(dt.getFullYear(), dt.getMonth() + 1, dt.getDate()) >= 5 ? ' rf-we' : '';
     const off = inMes ? '' : ' rf-off';
     const tip = [who ? RF_NOME[who] : 'Sem marcação', r.auto && who ? 'marcado pelo app' : '', r.horario, r.note].filter(Boolean).join(' · ');
-    return `<button type="button" class="rf-cell rf-${who || 'none'}${we}${off}${r.auto && who ? ' rf-auto' : ''}" data-act="rafa-open" data-day="${iso}" title="${esc(tip)}">
+    return `<button type="button" class="rf-cell rf-${who || 'none'}${we}${off}${r.auto && who ? ' rf-auto' : ''}" data-act="rafa-open" data-day="${iso}" title="${esc(tip + (who ? ' · arraste para outro dia para trocar' : ''))}"${who ? ' draggable="true"' : ''} data-rf-drag="${iso}">
       <span class="rf-top"><span class="rf-n">${dt.getDate()}</span>${r.horario ? `<span class="rf-hr">${esc(r.horario)}</span>` : ''}</span>
       <span class="rf-w">${who === 'X' ? 'T/A' : (who || '·')}</span>
       ${r.note ? `<span class="rf-obs nq-${rafaNotaQuem(iso)}">${esc(r.note)}</span>` : ''}</button>`;
@@ -253,3 +253,20 @@ VIEWS.rafa = () => {
     </div></div>
   </div>` };
 };
+
+/* Arrastar um dia para cima de outro troca quem fica com o Rafa nos dois (A ↔ T). Horário e nota ficam em cada dia. */
+function rafaTrocar(a, b) {
+  if (!a || !b || a === b) return;
+  const ra = rafaDiaDe(a), rb = rafaDiaDe(b);
+  const wa = ra?.who || null, wb = rb?.who || null;
+  if (wa === wb) return;
+  rafaMarcar(a, { who: wb }); rafaMarcar(b, { who: wa }); db.emit();
+  toast(`Trocado: ${fmtDate(a)} agora ${wb || 'sem marcação'}, ${fmtDate(b)} agora ${wa || 'sem marcação'}.`);
+}
+if (typeof document !== 'undefined' && document.addEventListener) {
+  let rfDe = null;
+  document.addEventListener('dragstart', (e) => { const c = e.target.closest && e.target.closest('[data-rf-drag]'); if (!c) return; rfDe = c.dataset.rfDrag; try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', rfDe); } catch (x) {} c.classList.add('rf-arrastando'); });
+  document.addEventListener('dragover', (e) => { if (!rfDe) return; const c = e.target.closest && e.target.closest('[data-rf-drag]'); if (!c) return; e.preventDefault(); document.querySelectorAll('.rf-alvo').forEach(x => x !== c && x.classList.remove('rf-alvo')); c.classList.add('rf-alvo'); });
+  document.addEventListener('drop', (e) => { if (!rfDe) return; const c = e.target.closest && e.target.closest('[data-rf-drag]'); if (!c) return; e.preventDefault(); const de = rfDe; rfDe = null; rafaTrocar(de, c.dataset.rfDrag); });
+  document.addEventListener('dragend', () => { rfDe = null; document.querySelectorAll('.rf-alvo,.rf-arrastando').forEach(x => x.classList.remove('rf-alvo', 'rf-arrastando')); });
+}

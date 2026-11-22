@@ -1684,3 +1684,7 @@ td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
 .pl-mc-tag.obs.nq-A { background: color-mix(in oklab, #DF6788 30%, transparent); color: #B8466A; border-color: #DF6788; }
 .rf-obs.nq-T { color: #7A00C2; } .rf-obs.nq-A { color: #B8466A; }
 .pl-mc.hoje { border-width: 1px; }
+/* Dias de Rafa: arrastar um dia sobre outro troca A ↔ T */
+.rf-cell[draggable="true"] { cursor: grab; }
+.rf-cell.rf-arrastando { opacity: .45; }
+.rf-cell.rf-alvo { outline: 2px dashed var(--accent); outline-offset: 2px; }
