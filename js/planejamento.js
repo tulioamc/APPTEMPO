@@ -302,9 +302,25 @@ function planoNotasHTML(dia) {
   if (!planoMostra('rafa') || typeof rafaNotas !== 'function') return '';
   const l = rafaNotas(dia); return l.length ? `<div class="pl-notas">${l.map(n => `<div class="pl-mc-tag obs nq-${n.q || 'N'}" title="${esc(n.t)}">${esc(n.t)}</div>`).join('')}</div>` : '';
 }
+/* Semana: o registrado vira blocos de 15 min — cada quarto de hora fica com o projeto que mais teve tempo nele
+   (quarto com menos de 5 min de registro fica vazio), e quartos seguidos do mesmo projeto se juntam. */
+function planoRegistro15(itens) {
+  const feitos = itens.filter(x => x.k === 'feito'); if (!feitos.length) return itens;
+  const Q = 0.25, slots = {};
+  feitos.forEach(x => { for (let q = Math.floor(x.a / Q) * Q; q < x.b; q += Q) { const ov = Math.min(x.b, q + Q) - Math.max(x.a, q); if (ov <= 0) continue; const k = q.toFixed(2); const m = (slots[k] ||= {}); const pid = x.f.pid || '_'; m[pid] = (m[pid] || 0) + ov; } });
+  const blocos = [];
+  Object.keys(slots).map(Number).sort((a, b) => a - b).forEach(q => {
+    const m = slots[q.toFixed(2)]; const [pid, h] = Object.entries(m).sort((a, b) => b[1] - a[1])[0];
+    if (Object.values(m).reduce((t, v) => t + v, 0) < 5 / 60) return;
+    const l = blocos[blocos.length - 1];
+    if (l && l.pid === pid && Math.abs(l.b - q) < 1e-6) { l.b = q + Q; l.h += h; } else blocos.push({ pid, a: q, b: q + Q, h });
+  });
+  const novos = blocos.map(bl => { const pid = bl.pid === '_' ? null : bl.pid; return { k: 'feito', a: bl.a, b: bl.b, f: { pid, ini: bl.a, fim: bl.b, ms: bl.h * 36e5 } }; });
+  return [...itens.filter(x => x.k !== 'feito'), ...novos];
+}
 function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0, cabecalho = true, semana = '' } = {}) {
   const cfg = planoCfg(); const v = porDia[dia]; const util = planoDiaUtil(dia); const hoje = ymd(new Date());
-  const itens = planoFaixas(planoItensDoDia(dia, porDia), unico).map(x => planoItemHTML(x, dia, { alt, unico })).join('');
+  const itens = planoFaixas(unico ? planoItensDoDia(dia, porDia) : planoRegistro15(planoItensDoDia(dia, porDia)), unico).map(x => planoItemHTML(x, dia, { alt, unico })).join('');
   const agora = dia === hoje ? (() => { const n = new Date(); const h = n.getHours() + n.getMinutes() / 60; return `<div class="pl-agora" style="top:${h * alt}px"></div>`; })() : '';
   const h = v?.horas || 0, est = planoEsticados()[dia], fer = planoFer(dia);
   const wd = new Date(dia + 'T12:00:00').getDay();
@@ -334,11 +350,11 @@ function planoSemanaHTML(porDia) {
 /* Filtros do calendário (Mês): esconder Alice, Rafa, trabalho, to-dos ou rotina. Guardado em planoMesFiltro { k: false }. */
 const PL_FILTROS = [['alice', 'Alice'], ['rafa', 'Rafa'], ['trabalho', 'Trabalho'], ['todos', 'To-dos'], ['rotina', 'Rotina']];
 const planoMostra = (k) => (db.setting('planoMesFiltro', {}) || {})[k] !== false;
-/* Botão "Mostrar" no padrão do Filtrar do app: abre a lista de caixas de seleção. */
+/* Filtros sempre à vista: um botão por tipo (ligado = aparece), no padrão dos seletores do app. */
 function planoFiltroHTML() {
-  const off = PL_FILTROS.filter(([k]) => !planoMostra(k)).length;
-  return `<span class="pl-filtro-wrap"><button class="btn sm ${PLANO.filtroOpen || off ? 'on' : ''}" data-act="pl-filtro-toggle">${icon('search')} Mostrar${off ? ` · ${off} escondido${off > 1 ? 's' : ''}` : ''}</button>${PLANO.filtroOpen ? `<div class="pl-filtro-pop stack" style="gap:8px">${PL_FILTROS.map(([k, l]) => `<label class="check small"><input type="checkbox" data-on="pl-filtro" data-k="${k}" ${planoMostra(k) ? 'checked' : ''}> ${l}</label>`).join('')}</div>` : ''}</span>`;
+  return `<div class="seg pl-filtros" role="group" aria-label="Mostrar no calendário"><span class="pl-filtros-l">Mostrar</span>${PL_FILTROS.map(([k, l]) => `<button type="button" class="${planoMostra(k) ? 'on' : ''}" data-act="pl-filtro" data-k="${k}" aria-pressed="${planoMostra(k)}">${l}</button>`).join('')}</div>`;
 }
+ACTIONS['pl-filtro'] = (el) => { const f = { ...(db.setting('planoMesFiltro', {}) || {}) }; f[el.dataset.k] = !planoMostra(el.dataset.k); db.setSetting('planoMesFiltro', f); db.emit(); };
 ACTIONS['pl-filtro-toggle'] = () => { PLANO.filtroOpen = !PLANO.filtroOpen; render(); };
 CHANGES['pl-filtro'] = (el) => { const f = { ...(db.setting('planoMesFiltro', {}) || {}) }; f[el.dataset.k] = el.checked; db.setSetting('planoMesFiltro', f); db.emit(); };
 
@@ -456,7 +472,7 @@ VIEWS.plano = () => {
     nav = `<button class="btn sm" data-act="pl-nav" data-d="-1" aria-label="Dia anterior">${icon('chevL')}</button><button class="btn sm" data-act="pl-nav" data-d="1" aria-label="Próximo dia">${icon('chevR')}</button>${dia !== hoje ? '<button class="btn sm ghost" data-act="pl-nav" data-d="0">Hoje</button>' : ''}`;
     corpo = planoDiaHTML(dia, porDia);
   } else if (modo === 'mes') {
-    titulo = 'Calendário'; nav = `<button class="btn sm ghost" data-act="pl-mes-hoje">Hoje</button>`;
+    titulo = ''; nav = `<button class="btn sm ghost" data-act="pl-mes-hoje">Hoje</button>`;
     corpo = planoMesHTML(porDia);
   } else {
     titulo = 'Semana'; nav = `<button class="btn sm" data-act="pl-sem" data-d="-1" aria-label="Semana anterior">${icon('chevL')}</button><button class="btn sm" data-act="pl-sem" data-d="1" aria-label="Próxima semana">${icon('chevR')}</button><button class="btn sm ghost" data-act="pl-sem" data-d="0">Hoje</button>`;
@@ -464,7 +480,7 @@ VIEWS.plano = () => {
   }
   const nota = `${lista.length} projeto(s) com horas a fazer, distribuídas por prazo até ${cfg.horasDia} h por dia útil. Cheio = planejado (mais claro = colocado pelo app; fixado à mão fica forte) · chip com bolinha = registrado · cinza = rotina · tracejado = compromisso (bloqueio ou Google Agenda). Arraste ou puxe as bordas do que não é registro; a janelinha mostra o horário novo.${semEst.length ? ` ${semEst.length} projeto(s) ativo(s) sem horas estimadas não entram.` : ''}`;
   const html = `${estouro.length ? `<div class="panel" style="border-color:var(--warn)"><div class="panel-b small"><b>Não cabe no prazo:</b> ${estouro.map(x => `${esc(x.p.name)} (faltam ${fmtH(x.horas * 36e5)} até ${fmtDate(x.p.deadline)})`).join(' · ')}. Estique algum dia (+) ou mude o prazo.</div></div>` : ''}
-    <div class="panel"><div class="panel-h">${seg}${nav}<h3>${esc(titulo)}</h3><span class="grow"></span>${planoFiltroHTML()}<button class="btn sm" data-act="pl-bloq">${icon('plus')} Bloqueio</button></div>
+    <div class="panel"><div class="panel-h">${seg}${nav}${titulo ? `<h3>${esc(titulo)}</h3>` : ''}<span class="grow"></span>${planoFiltroHTML()}<button class="btn sm" data-act="pl-bloq">${icon('plus')} Bloqueio</button></div>
       <div class="panel-b">${corpo}<div class="small muted" style="margin-top:8px">${nota}</div></div></div>
     ${planoRotinaHTML()}`;
   setTimeout(() => (modo === 'mes' ? planoMesRolar() : planoGradeRolar(modo === 'semana')), 0);

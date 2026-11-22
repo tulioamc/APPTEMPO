@@ -1730,3 +1730,13 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 /* linhas das horas na grade (Semana e Dia) */
 .pl-grade { background-image: linear-gradient(to bottom, color-mix(in oklab, var(--line) 80%, transparent) 1px, transparent 1px), linear-gradient(to right, transparent calc(33.333% - .5px), var(--line) calc(33.333% - .5px), var(--line) calc(33.333% + .5px), transparent calc(33.333% + .5px)); background-size: 100% calc(100% / 24), 100% 100%; }
 .pl-dia.off .pl-grade { background-image: linear-gradient(to bottom, color-mix(in oklab, var(--line) 80%, transparent) 1px, transparent 1px), repeating-linear-gradient(45deg, transparent 0 10px, color-mix(in oklab, var(--line) 35%, transparent) 10px 11px) !important; background-size: 100% calc(100% / 24), auto !important; }
+/* calendário (Mês): conteúdo do dia alinhado pelo topo */
+.pl-mes { align-items: stretch; }
+.pl-mc { justify-content: flex-start; }
+.pl-mc-in { align-content: start; align-items: start; height: auto; }
+/* filtros sempre à vista */
+.seg.pl-filtros { align-items: center; margin-left: 0; gap: 2px; }
+.pl-filtros-l { font-size: 12px; color: var(--fg-3); padding: 0 6px 0 8px; }
+.seg.pl-filtros button:not(.on) { color: var(--fg-3); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--fg-3) 50%, transparent); }
+/* Dia: sem hachura no fim de semana */
+.pl-um .pl-dia.off .pl-grade, .pl-diaview .pl-dia.off .pl-grade { background-image: linear-gradient(to bottom, color-mix(in oklab, var(--line) 80%, transparent) 1px, transparent 1px) !important; background-size: 100% calc(100% / 24) !important; background-color: var(--surface-1, #fff) !important; }
