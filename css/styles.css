@@ -1576,3 +1576,12 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .pl-semana-h > .pl-dia.pl-segunda .pl-grade { box-shadow: -3px 0 0 var(--line); }
 .pl-diaview svg { width: 12px; height: 12px; vertical-align: -1px; }
 .pl-diaview .btn svg { width: 14px; height: 14px; }
+
+/* Notas fiscais: chip [NF36] (clique abre o PDF) */
+.nf-chip { cursor: pointer; font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: .01em; }
+.nf-chip:hover { filter: brightness(.95); text-decoration: underline; }
+.nf-chip.nf-cancelada, .nf-chip.nf-substituida { text-decoration: line-through; opacity: .75; }
+.nf-tab tr.nf-off td { opacity: .55; }
+.nf-tab select.input.sm { padding: 2px 6px; font-size: 12px; max-width: 140px; }
+.nf-tab .nf-tom { min-width: 260px; }
+td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }

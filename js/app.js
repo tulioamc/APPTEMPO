@@ -46,6 +46,7 @@ const NAV = [
   { id: 'tasks', label: 'Tarefas', icon: 'check' },
   { id: 'quotes', label: 'Orçamentos', icon: 'doc' },
   { id: 'finance', label: 'Financeiro PJ', icon: 'money' },
+  { id: 'notas', label: 'Notas fiscais', icon: 'doc' },
   { id: 'reports', label: 'Relatórios PJ', icon: 'chart' },
   { group: 'PF' },
   { id: 'financepf', label: 'Financeiro PF', icon: 'money' },
@@ -229,6 +230,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 /* Ponte do app de Mac. O app guarda os eventos numa fila e só tira da fila quando esta função roda. */
 window.TempoBridge = {
   reportNfse: (itens) => nfseReport(itens),
+  // notas fiscais emitidas (pasta do iCloud): devolve { ids, renomear }
+  reportNotasEmitidas: (itens, inventario) => (typeof nfReport === 'function' ? nfReport(itens, inventario) : { ids: [], renomear: [] }),
   // o app do Mac avisa que há versão nova dele mesmo: mostra o botão "Atualizar app do Mac"
   macUpdate: (v) => { if (window.TEMPO_MAC_UPDATE !== v) { window.TEMPO_MAC_UPDATE = v; render(); } },
   reportIdle: async (fromISO, toISO, app) => {

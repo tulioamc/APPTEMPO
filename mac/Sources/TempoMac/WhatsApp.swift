@@ -122,6 +122,8 @@ final class WhatsAppMonitor {
     /// Conversas (última recebida/enviada, resposta média) e horários das mensagens enviadas nas últimas 24 h
     /// -> window.TempoBridge.reportWhatsAppConversas (thread principal).
     var sendConversas: (([String: Any]) -> Void)?
+    /// PDF de conversa que não é de terapia (a pasta de notas emitidas confere se é nota sua).
+    var onPdf: ((Data) -> Void)?
     /// Não conseguiu abrir o banco do WhatsApp (avisa uma vez só).
     var onNoAccess: (() -> Void)?
 
@@ -484,9 +486,16 @@ final class WhatsAppMonitor {
         diaFmt.locale = Locale(identifier: "en_US_POSIX")
         diaFmt.dateFormat = "yyyy-MM-dd"
         for (nome, caminho, coreData) in linhas {
-            guard let linha = WhatsAppMonitor.notasPorChave[WhatsAppMonitor.chave(nome)] else { continue }
             let candidatos = [WhatsAppMonitor.midia.appendingPathComponent(caminho),
                               WhatsAppMonitor.shared.appendingPathComponent(caminho)]
+            guard let linha = WhatsAppMonitor.notasPorChave[WhatsAppMonitor.chave(nome)] else {
+                // outras conversas (ex.: contabilidade): PDF pode ser nota fiscal emitida por você -> pasta de notas
+                if caminho.lowercased().hasSuffix(".pdf"), let notaEmitida = onPdf,
+                   let arq = candidatos.first(where: { fm.fileExists(atPath: $0.path) }), let d = try? Data(contentsOf: arq) {
+                    notaEmitida(d)
+                }
+                continue
+            }
             guard let arquivo = candidatos.first(where: { fm.fileExists(atPath: $0.path) }),   // apagado ou ainda não baixado
                   let dados = try? Data(contentsOf: arquivo) else { continue }
             let sha = WhatsAppMonitor.sha256(dados)

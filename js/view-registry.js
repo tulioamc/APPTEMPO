@@ -132,6 +132,7 @@ function openParty(kind, id) {
         <div class="props"><span class="k">CNPJ</span><span class="mono">${esc(x.cnpj || '—')}</span><span class="k">Contato</span><span>${esc(x.contact || '—')}</span><span class="k">Endereço</span><span>${esc(x.address || '—')}</span><span class="k">Observações</span><span class="muted">${esc(x.notes || '—')}</span><span class="k">Cadastrado em</span><span>${fmtDate(x.created_at)}</span></div>
         ${kind === 'agency' ? `<div class="stack" style="gap:6px"><div class="row between"><span class="lbl">Clientes</span><button class="btn sm" data-x="new-client">${icon('plus')} Cliente desta agência</button></div><div class="row">${clients(id).map(c => `<button class="btn sm ghost" data-x="open-client" data-id="${c.id}" style="padding:2px">${clientTag(c)}</button>`).join('') || '<span class="small muted">Nenhum cliente vinculado.</span>'}</div></div>` : ''}
         ${feeHTML(kind, id, ps)}
+        ${typeof nfPartyHTML === 'function' ? nfPartyHTML(kind, id) : ''}
         ${resumoEmbedHTML(db.where('tempo_time_entries', e => ps.some(p => p.id === e.project_id)))}
         ${partyChartsHTML(ps)}
         <div class="panel"><div class="panel-h"><h3>Relatório do mês</h3><span class="small muted">horas e entregas, sem valores</span><span class="grow"></span><input type="month" class="input sm" style="max-width:160px" data-rc-ym value="${ymd(new Date()).slice(0, 7)}" aria-label="Mês do relatório"><button class="btn sm" data-act="rel-cliente" data-kind="${kind}" data-id="${id}">${icon('doc')} PDF</button></div></div>

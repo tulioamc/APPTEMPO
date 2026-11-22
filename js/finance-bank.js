@@ -394,7 +394,15 @@ function bankSummaryHTML(entity) {
   const inMonth = inBase.filter(t => t.scope === 'externa' && (t.posted_on || '').slice(0, 7) === ym);
   // Saídas: PF mostra tudo (contas PF e PJ); PJ mostra só o que é PJ
   const poolOut = (entity === 'pf' ? (BANK.every || []) : (BANK.all.pj || [])).filter(t => t.scope === 'externa' && t.flow === 'out');
-  const isTher = (t) => t.flow === 'out' && !!t.reimb_row_id;
+  // Categoria por contraparte e fluxo: entrada e saída da mesma contraparte podem ter categorias diferentes.
+  const cbk = (t) => (t.counterpart || '—') + '|' + (t.flow || '');
+  const catBy = {};
+  // categoria da contraparte = a mais usada (uma exceção marcada num lançamento não muda as outras)
+  const catCount = {};
+  (BANK.every || []).forEach(x => { if (x.category) { const c = (catCount[cbk(x)] ||= {}); c[x.category] = (c[x.category] || 0) + 1; } });
+  Object.entries(catCount).forEach(([k, c]) => { catBy[k] = Object.entries(c).sort((a, b) => b[1] - a[1])[0][0]; });
+  // terapia ligada à tabela, ou ainda sem ligar mas já com a categoria Terapia: nos dois casos é reembolsável
+  const isTher = (t) => t.flow === 'out' && (!!t.reimb_row_id || (t.category || catBy[cbk(t)]) === 'Terapia');
   const isReimb = (t) => t.flow === 'in' && isReembCat(t.category);
   const isExt = (t) => t.flow === 'in' && /^Estorno/.test(t.category || '');
   const extSum = inBase.filter(t => isExt(t) && (t.posted_on || '').slice(0, 7) === ym).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
@@ -407,13 +415,6 @@ function bankSummaryHTML(entity) {
   const origin = entity === 'pf' ? (BANK.origin || 'all') : 'all';
   const originOf = (t) => (/d660$/.test(t.account_tail || '') ? 'cartao' : 'conta');
   const f = BANK.f || {};
-  // Categoria por contraparte e fluxo: entrada e saída da mesma contraparte podem ter categorias diferentes.
-  const cbk = (t) => (t.counterpart || '—') + '|' + (t.flow || '');
-  const catBy = {};
-  // categoria da contraparte = a mais usada (uma exceção marcada num lançamento não muda as outras)
-  const catCount = {};
-  (BANK.every || []).forEach(x => { if (x.category) { const c = (catCount[cbk(x)] ||= {}); c[x.category] = (c[x.category] || 0) + 1; } });
-  Object.entries(catCount).forEach(([k, c]) => { catBy[k] = Object.entries(c).sort((a, b) => b[1] - a[1])[0][0]; });
   const catOf = (t) => t.category || catBy[cbk(t)] || null;
   const passes = (t) => {
     if (origin !== 'all' && originOf(t) !== origin) return false;

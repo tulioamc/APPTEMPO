@@ -2,6 +2,7 @@
    FINANCEIRO
    ===================================================================== */
 VIEWS.finance = () => {
+  if (typeof nfRegras === 'function') nfRegras();
   const f = S.fin;
   const list = filterProjects(f).sort((a, b) => (remainingOf(b) || 0) - (remainingOf(a) || 0));
   const sum = (fn) => list.reduce((s, p) => s + (fn(p) || 0), 0);
@@ -82,12 +83,13 @@ const PAYCOLS = {
   client: { label: 'Cliente', ico: 'users', w: 160, sort: x => clientOf(db.get('tempo_projects', x.project_id))?.name || '', cell: x => { const c = clientOf(db.get('tempo_projects', x.project_id)); return c ? tag(c.name, c.color || 'gray') : ''; } },
   work: { label: 'Status do trabalho', ico: 'list', w: 150, sort: x => statusCat(db.get('tempo_projects', x.project_id)?.status_id) || '', cell: x => statusTag(db.get('tempo_projects', x.project_id)?.status_id) },
   amount: { label: 'Valor', ico: 'money', w: 110, money: true, sort: x => Number(x.amount) || 0, cell: x => fmtMoney(x.amount) },
+  nf: { label: 'Nota', ico: 'doc', w: 130, sort: x => (typeof nfsDoPagamento === 'function' && nfsDoPagamento(x.id)[0]?.numero) || 0, cell: x => { const l = typeof nfsDoPagamento === 'function' ? nfsDoPagamento(x.id) : []; return l.length ? nfChips(l, { label: true }) : '<span class="faint small">sem nota</span>'; } },
 };
 const FCOLS = {
   agency: PCOLS.agency, client: PCOLS.client,
   name: { ...PCOLS.name, cell: p => `<span class="cell-name"><span class="ct">${esc(p.name)}</span>${openBtn('fin-open', p.id)}</span>` },
   status: PCOLS.status, pay: PCOLS.pay, budget: PCOLS.budget, paid: PCOLS.paid, remaining: PCOLS.remaining,
-  invoice: { label: 'Nota fiscal', ico: 'cal', w: 110, sort: p => p.invoice_at || '', cell: p => p.invoice_at ? fmtDate(p.invoice_at) : '', edit: { type: 'date', get: p => p.invoice_at ? ymd(p.invoice_at) : null, set: (p, v) => { db.update('tempo_projects', p.id, { invoice_at: v ? parseYmd(v).toISOString() : null }); if (v) logEvent('project', p.id, 'milestone', `Nota fiscal: ${fmtDate(v)}`); } } },
+  invoice: { label: 'Nota fiscal', ico: 'doc', w: 150, sort: p => (typeof nfsDoProjeto === 'function' && nfsDoProjeto(p.id)[0]?.emitida_em) || p.invoice_at || '', cell: p => { const l = typeof nfsDoProjeto === 'function' ? nfsDoProjeto(p.id) : []; return l.length ? nfChips(l, { label: l.length === 1 }) : p.invoice_at ? fmtDate(p.invoice_at) : ''; }, edit: { type: 'date', get: p => p.invoice_at ? ymd(p.invoice_at) : null, set: (p, v) => { db.update('tempo_projects', p.id, { invoice_at: v ? parseYmd(v).toISOString() : null }); if (v) logEvent('project', p.id, 'milestone', `Nota fiscal: ${fmtDate(v)}`); } } },
   lastpay: { label: 'Último pagamento', ico: 'cal', w: 130, sort: p => paymentsOf(p.id).slice(-1)[0]?.date || '', cell: p => { const lp = paymentsOf(p.id).slice(-1)[0]; return lp?.date ? fmtDate(lp.date) : ''; } },
   notes: PCOLS.notes
 };

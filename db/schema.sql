@@ -395,3 +395,44 @@ create trigger tempo_touch before update on public.tempo_wa_daily for each row e
 
 -- 21/11/2026: dia marcado pelo app (automático) × à mão
 alter table tempo_rafa_days add column if not exists auto boolean not null default false;
+-- V2.06.56: notas fiscais emitidas (lidas da pasta do iCloud pelo app do Mac)
+create table if not exists tempo_invoices (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  serie text not null default 'nacional',      -- 'nacional' (NFS-e padrão nacional) ou 'municipal' (antiga, até 2025)
+  numero int,
+  chave text,                                   -- chave de acesso (50 dígitos) da NFS-e nacional
+  emitida_em date, competencia date,
+  valor numeric(14,2),
+  tomador_nome text, tomador_doc text, descricao text,
+  situacao text,                                -- como veio no arquivo: 'gerada' | 'cancelada' | 'substituida'
+  substitui text[] not null default '{}',       -- chaves de outras notas citadas nesta (substituição)
+  status_manual text,                           -- 'valida' | 'cancelada' | 'substituida' (o que você marcou vence o automático)
+  substituida_por int,                          -- número da nota que substituiu esta
+  enviada_em date,
+  agency_id uuid references tempo_agencies(id) on delete set null,
+  client_id uuid references tempo_clients(id) on delete set null,
+  payment_id uuid references tempo_payments(id) on delete set null,
+  vinculo_manual boolean not null default false, -- agência/cliente/pagamento escolhidos à mão: o automático não mexe
+  arquivo text, sha text,
+  created_at timestamptz not null default now(), updated_at timestamptz
+);
+create unique index if not exists tempo_invoices_num on tempo_invoices (user_id, serie, numero);
+alter table tempo_invoices enable row level security;
+drop policy if exists own_rows on tempo_invoices;
+create policy own_rows on tempo_invoices for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create index if not exists tempo_invoices_user_idx on tempo_invoices(user_id);
+drop trigger if exists tempo_touch on public.tempo_invoices;
+create trigger tempo_touch before update on public.tempo_invoices for each row execute function public.tempo_touch();
+
+create or replace function public.tempo_sync_state() returns jsonb language plpgsql stable security invoker set search_path = public as $$
+declare t text; res jsonb := '{}'::jsonb; n bigint; m timestamptz;
+begin
+  foreach t in array array['tempo_agencies','tempo_clients','tempo_projects','tempo_tasks','tempo_time_entries','tempo_revisions','tempo_quotes','tempo_payments','tempo_deadline_changes','tempo_work_types','tempo_status_options','tempo_reminders','tempo_status_history','tempo_settings','tempo_notices','tempo_reimb_rows','tempo_expenses','tempo_rafa_days','tempo_wa_contacts','tempo_wa_daily','tempo_invoices'] loop
+    execute format('select count(*), max(greatest(created_at, coalesce(updated_at, created_at))) from public.%I', t) into n, m;
+    res := res || jsonb_build_object(t, n::text || '|' || coalesce(extract(epoch from m)::text, ''));
+  end loop;
+  return res;
+end $$;
+revoke execute on function public.tempo_sync_state() from public, anon;
+grant execute on function public.tempo_sync_state() to authenticated;

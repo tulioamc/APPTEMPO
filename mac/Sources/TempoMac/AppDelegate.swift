@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private let monitor = ActivityMonitor()
     private let whatsapp = WhatsAppMonitor()
     private let foco = FocoController()
+    private let notas = NotasEmitidas()
     private var focoItem: NSMenuItem?
     private let defaults = UserDefaults.standard
     private let isoFormatter: ISO8601DateFormatter = {
@@ -86,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         barTicker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshBar() }
         monitor.start()
         setupWhatsApp()
+        setupNotas()
         foco.onAbriu = { [weak self] nome in self?.enqueue("focoAbriu", [nome]) }
         foco.aviso = { [weak self] t, b in self?.showNotice(t, b) }
         foco.start()
@@ -121,6 +123,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             self?.showNotice("Tempo: WhatsApp", "Não consegui ler o WhatsApp. Ative Acesso Total ao Disco para o Tempo nos Ajustes do Sistema.")
         }
         whatsapp.start()
+    }
+
+    /// Notas fiscais emitidas (pasta FINANCEIRO/NOTAS FISCAIS no iCloud) -> TempoBridge.reportNotasEmitidas.
+    private func setupNotas() {
+        notas.aviso = { [weak self] t, b in self?.showNotice(t, b) }
+        notas.enviar = { [weak self] itens, inventario, done in
+            guard let self = self, let a = self.jsonString(itens), let b = self.jsonString(inventario) else { done([], []); return }
+            let js = "(function(){ var b = window.TempoBridge; if (!b || typeof b.reportNotasEmitidas !== 'function') return '{}'; return JSON.stringify(b.reportNotasEmitidas(\(a), \(b)) || {}); })()"
+            self.web.evaluateJavaScript(js) { result, _ in
+                var ids: [String] = [], ren: [[String: String]] = []
+                if let s = result as? String, let d = s.data(using: .utf8),
+                   let o = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] {
+                    ids = o["ids"] as? [String] ?? []
+                    ren = o["renomear"] as? [[String: String]] ?? []
+                }
+                done(ids, ren)
+            }
+        }
+        whatsapp.onPdf = { [weak self] dados in self?.notas.talvezSalvarDoWhatsApp(dados) }
+        notas.start()
     }
 
     @objc private func readWhatsAppNow() { whatsapp.runNow() }
@@ -280,6 +302,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         case "pdf": handlePDF(d); return
         case "pdfRenomear": handlePDFRenomear(d); return
         case "foco": handleFoco(d); return
+        case "nfReler": notas.reler(); return
         default: break
         }
         guard let title = d["title"] as? String, let body = d["body"] as? String else { return }

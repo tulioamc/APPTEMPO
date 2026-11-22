@@ -338,5 +338,31 @@ window.DB_COLUMNS = {
   "created_at",
   "updated_at",
   "auto"
+ ],
+ "tempo_invoices": [
+  "id",
+  "user_id",
+  "serie",
+  "numero",
+  "chave",
+  "emitida_em",
+  "competencia",
+  "valor",
+  "tomador_nome",
+  "tomador_doc",
+  "descricao",
+  "situacao",
+  "substitui",
+  "status_manual",
+  "substituida_por",
+  "enviada_em",
+  "agency_id",
+  "client_id",
+  "payment_id",
+  "vinculo_manual",
+  "arquivo",
+  "sha",
+  "created_at",
+  "updated_at"
  ]
 };
