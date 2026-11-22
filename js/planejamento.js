@@ -189,7 +189,7 @@ function planejar(lista, hoje = new Date(), dias = 60) {
 
 const PLANO = { modo: null, dia: null, mesTop: null, semLeft: null, gradeTop: null, porDia: {} };
 const planoHora = (h) => { const m = Math.round(h * 60); return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
-const PL_ALT = 44;   // px por hora
+let PL_ALT = 44;   // px por hora (zoom: Alt + rolagem do mouse na grade; fica salvo em 'planoZoom')
 const planoModo = () => PLANO.modo || db.setting('planoModo', 'semana');
 const planoFer = (dia) => typeof feriadosDoAno === 'function' ? feriadosDoAno(Number(dia.slice(0, 4))).find(f => f.data === dia) : null;
 const planoPrazos = (dia) => projects().filter(p => p.deadline === dia && ['todo', 'active'].includes(statusCat(p.status_id)));
@@ -395,6 +395,7 @@ function planoDiaHTML(dia, porDia) {
 }
 
 VIEWS.plano = () => {
+  PL_ALT = Math.max(16, Math.min(160, Number(db.setting('planoZoom', 44)) || 44));
   if (typeof rafaAutoPreencher === 'function') rafaAutoPreencher();
   const lista = planoProjetos(); const cfg = planoCfg(); const modo = planoModo();
   const { porDia, estouro } = planejar(lista, new Date(), modo === 'mes' ? 220 : 100);
@@ -684,3 +685,18 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
   const r = sc.querySelector('.pl-regua-col')?.offsetWidth || 44;
   sc.style.setProperty('--plw', Math.max(110, Math.floor((sc.clientWidth - r - 8) / 7) - 6) + 'px');
 });
+
+/* Zoom do tempo: Alt (Option) + rolagem do mouse na grade aproxima ou afasta as horas, mantendo a hora sob o cursor. */
+if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('wheel', (e) => {
+  if (!e.altKey) return; const sc = e.target.closest && e.target.closest('[data-pl-scroll]'); if (!sc) return;
+  e.preventDefault();
+  const grade = sc.querySelector('.pl-grade'); if (!grade) return;
+  const y = e.clientY - grade.getBoundingClientRect().top;          // px desde 0h
+  const hora = y / PL_ALT; const fator = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  const novo = Math.max(16, Math.min(160, Math.round(PL_ALT * fator)));
+  if (novo === PL_ALT) return;
+  const naTela = e.clientY - sc.getBoundingClientRect().top;
+  const topoGrade = grade.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+  PLANO.gradeTop = Math.max(0, topoGrade + hora * novo - naTela);
+  db.setSetting('planoZoom', novo); PL_ALT = novo; render();
+}, { passive: false });

@@ -1574,3 +1574,5 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .pl-dia.off .pl-grade { background: color-mix(in oklab, var(--surface-2) 55%, var(--surface-1, #fff)) !important; background-image: none !important; }
 .pl-mc.off { background-image: none !important; background: color-mix(in oklab, var(--surface-2) 55%, var(--surface-1, #fff)) !important; }
 .pl-semana-h > .pl-dia.pl-segunda .pl-grade { box-shadow: -3px 0 0 var(--line); }
+.pl-diaview svg { width: 12px; height: 12px; vertical-align: -1px; }
+.pl-diaview .btn svg { width: 14px; height: 14px; }
