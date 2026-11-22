@@ -807,3 +807,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V2.06.70 (fila 22/11): notas do dia — várias por dia, cada uma de Tulio, Amanda ou Neutro (caixa pequena, botão "Adicionar nota", × para tirar); aparecem coloridas em Dias de Rafa e no calendário do Planejamento (`diaNotas`; a nota antiga vira a primeira).
 - V2.06.71 (fila 22/11): Relatórios sem repetição — PJ sem "Horas por dia" (fica em Produtividade), Produtividade sem a tabela que repetia o gráfico da Tendência semanal; título da aba "Produtividade".
 - V2.06.72 (fila 22/11): Alice — marcar AL:M / AL:C à mão na janela do dia (Dias de Rafa ou + no calendário). Feriado sempre como "[FERIADO] Nome" (Mês, Semana e Dia). Calendário (Mês): filtros para esconder Alice, Rafa, Trabalho, To-dos e Rotina (`planoMesFiltro`).
+- V2.06.73 (22/11): chips do calendário cheios (fundo forte, letra clara): T #5507D2, A #F470B8, AL:C #4683E6, AL:F #64C78A, AL:M #FF0000, AL:PM #E7A243.

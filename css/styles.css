@@ -1696,3 +1696,14 @@ td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
 .al-tg.on { outline: 2px solid var(--accent); outline-offset: 1px; background: var(--accent-soft); }
 .pl-filtros { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-left: 8px; }
 .pl-filtros .check { display: inline-flex; gap: 5px; align-items: center; color: var(--fg-2); }
+/* chips do calendário cheios (22/11): fundo forte, letra clara, sem borda */
+.pl-mc .pl-mc-chips .pl-rf, .al-chip { border: 0 !important; border-radius: 6px; padding: 4px 7px; font-weight: 800; }
+.pl-mc .pl-mc-chips .pl-rf.T { background: #5507D2; color: #E2DAF8; }
+.pl-mc .pl-mc-chips .pl-rf.A { background: #F470B8; color: #F8E0EE; }
+.pl-mc .pl-mc-chips .pl-rf.M { background: #2E9E6B; color: #DDF3E8; }
+.pl-mc .pl-mc-chips .pl-rf.X { background: #8E6BD8; color: #EEE7FB; }
+.al-chip.c { background: #4683E6; color: #CFE0F8; }
+.al-chip.f { background: #64C78A; color: #D2F7E3; }
+.al-chip.m { background: #FF0000; color: #FDD8D8; }
+.al-chip.pm { background: #E7A243; color: #FCE8B4; }
+.pl-rf.T { color: #5507D2; } .pl-rf.A { color: #F470B8; }
