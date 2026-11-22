@@ -324,6 +324,42 @@ function planoSemanaHTML(porDia) {
     <div class="pl-regua-col"><div class="pl-cab pl-cab-vazio"></div>${lt ? `<div style="height:${lt * 20}px"></div>` : ''}${planoRegua()}</div>${cols}</div></div>`;
 }
 
+/* Um dia do calendário (Mês): número grande e chips à direita; feriado, compromissos do dia todo e observação;
+   tempo trabalhado (ou planejado) por projeto; à direita, a lista de horários do dia, com rolagem própria. */
+function planoMesCelHTML(dia, porDia, hoje, cfg) {
+  const dt = new Date(dia + 'T12:00:00'); const n = dt.getDate(); const util = planoDiaUtil(dia); const fer = planoFer(dia);
+  const passado = dia <= hoje;
+  const plan = planoSomaPor(porDia[dia]?.blocos || []); const feito = planoSomaPor(planoFeitosDoDia(dia), 'ms');
+  const base = passado ? feito : plan;
+  const pids = Object.keys(base).filter(k => base[k] > 0.001).sort((a, b) => base[b] - base[a]);
+  const tot = pids.reduce((t, k) => t + base[k], 0);
+  const ev = planoEventos(dia); const prz = planoPrazos(dia);
+  const rafa = typeof rafaDiaDe === 'function' ? rafaDiaDe(dia) : null;
+  const al = typeof aliceChipsHTML === 'function' ? aliceChipsHTML(dia) : '';
+  const topo = [
+    fer ? `<div class="pl-mc-tag fer" title="${esc(fer.nome)}">${esc(fer.nome)}</div>` : '',
+    ...prz.map(p => `<div class="pl-mc-tag prazo" title="Prazo: ${esc(p.name)}">${icon('flag')} ${esc(p.name)}</div>`),
+    ...ev.filter(e => e.diaTodo).map(e => `<div class="pl-mc-tag ev ${e.origem}${e.feito ? ' feito' : ''}" title="${esc(e.titulo)}">${esc(e.titulo)}</div>`),
+    rafa && rafa.note ? `<div class="pl-mc-tag obs" title="${esc(rafa.note)}">Obs.: ${esc(rafa.note)}</div>` : ''
+  ].join('');
+  const horarios = [
+    ...planoFixosDoDia(dia).map(f => ({ ini: f[0], titulo: f[2], cls: 'fixo' })),
+    ...ev.filter(e => !e.diaTodo).map(e => ({ ini: e.ini, titulo: e.titulo, cls: e.origem + (e.feito ? ' feito' : '') }))
+  ].sort((x, y) => x.ini - y.ini);
+  const proj = pids.map(pid => { const p = db.get('tempo_projects', pid);
+    return `<div class="pl-mc-p" style="--fc:${planoCor(pid === '_' ? null : pid)}"><i></i><span>${esc(p?.name || 'Sem projeto')}</span><em>${fmtH(base[pid] * 36e5)}</em></div>`; }).join('');
+  return `<div class="pl-mc${dt.getMonth() % 2 === 0 ? ' par' : ''}${dia === hoje ? ' hoje' : ''}${!util ? ' off' : ''}${dia < hoje ? ' passado' : ''}" data-act="pl-ir-dia" data-dia="${dia}" data-pl-pop="${dia}"${dia === hoje ? ' data-hoje="1"' : ''}>
+    <div class="pl-mc-in">
+      <div class="pl-mc-esq">
+        <div class="pl-mc-n"><b>${n === 1 ? dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '') : n}</b><span class="pl-mc-chips">${al}${planoRafaLetraHTML(dia)}</span></div>
+        ${topo}
+        ${pids.length ? `<div class="pl-mc-tt${!passado && tot > cfg.horasDia + 0.05 ? ' late' : ''}"><span>${passado ? 'Tempo trabalhado' : 'Planejado'}</span><em>${fmtH(tot * 36e5)}</em></div>${proj}` : ''}
+      </div>
+      ${horarios.length ? `<div class="pl-mc-dir" data-pl-noclick>${horarios.map(h => `<div class="pl-mc-hr ${h.cls}" title="${esc(planoHora(h.ini) + ' ' + h.titulo)}"><b>${planoHora(h.ini)}</b> ${esc(h.titulo)}</div>`).join('')}</div>` : ''}
+    </div>
+  </div>`;
+}
+
 /* Mês: um calendário corrido (semanas em sequência, seg a dom), rolando para meses anteriores e seguintes. */
 function planoMesHTML(porDia) {
   const hoje = ymd(new Date()); const cfg = planoCfg();
@@ -334,22 +370,7 @@ function planoMesHTML(porDia) {
     const dias = Array.from({ length: 7 }, (_, i) => { const x = new Date(d); x.setDate(x.getDate() + i); return ymd(x); });
     const primeiro = dias.find(x => x.endsWith('-01'));
     if (primeiro) html += `<div class="pl-mes-rot" data-mes="${primeiro.slice(0, 7)}">${new Date(primeiro + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/^./, c => c.toUpperCase())}</div>`;
-    html += dias.map(dia => {
-      const dt = new Date(dia + 'T12:00:00'); const n = dt.getDate(); const util = planoDiaUtil(dia); const fer = planoFer(dia);
-      const plan = planoSomaPor(porDia[dia]?.blocos || []); const feito = planoSomaPor(planoFeitosDoDia(dia), 'ms');
-      const pids = [...new Set([...Object.keys(feito), ...Object.keys(plan)])].sort((a, b) => ((feito[b] || 0) + (plan[b] || 0)) - ((feito[a] || 0) + (plan[a] || 0)));
-      const linhas = pids.slice(0, 3).map(pid => { const p = db.get('tempo_projects', pid); const f = feito[pid] || 0, pl = plan[pid] || 0;
-        return `<div class="pl-mc-l" style="--fc:${planoCor(pid === '_' ? null : pid)}"><i class="${f && !pl ? 'f' : !f ? 'p' : 'fp'}"></i><span>${esc(p?.name || 'Sem projeto')}</span><em>${f ? fmtH(f * 36e5) : ''}${f && pl ? ' + ' : ''}${pl ? fmtH(pl * 36e5) : ''}</em></div>`; }).join('');
-      const ev = planoEventos(dia); const prz = planoPrazos(dia);
-      const tf = Object.values(feito).reduce((a, b) => a + b, 0), tp = Object.values(plan).reduce((a, b) => a + b, 0);
-      return `<div class="pl-mc${dt.getMonth() % 2 === 0 ? ' par' : ''}${dia === hoje ? ' hoje' : ''}${!util ? ' off' : ''}${dia < hoje ? ' passado' : ''}" data-act="pl-ir-dia" data-dia="${dia}" data-pl-pop="${dia}"${dia === hoje ? ' data-hoje="1"' : ''}>
-        <div class="pl-mc-n"><span class="pl-mc-d"><b>${n === 1 ? dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '') : n}</b>${planoRafaLetraHTML(dia)}</span>${tf + tp > 0 ? `<span class="pl-mc-h${tf + tp > cfg.horasDia + 0.05 ? ' late' : ''}">${fmtH((tf + tp) * 36e5)}</span>` : ''}</div>
-        ${fer ? `<div class="pl-mc-fer">${esc(fer.nome)}</div>` : ''}
-        ${prz.map(p => `<div class="pl-mc-prazo">${icon('flag')} ${esc(p.name)}</div>`).join('')}
-        ${ev.slice(0, 2).map(e => `<div class="pl-mc-ev ${e.origem}">${e.diaTodo ? '' : planoHora(e.ini) + ' '}${esc(e.titulo)}</div>`).join('')}${ev.length > 2 ? `<div class="pl-mc-mais">+${ev.length - 2} compromisso(s)</div>` : ''}
-        ${linhas}${pids.length > 3 ? `<div class="pl-mc-mais">+${pids.length - 3} projeto(s)</div>` : ''}
-      </div>`;
-    }).join('');
+    html += dias.map(dia => planoMesCelHTML(dia, porDia, hoje, cfg)).join('');
   }
   return `<div class="pl-mes-cab">${['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(x => `<span>${x}</span>`).join('')}</div>
     <div class="pl-mes-scroll" data-pl-mes><div class="pl-mes">${html}</div></div>

@@ -119,6 +119,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                 done(ids)
             }
         }
+        whatsapp.sendAlice = { [weak self] itens in
+            guard let self = self, let json = self.jsonString(itens) else { return }
+            self.web.evaluateJavaScript("window.TempoBridge && window.TempoBridge.reportAlice && window.TempoBridge.reportAlice(\(json)); true", completionHandler: nil)
+        }
         whatsapp.onNoAccess = { [weak self] in
             self?.showNotice("Tempo: WhatsApp", "Não consegui ler o WhatsApp. Ative Acesso Total ao Disco para o Tempo nos Ajustes do Sistema.")
         }

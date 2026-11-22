@@ -505,7 +505,7 @@ function bankSummaryHTML(entity) {
       <span><input type="checkbox" data-on="bank-sel" data-id="${t.id}" ${BANK.sel && BANK.sel[t.id] ? 'checked' : ''} aria-label="Selecionar lançamento"></span>
       <span class="mono small">${fmtDateShort(t.posted_on)}</span>
       <span class="bn" title="${esc(info?.nome || k)}">${esc(k)}${alias(k) ? ` <span class="faint">· ${esc(alias(k))}</span>` : ''} <button class="bank-cat-btn faint small" data-act="bank-alias" data-cp="${esc(k)}" title="Dar apelido">✎</button></span>
-      <span class="mono small">${dotHTML(t.scope === 'interna' ? '#2563eb' : t.flow === 'in' ? '#22a06b' : '#d64545', t.scope === 'interna' ? 'Interna' : t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
+      <span class="mono small" style="color:${t.scope === 'interna' ? 'var(--accent)' : t.flow === 'in' ? 'var(--ok)' : 'var(--danger)'}">${dotHTML(t.scope === 'interna' ? '#2563eb' : t.flow === 'in' ? '#22a06b' : '#d64545', t.scope === 'interna' ? 'Interno' : t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
       <span class="small muted">${bankMethod(t)}</span>
       <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
       <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">${catTag(cat)}${autoCat[k] === cat ? ' <span class="faint small">sugerido</span>' : ''}</button>`
@@ -526,9 +526,8 @@ function bankSummaryHTML(entity) {
     const tot = real.filter(t => t.flow === 'out').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
     const totIn = real.filter(t => t.flow === 'in').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
     const trf = items.filter(t => t.scope === 'interna').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-    const headTxt = lst === 'in' ? `entradas ${fmtMoney0(totIn)}` : lst === 'out' ? fmtMoney0(tot) : `↑ ${fmtMoney0(totIn)} · ↓ ${fmtMoney0(tot)}`;
     return `<div class="bank-group">
-      <button class="bank-ghead" data-act="bank-mtoggle" data-k="${entity}:${m}"><span>${open ? '▾' : '▸'} ${rbLabel(m)}</span><span class="mono small muted">${real.length} · ${headTxt}${trf ? ` · transferências para PF ${fmtMoney0(trf)} (fora do total)` : ''}</span></button>
+      <button class="bank-ghead bank-gcols" data-act="bank-mtoggle" data-k="${entity}:${m}" aria-expanded="${open}"><span class="bg-m">${icon(open ? 'chevD' : 'chevR')}${rbLabel(m)}</span><span class="bg-c"><span class="bg-l">Lançamentos</span><span class="bg-v">${real.length}</span></span><span class="bg-c in"><span class="bg-l">Entradas</span><span class="bg-v">${lst === 'out' ? '—' : fmtMoney0(totIn)}</span></span><span class="bg-c out"><span class="bg-l">Saídas</span><span class="bg-v">${lst === 'in' ? '—' : fmtMoney0(tot)}</span></span><span class="bg-c int" data-tip="Transferências entre as suas contas (PF ↔ PJ): não entram nos totais"><span class="bg-l">Interno</span><span class="bg-v">${trf ? fmtMoney0(trf) : '—'}</span></span></button>
       ${open ? `<div class="bank-rows bank-head"><span></span><span>Data</span><span>Descrição</span><span>Valor</span><span>Meio</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div>${items.map(rowHTML).join('')}` : ''}
     </div>`;
   }).join('');

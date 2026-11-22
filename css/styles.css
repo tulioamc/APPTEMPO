@@ -1596,3 +1596,64 @@ td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
 .ex-aberto { margin-left: auto; font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--surface-2, #f3f4f6); }
 .ex-aberto b { color: var(--danger, #c0392b); }
 .rel-tabs { margin-bottom: 14px; }
+/* Despesas: cabeçalho do mês em colunas fixas (alinha um mês com o outro, aberto ou fechado) */
+.ex-month { margin-bottom: 10px; }
+.ex-month-h { display: grid; grid-template-columns: minmax(190px, 1.3fr) repeat(5, minmax(150px, 1fr)); gap: 0 22px; align-items: baseline; padding: 10px 14px; border-radius: var(--radius-sm); cursor: pointer; user-select: none; }
+.ex-month-h:hover { background: var(--surface-2); }
+.ex-month.open .ex-month-h { margin-bottom: 6px; }
+.ex-mt { display: inline-flex; align-items: center; gap: 6px; font-size: 1.02em; letter-spacing: .02em; white-space: nowrap; }
+.ex-mt svg { width: 14px; height: 14px; color: var(--fg-3); }
+.ex-mc { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; white-space: nowrap; }
+.ex-ml { font-size: 12.5px; color: var(--fg-3); }
+.ex-mv { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13.5px; font-weight: 600; text-align: right; }
+.ex-mc.in .ex-mv, .ex-mc.pos .ex-mv { color: var(--ok); }
+.ex-mc.out .ex-mv, .ex-mc.neg .ex-mv { color: var(--danger); }
+@media (max-width: 1100px) { .ex-month-h { grid-template-columns: 1fr 1fr; gap: 4px 16px; } .ex-mt { grid-column: 1 / -1; margin-bottom: 4px; } }
+/* Financeiro: cabeçalho do mês em colunas fixas, alinhado entre os meses */
+.bank-gcols { display: grid; grid-template-columns: minmax(170px, 1.2fr) minmax(110px, .6fr) repeat(3, minmax(150px, 1fr)); gap: 0 22px; align-items: baseline; padding: 9px 14px; }
+.bank-gcols .bg-m { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.bank-gcols .bg-m svg { width: 14px; height: 14px; color: var(--fg-3); }
+.bank-gcols .bg-c { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; white-space: nowrap; font-weight: 500; }
+.bank-gcols .bg-l { font-size: 12.5px; color: var(--fg-3); }
+.bank-gcols .bg-v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13.5px; font-weight: 600; text-align: right; }
+.bank-gcols .in .bg-v { color: var(--ok); }
+.bank-gcols .out .bg-v { color: var(--danger); }
+.bank-gcols .int .bg-v { color: var(--accent); }
+@media (max-width: 1000px) { .bank-gcols { grid-template-columns: 1fr 1fr; gap: 4px 16px; } .bank-gcols .bg-m { grid-column: 1 / -1; } }
+/* Calendário (Mês) repaginado: número grande, chips à direita, etiquetas do dia, tempo por projeto e horários com rolagem */
+.pl-mc { min-height: 168px; padding: 8px; container-type: inline-size; }
+.pl-mc-in { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; height: 100%; }
+@container (min-width: 300px) { .pl-mc-in { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
+.pl-mc-esq { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pl-mc .pl-mc-n { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px; font-size: 1em; }
+.pl-mc .pl-mc-n b { font-size: 1.9em !important; font-weight: 800; line-height: 1; color: var(--fg-2); letter-spacing: -.02em; }
+.pl-mc.hoje .pl-mc-n b { color: var(--accent); }
+.pl-mc-chips { display: inline-flex; gap: 4px; align-items: center; font-family: inherit !important; }
+.pl-mc .pl-mc-chips .pl-rf, .al-chip { font-size: .78em !important; font-weight: 800; line-height: 1; padding: 3px 6px; border-radius: 6px; border: 1.5px solid currentColor; background: color-mix(in oklab, currentColor 14%, transparent); }
+.pl-mc-tag { font-size: .7em; line-height: 1.35; padding: 1px 6px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid transparent; }
+.pl-mc-tag svg { width: 10px; height: 10px; vertical-align: -1px; }
+.pl-mc-tag.fer { background: var(--surface-2); color: var(--fg-2); border-color: var(--line); }
+.pl-mc-tag.prazo { background: var(--danger-soft); color: var(--danger); }
+.pl-mc-tag.ev { background: var(--t-purple-bg, #EDE7FB); color: var(--t-purple-fg, #6D3FD1); border-color: currentColor; }
+.pl-mc-tag.ev.todo { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.pl-mc-tag.feito { text-decoration: line-through; opacity: .6; }
+.pl-mc-tag.obs { background: color-mix(in oklab, #E0558C 12%, transparent); color: #C2437A; border-color: color-mix(in oklab, #E0558C 60%, transparent); }
+.pl-mc-tt { display: flex; justify-content: space-between; font-size: .66em; color: var(--fg-3); border-top: 1px solid var(--line); margin-top: 3px; padding-top: 4px; font-weight: 600; }
+.pl-mc-tt em { font-style: normal; font-family: var(--font-mono); }
+.pl-mc-tt.late em { color: var(--warn, #B45309); }
+.pl-mc-p { display: flex; align-items: center; gap: 5px; font-size: .7em; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--fc, #64748B); background: color-mix(in oklab, var(--fc, #64748B) 14%, transparent); min-width: 0; }
+.pl-mc-p i { width: 8px; height: 8px; border-radius: 2px; background: var(--fc, #64748B); flex: none; }
+.pl-mc-p span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-mc-p em { font-style: normal; font-family: var(--font-mono); color: var(--fg-3); font-size: .95em; }
+.pl-mc-dir { display: flex; flex-direction: column; gap: 3px; max-height: 128px; overflow-y: auto; padding: 4px; border-radius: 6px; background: color-mix(in oklab, var(--accent) 6%, transparent); scrollbar-width: thin; }
+.pl-mc-hr { font-size: .68em; padding: 2px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
+.pl-mc-hr b { font-weight: 700; margin-right: 2px; }
+.pl-mc-hr.fixo { opacity: .85; }
+.pl-mc-hr.feito { text-decoration: line-through; opacity: .55; }
+.pl-mc-hr.google { background: color-mix(in oklab, #4285F4 12%, transparent); color: #1A4FB4; }
+/* Ciclo da Alice no calendário */
+.al-chip { display: inline-block; font-size: .72em; }
+.al-chip.m { color: #C92A2A; }
+.al-chip.f { color: #2B8A3E; }
+.al-chip.pm { color: #B08800; }
+.al-chip.c { color: #7048E8; }

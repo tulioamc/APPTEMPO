@@ -58,13 +58,14 @@ function exEnsureMonths() {
 const EX_ABRE_DIA = 25;
 const exNow = () => { const d = new Date(); const ym = ymd(d).slice(0, 7); return d.getDate() >= EX_ABRE_DIA ? rbAddMonth(ym, 1) : ym; };
 /* intervalo mostrado: de (mês inicial) até (mês final), o mais recente em cima */
-const exRange = () => { let from = S.exFrom || rbAddMonth(exNow(), -2), to = S.exTo || exNow(); if (from > to) [from, to] = [to, from]; return { from, to }; };
+const exRange = () => { let from = S.exFrom || exMonths().slice(-1)[0] || exNow(), to = S.exTo || exNow(); if (from > to) [from, to] = [to, from]; return { from, to }; };
 ACTIONS['ex-create'] = (el) => {
   const ym = el.dataset.m;
   const prev = exMonths().find(m => m < ym);
   if (!exCopyMonth(ym, prev)) { exAddRow(ym, 'out'); }
   db.emit(); toast(prev ? `Mês criado a partir de ${rbLabel(prev)}` : 'Mês criado');
 };
+ACTIONS['ex-toggle'] = (el) => { const ym = el.dataset.m; S.exOpenM = S.exOpenM || {}; S.exOpenM[ym] = el.getAttribute('aria-expanded') !== 'true'; render(); };
 ACTIONS['ex-preset'] = (el) => {
   const now = exNow(); const m = el.dataset.p;
   if (m === 'all') { const all = exMonths(); S.exFrom = all[all.length - 1] || now; S.exTo = now; }
@@ -123,6 +124,59 @@ CHANGES['ex-import'] = async (el) => {
 };
 
 
+/* Freelas automáticos em Entradas (daqui pra frente, a partir de nov/2026):
+   - pagamento de projeto lançado → linha "Recebido" no mês do pagamento, ligada ao projeto;
+   - nota fiscal emitida e ainda sem pagamento → linha "Não recebido" no mês da emissão; quando a nota é paga, a mesma linha vira "Recebido".
+   Não duplica o que já está na lista (mesmo projeto, ou mesmo valor no mês ou no seguinte, ex.: Salário = fee).
+   Linha apagada à mão não volta (fica marcada em exAuto). */
+const EX_AUTO_DESDE = '2026-11';
+function exFreelaSync() {
+  if (!db.loaded || !db.data.tempo_payments) return;
+  const auto = { ...(db.setting('exAuto', {}) || {}) }; let mudou = false;
+  const meses = new Set(exMonths());
+  const usados = new Set(Object.values(auto));
+  const mesDe = (d) => String(d || '').slice(0, 7);
+  const proxMes = (ym) => rbAddMonth(ym, 1), antMes = (ym) => rbAddMonth(ym, -1);
+  const nomeDe = (pr) => { const ag = agencyOf(pr), cl = clientOf(pr); return ag && !(typeof isDirectAgency === 'function' && isDirectAgency(ag)) ? ag.name : (cl?.name || pr?.name || 'Freela'); };
+  const jaTem = (ym, amt, pid) => db.all('tempo_expenses').some(r => r.kind === 'in' && !usados.has(r.id) && [ym, proxMes(ym), antMes(ym)].includes(r.month) && (Math.abs(Number(r.amount ?? r.amount_sug ?? -1) - amt) < 0.01 || (pid && r.project_id === pid && Math.abs(Number(r.amount || 0) - amt) < 0.01)));
+  const notas = typeof nfTodas === 'function' ? nfTodas() : [];
+  const nfDoPag = (pid) => notas.find(n => n.payment_id === pid);
+  const linha = (key, campos) => {
+    const id = auto[key];
+    if (id) { const r = db.get('tempo_expenses', id); if (!r) return; const upd = {}; Object.entries(campos).forEach(([k, v]) => { if ((r[k] ?? null) !== (v ?? null) && !(k === 'month' && r.status === EX_DONE.in && campos.status === EX_DONE.in)) upd[k] = v; }); if (Object.keys(upd).length) { db.update('tempo_expenses', id, upd, true); mudou = true; } return; }
+    if (!meses.has(campos.month)) return;
+    const r = db.insert('tempo_expenses', { kind: 'in', cat: 'EMPRESA/Freelas', note: '', due_date: null, inst_no: null, inst_total: null, amount_sug: null, order: exRows(campos.month, 'in').length, ...campos }, true);
+    auto[key] = r.id; usados.add(r.id); mudou = true;
+  };
+  db.all('tempo_payments').forEach(p => {
+    const ym = mesDe(p.date); if (!ym || ym < EX_AUTO_DESDE) return;
+    const amt = Math.round(Number(p.amount || 0) * 100) / 100; if (!(amt > 0)) return;
+    const pr = db.get('tempo_projects', p.project_id);
+    const nf = nfDoPag(p.id);
+    const key = nf && auto['nf:' + nf.id] ? 'nf:' + nf.id : 'pay:' + p.id;
+    if (!auto[key] && (jaTem(ym, amt, p.project_id) || /^Entrada: /.test(p.note || ''))) return;   // já existe (ou nasceu de uma linha de Entradas)
+    linha(key, { month: auto[key] ? (db.get('tempo_expenses', auto[key])?.month || ym) : ym, name: nomeDe(pr), project_id: p.project_id, amount: amt, status: EX_DONE.in, paid_on: p.date, note: nf ? `NF${String(nf.numero).padStart(2, '0')}` : '' });
+  });
+  notas.forEach(n => {
+    if (typeof nfValida === 'function' && !nfValida(n)) return;
+    const ym = mesDe(n.emitida_em); if (!ym || ym < EX_AUTO_DESDE || n.payment_id || auto['nf:' + n.id] === undefined && nfStatus(n) === 'paga') return;
+    const amt = Math.round(Number(n.valor || 0) * 100) / 100; if (!(amt > 0)) return;
+    if (!auto['nf:' + n.id] && jaTem(ym, amt, null)) return;
+    const ag = db.get('tempo_agencies', n.agency_id), cl = db.get('tempo_clients', n.client_id);
+    linha('nf:' + n.id, { month: ym, name: (ag && !(typeof isDirectAgency === 'function' && isDirectAgency(ag)) ? ag.name : cl?.name) || n.tomador_nome || 'Nota fiscal', amount: amt, status: EX_OPEN.in, paid_on: null, note: `NF${String(n.numero).padStart(2, '0')}` });
+  });
+  if (mudou) db.setSetting('exAuto', auto);
+}
+/* Vínculo da entrada: projeto, cliente e agência (para o painel da linha). */
+function exVinculoHTML(r) {
+  if (r.kind !== 'in') return '';
+  const pr = r.project_id ? db.get('tempo_projects', r.project_id) : null;
+  const nfN = /^NF(\d+)/.exec(r.note || ''); const nf = nfN && typeof nfTodas === 'function' ? nfTodas().find(n => n.serie === 'nacional' && n.numero === Number(nfN[1])) : null;
+  if (!pr && !nf) return '';
+  const cl = pr ? clientOf(pr) : null, ag = pr ? agencyOf(pr) : null;
+  return `<div class="field"><span class="lbl">Vínculo</span><div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">${pr ? `<a href="#" data-act="proj-open" data-id="${pr.id}">${esc(pr.name)}</a><span class="small muted">${esc([cl?.name, ag && ag.name !== cl?.name ? ag.name : null].filter(Boolean).join(' · '))}</span>` : ''}${nf && typeof nfChip === 'function' ? nfChip(nf, { label: true }) : ''}</div></div>`;
+}
+
 const exMesCurto = (ym) => { const [y, m] = ym.split('-').map(Number); return `${RB_MONTHS[m - 1]} ${y}`; };
 /* resumo de um mês: previsto e realizado */
 function exMonthTotals(ym) {
@@ -171,7 +225,7 @@ function exSyncPayment(antes, r) {
 }
 const EX_COLS = {
   cat: { label: 'Categoria', ico: 'layers', w: 170, cell: r => r.cat ? exCatTags(r.cat) : '<span class="faint">—</span>', edit: { type: 'combo', kind: 'ex_cat', allowEmpty: true, emptyLabel: 'Sem categoria', get: r => r.cat, set: (r, v) => db.update('tempo_expenses', r.id, { cat: v || null }) } },
-  name: { label: 'Nome', ico: 'text', cls: 'name', sort: r => r.name || '', w: 220, cell: r => `<span class="cell-name"><span class="ct">${esc(r.name || '') || '<span class="faint">—</span>'}</span>${typeof openBtn === 'function' ? openBtn('ex-open', r.id) : ''}</span>`, edit: { type: 'text', get: r => r.name, set: (r, v) => db.update('tempo_expenses', r.id, { name: (v || '').trim() }) } },
+  name: { label: 'Nome', ico: 'text', cls: 'name', sort: r => r.name || '', w: 220, cell: r => `<span class="cell-name"><span class="ct">${esc(r.name || '') || '<span class="faint">—</span>'}${r.kind === 'in' && r.project_id && db.get('tempo_projects', r.project_id) ? ` <a href="#" class="small muted ex-lig" data-act="proj-open" data-id="${r.project_id}" title="Abrir o projeto">↗ ${esc(db.get('tempo_projects', r.project_id).name)}</a>` : ''}</span>${typeof openBtn === 'function' ? openBtn('ex-open', r.id) : ''}</span>`, edit: { type: 'text', get: r => r.name, set: (r, v) => db.update('tempo_expenses', r.id, { name: (v || '').trim() }) } },
   due_date: { label: 'Vencimento', ico: 'cal', w: 120, cell: r => r.due_date ? fmtDate(r.due_date) : '<span class="faint">—</span>', sort: r => r.due_date || '', edit: { type: 'date', get: r => r.due_date, set: (r, v) => db.update('tempo_expenses', r.id, { due_date: v || null }) } },
   amount: { label: 'Valor', ico: 'money', sort: r => r.amount || 0, money: true, w: 130, cell: r => { const v = exIsSug(r) ? `<span class="ex-sug" title="${exPorDiaTxt(r) ? 'Conta das sessões. Clique para confirmar ou mudar (ou marque como pago); até lá não entra na soma.' : 'Sugestão do mês anterior. Clique para confirmar ou mudar; até lá não entra na soma.'}"><span class="ex-sign">${r.kind === 'in' ? '+' : '−'}</span> ${fmtMoney(r.amount_sug)}</span>` : `<span class="ex-sign">${r.kind === 'in' ? '+' : '−'}</span> ${fmtMoney(r.amount || 0)}`;
     return exPorDiaTxt(r) ? `<span class="ex-val"><span class="faint small ex-ses" title="Valor por sessão (Abrir na linha para mudar)">${exPorDiaTxt(r)}</span><span>${v}</span></span>` : v; }, val: r => (r.status === EX_OFF ? 0 : (r.amount || 0)), edit: { type: 'money', get: r => exIsSug(r) ? r.amount_sug : r.amount, confirm: exIsSug, set: (r, v) => db.update('tempo_expenses', r.id, { amount: Math.abs(v || 0), amount_sug: null }) } },
@@ -258,6 +312,7 @@ function exSectionHTML(ym, kind) {
 
 VIEWS.expenses = () => {
   exReembSync();
+  exFreelaSync();
   exPorDiaSync();
   const { from, to } = exRange(); S.exFrom = from; S.exTo = to;
   const now = exNow();
@@ -293,18 +348,24 @@ VIEWS.expenses = () => {
       <div class="row" style="justify-content:flex-end">${fbtn}</div>
     </div>`;
 
+  // mês atual (ou o mais recente) aberto; os outros fechados, com o resumo na mesma linha, alinhado em colunas
+  const aberto = (ym) => (S.exOpenM && ym in S.exOpenM) ? S.exOpenM[ym] : ym === (existing.includes(now) ? now : existing[0]);
+  const cel = (lab, val, cls = '', tip = '') => `<span class="ex-mc ${cls}" ${tip ? `data-tip="${esc(tip)}"` : ''}><span class="ex-ml">${lab}</span><span class="ex-mv">${val}</span></span>`;
   const block = (ym) => {
-    const t = exMonthTotals(ym);
-    return `<section class="ex-month">
-      <div class="ex-month-h">
-        <span class="ex-title">${rbLabel(ym)}</span>
-        <span class="small muted">previsto ${fmtMoney0(t.inPrev - t.outPrev)} · realizado ${fmtMoney0(t.inDone - t.outDone)}</span>
-        <span class="ex-aberto" data-tip="Saídas com valor já definido que ainda não foram pagas (sem as que estão como Não teve).">Despesas em aberto: <b>${fmtMoney(t.outOpen)}</b>${t.outOpenN ? ` <span class="faint small">(${t.outOpenN})</span>` : ''}</span>
+    const t = exMonthTotals(ym), op = aberto(ym);
+    const saldo = t.inPrev - t.outPrev, real = t.inDone - t.outDone;
+    return `<section class="ex-month ${op ? 'open' : ''}">
+      <div class="ex-month-h" data-act="ex-toggle" data-m="${ym}" role="button" tabindex="0" aria-expanded="${op}">
+        <span class="ex-mt">${icon(op ? 'chevD' : 'chevR')}<b>${rbLabel(ym).toUpperCase()}</b></span>
+        ${cel('Entradas', fmtMoney(t.inPrev) || 'R$ 0,00', 'in', 'Tudo que entra no mês (menos "Não teve")')}
+        ${cel('Saídas', fmtMoney(t.outPrev) || 'R$ 0,00', 'out', 'Tudo que sai no mês (menos "Não teve")')}
+        ${cel('Saldo do mês', fmtMoney(saldo) || 'R$ 0,00', saldo >= 0 ? 'pos' : 'neg', 'Entradas − Saídas (previsto)')}
+        ${cel('Realizado', fmtMoney(real) || 'R$ 0,00', '', 'Só o que já foi recebido menos o que já foi pago')}
+        ${cel('Falta pagar', t.outOpen ? fmtMoney(t.outOpen) + (t.outOpenN ? ` <span class="faint small">(${t.outOpenN})</span>` : '') : '—', t.outOpen ? 'neg' : '', 'Saídas com valor definido que ainda não foram pagas')}
       </div>
-      <div class="ex-box">${exSectionHTML(ym, 'in')}${exSectionHTML(ym, 'out')}</div>
+      ${op ? `<div class="ex-box">${exSectionHTML(ym, 'in')}${exSectionHTML(ym, 'out')}</div>` : ''}
     </section>`;
   };
-
   const body = existing.length
     ? existing.map(block).join('')
     : `<div class="empty">${icon('money')}<b>Nenhum mês nesse intervalo</b><span>Escolha outro período acima.</span></div>`;
@@ -314,7 +375,7 @@ VIEWS.expenses = () => {
     title: 'Despesas',
     actions: `<label class="btn sm">${icon('upload')} Importar CSV do Notion<input type="file" accept=".csv,text/csv" hidden data-on="ex-import"></label>`,
     html: `${controls}${createBtn}${body}
-      <p class="small faint">Valores sempre positivos: entradas com + e saídas com −. Previsto = todas as linhas exceto "Não teve". Realizado = só o que já foi recebido ou pago.</p>`
+      <p class="small faint">Valores sempre positivos: entradas com + e saídas com −. Entradas e Saídas = todas as linhas exceto "Não teve"; Saldo do mês = Entradas − Saídas. Realizado = só o que já foi recebido ou pago. Clique no mês para abrir ou fechar.</p>`
   };
 };
 
@@ -376,6 +437,7 @@ function exPorDiaEditar(id) {
       <div class="grid2"><div class="field"><label for="ed-n">Nome</label><input id="ed-n" class="input" value="${esc(r.name || '')}"></div>
       <div class="field"><label for="ed-c">Categoria</label><select id="ed-c" class="input"><option value="">Sem categoria</option>${cats}</select></div></div>
       <div class="field"><label for="ed-o">Anotação (só deste mês)</label><input id="ed-o" class="input" value="${esc(r.note || '')}"></div>
+      ${exVinculoHTML(r)}
       ${r.kind === 'out' ? `<label class="check"><input type="checkbox" id="ed-s" ${q ? 'checked' : ''}> Cobrança por sessão (ex.: diarista, psicóloga)</label>
       <div id="ed-sess" ${q ? '' : 'hidden'} class="stack" style="gap:10px">
         <div class="grid2"><div class="field"><label for="ed-d">Dia da semana</label><select id="ed-d" class="input">${EX_DIAS.map((d, k) => `<option value="${k}" ${k === base.dow ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
