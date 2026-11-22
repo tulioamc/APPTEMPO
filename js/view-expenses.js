@@ -344,10 +344,16 @@ function exReembSync() {
    Guardado em exPorDia: { "<nome sem acento, minúsculo>": { dow: 0-6 (domingo = 0), valor } }. */
 const EX_DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const exNomeKey = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-const exPorDiaDe = (r) => (r && r.kind === 'out' && (db.setting('exPorDia', {}) || {})[exNomeKey(r.name)]) || null;
+const exPorDiaGeral = (r) => (r && r.kind === 'out' && (db.setting('exPorDia', {}) || {})[exNomeKey(r.name)]) || null;
+/* ajuste só desta linha (só este mês): { dow?, valor?, n? } — n = quantas sessões teve de fato */
+const exSessaoMes = (r) => (r && (db.setting('exSessaoMes', {}) || {})[r.id]) || null;
+const exPorDiaDe = (r) => { const g = exPorDiaGeral(r), o = exSessaoMes(r); if (!g && !(o && o.valor != null)) return null; return { ...(g || {}), ...(o || {}) }; };
+const exSessoesN = (r) => { const q = exPorDiaDe(r); if (!q) return 0; return q.n ?? exContaDia(r.month, q.dow); };
+const exDatasDia = (ym, dow) => { const [y, m] = ym.split('-').map(Number); const n = new Date(y, m, 0).getDate(); const out = []; for (let d = 1; d <= n; d++) if (new Date(y, m - 1, d).getDay() === dow) out.push(d); return out; };
 function exContaDia(ym, dow) { const [y, m] = ym.split('-').map(Number); const n = new Date(y, m, 0).getDate(); let c = 0; for (let d = 1; d <= n; d++) if (new Date(y, m - 1, d).getDay() === dow) c++; return c; }
-const exPorDiaValor = (r, ym) => { const q = exPorDiaDe(r); return q ? Math.round(q.valor * exContaDia(ym || r.month, q.dow) * 100) / 100 : null; };
-const exPorDiaTxt = (r) => { const q = exPorDiaDe(r); if (!q) return ''; const n = exContaDia(r.month, q.dow); return `${n} ${EX_DIAS[q.dow]}${n > 1 ? 's' : ''} × ${fmtMoney(q.valor)}`; };
+// ym = mês novo (cópia): só a regra geral; sem ym: a linha, com o ajuste do mês
+const exPorDiaValor = (r, ym) => { if (ym) { const g = exPorDiaGeral(r); return g ? Math.round(g.valor * exContaDia(ym, g.dow) * 100) / 100 : null; } const q = exPorDiaDe(r); return q ? Math.round(q.valor * exSessoesN(r) * 100) / 100 : null; };
+const exPorDiaTxt = (r) => { const q = exPorDiaDe(r); if (!q) return ''; const n = exSessoesN(r), tot = exContaDia(r.month, q.dow); return `${n}${n !== tot ? ' de ' + tot : ''} ${EX_DIAS[q.dow]}${tot > 1 ? 's' : ''} × ${fmtMoney(q.valor)}`; };
 /* linha ainda sem valor confirmado: a sugestão segue a conta do mês */
 function exPorDiaSync() {
   const regras = db.setting('exPorDia', {}) || {}; if (!Object.keys(regras).length) return;
@@ -360,35 +366,60 @@ function exPorDiaSync() {
    e cobrança por sessão (dia da semana × valor), que vale para todos os meses dessa despesa. */
 function exPorDiaEditar(id) {
   const r = db.get('tempo_expenses', id); if (!r) return;
-  const q = exPorDiaDe(r);
+  const q = exPorDiaDe(r), o = exSessaoMes(r);
   const base = q || { dow: 2, valor: '' };
+  const nAtual = q ? exSessoesN(r) : exContaDia(r.month, base.dow);
   const cats = Object.entries(EX_CATS).map(([g, subs]) => `<optgroup label="${g === 'PESSOAL' ? 'Pessoal' : 'Empresa'}">${subs.map(c => `<option value="${g}/${c}" ${r.cat === `${g}/${c}` ? 'selected' : ''}>${c}</option>`).join('')}</optgroup>`).join('');
-  const l = openLayer({ html: `<div class="dh"><h2>${esc(r.name || 'Despesa')}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+  const l = openLayer({ html: `<div class="dh"><h2>${esc(r.name || 'Despesa')}</h2><span class="small muted">${rbLabel(r.month)}</span><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db">
       <div class="grid2"><div class="field"><label for="ed-n">Nome</label><input id="ed-n" class="input" value="${esc(r.name || '')}"></div>
       <div class="field"><label for="ed-c">Categoria</label><select id="ed-c" class="input"><option value="">Sem categoria</option>${cats}</select></div></div>
       <div class="field"><label for="ed-o">Anotação (só deste mês)</label><input id="ed-o" class="input" value="${esc(r.note || '')}"></div>
       ${r.kind === 'out' ? `<label class="check"><input type="checkbox" id="ed-s" ${q ? 'checked' : ''}> Cobrança por sessão (ex.: diarista, psicóloga)</label>
-      <div class="grid2" id="ed-sess" ${q ? '' : 'hidden'}><div class="field"><label for="ed-d">Dia da semana</label><select id="ed-d" class="input">${EX_DIAS.map((d, k) => `<option value="${k}" ${k === base.dow ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
-      <div class="field"><label for="ed-v">Valor por sessão</label><input id="ed-v" class="input mono" type="number" step="0.01" min="0" value="${base.valor}"></div></div>
+      <div id="ed-sess" ${q ? '' : 'hidden'} class="stack" style="gap:10px">
+        <div class="grid2"><div class="field"><label for="ed-d">Dia da semana</label><select id="ed-d" class="input">${EX_DIAS.map((d, k) => `<option value="${k}" ${k === base.dow ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
+        <div class="field"><label for="ed-v">Valor por sessão</label><input id="ed-v" class="input mono" type="number" step="0.01" min="0" value="${base.valor}"></div></div>
+        <div class="field"><span class="lbl">Sessões neste mês</span><div class="row" style="gap:6px;align-items:center"><button type="button" class="btn sm" data-x="menos" aria-label="Menos uma">−</button><input id="ed-q" class="input mono" type="number" min="0" style="width:70px;text-align:center" value="${nAtual}"><button type="button" class="btn sm" data-x="mais" aria-label="Mais uma">+</button><span class="small muted" id="ed-datas"></span></div></div>
+        <div class="field"><span class="lbl">Dia e valor valem para</span><div class="seg"><button type="button" data-x="esc-todos" class="${o && o.valor != null ? '' : 'on'}">Este mês e os próximos</button><button type="button" data-x="esc-mes" class="${o && o.valor != null ? 'on' : ''}">Só este mês</button></div></div>
+      </div>
       <span class="hint" id="ed-h"></span>` : ''}
     </div>
     <div class="df"><span class="grow"></span><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="ok">Salvar</button></div>` });
   const $l = (sel) => l.box.querySelector(sel);
-  const dica = () => { const h = $l('#ed-h'); if (!h) return; if (!$l('#ed-s').checked) { h.textContent = ''; return; } const dw = Number($l('#ed-d').value), v = Number($l('#ed-v').value) || 0, n = exContaDia(r.month, dw); h.textContent = `${rbLabel(r.month)}: ${n} ${EX_DIAS[dw]}${n > 1 ? 's' : ''} × ${fmtMoney(v) || 'R$ 0,00'} = ${fmtMoney(n * v) || 'R$ 0,00'}. Vale para os próximos meses também.`; };
-  l.box.addEventListener('input', dica); l.box.addEventListener('change', (e) => { if (e.target.id === 'ed-s') $l('#ed-sess').hidden = !e.target.checked; dica(); });
+  let soMes = !!(o && o.valor != null), qMexeu = !!(o && o.n != null);
+  const dica = () => {
+    const h = $l('#ed-h'); if (!h) return;
+    if (!$l('#ed-s').checked) { h.textContent = ''; return; }
+    const dw = Number($l('#ed-d').value), v = Number($l('#ed-v').value) || 0;
+    if (!qMexeu) $l('#ed-q').value = exContaDia(r.month, dw);
+    const n = Number($l('#ed-q').value) || 0, ds = exDatasDia(r.month, dw);
+    $l('#ed-datas').textContent = `${EX_DIAS[dw]}s do mês: ${ds.join(', ')} (${ds.length})`;
+    h.textContent = `${rbLabel(r.month)}: ${n} × ${fmtMoney(v) || 'R$ 0,00'} = ${fmtMoney(n * v) || 'R$ 0,00'}.${soMes ? ' Dia e valor só neste mês.' : ' Os próximos meses usam o mesmo dia e valor (com a quantidade de ' + EX_DIAS[dw] + 's de cada mês).'}`;
+  };
+  l.box.addEventListener('input', (e) => { if (e.target.id === 'ed-q') qMexeu = true; dica(); });
+  l.box.addEventListener('change', (e) => { if (e.target.id === 'ed-s') $l('#ed-sess').hidden = !e.target.checked; if (e.target.id === 'ed-d') qMexeu = false; dica(); });
   dica();
   l.box.addEventListener('click', (e) => {
-    if (!e.target.closest('[data-x="ok"]')) return;
+    const b = e.target.closest('[data-x]'); if (!b) return;
+    if (b.dataset.x === 'menos' || b.dataset.x === 'mais') { const inp = $l('#ed-q'); inp.value = Math.max(0, (Number(inp.value) || 0) + (b.dataset.x === 'mais' ? 1 : -1)); qMexeu = true; return dica(); }
+    if (b.dataset.x === 'esc-todos' || b.dataset.x === 'esc-mes') { soMes = b.dataset.x === 'esc-mes'; b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); return dica(); }
+    if (b.dataset.x !== 'ok') return;
     const nome = $l('#ed-n').value.trim();
     db.update('tempo_expenses', r.id, { name: nome, cat: $l('#ed-c').value || null, note: $l('#ed-o').value.trim() });
     if (r.kind === 'out') {
-      const m = { ...(db.setting('exPorDia', {}) || {}) }; delete m[exNomeKey(r.name)];
-      if ($l('#ed-s').checked) { const v = Number($l('#ed-v').value); if (!v) return toast('Informe o valor por sessão.'); m[exNomeKey(nome)] = { dow: Number($l('#ed-d').value), valor: v }; }
-      db.setSetting('exPorDia', m);
-      // este mês: se ainda não foi pago, o valor passa a ser a conta das sessões
+      const geral = { ...(db.setting('exPorDia', {}) || {}) }, mes = { ...(db.setting('exSessaoMes', {}) || {}) };
+      const kOld = exNomeKey(r.name), kNew = exNomeKey(nome);
+      if (kOld !== kNew && geral[kOld]) { geral[kNew] = geral[kOld]; delete geral[kOld]; }
+      delete mes[r.id];
+      if ($l('#ed-s').checked) {
+        const v = Number($l('#ed-v').value), dw = Number($l('#ed-d').value), n = Number($l('#ed-q').value);
+        if (!v) return toast('Informe o valor por sessão.');
+        if (soMes) mes[r.id] = { dow: dw, valor: v, n };
+        else { geral[kNew] = { dow: dw, valor: v }; if (n !== exContaDia(r.month, dw)) mes[r.id] = { n }; }
+      } else if (!soMes) delete geral[kNew];
+      db.setSetting('exPorDia', geral); db.setSetting('exSessaoMes', mes);
       const atual = db.get('tempo_expenses', r.id);
-      if ($l('#ed-s').checked && atual.status !== EX_DONE.out) db.update('tempo_expenses', r.id, { amount: exPorDiaValor(atual), amount_sug: null }, true);
+      if ($l('#ed-s').checked) db.update('tempo_expenses', r.id, { amount: exPorDiaValor(atual), amount_sug: null }, true);
       exPorDiaSync();
     }
     l.close(); render();
