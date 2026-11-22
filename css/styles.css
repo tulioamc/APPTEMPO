@@ -1629,7 +1629,7 @@ td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
 .pl-mc .pl-mc-n b { font-size: 1.9em !important; font-weight: 800; line-height: 1; color: var(--fg-2); letter-spacing: -.02em; }
 .pl-mc.hoje .pl-mc-n b { color: var(--accent); }
 .pl-mc-chips { display: inline-flex; gap: 4px; align-items: center; font-family: inherit !important; }
-.pl-mc .pl-mc-chips .pl-rf, .al-chip { font-size: .78em !important; font-weight: 800; line-height: 1; padding: 3px 6px; border-radius: 6px; border: 1.5px solid currentColor; background: color-mix(in oklab, currentColor 14%, transparent); }
+.pl-mc-chips .pl-rf, .al-chip { font-size: .78em !important; font-weight: 800; line-height: 1; padding: 3px 6px; border-radius: 6px; border: 1.5px solid currentColor; background: color-mix(in oklab, currentColor 14%, transparent); }
 .pl-mc-tag { font-size: .7em; line-height: 1.35; padding: 1px 6px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid transparent; }
 .pl-mc-tag svg { width: 10px; height: 10px; vertical-align: -1px; }
 .pl-mc-tag.fer { background: var(--surface-2); color: var(--fg-2); border-color: var(--line); }
@@ -1678,7 +1678,7 @@ td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
 .pl-mc-hr.google { background: var(--surface, #fff); color: #1A4FB4; }
 /* cores definidas no canvas: Tulio a100ff, Amanda df6788; AL:M carmesim, AL:PM laranja, AL:C azul; fundo dos chips 30% da cor */
 .pl-rf.T { color: #A100FF; } .pl-rf.A { color: #DF6788; }
-.pl-mc .pl-mc-chips .pl-rf, .al-chip { background: color-mix(in oklab, currentColor 30%, transparent); }
+.pl-mc-chips .pl-rf, .al-chip { background: color-mix(in oklab, currentColor 30%, transparent); }
 .al-chip.m { color: #DC143C; } .al-chip.pm { color: #F08C00; } .al-chip.c { color: #1C7ED6; }
 .pl-mc-tag.obs.nq-T { background: color-mix(in oklab, #A100FF 30%, transparent); color: #7A00C2; border-color: #A100FF; }
 .pl-mc-tag.obs.nq-A { background: color-mix(in oklab, #DF6788 30%, transparent); color: #B8466A; border-color: #DF6788; }
@@ -1697,13 +1697,36 @@ td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
 .pl-filtros { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-left: 8px; }
 .pl-filtros .check { display: inline-flex; gap: 5px; align-items: center; color: var(--fg-2); }
 /* chips do calendário cheios (22/11): fundo forte, letra clara, sem borda */
-.pl-mc .pl-mc-chips .pl-rf, .al-chip { border: 0 !important; border-radius: 6px; padding: 4px 7px; font-weight: 800; }
-.pl-mc .pl-mc-chips .pl-rf.T { background: #5507D2; color: #E2DAF8; }
-.pl-mc .pl-mc-chips .pl-rf.A { background: #F470B8; color: #F8E0EE; }
-.pl-mc .pl-mc-chips .pl-rf.M { background: #2E9E6B; color: #DDF3E8; }
-.pl-mc .pl-mc-chips .pl-rf.X { background: #8E6BD8; color: #EEE7FB; }
+.pl-mc-chips .pl-rf, .al-chip { border: 0 !important; border-radius: 6px; padding: 4px 7px; font-weight: 800; }
+.pl-mc-chips .pl-rf.T { background: #5507D2; color: #E2DAF8; }
+.pl-mc-chips .pl-rf.A { background: #F470B8; color: #F8E0EE; }
+.pl-mc-chips .pl-rf.M { background: #2E9E6B; color: #DDF3E8; }
+.pl-mc-chips .pl-rf.X { background: #8E6BD8; color: #EEE7FB; }
 .al-chip.c { background: #4683E6; color: #CFE0F8; }
 .al-chip.f { background: #64C78A; color: #D2F7E3; }
 .al-chip.m { background: #FF0000; color: #FDD8D8; }
 .al-chip.pm { background: #E7A243; color: #FCE8B4; }
 .pl-rf.T { color: #5507D2; } .pl-rf.A { color: #F470B8; }
+
+/* chips e notas também na Semana e no Dia */
+.pl-cab .pl-mc-chips { margin-left: 4px; }
+.pl-cab .pl-mc-chips .pl-rf, .pl-cab .al-chip, .pl-pop-t .al-chip, .pl-pop-t .pl-mc-chips .pl-rf { font-size: .68em !important; padding: 2px 5px; }
+.pl-notas { display: flex; flex-direction: column; gap: 2px; margin-top: 3px; }
+.pl-cab .pl-notas .pl-mc-tag { font-size: .66em; }
+/* filtro "Mostrar" no padrão do Filtrar */
+.pl-filtro-wrap { position: relative; }
+.pl-filtro-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0,0,0,.16); padding: 12px 14px; min-width: 170px; }
+/* todas as caixas de seleção do app no mesmo estilo */
+input[type=checkbox] { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; flex: none; margin: 0; border: 1.5px solid var(--line-strong, #C4C9D2); border-radius: 4px; background: var(--surface, #fff); display: inline-grid; place-content: center; cursor: pointer; vertical-align: -3px; transition: background .12s, border-color .12s; }
+input[type=checkbox]::before { content: ""; width: 9px; height: 9px; transform: scale(0); transition: transform .1s; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); background: #fff; }
+input[type=checkbox]:checked { background: var(--accent, #2E43D6); border-color: var(--accent, #2E43D6); }
+input[type=checkbox]:checked::before { transform: scale(1); }
+input[type=checkbox]:focus-visible { outline: 2px solid var(--accent-line, #C3CAF8); outline-offset: 1px; }
+input[type=checkbox]:disabled { opacity: .5; cursor: default; }
+.sel-col input[type=checkbox] { display: grid; }
+/* janelinha do arrasto: "Novo fim: 9h30" e a duração embaixo (de 15 em 15 min) */
+.pl-dg-tip { font-family: var(--font, inherit); font-size: 13px; padding: 6px 10px; }
+.pl-dg-tip::after { content: attr(data-sub); display: block; font-weight: 500; font-size: 11px; opacity: .7; margin-top: 2px; }
+/* linhas das horas na grade (Semana e Dia) */
+.pl-grade { background-image: linear-gradient(to bottom, color-mix(in oklab, var(--line) 80%, transparent) 1px, transparent 1px), linear-gradient(to right, transparent calc(33.333% - .5px), var(--line) calc(33.333% - .5px), var(--line) calc(33.333% + .5px), transparent calc(33.333% + .5px)); background-size: 100% calc(100% / 24), 100% 100%; }
+.pl-dia.off .pl-grade { background-image: linear-gradient(to bottom, color-mix(in oklab, var(--line) 80%, transparent) 1px, transparent 1px), repeating-linear-gradient(45deg, transparent 0 10px, color-mix(in oklab, var(--line) 35%, transparent) 10px 11px) !important; background-size: 100% calc(100% / 24), auto !important; }

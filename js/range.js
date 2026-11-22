@@ -24,7 +24,7 @@ function actMoveRange(entryId, a, b, pick) {
   const list = actList(entryId);
   const inRange = list.filter(r => new Date(r.to) > new Date(a) && new Date(r.from) < new Date(b));
   const keep = list.filter(r => !inRange.includes(r));
-  const rest = actSubtract(e.segments || [], [{ a, b }]);
+  const rest = actSubtract(e.segments || [], [{ a, b }], p.id);
   const label = tkProjectLabel(p);
   const intervalo = `${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}`;
   const movedSegs = [{ s: new Date(a).toISOString(), e: new Date(b).toISOString() }];
@@ -40,6 +40,7 @@ function actMoveRange(entryId, a, b, pick) {
       edits: [{ at: nowISO(), reason: `Intervalo ${intervalo} movido para ${label}`, before: e.segments }],
     });
   }
+  if (typeof repairMovedGaps === 'function') repairMovedGaps(3);
   db.emit();
   return true;
 }

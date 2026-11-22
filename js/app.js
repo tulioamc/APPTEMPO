@@ -38,7 +38,7 @@ function pendingOf(id) {
 const NAV = [
   { id: 'timesheet', label: 'Time Sheet', icon: 'clock' },
   { id: 'todo', label: 'To-do', icon: 'check' },
-  { id: 'plano', label: 'Planejamento', icon: 'cal' },
+  { id: 'plano', label: 'Calendário', icon: 'cal' },
   { id: 'relatorios', label: 'Relatórios', icon: 'chart' },
   { group: 'PJ' },
   { id: 'registry', label: 'Agências e clientes', icon: 'users' },

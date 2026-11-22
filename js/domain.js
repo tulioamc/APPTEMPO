@@ -506,6 +506,31 @@ function migrateMovedGaps() {
   db.setSetting('migMovedGaps', true);
   return n;
 }
+/* Conserto contínuo (ao abrir o app e depois de mover): lacuna entre dois trechos de uma sessão que está quase toda
+   (90%+) dentro de OUTRA sessão não é pausa: é tempo que foi movido para lá. Marca "movido" com o destino.
+   Olha só os últimos 60 dias, para ser rápido. */
+function repairMovedGaps(dias = 60) {
+  const T = (x) => new Date(x).getTime(); const desde = Date.now() - dias * 864e5;
+  const all = db.all('tempo_time_entries').filter(e => (e.segments || []).some(s => s.e && T(s.e) >= desde));
+  let n = 0;
+  all.forEach(o => {
+    const segs = o.segments || []; let out = null;
+    for (let i = 0; i < segs.length - 1; i++) {
+      const a = segs[i].e, b = segs[i + 1].s;
+      if (!a || !b || T(b) <= T(a) || segs[i].why === 'moved' || T(a) < desde) continue;
+      const A = T(a), B = T(b), len = B - A; if (len < 60000) continue;
+      let total = 0, best = null, bestC = 0;
+      all.forEach(d => {
+        if (d.id === o.id) return;
+        const c = (d.segments || []).reduce((t, x) => { const xs = T(x.s), xe = x.e ? T(x.e) : Date.now(); const ov = Math.min(B, xe) - Math.max(A, xs); return ov > 0 ? t + ov : t; }, 0);
+        total += c; if (c > bestC) { bestC = c; best = d; }
+      });
+      if (best && total >= len * 0.9) { out = out || segs.map(x => ({ ...x })); out[i] = { ...out[i], why: 'moved', movedTo: best.project_id }; n++; }
+    }
+    if (out) db.update('tempo_time_entries', o.id, { segments: out, edits: auditEdit(o, segs, 'Lacuna que estava em outra sessão marcada como trecho movido (não é pausa)') }, true);
+  });
+  return n;
+}
 /* Migração (uma vez): nos lançamentos de destino de trechos movidos, o espaço entre os pedaços é "fora" e não pausa. */
 function migrateForaGaps() {
   if (db.setting('migFora1', false)) return 0;
@@ -584,6 +609,8 @@ function checkEntries() {
   migrateMovedTo();
   const movidos = migrateMovedGaps();
   if (movidos) toast(`${movidos} lacuna(s) de trecho movido marcada(s) com o destino.`);
+  const conserto = repairMovedGaps();
+  if (conserto) toast(`${conserto} pausa(s) que na verdade eram tempo movido para outra sessão foram corrigidas.`);
   let fixed = 0;
   db.all('tempo_time_entries').forEach(e => {
     if (e.state !== 'done') return;

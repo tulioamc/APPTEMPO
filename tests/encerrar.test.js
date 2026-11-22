@@ -51,3 +51,14 @@ test('ajustar automaticamente: tira os trechos de Mac bloqueado (2 min ou mais) 
   assert.equal(r.tirado, 60 * 60e3);
   assert.deepEqual(r.segs.map(x => [x.s, x.e]), [[d(9, 0), d(10, 0)], [d(11, 0), d(13, 0)]]);
 });
+
+// Mover um intervalo que começa exatamente onde um trecho termina: a lacuna vira "movido" (não pausa com o motivo antigo).
+test('mover intervalo a partir do fim de um trecho não deixa pausa falsa na origem', () => {
+  const { load } = require('./helpers');
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/activity.js'], ['actSubtract'], { VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {}, toast() {}, render() {}, go() {} });
+  const T = (s) => new Date(s).getTime();
+  const segs = [{ s: '2026-11-22T14:14:25Z', e: '2026-11-22T14:16:58Z', why: 'WhatsApp' }, { s: '2026-11-22T14:22:35Z', e: null }];
+  const out = m.actSubtract(segs, [{ a: T('2026-11-22T14:16:58Z'), b: T('2026-11-22T17:04:54Z') }], 'proj-b');
+  assert.equal(out[0].why, 'moved'); assert.equal(out[0].movedTo, 'proj-b');
+  assert.equal(out[1].s, '2026-11-22T17:04:54.000Z'); assert.equal(out[1].e, null);
+});

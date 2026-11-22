@@ -327,9 +327,15 @@ function actSubtract(segs, cuts, movedTo = null) {
     });
     out.push(...pieces);
   });
-  return out.filter(p => p.e === null || p.e > p.s)
-    .map(p => ({ s: new Date(p.s).toISOString(), e: p.e === null ? null : new Date(p.e).toISOString(), ...(p.why ? { why: p.why } : {}), ...(p.movedTo ? { movedTo: p.movedTo } : {}) }))
-    .sort((p, q) => new Date(p.s) - new Date(q.s));
+  const vivos = out.filter(p => p.e === null || p.e > p.s).sort((p, q) => p.s - q.s);
+  // o espaço que ficou depois de um trecho, se foi (mesmo que em parte) levado pelo corte, é "movido" e não pausa —
+  // vale também quando o corte começa exatamente onde o trecho termina (antes ficava com o motivo da pausa, ex.: WhatsApp)
+  vivos.forEach((p, i) => {
+    const nx = vivos[i + 1]; if (p.e === null || !nx) return;
+    if (movedTo && cuts.some(c => c.a < nx.s && c.b > p.e)) { p.why = 'moved'; p.movedTo = movedTo; }
+  });
+  return vivos
+    .map(p => ({ s: new Date(p.s).toISOString(), e: p.e === null ? null : new Date(p.e).toISOString(), ...(p.why ? { why: p.why } : {}), ...(p.movedTo ? { movedTo: p.movedTo } : {}) }));
 }
 /* Partes dos segmentos que caem dentro dos cortes: é o tempo que vai para o novo registro. */
 function actIntersect(segs, cuts, now) {
@@ -397,6 +403,7 @@ function actMoveGroup(entryId, g, pick, ranges = null) {
       state: 'done', segments: moved, edits: [{ at: nowISO(), reason: `Arquivo ${g.label} movido para ${label}`, before: e.segments }],
     });
   }
+  if (typeof repairMovedGaps === 'function') repairMovedGaps(3);
   db.emit();
   return true;
 }

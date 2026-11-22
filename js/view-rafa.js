@@ -105,7 +105,7 @@ ACTIONS['rafa-open'] = (el) => {
       <input type="hidden" id="rf-who" value="${esc(cur)}">
       <div class="field" style="margin-top:14px"><span class="lbl">Horário</span>
         <input id="rf-hora" class="input" value="${esc(row.horario || '')}" placeholder="ex.: 8h às 18h"></div>
-      <div class="field" style="margin-top:10px"><span class="lbl">Notas do dia <span class="faint">(aparecem também no calendário do Planejamento)</span></span>
+      <div class="field" style="margin-top:10px"><span class="lbl">Notas do dia <span class="faint">(aparecem também no Calendário)</span></span>
         <div id="rf-notas" class="stack" style="gap:6px">${rafaNotas(iso).map(rafaNotaLinhaHTML).join('')}</div>
         <button type="button" class="btn sm ghost" data-act="rafa-nota-add" style="align-self:flex-start;margin-top:4px">${icon('plus')} Adicionar nota</button></div>
       ${typeof alMarcar === 'function' ? `<div class="field" style="margin-top:10px"><span class="lbl">Alice <span class="faint">(marcar à mão; o WhatsApp também marca sozinho)</span></span>
