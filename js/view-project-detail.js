@@ -105,12 +105,18 @@ function pdRevisions(p) {
 const pdNcDe = (p) => { const m = (db.setting('projNaoCobrado', {}) || {})[p.id]; const pessoal = /pessoal/i.test(agencyOf(p)?.name || '') || /pessoal/i.test(clientOf(p)?.name || ''); return { on: m ? !!m.on : pessoal, rate: m && Number(m.rate) > 0 ? Number(m.rate) : null }; };
 const pdNcPadrao = () => (typeof precoBase === 'function' ? Number(precoBase().hora) || 0 : 0);
 function pdNaoCobradoHTML(p) {
-  const nc = pdNcDe(p); const ms = projectMs(p.id); const rate = nc.rate ?? pdNcPadrao(); const h = ms / 36e5;
-  const box = nc.on ? `<div class="panel"><div class="panel-h"><h3>Quanto teria custado</h3><span class="small muted">${fmtH(ms)} trabalhadas</span></div><div class="panel-b">
+  // conta pelo bruto sem o ócio: trabalho + distração (WhatsApp etc. durante o trabalho); parado, tela bloqueada e Mac dormindo ficam fora
+  const nc = pdNcDe(p); const ents = db.where('tempo_time_entries', e => e.project_id === p.id && e.state === 'done');
+  const pr = typeof prodOfEntries === 'function' ? prodOfEntries(ents) : null;
+  const m0 = (db.setting('projNaoCobrado', {}) || {})[p.id] || {}; const comPausa = m0.pausa !== false, comOcio = m0.ocio === true;
+  const ms = pr && pr.base ? pr.prod + (comPausa ? pr.dist : 0) + (comOcio ? pr.ocio : 0) : projectMs(p.id); const rate = nc.rate ?? pdNcPadrao(); const h = ms / 36e5;
+  const box = nc.on ? `<div class="panel"><div class="panel-h"><h3>Quanto teria custado</h3><span class="small muted">${pr && pr.base ? [`${fmtH(pr.prod)} de trabalho`, comPausa ? `${fmtH(pr.dist)} de pausa/distração` : '', comOcio ? `${fmtH(pr.ocio)} de ócio` : ''].filter(Boolean).join(' + ') : `${fmtH(ms)} trabalhadas`}</span></div><div class="panel-b">
       <div class="row" style="gap:16px;align-items:flex-end;flex-wrap:wrap">
         <div class="field" style="max-width:190px;margin:0"><label for="pd-ncrate">Valor da hora</label><input id="pd-ncrate" class="input mono" type="number" step="1" min="0" value="${rate || ''}" data-x-nc="rate"><span class="hint">${nc.rate ? `só neste projeto · padrão ${fmtMoney(pdNcPadrao())}` : 'o padrão dos orçamentos (mude aqui só para este projeto)'}</span></div>
         <div class="kpi" style="flex:1;min-width:220px"><span class="k">Se fosse cobrado</span><span class="v">${fmtMoney0(h * rate)}</span><span class="s">${fmtH(ms)} × ${fmtMoney(rate)}/h</span></div>
-      </div>${nc.rate ? `<button type="button" class="btn sm ghost" data-x="pd-ncpadrao" style="margin-top:8px">Voltar à hora padrão</button>` : ''}</div></div>` : '';
+      </div>
+      ${pr && pr.base ? `<div class="row" style="gap:16px;margin-top:10px;flex-wrap:wrap"><label class="check small" data-tip="Pausas de WhatsApp, Telegram e Instagram no meio do trabalho"><input type="checkbox" data-x="pd-ncpausa" ${comPausa ? 'checked' : ''}> Considerar pausa (distração)</label><label class="check small" data-tip="Parado, tela bloqueada, Mac dormindo ou pausa manual"><input type="checkbox" data-x="pd-ncocio" ${comOcio ? 'checked' : ''}> Considerar ócio</label></div>` : ''}
+      ${nc.rate ? `<button type="button" class="btn sm ghost" data-x="pd-ncpadrao" style="margin-top:8px">Voltar à hora padrão</button>` : ''}</div></div>` : '';
   return `<label class="check small" style="margin-bottom:10px"><input type="checkbox" data-x="pd-naocob" ${nc.on ? 'checked' : ''}> Não cobrado <span class="faint">(projeto pessoal ou por conta própria)</span></label>${box}`;
 }
 function pdFinance(p) {
@@ -167,6 +173,7 @@ function bindProjectDrawer(ly, id, st) {
       logEvent('task', t.id, 'deleted', `Tarefa “${t.name}” excluída`, null, null, { project_id: id }); db.emit();
     }
     if (x === 'open-entry') openEntryModal(bid);
+    if (x === 'pd-ncpausa' || x === 'pd-ncocio') { const m = { ...(db.setting('projNaoCobrado', {}) || {}) }; const cur = m[id] || {}; const k = x === 'pd-ncpausa' ? 'pausa' : 'ocio'; const atual = k === 'pausa' ? cur.pausa !== false : cur.ocio === true; m[id] = { on: true, rate: pdNcDe(p()).rate, ...cur, [k]: !atual }; db.setSetting('projNaoCobrado', m); ly.refresh(); return; }
     if (x === 'pd-naocob' || x === 'pd-ncpadrao') { const m = { ...(db.setting('projNaoCobrado', {}) || {}) }; const cur = pdNcDe(p()); m[id] = x === 'pd-naocob' ? { ...(m[id] || {}), on: !cur.on, rate: cur.rate } : { ...(m[id] || {}), on: true, rate: null }; db.setSetting('projNaoCobrado', m); ly.refresh(); return; }
     if (x === 'rev-resent') { const r = db.get('tempo_revisions', bid); db.update('tempo_revisions', bid, { resent_at: nowISO() }, true); logEvent('revision', bid, 'resent', `Reenvio da rodada ${r.number}`, null, null, { project_id: id }); db.emit(); }
     if (x === 'rev-track') { const pr = p(); const c = clientOf(pr); ly.close(); openStartModal({ agency_id: c?.agency_id || '__none', client_id: pr.client_id, project_id: pr.id }); toast('Ao encerrar, abra a sessão e vincule à rodada.'); }
