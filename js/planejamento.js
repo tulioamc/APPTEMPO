@@ -328,9 +328,8 @@ function planoSemanaHTML(porDia) {
    tempo trabalhado (ou planejado) por projeto; à direita, a lista de horários do dia, com rolagem própria. */
 function planoMesCelHTML(dia, porDia, hoje, cfg) {
   const dt = new Date(dia + 'T12:00:00'); const n = dt.getDate(); const util = planoDiaUtil(dia); const fer = planoFer(dia);
-  const passado = dia <= hoje;
   const plan = planoSomaPor(porDia[dia]?.blocos || []); const feito = planoSomaPor(planoFeitosDoDia(dia), 'ms');
-  const base = passado ? feito : plan;
+  const base = feito;   // à esquerda: o que foi trabalhado; o previsto vai em destaque na lista da direita
   const pids = Object.keys(base).filter(k => base[k] > 0.001).sort((a, b) => base[b] - base[a]);
   const tot = pids.reduce((t, k) => t + base[k], 0);
   const ev = planoEventos(dia); const prz = planoPrazos(dia);
@@ -342,8 +341,12 @@ function planoMesCelHTML(dia, porDia, hoje, cfg) {
     ...ev.filter(e => e.diaTodo).map(e => `<div class="pl-mc-tag ev ${e.origem}${e.feito ? ' feito' : ''}" title="${esc(e.titulo)}">${esc(e.titulo)}</div>`),
     rafa && rafa.note ? `<div class="pl-mc-tag obs nq-${typeof rafaNotaQuem === 'function' ? rafaNotaQuem(dia) : 'N'}" title="${esc(rafa.note)}">Obs.: ${esc(rafa.note)}</div>` : ''
   ].join('');
+  // rotina (fixos) só na semana atual, para os meses seguintes não ficarem carregados; to-dos e projetos previstos sempre
+  const semIni = (() => { const h = new Date(hoje + 'T12:00:00'); h.setDate(h.getDate() - ((h.getDay() + 6) % 7)); return ymd(h); })();
+  const semanaAtual = dia >= semIni && dia <= (() => { const f = new Date(semIni + 'T12:00:00'); f.setDate(f.getDate() + 6); return ymd(f); })();
+  const previstos = dia >= hoje ? Object.keys(plan).filter(k => plan[k] > 0.001).sort((a, b) => plan[b] - plan[a]) : [];
   const horarios = [
-    ...planoFixosDoDia(dia).map(f => ({ ini: f[0], titulo: f[2], cls: 'fixo' })),
+    ...(semanaAtual ? planoFixosDoDia(dia).map(f => ({ ini: f[0], titulo: f[2], cls: 'fixo' })) : []),
     ...ev.filter(e => !e.diaTodo).map(e => ({ ini: e.ini, titulo: e.titulo, cls: e.origem + (e.feito ? ' feito' : '') }))
   ].sort((x, y) => x.ini - y.ini);
   const proj = pids.map(pid => { const p = db.get('tempo_projects', pid);
@@ -353,9 +356,10 @@ function planoMesCelHTML(dia, porDia, hoje, cfg) {
       <div class="pl-mc-esq">
         <div class="pl-mc-n"><b>${n === 1 ? dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '') : n}</b><span class="pl-mc-chips"><button class="pl-mc-nota" data-act="rafa-open" data-day="${dia}" title="Nota do dia (a mesma de Dias de Rafa)" aria-label="Nota do dia">${icon('plus')}</button>${al}${planoRafaLetraHTML(dia)}</span></div>
         ${topo}
-        ${pids.length ? `<div class="pl-mc-tt${!passado && tot > cfg.horasDia + 0.05 ? ' late' : ''}"><span>${passado ? 'Tempo trabalhado' : 'Planejado'}</span><em>${fmtH(tot * 36e5)}</em></div>${proj}` : ''}
+        ${pids.length ? `<div class="pl-mc-tt"><span>Tempo trabalhado</span><em>${fmtH(tot * 36e5)}</em></div>${proj}` : ''}
       </div>
-      ${horarios.length ? `<div class="pl-mc-dir" data-pl-noclick>${horarios.map(h => `<div class="pl-mc-hr ${h.cls}" title="${esc(planoHora(h.ini) + ' ' + h.titulo)}"><b>${planoHora(h.ini)}</b> ${esc(h.titulo)}</div>`).join('')}</div>` : ''}
+      ${horarios.length || previstos.length ? `<div class="pl-mc-dir" data-pl-noclick>${previstos.map(pid => { const p = db.get('tempo_projects', pid); const ab = p && typeof agencyAbbr === 'function' ? agencyAbbr(agencyOf(p)) : ''; const nm = `${ab ? '[' + ab + '] ' : ''}${p?.name || 'Sem projeto'}`;
+        return `<div class="pl-mc-prev${plan[pid] && dia === hoje ? ' hoje' : ''}" style="--fc:${planoCor(pid === '_' ? null : pid)}" title="${esc(`Previsto: ${nm} · ${fmtH(plan[pid] * 36e5)}`)}"><span>${esc(nm)}</span><em>${fmtH(plan[pid] * 36e5)}</em></div>`; }).join('')}${horarios.map(h => `<div class="pl-mc-hr ${h.cls}" title="${esc(planoHora(h.ini) + ' ' + h.titulo)}"><b>${planoHora(h.ini)}</b> ${esc(h.titulo)}</div>`).join('')}</div>` : ''}
     </div>
   </div>`;
 }

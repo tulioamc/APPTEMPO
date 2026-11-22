@@ -1665,3 +1665,6 @@ td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
 .pl-mc-nota { border: 0; background: none; padding: 2px; color: var(--fg-3); opacity: 0; cursor: pointer; line-height: 0; }
 .pl-mc-nota svg { width: 12px; height: 12px; }
 .pl-mc:hover .pl-mc-nota { opacity: 1; }
+.pl-mc-prev { display: flex; justify-content: space-between; gap: 6px; font-size: .7em; font-weight: 700; padding: 3px 6px; border-radius: 5px; background: var(--accent); color: #fff; flex: none; min-width: 0; }
+.pl-mc-prev span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-mc-prev em { font-style: normal; font-family: var(--font-mono); font-weight: 500; opacity: .85; }
