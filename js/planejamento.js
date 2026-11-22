@@ -356,10 +356,10 @@ function planoMesCelHTML(dia, porDia, hoje, cfg) {
       <div class="pl-mc-esq">
         <div class="pl-mc-n"><b>${n === 1 ? dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '') : n}</b><span class="pl-mc-chips"><button class="pl-mc-nota" data-act="rafa-open" data-day="${dia}" title="Nota do dia (a mesma de Dias de Rafa)" aria-label="Nota do dia">${icon('plus')}</button>${al}${planoRafaLetraHTML(dia)}</span></div>
         ${topo}
-        ${pids.length ? `<div class="pl-mc-tt"><span>Tempo trabalhado</span><em>${fmtH(tot * 36e5)}</em></div>${proj}` : ''}
       </div>
       ${horarios.length || previstos.length ? `<div class="pl-mc-dir" data-pl-noclick>${previstos.map(pid => { const p = db.get('tempo_projects', pid); const ab = p && typeof agencyAbbr === 'function' ? agencyAbbr(agencyOf(p)) : ''; const nm = `${ab ? '[' + ab + '] ' : ''}${p?.name || 'Sem projeto'}`;
         return `<div class="pl-mc-prev${plan[pid] && dia === hoje ? ' hoje' : ''}" style="--fc:${planoCor(pid === '_' ? null : pid)}" title="${esc(`Previsto: ${nm} · ${fmtH(plan[pid] * 36e5)}`)}"><span>${esc(nm)}</span><em>${fmtH(plan[pid] * 36e5)}</em></div>`; }).join('')}${horarios.map(h => `<div class="pl-mc-hr ${h.cls}" title="${esc(planoHora(h.ini) + ' ' + h.titulo)}"><b>${planoHora(h.ini)}</b> ${esc(h.titulo)}</div>`).join('')}</div>` : ''}
+      ${pids.length ? `<div class="pl-mc-reg"><div class="pl-mc-tt"><span>Tempo trabalhado</span><em>${fmtH(tot * 36e5)}</em></div>${proj}</div>` : ''}
     </div>
   </div>`;
 }
