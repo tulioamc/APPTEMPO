@@ -1777,7 +1777,7 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 /* Projeto › Tarefas — no tamanho do desenho do Tulio (px de tela): nome 15, responsável 12 negrito cinza, status 12,5,
    tempos 13 (rótulos 10), data 13 com "quando" 10,5 negrito, hora 13. Linhas de ~60 px, limpo. */
 .tk { border-bottom: 1px solid var(--line); }
-.tk-l { display: grid; grid-template-columns: minmax(150px, 1fr) 56px 140px 138px 100px 58px 34px; gap: 10px; align-items: center; padding: 11px 14px 11px 20px; min-height: 60px; }
+.tk-l { display: grid; grid-template-columns: minmax(110px, 1fr) 50px 124px 128px 96px 56px; position: relative; gap: 10px; align-items: center; padding: 11px 14px 11px 20px; min-height: 60px; }
 .tk.sub .tk-l { padding-left: 38px; }
 .tk-in { border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 2px 5px; margin-left: -6px; font: inherit; color: inherit; width: 100%; min-width: 0; }
 .tk-in:hover { border-color: var(--line); }
@@ -1798,7 +1798,7 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .tk-rel.hoje { color: #E5487A; font-weight: 700; }
 .tk-rel.amanha { color: #E8893A; font-weight: 700; }
 .tk-rel.late { color: var(--danger); font-weight: 700; }
-.tk-acoes { display: flex; justify-content: flex-end; opacity: 0; transition: opacity .12s; }
+.tk-acoes { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; justify-content: flex-end; opacity: 0; transition: opacity .12s; background: var(--surface-1, #fff); border-radius: 6px; box-shadow: 0 0 0 1px var(--line); padding: 1px; }
 .tk:hover .tk-acoes, .tk.aberta .tk-acoes, .tk-acoes:focus-within { opacity: 1; }
 .tk-acoes .btn { padding: 2px; }
 .tk-mais-p { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 0 14px 10px 20px; font-size: 12px; }
@@ -1845,18 +1845,21 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .pl-reorg:hover { color: var(--accent); border-color: var(--accent); }
 /* Tarefas na janela bem estreita: some responsável e hora */
 .tk-lista { container-type: inline-size; }
-@container (max-width: 600px) { .tk-l { grid-template-columns: minmax(110px, 1fr) 120px 140px 100px 36px; } .tk-resp, .tk-hora { display: none; } }
+@container (max-width: 600px) { .tk-l { grid-template-columns: minmax(110px, 1fr) 120px 128px 96px; } .tk-resp, .tk-hora { display: none; } }
 .tk.tk-foco { background: color-mix(in oklab, var(--accent) 10%, transparent); transition: background .3s; }
-/* Agência/cliente: blocos que recolhem e mudam de lugar */
-.pty-sec { margin-top: 14px; }
-.pty-sec-h { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-.pty-grip { cursor: grab; color: var(--fg-3); font-size: .8rem; letter-spacing: -2px; padding: 2px 4px; border-radius: 4px; user-select: none; opacity: .6; }
-.pty-grip:hover { opacity: 1; background: var(--surface-2); }
-.pty-sec-t { border: 0; background: none; padding: 2px 0; display: inline-flex; align-items: center; gap: 6px; font: 700 .72rem/1 var(--font, inherit); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-3); cursor: pointer; }
-.pty-sec-t svg { width: 13px; height: 13px; }
-.pty-sec-t:hover { color: var(--fg); }
+/* Agência/cliente: blocos que recolhem e mudam de lugar (desenho do Tulio: ⠿ · [v] · TÍTULO em negrito, bem juntos) */
+.pty-sec { margin-top: 6px; }
+.pty-sec:not(.fechada) { margin-bottom: 14px; }
+.pty-sec-h { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+.pty-grip { cursor: grab; display: inline-flex; padding: 2px; border-radius: 4px; user-select: none; color: var(--fg-3); }
+.pty-grip svg { width: 8px; height: 12px; fill: currentColor; }
+.pty-grip:hover { background: var(--surface-2); color: var(--fg); }
+.pty-sec-t { border: 0; background: none; padding: 0; display: inline-flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 800; letter-spacing: 0; text-transform: uppercase; color: var(--fg); cursor: pointer; }
+.pty-chev { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 5px; background: var(--surface-2); color: var(--fg-3); }
+.pty-chev svg { width: 13px; height: 13px; transition: transform .15s; }
+.pty-sec:not(.fechada) .pty-chev svg { transform: rotate(180deg); }
+.pty-sec-t:hover .pty-chev { color: var(--fg); }
 .pty-sec.arrastando { opacity: .45; }
-.pty-sec.fechada { margin-top: 8px; }
 .party-ag { border: 0; background: none; padding: 0; cursor: pointer; display: inline-flex; margin: 2px 0 4px; }
 /* Calendário: linha de entrega (azul, fina) e chip do cliente nos blocos */
 .pl-grade > .pl-prazo { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px solid #2563EB; z-index: 90; cursor: ns-resize; touch-action: none; }
@@ -1864,3 +1867,8 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .pl-grade > .pl-prazo span { position: absolute; right: 2px; top: -13px; font-weight: 700 !important; font-size: 9.5px !important; line-height: 1.2 !important; color: #2563EB; background: color-mix(in oklab, var(--surface-1, #fff) 85%, transparent); padding: 0 3px; border-radius: 3px; max-width: 95%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .pl-grade > .pl-prazo::after { content: ''; position: absolute; left: 0; right: 0; top: -5px; height: 10px; }
 .pl-cli { font-size: .82em !important; padding: 0 5px !important; margin-right: 4px; vertical-align: 1px; border-radius: 4px; }
+
+.tk-st .combo-btn { max-width: 100%; }
+.tk-st .combo-btn .tag { max-width: 100%; white-space: nowrap; }
+.tk-st .combo-btn { padding: 0; }
+.tk-st .combo-btn .chev { display: none; }

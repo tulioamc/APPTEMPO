@@ -204,11 +204,11 @@ function tkMotor(agora = new Date(), dias = 120) {
       const pv = tkPrev(t); const feito = taskMs(t.id) / 60e3;
       const prevSim = pv.manual ? pv.min * H.fator : pv.min;
       itens.push({ id: t.id, t, p, pid: p.id, nome: t.name, eu: souEu(t.owner), deps: (Array.isArray(t?.depends_on) ? t.depends_on : []).filter(d => abertas.some(x => x.id === d)),
-        resto: Math.max(0, prevSim - feito), feitoMin: feito, prev: pv.min, entrega: tkEntrega(t) || (p.deadline ? fimExp(p.deadline) : null), chave: `${t.deadline || p.deadline || '9999'}T${t.deadline_time || '99'}|${String(t.order ?? 0).padStart(5, '0')}` });
+        resto: Math.ceil(Math.max(0, prevSim - feito) / 15 - 1e-6) * 15, feitoMin: feito, prev: pv.min, entrega: tkEntrega(t) || (p.deadline ? fimExp(p.deadline) : null), chave: `${t.deadline || p.deadline || '9999'}T${t.deadline_time || '99'}|${String(t.order ?? 0).padStart(5, '0')}` });
     });
     else if (Number(p.estimated_hours) > 0) {
       const falta = Number(p.estimated_hours) * 60 - projectMs(p.id) / 60e3;
-      if (falta > 3) itens.push({ id: 'p:' + p.id, t: null, p, pid: p.id, nome: p.name, eu: true, deps: [], resto: falta, feitoMin: 0, prev: falta, entrega: p.deadline ? fimExp(p.deadline) : null, chave: `${p.deadline || '9999'}T99|00000` });
+      if (falta > 3) itens.push({ id: 'p:' + p.id, _q: 1, t: null, p, pid: p.id, nome: p.name, eu: true, deps: [], resto: Math.ceil(falta / 15) * 15, feitoMin: 0, prev: falta, entrega: p.deadline ? fimExp(p.deadline) : null, chave: `${p.deadline || '9999'}T99|00000` });
     }
   });
   const porId = Object.fromEntries(itens.map(x => [x.id, x]));
@@ -239,10 +239,11 @@ function tkMotor(agora = new Date(), dias = 120) {
       for (const [a, b] of jan) {
         if (falta <= 0.5) break;
         let cap = gasta ? capMin(d) - (usado[d] || 0) : Infinity; if (cap <= 0.5) break;
-        const x = Math.max(a, h0); if (b - x <= 0.01) continue;
+        // tudo em blocos de 15 min: começa e termina em :00, :15, :30 ou :45
+        const x = Math.ceil(Math.max(a, h0) * 4 - 1e-6) / 4, bq = Math.floor(b * 4 + 1e-6) / 4; if (bq - x <= 0.01) continue;
         // sem pedacinhos: brecha menor que 30 min só serve se for o que falta para terminar
-        if ((b - x) * 60 < Math.min(30, falta) - 0.5) continue;
-        const take = Math.min(falta, (b - x) * 60, cap);
+        if ((bq - x) * 60 < Math.min(30, falta) - 0.5) continue;
+        const take = Math.floor(Math.min(falta, (bq - x) * 60, cap) / 15 + 1e-6) * 15; if (take < 15) continue;
         blocos.push({ dia: d, ini: x, fim: x + take / 60 }); falta -= take; if (gasta) usado[d] = (usado[d] || 0) + take;
         fim = diaDe(d, x + take / 60);
       }
@@ -259,6 +260,7 @@ function tkMotor(agora = new Date(), dias = 120) {
     // blocos fixados à mão deste projeto
     [...(x.t ? pinPool['t:' + x.t.id] || [] : []), ...(pinPool['p:' + x.pid] || [])].forEach(pn => {
       if (resto <= 0.5) return; let cur = pn.cur; if (pn.dia === hoje) cur = Math.max(cur, nowH); if (pn.dia < hoje || pn.b - cur <= 0.01) return;
+      cur = Math.ceil(cur * 4 - 1e-6) / 4; if (pn.b - cur <= 0.01) return;
       const take = Math.min(resto, (pn.b - cur) * 60); blocos.push({ dia: pn.dia, ini: cur, fim: cur + take / 60, pin: pn.id }); pn.cur = cur + take / 60; resto -= take;
       const f = diaDe(pn.dia, pn.cur); if (f > fim) fim = f;
     });

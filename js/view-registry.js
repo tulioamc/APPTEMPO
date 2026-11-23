@@ -122,7 +122,7 @@ function partySecoesHTML(secs) {
   const ord = db.setting('partySecOrdem', null) || PARTY_SEC_PADRAO; const fech = db.setting('partySecFechado', {}) || {};
   const pos = (k) => { const i = ord.indexOf(k); return i < 0 ? 100 + PARTY_SEC_PADRAO.indexOf(k) : i; };
   return secs.filter(([, , html]) => html).sort((a, b) => pos(a[0]) - pos(b[0])).map(([k, t, html]) => `<section class="pty-sec${fech[k] ? ' fechada' : ''}" data-sec="${k}">
-    <div class="pty-sec-h"><span class="pty-grip" draggable="true" data-grip title="Arraste para mudar a ordem (vale para todos)">⋮⋮</span><button type="button" class="pty-sec-t" data-x="sec-tog" data-k="${k}" aria-expanded="${!fech[k]}">${esc(t)} ${icon(fech[k] ? 'chevR' : 'chevD')}</button></div>
+    <div class="pty-sec-h"><span class="pty-grip" draggable="true" data-grip title="Arraste para mudar a ordem (vale para todos)"><svg viewBox="0 0 8 12" aria-hidden="true"><circle cx="2" cy="2" r="1.1"/><circle cx="6" cy="2" r="1.1"/><circle cx="2" cy="6" r="1.1"/><circle cx="6" cy="6" r="1.1"/><circle cx="2" cy="10" r="1.1"/><circle cx="6" cy="10" r="1.1"/></svg></span><button type="button" class="pty-sec-t" data-x="sec-tog" data-k="${k}" aria-expanded="${!fech[k]}"><span class="pty-chev">${icon('chevD')}</span>${esc(t)}</button></div>
     ${fech[k] ? '' : `<div class="pty-sec-b">${html}</div>`}</section>`).join('');
 }
 function openParty(kind, id) {
