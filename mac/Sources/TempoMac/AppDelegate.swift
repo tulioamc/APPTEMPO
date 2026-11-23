@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private let whatsapp = WhatsAppMonitor()
     private let foco = FocoController()
     private let notas = NotasEmitidas()
+    private let agenda = AgendaApple()
     private var focoItem: NSMenuItem?
     private let defaults = UserDefaults.standard
     private let isoFormatter: ISO8601DateFormatter = {
@@ -88,6 +89,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         monitor.start()
         setupWhatsApp()
         setupNotas()
+        // Calendário da Apple → Calendário do Tempo (só leitura; traz agendas que não passam pelo Google, como a da Brenda)
+        agenda.enviar = { [weak self] itens in
+            guard let self = self, let json = self.jsonString(itens) else { return }
+            self.web.evaluateJavaScript("window.TempoBridge && window.TempoBridge.reportAgendaMac && window.TempoBridge.reportAgendaMac(\(json)); true", completionHandler: nil)
+        }
+        agenda.start()
         foco.onAbriu = { [weak self] nome in self?.enqueue("focoAbriu", [nome]) }
         foco.aviso = { [weak self] t, b in self?.showNotice(t, b) }
         foco.start()

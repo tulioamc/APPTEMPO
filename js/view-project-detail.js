@@ -57,25 +57,41 @@ function pdOverview(p) {
 
 function pdTasks(p) {
   const tks = tasksOf(p.id);
-  const row = (t, isSub) => `<div class="task-row ${isSub ? 'sub' : ''}">
-    <input class="input sm n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome">
-    ${comboBtn('work', t.status_id, 'task-status', t.id)}
-    ${t.status_inherited !== false ? '<span class="inh" title="Acompanha o status do projeto">H</span>' : `<button class="btn sm ghost" data-x="inherit" data-id="${t.id}" title="Voltar a acompanhar o status do projeto">${icon('undo')} herdar</button>`}
-    ${!isSub ? comboBtn('wt', t.work_type_id, 'task-wt', t.id, { cls: 'hide-sm' }) : ''}
-    <span class="row" style="gap:4px" data-dias-wrap><input type="date" class="input sm" style="width:auto" value="${t.deadline || ''}" data-pd="tdl" data-id="${t.id}" aria-label="Prazo">${emDiasHTML(false)}</span>
-    <input class="input sm" style="width:130px" value="${esc(t.owner || '')}" placeholder="Responsável" data-pd="owner" data-id="${t.id}" aria-label="Responsável">
-    <span class="mono small faint" style="min-width:52px;text-align:right" title="Líquido">${fmtDur(isSub ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : taskMs(t.id))}</span><span class="mono small faint" style="min-width:52px;text-align:right" title="Bruto (com pausas)">${fmtDur(db.where('tempo_time_entries', e => (isSub ? e.task_id === t.id : (e.task_id === t.id || subtasksOf(t.id).some(x => x.id === e.task_id)))).reduce((s, e) => s + entryBrutoMs(e), 0))}</span>
-    ${!t.owner || t.owner === 'Eu' ? `<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` : '<span class="faint small" title="Terceiro: sem apontamento de horas">terceiro</span>'}
-    ${!isSub ? `<button class="btn sm icon ghost" data-x="add-sub" data-id="${t.id}" aria-label="Adicionar subtarefa">${icon('plus')}</button>` : ''}
-    ${!isSub ? depsHTML(t) : ''}
-    ${!isSub && !ADJUST_RE.test(t.name) ? `<button class="btn sm ghost" data-x="add-adjust" data-id="${t.id}" title="Registrar um ajuste desta tarefa (cria [Ajuste NN] para você preencher o prazo)">Ajuste</button>` : ''}
-    <button class="btn sm icon ghost" data-x="del-task" data-id="${t.id}" aria-label="Excluir">${icon('trash')}</button>
+  // Uma linha por tarefa só com o essencial; o resto (tipo, herdar, dependências, subtarefa, ajuste, excluir) abre ao clicar na seta.
+  const relDia = (d) => { if (!d) return ''; const n = Math.round((new Date(d + 'T12:00:00') - new Date(ymd(new Date()) + 'T12:00:00')) / 864e5); return n === 0 ? 'hoje' : n === 1 ? 'amanhã' : n === -1 ? 'ontem' : n > 0 ? `em ${n} dias` : `${-n} dias atrás`; };
+  const row = (t, isSub) => {
+    const liq = isSub ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : taskMs(t.id);
+    const bruto = db.where('tempo_time_entries', e => (isSub ? e.task_id === t.id : (e.task_id === t.id || subtasksOf(t.id).some(x => x.id === e.task_id)))).reduce((s, e) => s + entryBrutoMs(e), 0);
+    const est = estimadoDaTarefa(t); const aberto = TK_ABERTAS.has(t.id);
+    const deps = (Array.isArray(t.depends_on) ? t.depends_on : []).map(d => db.get('tempo_tasks', d)?.name).filter(Boolean);
+    const atras = t.deadline && t.deadline < ymd(new Date()) && statusCat(t.status_id) !== 'done';
+    const tempo = liq || est ? `${liq ? fmtDur(liq) : '0min'}${est ? ` <span class="faint">de ${fmtH(est * 36e5)}</span>` : ''}` : '';
+    return `<div class="tk ${isSub ? 'sub' : ''}${aberto ? ' aberta' : ''}">
+    <div class="tk-l">
+      ${comboBtn('work', t.status_id, 'task-status', t.id)}
+      <div class="tk-nome"><input class="tk-in n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome">${deps.length ? `<span class="tk-dep">depois de ${esc(deps.join(', '))}</span>` : ''}</div>
+      <input class="tk-in tk-resp" value="${esc(t.owner || '')}" placeholder="Responsável" data-pd="owner" data-id="${t.id}" aria-label="Responsável">
+      <label class="tk-prazo${atras ? ' late' : ''}" data-tip="Prazo"><input type="date" class="tk-in" value="${t.deadline || ''}" data-pd="tdl" data-id="${t.id}" aria-label="Prazo"><span>${relDia(t.deadline)}</span></label>
+      <span class="tk-tempo mono small" data-tip="${esc(`Líquido ${fmtDur(liq)} · bruto (com pausas) ${fmtDur(bruto)}${est ? ' · estimado ' + fmtH(est * 36e5) : ''}`)}">${tempo}</span>
+      ${!t.owner || t.owner === 'Eu' ? `<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` : '<span class="faint small tk-terc" data-tip="Terceiro: sem apontamento de horas">terceiro</span>'}
+      <button class="btn sm icon ghost tk-mais" data-x="tk-abrir" data-id="${t.id}" aria-label="${aberto ? 'Fechar' : 'Mais opções'}" aria-expanded="${aberto}">${icon(aberto ? 'chevU' : 'chevD')}</button>
+    </div>
+    ${aberto ? `<div class="tk-mais-p">
+      ${t.status_inherited !== false ? `<span class="small muted" data-tip="Mudar o status do projeto muda o desta tarefa também">${icon('layers')} Segue o status do projeto</span>` : `<button class="btn sm" data-x="inherit" data-id="${t.id}" data-tip="Esta tarefa foi mudada à mão e não segue mais o status do projeto">${icon('undo')} Voltar a seguir o projeto</button>`}
+      ${!isSub ? comboBtn('wt', t.work_type_id, 'task-wt', t.id) : ''}
+      ${!isSub ? depsHTML(t) : ''}
+      <span class="grow"></span>
+      ${!isSub ? `<button class="btn sm ghost" data-x="add-sub" data-id="${t.id}">${icon('plus')} Subtarefa</button>` : ''}
+      ${!isSub && !ADJUST_RE.test(t.name) ? `<button class="btn sm ghost" data-x="add-adjust" data-id="${t.id}" data-tip="Registrar um ajuste desta tarefa (cria [Ajuste NN] para você preencher o prazo)">Ajuste</button>` : ''}
+      <button class="btn sm icon ghost" data-x="del-task" data-id="${t.id}" aria-label="Excluir">${icon('trash')}</button>
+    </div>` : ''}
   </div>`;
-  return `<div class="banner info small">${icon('layers')} Mudar o status do projeto atualiza só as tarefas marcadas como <b>herdado</b>. Ao mudar uma tarefa manualmente, ela vira exceção e não afeta o projeto nem as outras tarefas.</div>
-  <div class="row" style="justify-content:flex-end;margin:6px 0;gap:8px"><button class="btn sm" data-act="tk-new" data-project="${p.id}">${icon('plus')} Criar tarefa</button><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
-  <div class="panel"><div class="panel-b tight">${tks.length ? tks.map(t => row(t) + subtasksOf(t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}</div></div>
-  <form class="row" data-form="add-task"><input class="input grow" name="name" placeholder="Nova tarefa" aria-label="Nova tarefa"><button class="btn primary">${icon('plus')} Adicionar tarefa</button></form>`;
+  };
+  return `<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px"><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
+  <div class="panel"><div class="panel-b tight">${tks.length ? tks.map(t => row(t) + subtasksOf(t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}
+  <form class="tk-nova" data-form="add-task"><span class="tk-nova-i">${icon('plus')}</span><input class="tk-in grow" name="name" placeholder="Nova tarefa (Enter para adicionar)" aria-label="Nova tarefa"></form></div></div>`;
 }
+const TK_ABERTAS = new Set();
 
 function pdTime(p) {
   const es = db.where('tempo_time_entries', e => e.project_id === p.id).sort((a, b) => new Date(entryStart(b)) - new Date(entryStart(a)));
@@ -165,6 +181,7 @@ function bindProjectDrawer(ly, id, st) {
     if (x === 'add-adjust') { const t = db.get('tempo_tasks', bid); const nt = createAdjustTask(t, null, 'Registrado manualmente'); setTimeout(() => { const ins = $$('[data-pd="tdl"]', ly.box).find(i => i.dataset.id === nt.id); ins?.focus(); }, 30); }
     if (x === 'del-change') { if (!await confirmBox({ title: 'Apagar esta alteração?', body: 'Remove só a linha do histórico de prazo. O prazo atual não muda.', ok: 'Apagar', danger: true })) return; db.remove('tempo_deadline_changes', bid, true); ly.refresh(); toast('Alteração apagada'); }
     if (x === 'inherit') resetTaskInheritance(db.get('tempo_tasks', bid));
+    if (x === 'tk-abrir') { TK_ABERTAS.has(bid) ? TK_ABERTAS.delete(bid) : TK_ABERTAS.add(bid); ly.refresh(); return; }
     if (x === 'add-sub') { const t = db.get('tempo_tasks', bid); db.insert('tempo_tasks', { project_id: id, parent_id: t.id, name: 'Nova subtarefa', status_id: t.status_id, status_inherited: true, deadline: null, notes: '', order: subtasksOf(t.id).length }); setTimeout(() => { const ins = $$('[data-pd="tname"]', ly.box); const last = ins.find(i => db.get('tempo_tasks', i.dataset.id)?.name === 'Nova subtarefa'); last?.select(); }, 30); }
     if (x === 'del-task') {
       const t = db.get('tempo_tasks', bid); const subs = subtasksOf(t.id);

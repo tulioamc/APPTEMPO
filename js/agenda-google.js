@@ -136,3 +136,11 @@ if (typeof window !== 'undefined' && !window.__aggTimer) {
   setInterval(() => aggSync(), 5 * 60e3);
   if (/[?&]gcal=ok/.test(location.search)) setTimeout(() => aggSync(true), 3e3);
 }
+
+/* Calendário da Apple pelo app do Mac (só leitura): traz agendas que não passam pelo Google (ex.: Brenda). */
+function aggReportMac(itens) {
+  const lista = Array.isArray(itens) ? itens : [];
+  if (JSON.stringify(lista) === JSON.stringify(db.setting('agendaEventosMac', []) || [])) return true;
+  db.setSetting('agendaEventosMac', lista); db.emit(); return true;
+}
+if (window.TempoBridge) window.TempoBridge.reportAgendaMac = aggReportMac;

@@ -24,6 +24,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSAppleEventsUsageDescription</key><string>O Tempo cria lembretes no app Lembretes e mostra avisos.</string>
+<key>NSCalendarsUsageDescription</key><string>O Tempo mostra os compromissos do Calendário no planejamento.</string>
+<key>NSCalendarsFullAccessUsageDescription</key><string>O Tempo mostra os compromissos do Calendário no planejamento.</string>
 <key>NSRemindersUsageDescription</key><string>O Tempo cria lembretes com alarme para as suas to-dos.</string>
 </dict></plist>
 PLIST

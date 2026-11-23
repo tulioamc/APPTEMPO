@@ -116,7 +116,7 @@ module.exports = async (req, res) => {
           if (ev.status === 'cancelled' || !ev.start) return;
           const eu = (ev.attendees || []).find(a => a.self); if (eu && eu.responseStatus === 'declined') return;
           const k = (ev.iCalUID || ev.id) + '|' + iniDe(ev); if (vistosEv.has(k)) return; vistosEv.add(k);
-          eventos.push({ id: c.id + '|' + ev.id, ini: iniDe(ev), fim: fimDe(ev), titulo: ev.summary || (ev.visibility === 'private' ? 'Ocupado' : '(sem título)'), agenda: c.summaryOverride || c.summary || '', conta, diaTodo: !!ev.start.date, livre: ev.transparency === 'transparent' });
+          eventos.push({ id: c.id + '|' + ev.id, uid: ev.iCalUID || '', ini: iniDe(ev), fim: fimDe(ev), titulo: ev.summary || (ev.visibility === 'private' ? 'Ocupado' : '(sem título)'), agenda: c.summaryOverride || c.summary || '', conta, diaTodo: !!ev.start.date, livre: ev.transparency === 'transparent' });
         });
       });
     };

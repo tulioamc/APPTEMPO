@@ -78,15 +78,39 @@ function planoInicioDia(dia, cfg = planoCfg()) {
   return manha.length ? Math.min(cfg.inicio, Math.max(...manha.map(f => f[1]))) : cfg.inicio;
 }
 const planoPins = () => db.setting('planoPins', []) || [];
+/* Compromissos de fora: Google (servidor, 'agendaEventos') + Calendário da Apple (app do Mac, 'agendaEventosMac'),
+   sem repetir o mesmo evento que chega pelos dois caminhos (mesmo id do iCal, ou mesmo título e início). */
+/* Cada conta (Gmail, brenda.ag, iCloud…) pode ser escondida na visualização do Calendário; escondida, continua ocupando o planejamento. */
+const agendaContaDe = (ev) => ev.conta || ev.agenda || 'Outros';
+const agendaContaNome = (c) => { const d = String(c).split('@')[1]; return d ? (/^(gmail|googlemail)\.com$/i.test(d) ? 'Gmail' : d) : c; };
+const agendaContasOff = () => db.setting('agendaContasOff', {}) || {};
+function agendaContas() {
+  const s = new Set(); [...(db.setting('agendaEventos', []) || []), ...(db.setting('agendaEventosMac', []) || [])].forEach(ev => s.add(agendaContaDe(ev)));
+  return [...s].sort((x, y) => agendaContaNome(x).localeCompare(agendaContaNome(y)));
+}
+let _agTodos = { a: null, b: null, off: null, l: [] };
+function agendaTodosEventos() {
+  const a = db.setting('agendaEventos', []) || [], b = db.setting('agendaEventosMac', []) || [], off = agendaContasOff();
+  if (_agTodos.a === a && _agTodos.b === b && _agTodos.off === off) return _agTodos.l;
+  const visto = new Set(), out = [];
+  const min = (x) => Math.round(new Date(x).getTime() / 60e3);
+  [...a, ...b].forEach(ev => {
+    const k1 = ev.uid ? 'u' + ev.uid + '|' + min(ev.ini) : null, k2 = 't' + String(ev.titulo || '').trim().toLowerCase() + '|' + min(ev.ini);
+    if ((k1 && visto.has(k1)) || visto.has(k2)) return;
+    if (k1) visto.add(k1); visto.add(k2); out.push(off[agendaContaDe(ev)] ? { ...ev, oculto: true } : ev);
+  });
+  _agTodos = { a, b, off, l: out }; return out;
+}
 /* Compromissos do dia, de qualquer origem, num formato só: { id, ini, fim (horas decimais), titulo, origem, diaTodo }.
    Hoje: bloqueios marcados no app. Google Agenda: o app do Mac vai gravar os eventos em tempo_settings 'agendaEventos'
    ([{ id, ini: ISO, fim: ISO, titulo, agenda, diaTodo }]) e eles entram aqui sozinhos, ocupando a agenda como bloqueio.
    A volta (Tempo → Google) leva só o FUTURO: blocos planejados (e bloqueios) de agora em diante, com id estável por
    projeto e dia. O que foi feito (registro) nunca vai para o Google: o Tempo é passado, presente e futuro; o Google é futuro. */
-function planoEventos(dia) {
+function planoEventos(dia, paraPlano = false) {
   const out = planoBloqueios().filter(b => b.dia === dia).map(b => ({ id: b.id, ini: Number(b.ini), fim: Number(b.fim), titulo: b.nome || 'Bloqueio', origem: 'bloqueio' }));
   const d0 = new Date(dia + 'T00:00:00').getTime(), d1 = d0 + 864e5;
-  (db.setting('agendaEventos', []) || []).forEach(ev => {
+  agendaTodosEventos().forEach(ev => {
+    if (ev.oculto && !paraPlano) return;
     const a = new Date(ev.ini).getTime(), b = new Date(ev.fim).getTime(); if (!(b > d0 && a < d1)) return;
     out.push({ id: ev.id, ini: Math.max(0, (a - d0) / 36e5), fim: Math.min(24, (b - d0) / 36e5), titulo: ev.titulo || 'Evento', origem: 'google', agenda: ev.agenda || '', diaTodo: !!ev.diaTodo, ocupa: !ev.livre });
   });
@@ -135,7 +159,7 @@ function planoDiaUtil(dia) {
 /* Janelas livres do dia (horas decimais), descontando fixos e bloqueios. */
 function planoJanelas(dia, cfg = planoCfg()) {
   const wd = new Date(dia + 'T12:00:00').getDay();
-  const tira = [...planoFixosDoDia(dia), ...planoEventos(dia).filter(ev => !ev.diaTodo && ev.ocupa !== false).map(ev => [ev.ini, ev.fim, ev.titulo])].sort((a, b) => a[0] - b[0]);
+  const tira = [...planoFixosDoDia(dia), ...planoEventos(dia, true).filter(ev => !ev.diaTodo && ev.ocupa !== false).map(ev => [ev.ini, ev.fim, ev.titulo])].sort((a, b) => a[0] - b[0]);
   let jan = [[planoInicioDia(dia, cfg), cfg.fim + Math.max(0, (planoEsticados()[dia] || cfg.horasDia) - cfg.horasDia)]];
   tira.forEach(([a, b]) => { jan = jan.flatMap(([x, y]) => b <= x || a >= y ? [[x, y]] : [[x, Math.min(a, y)], [Math.max(b, x), y]].filter(([p, q]) => q - p > 0.01)); });
   return { jan, fixos: tira };
@@ -352,9 +376,10 @@ const PL_FILTROS = [['alice', 'Alice'], ['rafa', 'Rafa'], ['trabalho', 'Trabalho
 const planoMostra = (k) => (db.setting('planoMesFiltro', {}) || {})[k] !== false;
 /* Filtros sempre à vista: um botão por tipo (ligado = aparece), no padrão dos seletores do app. */
 function planoFiltroHTML() {
-  return `<div class="seg pl-filtros" role="group" aria-label="Mostrar no calendário"><span class="pl-filtros-l">Mostrar</span>${PL_FILTROS.map(([k, l]) => `<button type="button" class="${planoMostra(k) ? 'on' : ''}" data-act="pl-filtro" data-k="${k}" aria-pressed="${planoMostra(k)}">${l}</button>`).join('')}</div>`;
+  return `<div class="seg pl-filtros" role="group" aria-label="Mostrar no calendário"><span class="pl-filtros-l">Mostrar</span>${PL_FILTROS.map(([k, l]) => `<button type="button" class="${planoMostra(k) ? 'on' : ''}" data-act="pl-filtro" data-k="${k}" aria-pressed="${planoMostra(k)}">${l}</button>`).join('')}${agendaContas().map(c => { const on = !agendaContasOff()[c]; return `<button type="button" class="${on ? 'on' : ''}" data-act="pl-conta" data-c="${esc(c)}" aria-pressed="${on}" data-tip="${esc(`Agenda: ${c}\n${on ? 'Clique para esconder da visualização (continua ocupando o planejamento)' : 'Escondida. Clique para mostrar'}`)}">${icon('calendar')} ${esc(agendaContaNome(c))}</button>`; }).join('')}</div>`;
 }
 ACTIONS['pl-filtro'] = (el) => { const f = { ...(db.setting('planoMesFiltro', {}) || {}) }; f[el.dataset.k] = !planoMostra(el.dataset.k); db.setSetting('planoMesFiltro', f); db.emit(); };
+ACTIONS['pl-conta'] = (el) => { const f = { ...agendaContasOff() }; const c = el.dataset.c; if (f[c]) delete f[c]; else f[c] = true; db.setSetting('agendaContasOff', f); db.emit(); };
 ACTIONS['pl-filtro-toggle'] = () => { PLANO.filtroOpen = !PLANO.filtroOpen; render(); };
 CHANGES['pl-filtro'] = (el) => { const f = { ...(db.setting('planoMesFiltro', {}) || {}) }; f[el.dataset.k] = el.checked; db.setSetting('planoMesFiltro', f); db.emit(); };
 
