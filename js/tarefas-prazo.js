@@ -238,6 +238,8 @@ function tkMotor(agora = new Date(), dias = 120) {
         if (falta <= 0.5) break;
         let cap = gasta ? capMin(d) - (usado[d] || 0) : Infinity; if (cap <= 0.5) break;
         const x = Math.max(a, h0); if (b - x <= 0.01) continue;
+        // sem pedacinhos: brecha menor que 30 min só serve se for o que falta para terminar
+        if ((b - x) * 60 < Math.min(30, falta) - 0.5) continue;
         const take = Math.min(falta, (b - x) * 60, cap);
         blocos.push({ dia: d, ini: x, fim: x + take / 60 }); falta -= take; if (gasta) usado[d] = (usado[d] || 0) + take;
         fim = diaDe(d, x + take / 60);

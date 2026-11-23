@@ -409,7 +409,7 @@ function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0
   const wd = new Date(dia + 'T12:00:00').getDay();
   const sexta = wd === 5 ? `<button class="btn sm ghost pl-rafa${planoSextaRafa(dia) ? ' on' : ''}" data-act="pl-sexta" data-dia="${dia}" title="Sexta com o Rafa (T) ou com a Amanda (A)? Clique para trocar só esta sexta (muda também no Dias de Rafa).">Rafa ${planoSextaRafa(dia) ? '✓' : '–'}</button>` : '';
   const cab = !cabecalho ? '' : `<div class="pl-cab">${semana ? `<span class="pl-sem-rot">${esc(semana)}</span>` : ''}<span class="pl-cab-l1"><button class="pl-cab-dia" data-act="pl-ir-dia" data-dia="${dia}" title="Ver o dia">${new Date(dia + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</button>${planoChipsHTML(dia)}</span>
-      <span class="pl-cab-l2">${(() => { const pr = dia <= hoje ? planoVsReal(dia) : null; return pr ? `<span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}" data-tip="${esc(`Plano × real: ${fmtH(pr.reg * 36e5)} registrados das ${fmtH(pr.plan * 36e5)} planejadas de manhã (mesmo projeto)`)}">${pr.pct}%</span>` : ''; })()}<span class="small ${h > cfg.horasDia + 0.05 ? 'late' : 'muted'}">${util ? (h > 0.01 ? `${fmtH(h * 36e5)} plano${est ? ` de ${est} h` : ''}` : '') : (fer ? '[FERIADO] ' + esc(fer.nome) : '')}</span>${sexta}</span>${planoNotasHTML(dia)}</div>`;
+      <span class="pl-cab-l2">${dia >= hoje && planoPins().some(pn => pn.dia === dia) ? `<button class="pl-reorg" data-act="pl-reorg" data-dia="${dia}" data-tip="Reorganizar: solta os blocos que você fixou neste dia e o app encaixa tudo de novo, sem sobrepor">↺</button>` : ''}${(() => { const pr = dia <= hoje ? planoVsReal(dia) : null; return pr ? `<span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}" data-tip="${esc(`Plano × real: ${fmtH(pr.reg * 36e5)} registrados das ${fmtH(pr.plan * 36e5)} planejadas de manhã (mesmo projeto)`)}">${pr.pct}%</span>` : ''; })()}<span class="small ${h > cfg.horasDia + 0.05 ? 'late' : 'muted'}">${util ? (h > 0.01 ? `${fmtH(h * 36e5)} plano${est ? ` de ${est} h` : ''}` : '') : (fer ? '[FERIADO] ' + esc(fer.nome) : '')}</span>${sexta}</span>${planoNotasHTML(dia)}</div>`;
   const todoDia = planoEventos(dia).filter(e => e.diaTodo && (planoMostra('todos') || e.origem !== 'todo'));
   const topo = linhasTopo ? `<div class="pl-topo" style="height:${linhasTopo * 20}px">${todoDia.map(e => e.origem === 'todo'
     ? `<button class="pl-chip todo${e.feito ? ' feito' : ''}" data-act="todo-modal" data-id="${e.id}" title="To-do do dia (sem hora)">${icon('check')}${esc(e.titulo)}</button>`
@@ -601,13 +601,20 @@ function planoGradeRolar(semana = false, irHoje = false) {
     const regua = sc.querySelector('.pl-regua-col')?.offsetWidth || 44;
     // volta para o mesmo dia que estava à esquerda (não para o mesmo pixel: a largura das colunas pode mudar entre um
     // redesenho e outro, e o pixel antigo caía em outra semana)
+    // O "encaixe" nas segundas (scroll-snap) anima a rolagem; durante esse tempo os eventos de rolagem não contam como
+    // você rolando (antes, cada redesenho guardava um ponto do meio da animação e a semana ia andando para trás).
     const anc = !irHoje && PLANO.semAnc ? sc.querySelector(`[data-pl-col="${PLANO.semAnc.dia}"]`) : null;
+    sc._restaurando = Date.now();
+    sc.style.scrollSnapType = 'none';
     if (anc) sc.scrollLeft = anc.offsetLeft - regua - 4 + PLANO.semAnc.dx;
-    else if (alvo) sc.scrollLeft = alvo.offsetLeft - regua - 4;
+    else if (alvo) { sc.scrollLeft = alvo.offsetLeft - regua - 4; PLANO.semAnc = { dia: alvo.dataset.plCol, dx: 0 }; }
+    requestAnimationFrame(() => requestAnimationFrame(() => { sc.style.scrollSnapType = ''; }));
   }
+  if (!sc._plScroll) { ['wheel', 'pointerdown', 'touchstart', 'keydown'].forEach(ev => sc.addEventListener(ev, () => { sc._usuario = Date.now(); }, { passive: true })); }
   if (!sc._plScroll) { sc._plScroll = true; sc.addEventListener('scroll', () => {
     PLANO.gradeTop = sc.scrollTop;
-    if (semana) { const regua = sc.querySelector('.pl-regua-col')?.offsetWidth || 44; const x = sc.scrollLeft + regua + 4;
+    const soAnimacao = sc._restaurando && Date.now() - sc._restaurando < 700 && !(sc._usuario > sc._restaurando);
+    if (semana && !soAnimacao) { const regua = sc.querySelector('.pl-regua-col')?.offsetWidth || 44; const x = sc.scrollLeft + regua + 4;
       const col = [...sc.querySelectorAll('[data-pl-col]')].find(c => c.offsetLeft + c.offsetWidth > x);
       if (col) PLANO.semAnc = { dia: col.dataset.plCol, dx: sc.scrollLeft - (col.offsetLeft - regua - 4) }; }
   }, { passive: true }); }
@@ -641,7 +648,9 @@ ACTIONS['pl-sem'] = (el) => {
   const regua = sc.querySelector('.pl-regua-col')?.offsetWidth || 44;
   const atual = PLANO.semAnc?.dia || sc.dataset.plSem; const seg = new Date(atual + 'T12:00:00'); seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7) + d * 7);
   const alvo = sc.querySelector(`[data-pl-col="${ymd(seg)}"]`); if (!alvo) return;
+  sc._restaurando = Date.now(); sc.style.scrollSnapType = 'none';
   sc.scrollLeft = alvo.offsetLeft - regua - 4; PLANO.semAnc = { dia: ymd(seg), dx: 0 };
+  requestAnimationFrame(() => requestAnimationFrame(() => { sc.style.scrollSnapType = ''; }));
 };
 ACTIONS['pl-rafa-ir'] = (el) => { if (typeof RF !== 'undefined') RF.ym = el.dataset.dia.slice(0, 7); go('rafa'); };
 ACTIONS['pl-dia'] = (el) => {
@@ -671,6 +680,11 @@ ACTIONS['pl-bloq'] = (el) => {
 };
 
 
+ACTIONS['pl-reorg'] = async (el) => {
+  const dia = el.dataset.dia; const n = planoPins().filter(p => p.dia === dia).length;
+  if (!await confirmBox({ title: 'Reorganizar o dia?', body: `Solta ${n} bloco${n > 1 ? 's' : ''} fixado${n > 1 ? 's' : ''} em ${fmtDate(dia)}. O app encaixa as tarefas de novo nas horas livres, pela entrega e pelas dependências.`, ok: 'Reorganizar' })) return;
+  db.setSetting('planoPins', planoPins().filter(p => p.dia !== dia)); db.emit(); render(); toast('Dia reorganizado');
+};
 ACTIONS['pl-unpin'] = (el) => { const ids = (el.closest('[data-pin]')?.dataset.pin || el.dataset.id || '').split(',').filter(Boolean); db.setSetting('planoPins', planoPins().filter(p => !ids.includes(p.id))); render(); };
 /* Sexta: troca só esta sexta entre T e A no Dias de Rafa (fica como marcada à mão). */
 ACTIONS['pl-sexta'] = (el) => {
@@ -845,20 +859,24 @@ ACTIONS['pl-encaixar'] = (el) => {
         if (v === null) { render(); return; }   // Cancelar: o bloco volta para onde estava
         if (v === 'prox') { ult.fim = cfg.fim; partes.push({ dia: prox, ini: cfg.inicio, fim: cfg.inicio + resto }); }
       }
-      // andou ou cresceu para frente no mesmo dia: empurra os blocos fixados que vêm logo depois (em cadeia, pulando a
-      // rotina). Puxando para trás, só o arrastado anda.
+      // nunca deixa dois blocos fixados um em cima do outro: o arrastado fica onde você soltou e os fixados que ele cobre
+      // (no dia de destino) vão para logo depois dele, em cadeia, pulando a rotina. Os que não encostam ficam onde estão.
       const empurrados = [];
-      if (dia === x.dia && (a > x.ini + 1e-6 || b > x.fim + 1e-6)) {
-        const fx = planoFixosDoDia(dia).slice().sort((p, q) => p[0] - q[0]);
-        let cur = partes.filter(pt => pt.dia === dia).reduce((m, pt) => Math.max(m, pt.fim), b);
-        const outros = (PLANO.porDia[dia]?.blocos || []).filter(o => (o.pins || []).length && !(o.pins || []).some(id => meus.includes(id)) && o.ini >= x.ini - 1e-6).sort((p, q) => p.ini - q.ini);
-        for (const o of outros) {
-          if (o.ini >= cur - 1e-6) break;
-          let ini = cur; for (let k = 0; k < 10; k++) { const f = fx.find(z => z[0] < ini + o.h - 1e-6 && z[1] > ini + 1e-6); if (!f) break; ini = f[1]; }
-          base = base.filter(p => !o.pins.includes(p.id));
-          empurrados.push({ id: uid(), dia, pid: o.pid, tid: o.tid || null, ini, h: o.h }); cur = ini + o.h;
-        }
-      }
+      partes.map(pt => pt.dia).filter((v, i, l) => l.indexOf(v) === i).forEach(dd => {
+        const fx = planoFixosDoDia(dd).slice().sort((p, q) => p[0] - q[0]);
+        const ocup = partes.filter(pt => pt.dia === dd).map(pt => [pt.ini, pt.fim]);
+        const outros = base.filter(p => p.dia === dd).sort((p, q) => Number(p.ini) - Number(q.ini));
+        outros.forEach(o => {
+          const h = Number(o.h); let ini = Number(o.ini);
+          for (let k = 0; k < 20; k++) {
+            const bate = ocup.find(([u, v]) => u < ini + h - 1e-6 && v > ini + 1e-6);
+            const rot = fx.find(z => z[0] < ini + h - 1e-6 && z[1] > ini + 1e-6);
+            if (bate) ini = bate[1]; else if (rot && ini !== Number(o.ini)) ini = rot[1]; else break;
+          }
+          if (Math.abs(ini - Number(o.ini)) > 1e-6) { base = base.filter(p => p.id !== o.id); empurrados.push({ ...o, ini }); }
+          ocup.push([ini, ini + h]);
+        });
+      });
       db.setSetting('planoPins', [...base, ...empurrados, ...partes.map(pt => ({ id: uid(), dia: pt.dia, pid, tid, ini: pt.ini, h: pt.fim - pt.ini }))]);
       if (empurrados.length) toast(`${empurrados.length} bloco${empurrados.length > 1 ? 's' : ''} empurrado${empurrados.length > 1 ? 's' : ''} para frente`);
       if (junta.length) toast('Pedaços juntados num bloco só');
