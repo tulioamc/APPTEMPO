@@ -1777,30 +1777,31 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 /* Projeto › Tarefas — no tamanho do desenho do Tulio (px de tela): nome 15, responsável 12 negrito cinza, status 12,5,
    tempos 13 (rótulos 10), data 13 com "quando" 10,5 negrito, hora 13. Linhas de ~60 px, limpo. */
 .tk { border-bottom: 1px solid var(--line); }
-.tk-l { display: grid; grid-template-columns: minmax(110px, 1fr) 50px 124px 128px 96px 56px; position: relative; gap: 10px; align-items: center; padding: 11px 14px 11px 20px; min-height: 60px; }
+.tk-l { display: grid; grid-template-columns: minmax(110px, 1fr) 44px 116px 122px 80px 44px 40px; gap: 8px; align-items: center; padding: 10px 10px 10px 22px; min-height: 56px; }
 .tk.sub .tk-l { padding-left: 38px; }
 .tk-in { border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 2px 5px; margin-left: -6px; font: inherit; color: inherit; width: 100%; min-width: 0; }
 .tk-in:hover { border-color: var(--line); }
 .tk-in:focus { border-color: var(--accent); background: var(--surface); outline: none; }
 .tk-in::placeholder { color: var(--fg-3); }
 .tk-nome { display: flex; flex-direction: column; min-width: 0; }
-.tk-nome .n { font-size: 15px; font-weight: 500; color: var(--fg); }
-.tk.sub .tk-nome .n { font-size: 14px; }
-.tk-dep { font-size: 11px; font-weight: 500; color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tk-nome .n { font-size: 14px; font-weight: 500; color: var(--fg); }
+.tk.sub .tk-nome .n { font-size: 13px; }
+.tk-dep { font-size: 10px; font-weight: 500; color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tk-st { min-width: 0; }
-.tk-st .combo-btn .tag { font-size: 12.5px; padding: 3px 11px; }
-.tk-resp { font-size: 12px; font-weight: 600; color: var(--fg-3); }
+.tk-st .combo-btn .tag { font-size: 11.5px; padding: 3px 10px; }
+.tk-resp { font-size: 11.5px; font-weight: 600; color: var(--fg-3); }
 .tk-data, .tk-hora { position: relative; display: flex; flex-direction: column; cursor: pointer; color: var(--fg-3); min-width: 0; }
-.tk-dv { font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tk-hora .tk-dv.prev { font-style: italic; opacity: .7; }
+.tk-dv { font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tk-hora .tk-dv.prev { opacity: .55; }
 .tk-data input, .tk-hora input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
-.tk-rel { font-size: 10.5px; color: var(--fg-3); white-space: nowrap; }
+.tk-rel { font-size: 9px; color: var(--fg-3); white-space: nowrap; }
 .tk-rel.hoje { color: #E5487A; font-weight: 700; }
 .tk-rel.amanha { color: #E8893A; font-weight: 700; }
 .tk-rel.late { color: var(--danger); font-weight: 700; }
-.tk-acoes { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; justify-content: flex-end; opacity: 0; transition: opacity .12s; background: var(--surface-1, #fff); border-radius: 6px; box-shadow: 0 0 0 1px var(--line); padding: 1px; }
-.tk:hover .tk-acoes, .tk.aberta .tk-acoes, .tk-acoes:focus-within { opacity: 1; }
-.tk-acoes .btn { padding: 2px; }
+.tk-acoes { display: flex; gap: 0; justify-content: flex-end; }
+
+.tk-acoes .btn { padding: 2px; width: 20px; height: 22px; color: var(--fg-3); }
+.tk-acoes .btn svg { width: 13px; height: 13px; }
 .tk-mais-p { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 0 14px 10px 20px; font-size: 12px; }
 .tk-mais-p svg { width: 13px; height: 13px; flex: none; }
 .tk.aberta { background: var(--surface-2); }
@@ -1810,20 +1811,20 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .tk-nova-i svg { width: 14px; height: 14px; }
 /* Trabalhado / previsto, com ⚠ */
 .tk-tempo { display: flex; flex-direction: column; gap: 1px; font-variant-numeric: tabular-nums; }
-.tk-t1, .tk-t2 { display: flex; align-items: center; gap: 5px; position: relative; padding-left: 18px; white-space: nowrap; }
-.tk-t1 b { font-weight: 500; font-size: 13px; color: var(--fg-3); min-width: 38px; }
-.tk-t1 i, .tk-t2 i { font-style: normal; font-size: 10px; color: color-mix(in srgb, var(--fg-3) 55%, transparent); }
-.tk-prev { width: 44px; border: 1px solid transparent; background: transparent; border-radius: 4px; padding: 0 2px; margin-left: -3px; font: inherit; font-size: 13px; color: color-mix(in srgb, var(--fg-3) 50%, transparent); }
+.tk-t1, .tk-t2 { display: flex; align-items: center; gap: 4px; position: relative; padding-left: 15px; white-space: nowrap; }
+.tk-t1 b { font-weight: 500; font-size: 11.5px; color: var(--fg-3); min-width: 34px; }
+.tk-t1 i, .tk-t2 i { font-style: normal; font-size: 9px; color: color-mix(in srgb, var(--fg-3) 55%, transparent); }
+.tk-prev { width: 38px; border: 1px solid transparent; background: transparent; border-radius: 4px; padding: 0 2px; margin-left: -3px; font: inherit; font-size: 11.5px; color: color-mix(in srgb, var(--fg-3) 50%, transparent); }
 .tk-prev:hover { border-color: var(--line); }
 .tk-prev:focus { border-color: var(--accent); background: var(--surface); color: var(--fg); outline: none; }
 .tk-prev::placeholder { color: color-mix(in srgb, var(--fg-3) 50%, transparent); }
 .tk-tempo.estourou .tk-t1 b, .tk-tempo.estourou .tk-t1 i { color: #E5484D; }
 .tk-alerta { position: absolute; left: 0; top: 50%; transform: translateY(-50%); border: 0; background: none; padding: 0; color: #E5484D; cursor: pointer; display: inline-flex; }
-.tk-alerta svg { width: 14px; height: 14px; fill: currentColor; stroke: #fff; }
+.tk-alerta svg { width: 12px; height: 12px; fill: currentColor; stroke: #fff; }
 
-.tk-prev.sug::placeholder { font-style: italic; color: color-mix(in srgb, var(--fg-3) 70%, transparent); }
+.tk-prev.sug::placeholder { font-style: normal; color: color-mix(in srgb, var(--fg-3) 70%, transparent); }
 .tk-prev.chute::placeholder { color: color-mix(in srgb, #E8893A 70%, transparent); }
-.tk-prev.sug { width: 56px; }
+.tk-prev.sug { width: 46px; }
 /* Calendário: item que bate com outro na faixa do meio; registro que juntou um compromisso da agenda */
 .pl-grade .choque { box-shadow: inset 0 0 0 2px #E5484D !important; }
 .pl-feito-ag { position: absolute; top: 2px; right: 3px; display: inline-flex; opacity: .7; }
@@ -1845,7 +1846,7 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .pl-reorg:hover { color: var(--accent); border-color: var(--accent); }
 /* Tarefas na janela bem estreita: some responsável e hora */
 .tk-lista { container-type: inline-size; }
-@container (max-width: 600px) { .tk-l { grid-template-columns: minmax(110px, 1fr) 120px 128px 96px; } .tk-resp, .tk-hora { display: none; } }
+@container (max-width: 560px) { .tk-l { grid-template-columns: minmax(100px, 1fr) 116px 122px 80px 40px; } .tk-resp, .tk-hora { display: none; } }
 .tk.tk-foco { background: color-mix(in oklab, var(--accent) 10%, transparent); transition: background .3s; }
 /* Agência/cliente: blocos que recolhem e mudam de lugar (desenho do Tulio: ⠿ · [v] · TÍTULO em negrito, bem juntos) */
 .pty-sec { margin-top: 6px; }

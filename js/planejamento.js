@@ -272,7 +272,7 @@ function planoItensDoDia(dia, porDia) {
     it.push({ k: 'prazo', a: h, b: h + 0.001, t });
   });
   if (dia <= ymd(new Date())) { const pr = planoVsReal(dia); (pr?.blocos || []).filter(b => !b.ok && (dia < ymd(new Date()) || b.fim <= new Date().getHours() + new Date().getMinutes() / 60)).forEach(b => it.push({ k: 'naofeito', a: b.ini, b: b.fim, bl: b })); }
-  const tipoFiltro = { fixo: 'rotina', todo: 'todos', todos: 'todos', feito: 'trabalho', plano: 'trabalho', prazo: 'trabalho' };
+  const tipoFiltro = { fixo: 'rotina', todo: 'todos', todos: 'todos', feito: 'trabalho', plano: 'trabalho', prazo: 'trabalho', naofeito: 'naofeito' };
   return it.filter(x => x.b > x.a && (!tipoFiltro[x.k] || planoMostra(tipoFiltro[x.k])));
 }
 /* Lado a lado: itens que se sobrepõem dividem a largura (colunas por grupo de sobreposição). */
@@ -443,8 +443,10 @@ function planoSemanaHTML(porDia) {
 }
 
 /* Filtros do calendário (Mês): esconder Alice, Rafa, trabalho, to-dos ou rotina. Guardado em planoMesFiltro { k: false }. */
-const PL_FILTROS = [['alice', 'Alice'], ['rafa', 'Rafa'], ['trabalho', 'Trabalho'], ['todos', 'To-dos'], ['rotina', 'Rotina']];
-const planoMostra = (k) => (db.setting('planoMesFiltro', {}) || {})[k] !== false;
+const PL_FILTROS = [['alice', 'Alice'], ['rafa', 'Rafa'], ['trabalho', 'Trabalho'], ['todos', 'To-dos'], ['rotina', 'Rotina'], ['naofeito', 'Não rolou']];
+// 'Não rolou' (planejado que não aconteceu) começa desligado; os outros começam ligados
+const PL_FILTRO_PADRAO = { naofeito: false };
+const planoMostra = (k) => { const v = (db.setting('planoMesFiltro', {}) || {})[k]; return v === undefined ? PL_FILTRO_PADRAO[k] !== false : v !== false; };
 /* Filtros sempre à vista: um botão por tipo (ligado = aparece), no padrão dos seletores do app. */
 function planoFiltroHTML() {
   return `<div class="seg pl-filtros" role="group" aria-label="Mostrar no calendário"><span class="pl-filtros-l">Mostrar</span>${PL_FILTROS.map(([k, l]) => `<button type="button" class="${planoMostra(k) ? 'on' : ''}" data-act="pl-filtro" data-k="${k}" aria-pressed="${planoMostra(k)}">${l}</button>`).join('')}${(() => { const cs = agendaContas(); const vis = cs.filter(c => !agendaContasOff()[c]).length; const erro = typeof AGG !== 'undefined' && (AGG.erro || (AGG.errosContas || []).length);
@@ -496,7 +498,7 @@ function planoMesCelHTML(dia, porDia, hoje, cfg) {
   const semanaAtual = dia >= semIni && dia <= (() => { const f = new Date(semIni + 'T12:00:00'); f.setDate(f.getDate() + 6); return ymd(f); })();
   const previstos = dia >= hoje && verTrab ? Object.keys(plan).filter(k => plan[k] > 0.001).sort((a, b) => plan[b] - plan[a]) : [];
   const horarios = [
-    ...(verRot ? planoFixosDoDia(dia).filter(f => planoRotina().find(r => r.id === f[3]?.rid)?.mes).map(f => ({ ini: f[0], titulo: f[2], cls: 'fixo' })) : []),
+    ...(verRot && semanaAtual ? planoFixosDoDia(dia).filter(f => planoRotina().find(r => r.id === f[3]?.rid)?.mes).map(f => ({ ini: f[0], titulo: f[2], cls: 'fixo' })) : []),
     ...ev.filter(e => !e.diaTodo && (verTodo || e.origem !== 'todo')).map(e => ({ ini: e.ini, titulo: e.titulo, cls: e.origem + (e.feito ? ' feito' : '') }))
   ].sort((x, y) => x.ini - y.ini);
   const proj = pids.map(pid => { const p = db.get('tempo_projects', pid);
@@ -730,7 +732,7 @@ function planoRotinaHTML() {
     <input type="time" class="input sm" value="${planoHora(r.fim)}" data-on="pl-rot" data-id="${r.id}" data-f="fim" aria-label="Termina">
     <select class="input sm" data-on="pl-rot" data-id="${r.id}" data-f="rafa" aria-label="Com o Rafa" title="Liga o bloco ao Dias de Rafa"><option value="" ${!r.rafa ? 'selected' : ''}>Sempre</option><option value="T" ${r.rafa === 'T' ? 'selected' : ''}>Dia T</option><option value="manha" ${r.rafa === 'manha' ? 'selected' : ''}>Manhã depois de T</option></select>
     <label class="check small" title="Flexível: num dia que já passou, o bloco vira o espaço real sem trabalho registrado (ex.: almoço 12h–14h, trabalhou até 12h40 e voltou 13h50 → 12h40–13h50)"><input type="checkbox" data-on="pl-rot" data-id="${r.id}" data-f="flex" ${r.flex ? 'checked' : ''}> Flexível</label>
-    <label class="check small" title="Mostrar este bloco também no calendário do Mês (Semana e Dia mostram sempre)"><input type="checkbox" data-on="pl-rot" data-id="${r.id}" data-f="mes" ${r.mes ? 'checked' : ''}> No mês</label>
+    <label class="check small" title="Mostrar este bloco no Mês, só na semana atual (desmarcado não aparece no Mês; Semana e Dia mostram sempre)"><input type="checkbox" data-on="pl-rot" data-id="${r.id}" data-f="mes" ${r.mes ? 'checked' : ''}> No mês</label>
     <select class="input sm" data-on="pl-rot" data-id="${r.id}" data-f="repete" aria-label="Repete"><option value="semanal" ${r.repete !== 'quinzenal' ? 'selected' : ''}>Toda semana</option><option value="quinzenal" ${r.repete === 'quinzenal' ? 'selected' : ''}>A cada 2 semanas</option></select>
     <button class="btn sm ghost icon" data-act="pl-rot-del" data-id="${r.id}" title="Tirar da rotina de hoje em diante" aria-label="Tirar">${icon('x')}</button></div>`;
   return `<div class="panel"><div class="panel-h"><h3>Rotina fixa</h3><span class="small muted">mudanças valem de hoje em diante; o passado não muda. Para mexer num dia só, arraste ou puxe o bloco no calendário. "Rafa" liga o bloco ao Dias de Rafa.</span><span class="grow"></span><button class="btn sm" data-act="pl-rot-novo">${icon('plus')} Bloco fixo</button></div>
