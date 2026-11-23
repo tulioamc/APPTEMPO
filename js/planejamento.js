@@ -586,8 +586,9 @@ VIEWS.plano = () => {
     <div class="panel"><div class="panel-h">${seg}${nav}${titulo ? `<h3>${esc(titulo)}</h3>` : ''}<span class="grow"></span>${planoFiltroHTML()}<button class="btn sm" data-act="pl-bloq">${icon('plus')} Bloqueio</button></div>
       <div class="panel-b">${corpo}<div class="small muted" style="margin-top:8px">${nota}</div></div></div>
     ${planoRotinaHTML()}`;
-  setTimeout(() => (modo === 'mes' ? planoMesRolar() : planoGradeRolar(modo === 'semana')), 0);
-  return { title: 'Calendário', actions: '', html };
+  // restaura a rolagem logo depois de desenhar (antes de o navegador mandar qualquer evento de rolagem da troca)
+  const rolar = () => (modo === 'mes' ? planoMesRolar() : planoGradeRolar(modo === 'semana'));
+  return { title: 'Calendário', actions: '', html, after: rolar };
 };
 /* Grade de 24 h: abre perto das 5h (ou 1 h antes de agora) e guarda a rolagem; na semana, abre na semana de hoje. */
 function planoGradeRolar(semana = false, irHoje = false) {
@@ -613,8 +614,10 @@ function planoGradeRolar(semana = false, irHoje = false) {
   if (!sc._plScroll) { ['wheel', 'pointerdown', 'touchstart', 'keydown'].forEach(ev => sc.addEventListener(ev, () => { sc._usuario = Date.now(); }, { passive: true })); }
   if (!sc._plScroll) { sc._plScroll = true; sc.addEventListener('scroll', () => {
     PLANO.gradeTop = sc.scrollTop;
-    const soAnimacao = sc._restaurando && Date.now() - sc._restaurando < 700 && !(sc._usuario > sc._restaurando);
-    if (semana && !soAnimacao) { const regua = sc.querySelector('.pl-regua-col')?.offsetWidth || 44; const x = sc.scrollLeft + regua + 4;
+    // só guarda a posição quando é VOCÊ rolando (roda do mouse, trackpad, toque, teclado, arrastar a barra) — rolagens
+    // que o navegador faz sozinho ao redesenhar ou encaixar nas segundas não contam
+    const voce = sc._usuario && Date.now() - sc._usuario < 1500 && !(sc._restaurando > sc._usuario);
+    if (semana && voce) { const regua = sc.querySelector('.pl-regua-col')?.offsetWidth || 44; const x = sc.scrollLeft + regua + 4;
       const col = [...sc.querySelectorAll('[data-pl-col]')].find(c => c.offsetLeft + c.offsetWidth > x);
       if (col) PLANO.semAnc = { dia: col.dataset.plCol, dx: sc.scrollLeft - (col.offsetLeft - regua - 4) }; }
   }, { passive: true }); }
