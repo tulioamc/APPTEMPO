@@ -271,22 +271,46 @@ function planoItensDoDia(dia, porDia) {
   return it.filter(x => x.b > x.a && (!tipoFiltro[x.k] || planoMostra(tipoFiltro[x.k])));
 }
 /* Lado a lado: itens que se sobrepõem dividem a largura (colunas por grupo de sobreposição). */
-function planoFaixas(itens, unico = true) {
-  if (!unico) {
-    // Semana: rotina vira fundo (largura toda), to-dos viram marcadores na borda direita, e o resto (registrado,
-    // planejado, compromissos) usa a largura toda, dividindo só quando um cai em cima do outro.
-    const fundo = itens.filter(x => x.k === 'fixo'), marc = itens.filter(x => x.k === 'todo' || x.k === 'todos');
-    const resto = planoFaixasLivre(itens.filter(x => x.k !== 'fixo' && x.k !== 'todo' && x.k !== 'todos'));
-    fundo.forEach(x => { x._left = 0; x._w = 100; x._fundo = true; });
-    resto.forEach(x => { x._left = x._l * (100 / x._n); x._w = 100 / x._n; });
-    marc.forEach(x => { x._marc = true; });
-    return [...fundo, ...resto, ...marc];
-  }
-  // registrado fica sempre na primeira terça parte da coluna; o resto divide os outros dois terços (cada bloco no máximo 1/3)
-  const reg = itens.filter(x => x.k === 'feito'); const resto = planoFaixasLivre(itens.filter(x => x.k !== 'feito'));
-  reg.forEach(x => { x._left = 0; x._w = 100 / 3; });
-  resto.forEach(x => { const w = Math.min(100 / 3, (200 / 3) / x._n); x._left = 100 / 3 + x._l * w; x._w = w; });
-  return [...resto, ...reg];
+/* Compromisso da agenda (Google/Apple) que aconteceu enquanto você registrava trabalho vira uma coisa só com o registro:
+   se pelo menos metade dele cai dentro do registrado, some como bloco separado e aparece no registro (nome e horário). */
+function planoJuntaAgenda(itens) {
+  const feitos = itens.filter(x => x.k === 'feito');
+  if (!feitos.length) return itens;
+  return itens.filter(x => {
+    if (x.k !== 'evento' || x.e?.origem !== 'google') return true;
+    const dur = x.b - x.a; if (dur <= 0) return true;
+    let sob = 0, alvo = null, melhor = 0;
+    feitos.forEach(f => { const o = Math.max(0, Math.min(f.b, x.b) - Math.max(f.a, x.a)); sob += o; if (o > melhor) { melhor = o; alvo = f; } });
+    if (sob < dur * 0.5 || !alvo) return true;
+    (alvo.agenda ||= []).push(x.e); return false;
+  });
+}
+/* Três faixas em cada dia (Semana e Dia): esquerda = rotina; meio = to-dos e trabalho planejado; direita = registrado e
+   compromissos. Dentro de cada faixa, o que cai no mesmo horário divide a largura e, no meio, ganha o aviso de choque.
+   Arrastar um item para o lado, dentro do mesmo dia, troca a faixa só dele (planoFaixaFix). */
+const PL_FAIXA = { fixo: 0, todo: 1, todos: 1, plano: 1, naofeito: 1, feito: 2, evento: 2 };
+const planoFaixaFix = () => db.setting('planoFaixaFix', {}) || {};
+function planoFk(x, dia) {
+  if (x.k === 'fixo') return 'f:' + (x.m?.grupo || x.n) + ':' + dia;
+  if (x.k === 'plano') return 'p:' + x.bl.pid + ':' + (x.bl.tid || '') + ':' + dia;
+  if (x.k === 'todo') return 't:' + x.e.id;
+  if (x.k === 'evento') return 'e:' + x.e.id;
+  return '';
+}
+function planoFaixas(itens, unico = true, dia = '') {
+  const fix = planoFaixaFix(); const lanes = [[], [], []];
+  itens.forEach(x => {
+    let l = x.k === 'evento' && x.e?.origem === 'bloqueio' ? 1 : (PL_FAIXA[x.k] ?? 1);
+    const k = planoFk(x, dia); if (k && fix[k] !== undefined) l = fix[k];
+    x._fk = k; x._lane = l; lanes[l].push(x);
+  });
+  const W = 100 / 3; const out = [];
+  lanes.forEach((ls, li) => planoFaixasLivre(ls).forEach(x => {
+    x._left = li * W + x._l * (W / x._n); x._w = W / x._n;
+    if (li === 1 && x._n > 1 && ['plano', 'todo', 'todos'].includes(x.k)) x._choque = true;
+    out.push(x);
+  }));
+  return out;
 }
 function planoFaixasLivre(itens) {
   const ord = itens.slice().sort((x, y) => x.a - y.a || (y.b - y.a) - (x.b - x.a));
@@ -322,9 +346,9 @@ function planoItemHTML(x, dia, { alt, unico, auto }) {
   if (x.k === 'todos') { const l = x.lista;
     return `<div class="pl-evento todo grupo" style="${pos}" data-tip="${esc(`${l.length} to-dos às ${planoHora(x.a)}\n` + l.map(e => (e.feito ? '✓ ' : '• ') + e.titulo).join('\n'))}">${icon('check')}<span class="pl-tx"><b>${l.length} to-dos</b>${curto ? '' : `<em>${l.filter(e => e.feito).length} feitos</em>`}</span></div>`; }
   if (x.k === 'feito') { const f = x.f; const pr = db.get('tempo_projects', f.pid);
-    return `<div class="pl-feito" style="${pos};--fc:${planoCor(f.pid)}" data-tip="${esc(`Registrado: ${pr?.name || 'Sem projeto'}${pr ? '\n' + (clientOf(pr)?.name || '') : ''}\n${planoHora(f.ini)}–${planoHora(f.fim)} · ${fmtH(f.ms)} trabalhado`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"` : ''}>${h >= 15 ? `<span class="pl-tx"><b>${esc(pr?.name || 'Sem projeto')}</b>` : '<span class="pl-tx">'}${h >= 34 ? `<em>${unico && pr ? esc(clientOf(pr)?.name || '') + ' · ' : ''}${fmtH(f.ms)}</em>` : ''}</span></div>`; }
+    return `<div class="pl-feito${x.agenda ? ' com-agenda' : ''}" style="${pos};--fc:${planoCor(f.pid)}" data-tip="${esc(`Registrado: ${pr?.name || 'Sem projeto'}${pr ? '\n' + (clientOf(pr)?.name || '') : ''}\n${planoHora(f.ini)}–${planoHora(f.fim)} · ${fmtH(f.ms)} trabalhado${x.agenda ? '\n' + x.agenda.map(e => `Agenda: ${e.titulo} (${planoHora(e.ini)}–${planoHora(e.fim)})`).join('\n') : ''}`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"` : ''}>${h >= 15 ? `<span class="pl-tx"><b>${esc(pr?.name || 'Sem projeto')}</b>` : '<span class="pl-tx">'}${h >= 34 ? `<em>${x.agenda ? esc(x.agenda[0].titulo) + ' · ' : unico && pr ? esc(clientOf(pr)?.name || '') + ' · ' : ''}${fmtH(f.ms)}</em>` : ''}</span>${x.agenda ? `<span class="pl-feito-ag">${icon('calendar')}</span>` : ''}</div>`; }
   const b = x.bl; const p = db.get('tempo_projects', b.pid); const c = planoCor(b.pid);
-  return `<div class="pl-bloco${b.atrasado ? ' late' : ''}${b.pin ? ' pin' : ' auto'}" data-dg="plano" data-dia="${dia}" data-pid="${b.pid}" data-ini="${b.ini}" data-fim="${b.fim}" style="${pos};--fc:${c}" data-act="proj-open" data-id="${b.pid}" data-tip="${esc(`Planejado: ${b.tarefa ? b.tarefa + ' · ' : ''}${p?.name}\n${clientOf(p)?.name || ''}\n${planoHora(b.ini)}–${planoHora(b.fim)} · ${fmtH(b.h * 36e5)}${b.atrasado ? '\nDepois do prazo' : ''}${b.pin ? '\nFixado à mão' : '\nColocado pelo app · arraste para mudar o horário ou o dia'}`)}"><span class="pl-tx"><b>${p && typeof agencyAbbr === 'function' && agencyAbbr(agencyOf(p)) ? '[' + esc(agencyAbbr(agencyOf(p))) + '] ' : ''}${esc(b.tarefa || p?.name || '')}</b>${curto ? '' : `<em>${b.tarefa ? esc(p?.name || '') + ' · ' : ''}${planoHora(b.ini)} · ${fmtH(b.h * 36e5)}${unico && p ? ' · ' + esc(clientOf(p)?.name || '') : ''}</em>`}</span>${b.pin ? `<button class="pl-unpin" data-act="pl-unpin" data-id="${b.pin}" title="Soltar: o app volta a encaixar este bloco sozinho" aria-label="Soltar bloco">×</button>` : ''}${PL_PUX}</div>`;
+  return `<div class="pl-bloco${b.atrasado ? ' late' : ''}${b.pin ? ' pin' : ' auto'}" data-dg="plano" data-dia="${dia}" data-pid="${b.pid}" data-tid="${b.tid || ''}" data-ini="${b.ini}" data-fim="${b.fim}" style="${pos};--fc:${c}" data-act="proj-open" data-id="${b.pid}" data-tip="${esc(`Planejado: ${b.tarefa ? b.tarefa + ' · ' : ''}${p?.name}\n${clientOf(p)?.name || ''}\n${planoHora(b.ini)}–${planoHora(b.fim)} · ${fmtH(b.h * 36e5)}${b.atrasado ? '\nDepois do prazo' : ''}${b.pin ? '\nFixado à mão' : '\nColocado pelo app · arraste para mudar o horário ou o dia'}`)}"><span class="pl-tx"><b>${p && typeof agencyAbbr === 'function' && agencyAbbr(agencyOf(p)) ? '[' + esc(agencyAbbr(agencyOf(p))) + '] ' : ''}${esc(b.tarefa || p?.name || '')}</b>${curto ? '' : `<em>${b.tarefa ? esc(p?.name || '') + ' · ' : ''}${planoHora(b.ini)} · ${fmtH(b.h * 36e5)}${unico && p ? ' · ' + esc(clientOf(p)?.name || '') : ''}</em>`}</span>${b.pin ? `<button class="pl-unpin" data-act="pl-unpin" data-id="${b.pin}" title="Soltar: o app volta a encaixar este bloco sozinho" aria-label="Soltar bloco">×</button>` : ''}${PL_PUX}</div>`;
 }
 /* Coluna de um dia: cabeçalho, linha "dia todo" (to-do só com data, evento de dia inteiro) e a grade de 24 h. */
 /* Chips do dia (Alice e Rafa) e notas do dia, iguais no Mês, na Semana e no Dia; respeitam os filtros. */
@@ -351,7 +375,11 @@ function planoRegistro15(itens) {
 }
 function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0, cabecalho = true, semana = '' } = {}) {
   const cfg = planoCfg(); const v = porDia[dia]; const util = planoDiaUtil(dia); const hoje = ymd(new Date());
-  const itens = planoFaixas(planoRegistro15(planoItensDoDia(dia, porDia)), unico).map(x => planoItemHTML(x, dia, { alt, unico })).join('');
+  const itens = planoFaixas(planoJuntaAgenda(planoRegistro15(planoItensDoDia(dia, porDia))), unico, dia).map(x => {
+    let h = planoItemHTML(x, dia, { alt, unico });
+    if (x._choque) h = h.replace('class="', 'class="choque ').replace('data-tip="', 'data-tip="⚠ Bate no horário com outro item.&#10;');
+    return h.replace(/^<div /, `<div data-fk="${esc(x._fk || '')}" data-lane="${x._lane ?? ''}" `);
+  }).join('');
   const agora = dia === hoje ? (() => { const n = new Date(); const h = n.getHours() + n.getMinutes() / 60; return `<div class="pl-agora" style="top:${h * alt}px"></div>`; })() : '';
   const h = v?.horas || 0, est = planoEsticados()[dia], fer = planoFer(dia);
   const wd = new Date(dia + 'T12:00:00').getDay();
@@ -489,7 +517,7 @@ function planoDiaHTML(dia, porDia) {
 }
 
 VIEWS.plano = () => {
-  PL_ALT = Math.max(16, Math.min(160, Number(db.setting('planoZoom', 44)) || 44));
+  if (!window.__plZoomT || !PL_ALT) PL_ALT = Math.max(16, Math.min(160, Number(db.setting('planoZoom', 44)) || 44));
   if (typeof rafaAutoPreencher === 'function') rafaAutoPreencher();
   const lista = planoProjetos(); const cfg = planoCfg(); const modo = planoModo();
   const { porDia, estouro } = planejar(lista, new Date(), modo === 'mes' ? 220 : 100);
@@ -676,29 +704,66 @@ ACTIONS['pl-encaixar'] = (el) => {
     if (!mexeu) { mexeu = true; d.el.classList.add('arrastando'); tip = document.createElement('div'); tip.className = 'pl-dg-tip'; document.body.appendChild(tip); }
     const [a, b] = calc(d, dy);
     d.el.style.top = (a * PL_ALT) + 'px'; d.el.style.height = Math.max(10, (b - a) * PL_ALT - 2) + 'px';
-    if (d.modo === 'move' && (d.kind === 'plano' || d.kind === 'bloq')) d.el.style.transform = `translateX(${dx}px)`;
+    if (d.modo === 'move') d.el.style.transform = `translateX(${dx}px)`;
     const hh = (h) => planoHora(h).replace(':', 'h').replace(/h00$/, 'h');
     tip.textContent = d.modo === 'top' ? `Novo início: ${hh(a)}` : d.modo === 'bot' ? `Novo fim: ${hh(b)}` : `Novo horário: ${hh(a)}–${hh(b)}`;
-    tip.dataset.sub = `${fmtH((b - a) * 36e5)}${d.modo === 'move' && (d.kind === 'plano' || d.kind === 'bloq') ? ' · arraste para o lado para mudar o dia' : ''}`;
+    tip.dataset.sub = `${fmtH((b - a) * 36e5)}${d.modo === 'move' ? (['plano', 'bloq', 'todo'].includes(d.kind) ? ' · para o lado: outro dia ou outra faixa' : ' · para o lado: outra faixa') : ''}`;
     tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 12) + 'px';
   });
-  document.addEventListener('pointerup', (e) => {
+  document.addEventListener('pointerup', async (e) => {
     if (!d) return; const x = d; d = null; if (tip) { tip.remove(); tip = null; }
     if (!mexeu) return;
     x.el.style.pointerEvents = 'none';
-    const [a, b] = calc(x, e.clientY - x.y0);
-    let dia = x.dia;
-    if (x.modo === 'move' && (x.kind === 'plano' || x.kind === 'bloq')) { const col = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-pl-col]'); if (col) dia = col.dataset.plCol; }
-    x.el.style.pointerEvents = '';
+    let [a, b] = calc(x, e.clientY - x.y0);
+    let dia = x.dia; let faixa = null;
+    const col = x.modo === 'move' ? document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-pl-col]') : null;
+    x.el.style.pointerEvents = ''; x.el.style.transform = '';
+    if (col && col.dataset.plCol !== x.dia && ['plano', 'bloq', 'todo'].includes(x.kind)) dia = col.dataset.plCol;
+    else if (col && col.dataset.plCol === x.dia && x.el.dataset.fk) {   // mesmo dia, outra terça parte: troca a faixa só deste item
+      const r = col.querySelector('.pl-grade')?.getBoundingClientRect() || col.getBoundingClientRect();
+      const l = Math.max(0, Math.min(2, Math.floor((e.clientX - r.left) / (r.width / 3))));
+      if (String(l) !== x.el.dataset.lane && Math.abs(e.clientX - x.x0) > 12) faixa = l;
+    }
+    if (faixa !== null) {
+      const f = { ...planoFaixaFix(), [x.el.dataset.fk]: faixa }; db.setSetting('planoFaixaFix', f);
+      if (Math.abs(e.clientY - x.y0) < 6) { db.emit(); render(); return; }   // só mudou de faixa
+    }
     if (x.kind === 'plano') {
-      const pid = x.el.dataset.pid;
-      const pins = planoPins().filter(p => !(p.pid === pid && (p.dia === x.dia || p.dia === dia)));
-      pins.push({ id: uid(), dia, pid, ini: a, h: b - a }); db.setSetting('planoPins', pins);
+      const pid = x.el.dataset.pid, tid = x.el.dataset.tid || null; const cfg = planoCfg();
+      const base = planoPins().filter(p => !(tid ? p.tid === tid : (p.pid === pid && !p.tid)) || (p.dia !== x.dia && p.dia !== dia));
+      let partes = [{ dia, ini: a, fim: b }];
+      // passou por cima da rotina: em paralelo ou dividir em volta dela?
+      const bate = planoFixosDoDia(dia).filter(f => f[0] < b - 1e-6 && f[1] > a + 1e-6);
+      if (bate.length && typeof choiceBox === 'function') {
+        const v = await choiceBox({ title: 'Passou por cima da rotina', body: `O bloco bate com <b>${esc(bate.map(f => f[2]).join(', '))}</b>.`, opts: [['dividir', 'Dividir: o trabalho para durante a rotina e continua depois'], ['paralelo', 'Deixar em paralelo (faço junto)']] });
+        if (v === null) { render(); return; }
+        if (v === 'dividir') {
+          let falta = b - a, cur = a; partes = [];
+          const fx = planoFixosDoDia(dia).slice().sort((p, q) => p[0] - q[0]);
+          while (falta > 0.01 && cur < 24) {
+            const f = fx.find(z => z[0] <= cur + 1e-6 && z[1] > cur + 1e-6); if (f) { cur = f[1]; continue; }
+            const prox = fx.find(z => z[0] > cur + 1e-6); const lim = Math.min(24, prox ? prox[0] : 24);
+            const take = Math.min(falta, lim - cur); partes.push({ dia, ini: cur, fim: cur + take }); falta -= take; cur += take;
+          }
+          if (falta > 0.01) partes.push({ dia, ini: cur, fim: cur + falta });
+        }
+      }
+      // passou do fim do expediente: continua no próximo dia útil?
+      const ult = partes[partes.length - 1];
+      if (ult && ult.fim > cfg.fim + 1e-6 && ult.ini < cfg.fim && typeof confirmBox === 'function') {
+        const prox = (() => { const n = new Date(dia + 'T12:00:00'); do { n.setDate(n.getDate() + 1); } while (!planoDiaUtil(ymd(n))); return ymd(n); })();
+        const resto = ult.fim - cfg.fim;
+        if (await confirmBox({ title: `Passa das ${planoHora(cfg.fim).replace(':00', 'h')}`, body: `Sobram ${fmtH(resto * 36e5)} depois das ${planoHora(cfg.fim)}. Continuar em ${fmtDate(prox)} a partir das ${planoHora(cfg.inicio)}, num bloco separado?`, ok: 'Sim, no próximo dia', no: 'Não, fica no mesmo dia' })) {
+          ult.fim = cfg.fim; partes.push({ dia: prox, ini: cfg.inicio, fim: cfg.inicio + resto });
+        }
+      }
+      db.setSetting('planoPins', [...base, ...partes.map(pt => ({ id: uid(), dia: pt.dia, pid, tid, ini: pt.ini, h: pt.fim - pt.ini }))]);
+      a = partes[0].ini; b = partes[partes.length - 1].fim;
     } else if (x.kind === 'fixo') {
       const m = { ...planoRotinaDia() }; m[x.dia] = { ...(m[x.dia] || {}), [x.el.dataset.g]: { ini: a, fim: b } }; db.setSetting('planoRotinaDia', m);
     } else if (x.kind === 'todo') {
       const n = db.get('tempo_notices', x.el.dataset.id);
-      if (n) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), due: `${x.dia}T${planoHora(a)}`, end: b < 24 ? planoHora(b) : null, semHora: false } }, true);
+      if (n) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), due: `${dia}T${planoHora(a)}`, end: b < 24 ? planoHora(b) : null, semHora: false } }, true);
     } else if (x.kind === 'bloq') {
       db.setSetting('planoBloqueios', planoBloqueios().map(bq => bq.id === x.el.dataset.id ? { ...bq, dia, ini: a, fim: b } : bq));
     }
@@ -784,15 +849,17 @@ if (typeof window !== 'undefined' && window.addEventListener) window.addEventLis
 
 /* Zoom do tempo: Alt (Option) + rolagem do mouse na grade aproxima ou afasta as horas, mantendo a hora sob o cursor. */
 if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('wheel', (e) => {
-  if (!e.altKey) return; const sc = e.target.closest && e.target.closest('[data-pl-scroll]'); if (!sc) return;
+  // Alt + rolagem, ou pinça no trackpad (o navegador manda como rolagem com Ctrl)
+  if (!e.altKey && !e.ctrlKey) return; const sc = e.target.closest && e.target.closest('[data-pl-scroll]'); if (!sc) return;
   e.preventDefault();
   const grade = sc.querySelector('.pl-grade'); if (!grade) return;
   const y = e.clientY - grade.getBoundingClientRect().top;          // px desde 0h
-  const hora = y / PL_ALT; const fator = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  const hora = y / PL_ALT; const fator = e.ctrlKey ? Math.exp(-e.deltaY * 0.012) : (e.deltaY < 0 ? 1.15 : 1 / 1.15);
   const novo = Math.max(16, Math.min(160, Math.round(PL_ALT * fator)));
   if (novo === PL_ALT) return;
   const naTela = e.clientY - sc.getBoundingClientRect().top;
   const topoGrade = grade.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
   PLANO.gradeTop = Math.max(0, topoGrade + hora * novo - naTela);
-  db.setSetting('planoZoom', novo); PL_ALT = novo; render();
+  PL_ALT = novo; render();
+  clearTimeout(window.__plZoomT); window.__plZoomT = setTimeout(() => db.setSetting('planoZoom', PL_ALT), 500);   // grava só quando para
 }, { passive: false });

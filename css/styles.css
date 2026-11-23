@@ -1823,3 +1823,7 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .tk-prev.sug::placeholder { font-style: italic; color: color-mix(in srgb, var(--fg-3) 70%, transparent); }
 .tk-prev.chute::placeholder { color: color-mix(in srgb, #E8893A 70%, transparent); }
 .tk-prev.sug { width: 60px; }
+/* Calendário: item que bate com outro na faixa do meio; registro que juntou um compromisso da agenda */
+.pl-grade .choque { box-shadow: inset 0 0 0 2px #E5484D !important; }
+.pl-feito-ag { position: absolute; top: 2px; right: 3px; display: inline-flex; opacity: .7; }
+.pl-feito-ag svg { width: 11px; height: 11px; }

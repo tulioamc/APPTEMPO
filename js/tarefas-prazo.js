@@ -226,7 +226,8 @@ function tkMotor(agora = new Date(), dias = 120) {
   };
   const usado = {}; const capMin = (dia) => Math.min(planoEsticados()[dia] || cfg.horasDia, 24) * 60;
   pins.forEach(pn => { usado[pn.dia] = (usado[pn.dia] || 0) + Number(pn.h) * 60; });
-  const pinPool = {}; pins.slice().sort((a, b) => (a.dia + a.ini).localeCompare(b.dia + b.ini)).forEach(pn => { (pinPool[pn.pid] ||= []).push({ ...pn, cur: Number(pn.ini), b: Number(pn.ini) + Number(pn.h) }); });
+  // blocos fixados: de uma tarefa (tid) só servem a ela; do projeto (sem tid) servem às tarefas dele, na ordem da fila
+  const pinPool = {}; pins.slice().sort((a, b) => (a.dia + String(a.ini).padStart(5, '0')).localeCompare(b.dia + String(b.ini).padStart(5, '0'))).forEach(pn => { (pinPool[pn.tid ? 't:' + pn.tid : 'p:' + pn.pid] ||= []).push({ ...pn, cur: Number(pn.ini), b: Number(pn.ini) + Number(pn.h) }); });
   const limite = ymd(new Date(agora.getTime() + dias * 864e5));
   // anda `min` minutos a partir de `ini` (na sua fila, gastando a capacidade do dia, ou só calculando para terceiros)
   const andar = (ini, min, gasta) => {
@@ -252,7 +253,7 @@ function tkMotor(agora = new Date(), dias = 120) {
     x.deps.forEach(dd => { const r = res[dd]; if (r && r.fim > pronto) { pronto = r.fim; antes = porId[dd]?.t || null; } });
     let resto = x.resto; const blocos = []; let fim = pronto;
     // blocos fixados à mão deste projeto
-    (pinPool[x.pid] || []).forEach(pn => {
+    [...(x.t ? pinPool['t:' + x.t.id] || [] : []), ...(pinPool['p:' + x.pid] || [])].forEach(pn => {
       if (resto <= 0.5) return; let cur = pn.cur; if (pn.dia === hoje) cur = Math.max(cur, nowH); if (pn.dia < hoje || pn.b - cur <= 0.01) return;
       const take = Math.min(resto, (pn.b - cur) * 60); blocos.push({ dia: pn.dia, ini: cur, fim: cur + take / 60, pin: pn.id }); pn.cur = cur + take / 60; resto -= take;
       const f = diaDe(pn.dia, pn.cur); if (f > fim) fim = f;
