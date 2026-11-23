@@ -115,6 +115,16 @@ function openPartyForm(kind, id, cb, preset = {}) {
   });
 }
 
+/* Blocos da janela de agência/cliente: cada um recolhe (chevron) e muda de lugar (arrastar o ⋮⋮). A ordem e o que está
+   recolhido ficam salvos e valem para todas as agências e clientes ('partySecOrdem', 'partySecFechado'). */
+const PARTY_SEC_PADRAO = ['infos', 'clientes', 'fee', 'nf', 'timesheet', 'tempo', 'relatorio', 'projetos'];
+function partySecoesHTML(secs) {
+  const ord = db.setting('partySecOrdem', null) || PARTY_SEC_PADRAO; const fech = db.setting('partySecFechado', {}) || {};
+  const pos = (k) => { const i = ord.indexOf(k); return i < 0 ? 100 + PARTY_SEC_PADRAO.indexOf(k) : i; };
+  return secs.filter(([, , html]) => html).sort((a, b) => pos(a[0]) - pos(b[0])).map(([k, t, html]) => `<section class="pty-sec${fech[k] ? ' fechada' : ''}" data-sec="${k}">
+    <div class="pty-sec-h"><span class="pty-grip" draggable="true" data-grip title="Arraste para mudar a ordem (vale para todos)">⋮⋮</span><button type="button" class="pty-sec-t" data-x="sec-tog" data-k="${k}" aria-expanded="${!fech[k]}">${esc(t)} ${icon(fech[k] ? 'chevR' : 'chevD')}</button></div>
+    ${fech[k] ? '' : `<div class="pty-sec-b">${html}</div>`}</section>`).join('');
+}
 function openParty(kind, id) {
   const T = kind === 'agency' ? 'tempo_agencies' : 'tempo_clients';
   const l = openLayer({
@@ -124,19 +134,21 @@ function openParty(kind, id) {
       const ps = partyProjects(kind, id); const ms = ps.reduce((s, p) => s + projectMs(p.id), 0);
       const sum = (fn) => ps.reduce((s, p) => s + (fn(p) || 0), 0);
       const ag = kind === 'client' ? db.get('tempo_agencies', x.agency_id) : null;
-      return `<div class="dh"><div class="grow"><div class="small muted">${kind === 'agency' ? 'Agência contratante' : 'Cliente' + (ag ? ` · <a href="#" data-x="open-agency" data-id="${ag.id}">${esc(ag.name)}</a>` : ' direto')}</div>${kind === 'agency'
+      return `<div class="dh"><div class="grow"><div class="small muted">${kind === 'agency' ? 'Agência contratante' : 'Cliente' + (ag ? '' : ' direto')}</div>${kind === 'agency'
   ? `<h2 class="party-name">${esc(x.name)}</h2><button type="button" class="party-color row" style="gap:8px" data-act="party-color" data-kind="${kind}" data-id="${id}" title="Mudar cor" aria-label="Mudar cor">${tag(x.name, x.color, { upper: true, fg: partyFg(kind, id) })}<span class="tag tg abbr mono small" style="${cssTb(x.color)}${partyFg(kind, id) ? ';color:' + partyFg(kind, id) : ''}">${esc(agencyAbbr(x))}</span></button>`
-  : `<h2 class="row" style="gap:8px;margin-top:2px"><button type="button" class="party-color" data-act="party-color" data-kind="${kind}" data-id="${id}" title="Mudar cor" aria-label="Mudar cor">${clientTag(x)}</button></h2>`}</div><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+  : `${ag ? `<button type="button" class="party-ag" data-x="open-agency" data-id="${ag.id}" title="Abrir a agência">${agencyTag(ag)}</button>` : ''}<h2 class="party-name">${esc(x.name)}</h2><button type="button" class="party-color row" style="gap:8px" data-act="party-color" data-kind="${kind}" data-id="${id}" title="Mudar cor" aria-label="Mudar cor">${clientTag(x)}</button>`}</div><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
       <div class="db">
         <div class="kpis"><div class="kpi"><span class="k">Projetos</span><span class="v">${ps.length}</span></div><div class="kpi"><span class="k">Horas</span><span class="v">${fmtH(ms)}</span><span class="s">bruto ${fmtH(ps.reduce((t, p) => t + db.where('tempo_time_entries', e => e.project_id === p.id).reduce((u, e) => u + entryBrutoMs(e), 0), 0))}</span></div><div class="kpi"><span class="k">Orçado</span><span class="v">${fmtMoney0(sum(p => Number(p.budget)))}</span></div><div class="kpi"><span class="k">Em aberto</span><span class="v">${fmtMoney0(sum(remainingOf))}</span></div></div>
-        <div class="props"><span class="k">CNPJ</span><span class="mono">${esc(x.cnpj || '—')}</span><span class="k">Contato</span><span>${esc(x.contact || '—')}</span><span class="k">Endereço</span><span>${esc(x.address || '—')}</span><span class="k">Observações</span><span class="muted">${esc(x.notes || '—')}</span><span class="k">Cadastrado em</span><span>${fmtDate(x.created_at)}</span></div>
-        ${kind === 'agency' ? `<div class="stack" style="gap:6px"><div class="row between"><span class="lbl">Clientes</span><button class="btn sm" data-x="new-client">${icon('plus')} Cliente desta agência</button></div><div class="row">${clients(id).map(c => `<button class="btn sm ghost" data-x="open-client" data-id="${c.id}" style="padding:2px">${clientTag(c)}</button>`).join('') || '<span class="small muted">Nenhum cliente vinculado.</span>'}</div></div>` : ''}
-        ${feeHTML(kind, id, ps)}
-        ${typeof nfPartyHTML === 'function' ? nfPartyHTML(kind, id) : ''}
-        ${resumoEmbedHTML(db.where('tempo_time_entries', e => ps.some(p => p.id === e.project_id)))}
-        ${partyChartsHTML(ps)}
-        <div class="panel"><div class="panel-h"><h3>Relatório do mês</h3><span class="small muted">horas e entregas, sem valores</span><span class="grow"></span><input type="month" class="input sm" style="max-width:160px" data-rc-ym value="${ymd(new Date()).slice(0, 7)}" aria-label="Mês do relatório"><button class="btn sm" data-act="rel-cliente" data-kind="${kind}" data-id="${id}">${icon('doc')} PDF</button></div></div>
-        <div class="panel"><div class="panel-h"><h3>Projetos</h3><span class="grow"></span>${kind === 'client' ? `<button class="btn sm" data-act="proj-new" data-client="${id}">${icon('plus')} Criar projeto</button>` : ''}</div><div class="panel-b tight">${ps.length ? `<div class="list">${ps.sort((a, b) => b.created_at.localeCompare(a.created_at)).map(p => `<div class="li" data-x="open-proj" data-id="${p.id}"><div class="grow"><div class="t">${esc(p.name)}</div><div class="meta">${kind === 'agency' ? esc(clientOf(p)?.name || '') + ' · ' : ''}${fmtH(projectMs(p.id))}${p.deadline ? ' · prazo ' + fmtDate(p.deadline) : ''}</div></div><div class="meta">${statusTag(p.status_id)}${statusTag(p.payment_status_id, false)}<span class="mono">${fmtMoney(p.budget)}</span></div></div>`).join('')}</div>` : '<div class="empty small">Nenhum projeto.</div>'}</div></div>
+        ${partySecoesHTML([
+          ['infos', 'Infos', `<div class="props"><span class="k">CNPJ</span><span class="mono">${esc(x.cnpj || '—')}</span><span class="k">Contato</span><span>${esc(x.contact || '—')}</span><span class="k">Endereço</span><span>${esc(x.address || '—')}</span><span class="k">Observações</span><span class="muted">${esc(x.notes || '—')}</span><span class="k">Cadastrado em</span><span>${fmtDate(x.created_at)}</span></div>`],
+          ...(kind === 'agency' ? [['clientes', 'Clientes', `<div class="stack" style="gap:6px"><div class="row between"><span class="lbl">Clientes</span><button class="btn sm" data-x="new-client">${icon('plus')} Cliente desta agência</button></div><div class="row">${clients(id).map(c => `<button class="btn sm ghost" data-x="open-client" data-id="${c.id}" style="padding:2px">${clientTag(c)}</button>`).join('') || '<span class="small muted">Nenhum cliente vinculado.</span>'}</div></div>`]] : []),
+          ['fee', 'Fee mensal', feeHTML(kind, id, ps)],
+          ['nf', 'Nota fiscal', typeof nfPartyHTML === 'function' ? nfPartyHTML(kind, id) : ''],
+          ['timesheet', 'Time sheet', resumoEmbedHTML(db.where('tempo_time_entries', e => ps.some(p => p.id === e.project_id)))],
+          ['tempo', 'Tempo por projeto', partyChartsHTML(ps)],
+          ['relatorio', 'Relatório do mês', `<div class="panel"><div class="panel-h"><h3>Relatório do mês</h3><span class="small muted">horas e entregas, sem valores</span><span class="grow"></span><input type="month" class="input sm" style="max-width:160px" data-rc-ym value="${ymd(new Date()).slice(0, 7)}" aria-label="Mês do relatório"><button class="btn sm" data-act="rel-cliente" data-kind="${kind}" data-id="${id}">${icon('doc')} PDF</button></div></div>`],
+          ['projetos', 'Projetos', `<div class="panel"><div class="panel-h"><h3>Projetos</h3><span class="grow"></span>${kind === 'client' ? `<button class="btn sm" data-act="proj-new" data-client="${id}">${icon('plus')} Criar projeto</button>` : ''}</div><div class="panel-b tight">${ps.length ? `<div class="list">${ps.sort((a, b) => b.created_at.localeCompare(a.created_at)).map(p => `<div class="li" data-x="open-proj" data-id="${p.id}"><div class="grow"><div class="t">${esc(p.name)}</div><div class="meta">${kind === 'agency' ? esc(clientOf(p)?.name || '') + ' · ' : ''}${fmtH(projectMs(p.id))}${p.deadline ? ' · prazo ' + fmtDate(p.deadline) : ''}</div></div><div class="meta">${statusTag(p.status_id)}${statusTag(p.payment_status_id, false)}<span class="mono">${fmtMoney(p.budget)}</span></div></div>`).join('')}</div>` : '<div class="empty small">Nenhum projeto.</div>'}</div></div>`],
+        ])}
       </div>
       ${kind === 'agency' && isDirectAgency(x) ? `<div class="df"><span class="small muted grow">Agência interna: clientes sem agência contratante. Não pode ser editada nem excluída.</span></div>` : `<div class="df"><button class="btn danger left" data-x="del">${icon('trash')} Excluir</button><button class="btn" data-x="arch">${x.archived ? 'Desarquivar' : 'Arquivar'}</button><button class="btn primary" data-x="edit">${icon('edit')} Editar</button></div>`}`;
     }
@@ -144,8 +156,17 @@ function openParty(kind, id) {
   l.live = true;
   bindResumoClicks(l.box, () => { const pids = new Set(partyProjects(kind, id).map(p => p.id)); return db.where('tempo_time_entries', e => pids.has(e.project_id) && e.state === 'done').map(e => e.id); },
     { refresh: () => l.refresh(), reabrir: () => l.refresh() });
+  // arrastar os blocos pelo ⋮⋮
+  let arr = null;
+  l.box.addEventListener('dragstart', (e) => { const g = e.target.closest?.('[data-grip]'); if (!g) return; arr = g.closest('.pty-sec'); arr.classList.add('arrastando'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', arr.dataset.sec); } catch (err) {} });
+  l.box.addEventListener('dragover', (e) => { if (!arr) return; const alvo = e.target.closest?.('.pty-sec'); if (!alvo || alvo === arr) return; e.preventDefault();
+    const r = alvo.getBoundingClientRect(); alvo.parentNode.insertBefore(arr, e.clientY < r.top + r.height / 2 ? alvo : alvo.nextSibling); });
+  l.box.addEventListener('dragend', () => { if (!arr) return; arr.classList.remove('arrastando');
+    const vis = [...l.box.querySelectorAll('.pty-sec')].map(x => x.dataset.sec); const ant = db.setting('partySecOrdem', null) || PARTY_SEC_PADRAO;
+    const ordem = [...vis, ...ant.filter(k => !vis.includes(k))]; arr = null; db.setSetting('partySecOrdem', ordem); l.refresh(); });
   l.box.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-x]'); if (!b) return; const x = db.get(T, id);
+    if (b.dataset.x === 'sec-tog') { const f = { ...(db.setting('partySecFechado', {}) || {}) }; if (f[b.dataset.k]) delete f[b.dataset.k]; else f[b.dataset.k] = true; db.setSetting('partySecFechado', f); l.refresh(); return; }
     if (b.dataset.x === 'edit') openPartyForm(kind, id);
     if (b.dataset.x === 'open-proj') openProject(b.dataset.id);
     if (b.dataset.x === 'open-client') openParty('client', b.dataset.id);

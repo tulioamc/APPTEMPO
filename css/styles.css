@@ -1859,3 +1859,14 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 }
 @container (max-width: 640px) { .tk-l { grid-template-columns: minmax(100px, 1fr) 120px 128px 104px 40px; } .tk-resp, .tk-hora { display: none; } }
 .tk.tk-foco { background: color-mix(in oklab, var(--accent) 10%, transparent); transition: background .3s; }
+/* Agência/cliente: blocos que recolhem e mudam de lugar */
+.pty-sec { margin-top: 14px; }
+.pty-sec-h { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.pty-grip { cursor: grab; color: var(--fg-3); font-size: .8rem; letter-spacing: -2px; padding: 2px 4px; border-radius: 4px; user-select: none; opacity: .6; }
+.pty-grip:hover { opacity: 1; background: var(--surface-2); }
+.pty-sec-t { border: 0; background: none; padding: 2px 0; display: inline-flex; align-items: center; gap: 6px; font: 700 .72rem/1 var(--font, inherit); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-3); cursor: pointer; }
+.pty-sec-t svg { width: 13px; height: 13px; }
+.pty-sec-t:hover { color: var(--fg); }
+.pty-sec.arrastando { opacity: .45; }
+.pty-sec.fechada { margin-top: 8px; }
+.party-ag { border: 0; background: none; padding: 0; cursor: pointer; display: inline-flex; margin: 2px 0 4px; }
