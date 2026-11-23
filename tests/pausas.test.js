@@ -58,3 +58,12 @@ test('pausas existentes (manual, ociosidade) ficam como estão', () => {
   const r = pzReconciliar(segs, [W(H(9), H(10))], { T: 120e3 });
   assert.equal(r.n, 0);
 });
+
+test('pausa de WhatsApp que continuou com o computador parado: o trecho sem registro vira "Sem registro"', () => {
+  // saiu de casa logo depois de abrir o WhatsApp: WhatsApp 12h08–12h11, nada até 14h36
+  const { pzReconciliar: pz } = load(['js/activity.js', 'js/pausas.js'], ['pzReconciliar'], { db: { setting: () => null, all: () => [], get: () => null }, VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {} });
+  const segs = [{ s: I(H(11)), e: I(H(12, 8)), why: 'WhatsApp' }, { s: I(H(14, 36)), e: I(H(15)) }];
+  const r = pz(segs, [W(H(11), H(12, 8)), P(H(12, 8), H(12, 11), 'WhatsApp'), W(H(14, 36), H(15))], { T: 120e3, at: H(15) });
+  assert.deepEqual(r.segs.map(x => x.why || null), ['WhatsApp', 'Sem registro', null]);
+  assert.equal(r.segs[1].s, I(H(12, 11)));
+});

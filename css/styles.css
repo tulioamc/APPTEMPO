@@ -1512,7 +1512,7 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .pl-pop-l span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pl-pop-l em { font-style: normal; color: var(--fg-3); font-size: .9em; }
 .pl-pop-l.feito span:nth-child(2) { font-weight: 600; }
-.pl-rot-cab, .pl-rot-l { grid-template-columns: minmax(130px, 2fr) auto 86px 86px 130px 96px 130px 30px !important; }
+.pl-rot-cab, .pl-rot-l { grid-template-columns: minmax(140px, 240px) auto 80px 80px 150px auto auto 130px 28px !important; justify-content: start; column-gap: 12px; }
 .act-chip-fora i { background: linear-gradient(to bottom, #64748B 50%, #CBD5E1 50%) !important; }
 .act-chip-fora { border-style: dashed; }
 /* Estilo Google Agenda: cantos de poucos pixels, texto no canto de cima à esquerda */

@@ -41,10 +41,11 @@ function prodCollect() {
   all.forEach(e => (e.segments || []).forEach(x => { if (!x.s) return; const c = clip(new Date(x.s).getTime(), x.e ? new Date(x.e).getTime() : Date.now()); if (c) work.push(c); }));
   work.sort((x, y) => x[0] - y[0]);
   const union = prodMerge(work, 0);
-  const pauses = pauseGapsOf(all).map(g => {
+  // pausa em rotina ou compromisso do Calendário não entra (nem distração nem ócio)
+  const pauses = pauseGapsOf(all).flatMap(g => {
     const c = clip(new Date(g.s).getTime(), new Date(g.e).getTime());
-    return c ? { s: c[0], e: c[1], why: g.why || null } : null;
-  }).filter(Boolean);
+    return c ? prodSemFora(c[0], c[1]).map(([x, y]) => ({ s: x, e: y, why: g.why || null })) : [];
+  });
   return { a, b, union, pauses };
 }
 /* Classe de cada pausa: distração (apps de conversa/redes) ou ocioso (o resto). */
@@ -465,12 +466,39 @@ function prodComparacoesHTML() {
   </div></section>`;
 }
 
+/* Trechos de [a, b] que caem em rotina fixa ou compromisso do Calendário (unidos, sem repetir horário). */
+function prodForaIntervalos(a, b) {
+  if (typeof planoFixosDoDia !== 'function' || !(b > a)) return [];
+  const iv = [];
+  for (let d = new Date(a); d.getTime() < b; d = new Date(new Date(ymd(d) + 'T00:00:00').getTime() + 864e5 + 3600e3)) {
+    const dia = ymd(d), base = new Date(dia + 'T00:00:00').getTime();
+    planoFixosDoDia(dia).forEach(f => iv.push([base + f[0] * 36e5, base + f[1] * 36e5]));
+    (typeof planoEventos === 'function' ? planoEventos(dia, true) : []).filter(e => !e.diaTodo && e.origem !== 'todo' && e.ocupa !== false).forEach(e => iv.push([base + e.ini * 36e5, base + e.fim * 36e5]));
+  }
+  const cl = iv.map(([x, y]) => [Math.max(x, a), Math.min(y, b)]).filter(([x, y]) => y > x).sort((p, q) => p[0] - q[0]);
+  const un = []; cl.forEach(([x, y]) => { const l = un[un.length - 1]; if (l && x <= l[1]) l[1] = Math.max(l[1], y); else un.push([x, y]); });
+  return un;
+}
+const prodForaDoTrabalho = (a, b) => prodForaIntervalos(a, b).reduce((t, [x, y]) => t + (y - x), 0);
+/* [a, b] sem os trechos de rotina/compromisso (pedaços que sobram). */
+function prodSemFora(a, b) {
+  const out = []; let c = a;
+  prodForaIntervalos(a, b).forEach(([x, y]) => { if (x > c) out.push([c, x]); c = Math.max(c, y); });
+  if (b > c) out.push([c, b]);
+  return out;
+}
 /* Barrinha de produtividade de um conjunto de sessões (janela da sessão e Resumo): produtivo, distração e ocioso,
    em tempo e % — mesma conta do Relatório Produtividade (pausa nunca é trabalho). */
 function prodOfEntries(entries, at = Date.now()) {
   const work = entries.flatMap(e => (e.segments || []).filter(x => x.s).map(x => [new Date(x.s).getTime(), x.e ? new Date(x.e).getTime() : at])).filter(([a, b]) => b > a);
   const r = { prod: unionMs(work), dist: 0, ocio: 0 };
-  pauseGapsOf(entries, at).forEach(g => { r[prodPauseCls(g.why)] += new Date(g.e) - new Date(g.s); });
+  // pausa que cai em rotina ou compromisso do Calendário (buscar o Rafa, almoço, reunião fora…) não conta como
+  // distração nem ócio: você não estava trabalhando por um motivo marcado. Vai para "fora" (fora da base).
+  r.fora = 0;
+  pauseGapsOf(entries, at).forEach(g => {
+    const a = new Date(g.s).getTime(), b = new Date(g.e).getTime(); const fora = prodForaDoTrabalho(a, b);
+    r[prodPauseCls(g.why)] += (b - a) - fora; r.fora += fora;
+  });
   r.base = r.prod + r.dist + r.ocio;
   return r;
 }
@@ -481,7 +509,8 @@ function prodMiniHTML(entries) {
   const tip = (k) => `${PROD_NAME[k]} ${fmtDur(r[k])} · ${usePctTxt(pct(k))}\n${DESC[k]}\nBase: ${fmtDur(r.base)} (produtivo + distração + ócio)`;
   const bar = PROD_KEYS.filter(k => r[k] > 0).map(k => `<span class="pm-seg" data-hk="${k}" data-tip="${esc(tip(k))}" style="width:${pct(k).toFixed(2)}%;background:${PROD_COLOR[k]}"></span>`).join('');
   const txt = PROD_KEYS.map(k => `<span class="pm-lbl" data-hk="${k}" data-tip="${esc(tip(k))}"><i style="background:${PROD_COLOR[k]}"></i>${PROD_NAME[k]} <b class="mono">${fmtDur(r[k])}</b> <span class="mono muted">${Math.round(pct(k))}%</span></span>`).join('');
-  return `<div class="pm-wrap" data-hkroot="1"><div class="pm-bar">${bar}</div><div class="pm-txt">${txt}</div></div>`;
+  const fora = r.fora > 60e3 ? `<span class="pm-lbl" data-tip="${esc('Pausas que caíram em rotina ou compromisso do Calendário (buscar o Rafa, almoço, reunião…). Não contam como distração nem ócio.')}"><i style="background:transparent;border:1px dashed var(--line-strong)"></i>Rotina/compromisso <b class="mono">${fmtDur(r.fora)}</b></span>` : '';
+  return `<div class="pm-wrap" data-hkroot="1"><div class="pm-bar">${bar}</div><div class="pm-txt">${txt}${fora}</div></div>`;
 }
 
 /* WhatsApp no período escolhido (registro do Mac: conversa aberta em primeiro plano).

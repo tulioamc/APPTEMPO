@@ -15,7 +15,7 @@ const PZ_MIN_APP = 10e3;
 
 /* Núcleo puro (testável). segs = intervalos da sessão; recs = [{a, b, work, why}] do registro.
    janela [p0, p1] = trecho a revisar. Devolve { segs, n } (n = pausas novas). */
-function pzReconciliar(segs, recs, { T = 120e3, at = Date.now(), p0 = -Infinity, p1 = Infinity, aberta = false } = {}) {
+function pzReconciliar(segs, recs, { T = 120e3, at = Date.now(), p0 = -Infinity, p1 = Infinity, aberta = false, soDividir = false } = {}) {
   const ms = (x) => new Date(x).getTime();
   const lista = (segs || []).filter(s => s && s.s);
   if (!lista.length) return { segs, n: 0 };
@@ -37,9 +37,29 @@ function pzReconciliar(segs, recs, { T = 120e3, at = Date.now(), p0 = -Infinity,
   work.forEach(([a, b]) => { const l = cov[cov.length - 1]; if (l && a - l[1] < T) l[1] = Math.max(l[1], b); else cov.push([a, b]); });
   // 3) trechos de pausa vindos do registro (apps que pausam, tela bloqueada): sempre cortam, a partir de 10 s
   const pz = recs.filter(r => !r.work && r.b - r.a >= PZ_MIN_APP).map(r => ({ a: r.a, b: r.b, why: r.why || 'Sem registro' })).sort((x, y) => x.a - y.a);
+  // 3b) pausa de app (WhatsApp, Instagram…) que continuou com o computador parado: só o tempo em que o registro mostra
+  //     alguma coisa fica com o nome do app; trecho sem nenhum registro por T ou mais vira "Sem registro" (ocioso).
+  //     Ex.: troca para o WhatsApp às 12h08, sai de casa, volta 14h36 → WhatsApp só até o último registro, o resto é ócio.
+  const ehApp = (lab) => typeof pauseKind === 'function' && ['whatsapp', 'telegram', 'instagram'].includes(pauseKind(lab));
+  const todos = recs.filter(r => r.b > r.a).map(r => [r.a, r.b]).sort((x, y) => x[0] - y[0]);
+  let divididos = 0;
+  const tl2 = [];
+  tl.forEach(x => {
+    if (x.lab === 'W' || !ehApp(x.lab) || x.b <= w0 || x.a >= w1) { tl2.push(x); return; }
+    const vaz = []; let c = x.a;
+    todos.forEach(([ra, rb]) => { if (rb <= c || ra >= x.b) return; if (ra > c) vaz.push([c, ra]); c = Math.max(c, rb); });
+    if (x.b > c) vaz.push([c, x.b]);
+    const longos = vaz.filter(([a, b]) => b - a >= T);
+    if (!longos.length) { tl2.push(x); return; }
+    let t = x.a;
+    longos.forEach(([a, b]) => { if (a > t) tl2.push({ ...x, a: t, b: a }); tl2.push({ a, b, lab: 'Sem registro' }); t = b; });
+    if (x.b > t) tl2.push({ ...x, a: t, b: x.b, extra: undefined });
+    divididos++;
+  });
+  tl.length = 0; tl.push(...tl2);
   // 4) novas pausas = trabalho da sessão (na janela) sem cobertura de trabalho
   const novas = [];
-  tl.filter(x => x.lab === 'W').forEach(x => {
+  if (!soDividir) tl.filter(x => x.lab === 'W').forEach(x => {
     let a = Math.max(x.a, w0); const b = Math.min(x.b, w1); if (!(b > a)) return;
     const vazios = []; let c = a;
     cov.forEach(([ca, cb]) => { if (cb <= c || ca >= b) return; if (ca > c) vazios.push([c, ca]); c = Math.max(c, cb); });
@@ -56,7 +76,7 @@ function pzReconciliar(segs, recs, { T = 120e3, at = Date.now(), p0 = -Infinity,
       pedacos.forEach(p => { if (p.why) novas.push(p); else if (p.b - p.a >= T) novas.push({ ...p, why: 'Sem registro' }); });
     });
   });
-  if (!novas.length) return { segs, n: 0 };
+  if (!novas.length && !divididos) return { segs, n: 0 };
   // 5) aplica as novas pausas sobre o trabalho
   let out = tl.slice();
   novas.forEach(p => {
@@ -88,7 +108,7 @@ function pzReconciliar(segs, recs, { T = 120e3, at = Date.now(), p0 = -Infinity,
     else res.push({ ...(x.extra || {}), s: iso(x.a), e: iso(x.a), why: x.lab });
   });
   res.forEach(s => { if (!s.why) delete s.why; });
-  return { segs: res, n: novas.length };
+  return { segs: res, n: novas.length + divididos };
 }
 
 /* Registros do computador numa faixa, já marcados como trabalho ou pausa (com o motivo). */
@@ -135,6 +155,20 @@ function pzReverTudo() {
   if (_pzRodando || typeof isMacApp !== 'function' || !isMacApp()) return 0;
   _pzRodando = true;
   try {
+    // uma vez: passa em todas as sessões desde 16/11 só dividindo pausas de app que ficaram com o computador parado
+    // (não acrescenta outras pausas, para não desfazer correções manuais)
+    if (!db.setting('pzDividirV1', false)) {
+      const T = (typeof idleLimit === 'function' ? idleLimit() : 2) * 60e3; let k = 0;
+      db.all('tempo_time_entries').forEach(e => {
+        const segs = e.segments || []; if (segs.length < 2) return;
+        const ms = (x) => new Date(x).getTime(); const ini = ms(segs[0].s); const aberta = segs.some(x => x.s && !x.e);
+        const fim = Math.max(...segs.map(x => x.e ? ms(x.e) : Date.now())); if (fim < PZ_DESDE) return;
+        const recs = pzRegistros(ini - 60e3, fim); if (!recs.length) return;
+        const r = pzReconciliar(segs, recs, { T, at: Date.now(), aberta, soDividir: true });
+        if (r.n && JSON.stringify(r.segs) !== JSON.stringify(segs)) { db.update('tempo_time_entries', e.id, { segments: r.segs, edits: auditEdit(e, segs, 'Pausa de app com o computador parado: o trecho sem registro virou "Sem registro"') }, true); k++; }
+      });
+      db.setSetting('pzDividirV1', true); if (k) db.emit();
+    }
     const marcas = db.setting('pausasAte', {}) || {};
     let n = 0;
     db.all('tempo_time_entries').forEach(e => {
