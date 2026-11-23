@@ -114,7 +114,7 @@ VIEWS.projects = () => {
     <div class="panel-h"><div class="seg" role="tablist">${views.map(([v, l, i]) => `<button class="${f.view === v ? 'on' : ''}" data-act="proj-view" data-v="${v}" role="tab">${icon(i)}<span>${l}</span></button>`).join('')}</div>
     <div class="seg">${SITU_OPTS.map(([v, l]) => `<button class="${f.situ === v ? 'on' : ''}" data-act="flt-set" data-ns="proj" data-k="situ" data-v="${v}">${l}</button>`).join('')}</div>
     <span class="grow"></span>${f.view === 'table' ? colsBtn('projects') : ''}</div>
-    ${filterBar(f, 'proj', { situ: true })}
+    ${projSemTipoBannerHTML()}${filterBar(f, 'proj', { situ: true })}
     <div class="panel-b tight">${body}</div>
   </div>`;
   return { title: 'Projetos', actions: `<button class="btn primary" data-act="proj-new">${icon('plus')} Novo projeto</button>`, html };
@@ -199,6 +199,35 @@ const projectTypeOpts = (current) => {
   return ['', ...names, ...extra, ...cur];
 };
 const isVideoType = (t) => /^Vídeo/.test(t || '');
+/* Projetos sem tipo de trabalho: aviso no topo de Projetos e janela para definir todos de uma vez,
+   já com uma sugestão (o tipo mais usado nas sessões e tarefas do projeto). */
+const projSemTipo = () => projects().filter(p => !p.archived && !p.work_type_id);
+function projSemTipoBannerHTML() {
+  const n = projSemTipo().length; if (!n) return '';
+  return `<div class="banner info small row" style="margin:8px 12px">${icon('tag')} ${n} projeto${n > 1 ? 's' : ''} sem tipo de trabalho<span class="grow"></span><button class="btn sm primary" data-act="proj-tipos">Definir agora</button></div>`;
+}
+function projTipoSugerido(p) {
+  const conta = {};
+  db.where('tempo_time_entries', e => e.project_id === p.id && e.work_type_id).forEach(e => { conta[e.work_type_id] = (conta[e.work_type_id] || 0) + entryMs(e); });
+  db.where('tempo_tasks', t => t.project_id === p.id && t.work_type_id).forEach(t => { conta[t.work_type_id] = (conta[t.work_type_id] || 0) + 1; });
+  return Object.entries(conta).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+}
+ACTIONS['proj-tipos'] = () => {
+  const lista = projSemTipo().sort((a, b) => (clientOf(a)?.name || '').localeCompare(clientOf(b)?.name || '') || a.name.localeCompare(b.name));
+  const tipos = workTypes();
+  const l = openLayer({ wide: true, html: `<div class="dh">${icon('tag')}<h2>Tipo de trabalho dos projetos</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db"><div class="small muted" style="margin-bottom:8px">Já vem marcado o tipo mais usado em cada projeto, quando há. Para todos iguais: <select class="input sm" data-x-todos style="width:auto;display:inline-block">${options(tipos, '', { empty: true, emptyLabel: 'aplicar a todos…' })}</select></div>
+    <div class="stack" style="gap:2px;max-height:60vh;overflow:auto">${lista.map(p => `<div class="row" style="gap:10px;padding:5px 0;border-bottom:1px solid var(--line)"><div class="grow" style="min-width:0"><b>${esc(p.name)}</b> <span class="small muted">${esc(clientOf(p)?.name || '')}</span></div><select class="input sm" style="width:220px" data-pid="${p.id}">${options(tipos, projTipoSugerido(p), { empty: true, emptyLabel: '—' })}</select></div>`).join('')}</div></div>
+    <div class="df"><span class="small muted grow" data-x-n></span><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="salvar">Salvar</button></div>` });
+  const conta = () => { const n = $$('[data-pid]', l.box).filter(s => s.value).length; $('[data-x-n]', l.box).textContent = `${n} de ${lista.length} com tipo`; };
+  conta();
+  l.box.addEventListener('change', (e) => { if (e.target.matches('[data-x-todos]') && e.target.value) $$('[data-pid]', l.box).forEach(s => { s.value = e.target.value; }); conta(); });
+  l.box.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-x="salvar"]')) return;
+    let n = 0; $$('[data-pid]', l.box).forEach(s => { if (s.value) { projSetWorkType(db.get('tempo_projects', s.dataset.pid), s.value, null); n++; } });
+    l.close(); toast(`${n} projeto${n === 1 ? '' : 's'} com tipo de trabalho`); render();
+  });
+};
 /* Muda o tipo de trabalho do projeto e leva junto as tarefas que estavam no tipo antigo (ou sem tipo);
    tarefa mudada à mão para outro tipo fica como está. */
 function projSetWorkType(p, wt, antes = p?.work_type_id || null) {

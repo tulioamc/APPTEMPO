@@ -228,6 +228,11 @@ const VIDEO_FLOW = [
   { key: 'animacao', name: 'Animação', owner: 'Tulio', after: ['storyboard', 'locucao'] },
   { key: 'sonorizacao', name: 'Sonorização', owner: 'Tulio', after: ['animacao'] },
 ];
+/* Prazo da tarefa criada por último no projeto (tarefa nova começa com ele). */
+function ultimoPrazoDoProjeto(pid) {
+  const t = db.where('tempo_tasks', x => x.project_id === pid && x.deadline).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
+  return t ? { deadline: t.deadline, deadline_time: t.deadline_time || null } : { deadline: null, deadline_time: null };
+}
 /* Responsável é você: vazio, "Eu" ou "Tulio"/"Túlio" (padrão das tarefas novas). */
 const souEu = (owner) => !owner || /^(eu|t[uú]lio)$/i.test(String(owner).trim());
 function createVideoFlow(pid, names = {}) {
