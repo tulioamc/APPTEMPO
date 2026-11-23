@@ -232,6 +232,26 @@ const VIDEO_FLOW = [
    planejamento e não fica "atrasado". */
 const STATUS_PARADO_RE = /aguardando|enviado|aprova|stand ?by|pausad/i;
 function statusParado(id) { const s = db.get('tempo_status_options', id); return !!s && s.category === 'active' && STATUS_PARADO_RE.test(s.name || ''); }
+/* Entregas (deadlines) do projeto: marcos entre as tarefas. Cada uma fica depois de uma tarefa (depois = id da tarefa;
+   null = no topo) e vale para o bloco de tarefas acima dela, até a entrega anterior: essas tarefas não podem passar da
+   data e hora da entrega. Guardado em projEntregas { pid: [{ id, nome, dia, hora, depois }] }. */
+const projEntregas = (pid) => ((db.setting('projEntregas', {}) || {})[pid] || []);
+function projEntregasSalvar(pid, lista) { const m = { ...(db.setting('projEntregas', {}) || {}) }; m[pid] = lista; db.setSetting('projEntregas', m); }
+/* Lista na ordem da tela: [{ tipo: 'tarefa', t } | { tipo: 'entrega', e }] (só tarefas de topo). */
+function projSequencia(pid) {
+  const tks = tasksOf(pid); const ents = projEntregas(pid); const ids = new Set(tks.map(t => t.id)); const out = [];
+  ents.filter(e => !e.depois).forEach(e => out.push({ tipo: 'entrega', e }));
+  tks.forEach(t => { out.push({ tipo: 'tarefa', t }); ents.filter(e => e.depois === t.id).forEach(e => out.push({ tipo: 'entrega', e })); });
+  ents.filter(e => e.depois && !ids.has(e.depois)).forEach(e => out.push({ tipo: 'entrega', e }));
+  return out;
+}
+/* Entrega que vale para cada tarefa (a primeira entrega abaixo dela na lista): { tid: entrega } */
+function projEntregaDasTarefas(pid) {
+  const seq = projSequencia(pid); const m = {}; let pend = [];
+  seq.forEach(x => { if (x.tipo === 'tarefa') pend.push(x.t.id); else { pend.forEach(id => { m[id] = x.e; }); pend = []; } });
+  return m;
+}
+const entregaData = (e) => e && e.dia ? new Date(`${e.dia}T${e.hora || '19:00'}:00`) : null;
 /* Prazo da tarefa criada por último no projeto (tarefa nova começa com ele). */
 function ultimoPrazoDoProjeto(pid) {
   const t = db.where('tempo_tasks', x => x.project_id === pid && x.deadline).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];

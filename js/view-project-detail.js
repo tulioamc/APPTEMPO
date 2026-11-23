@@ -88,9 +88,18 @@ function pdTasks(p) {
     </div>` : ''}
   </div>`;
   };
+  const entHTML = (e) => `<div class="tk-entrega" data-ent="${e.id}"><span class="tk-ent-a"><span class="tk-ent-grip" draggable="true" data-ent-grip title="Arraste para mudar de lugar entre as tarefas"><svg viewBox="0 0 8 12" aria-hidden="true"><circle cx="2" cy="2" r="1.1"/><circle cx="6" cy="2" r="1.1"/><circle cx="2" cy="6" r="1.1"/><circle cx="6" cy="6" r="1.1"/><circle cx="2" cy="10" r="1.1"/><circle cx="6" cy="10" r="1.1"/></svg></span>
+    <input class="tk-ent-nome" value="${esc(e.nome || '')}" placeholder="ENTREGA" data-ent-f="nome" aria-label="Nome da entrega"></span>
+    <span class="tk-ent-linha"></span>
+    <span class="tk-ent-b"><span class="tk-ent-dl">DEADLINE</span>
+    <label class="tk-ent-v"><span>${e.dia ? fmtDate(e.dia) : 'data'}</span><input type="date" value="${e.dia || ''}" data-ent-f="dia" aria-label="Data da entrega"></label>
+    <label class="tk-ent-v"><span>${(e.hora || '19:00').replace(':', 'h')}</span><input type="time" step="900" value="${e.hora || '19:00'}" data-ent-f="hora" aria-label="Hora da entrega"></label>
+    <button type="button" class="tk-ent-x" data-x="ent-del" data-id="${e.id}" aria-label="Apagar entrega" title="Apagar entrega">×</button></span></div>`;
+  const seq = projSequencia(p.id);
   return `${typeof tkResolverBarraHTML === 'function' ? tkResolverBarraHTML(p.id) : ''}<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px"><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
-  <div class="panel tk-lista"><div class="panel-b tight">${tks.length ? tks.map(t => row(t) + subtasksOf(t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}
-  <form class="tk-nova" data-form="add-task"><span class="tk-nova-i">${icon('plus')}</span><input class="tk-in grow" name="name" placeholder="Nova tarefa (Enter para adicionar)" aria-label="Nova tarefa"></form></div></div>`;
+  <div class="panel tk-lista"><div class="panel-b tight">${tks.length ? seq.map(x => x.tipo === 'entrega' ? entHTML(x.e) : row(x.t) + subtasksOf(x.t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}
+  <form class="tk-nova" data-form="add-task"><span class="tk-nova-i">${icon('plus')}</span><input class="tk-in grow" name="name" placeholder="Nova tarefa (Enter para adicionar)" aria-label="Nova tarefa"></form>
+  <form class="tk-nova" data-form="add-ent"><span class="tk-nova-i">${icon('plus')}</span><input class="tk-in grow" name="name" placeholder="Deadline (Enter para adicionar)" aria-label="Nova entrega (deadline)"></form></div></div>`;
 }
 const TK_ABERTAS = new Set();
 /* Quanto falta para o prazo da tarefa: "Hoje, em 03h21" / "Amanhã" / "2 dias" / "Atrasada 1 dia". */
@@ -199,6 +208,7 @@ function bindProjectDrawer(ly, id, st) {
     if (x === 'inherit') resetTaskInheritance(db.get('tempo_tasks', bid));
     if (x === 'tk-resolver') return tkResolver(bid);
     if (x === 'tk-alerta') { e.preventDefault(); return tkAlerta(db.get('tempo_tasks', bid), b.dataset.k); }
+    if (x === 'ent-del') { if (!await confirmBox({ title: 'Apagar esta entrega?', body: 'As tarefas continuam; só o deadline some.', ok: 'Apagar', danger: true })) return; projEntregasSalvar(id, projEntregas(id).filter(z => z.id !== bid)); db.emit(); return; }
     if (x === 'tk-abrir') { TK_ABERTAS.has(bid) ? TK_ABERTAS.delete(bid) : TK_ABERTAS.add(bid); ly.refresh(); return; }
     if (x === 'add-sub') { const t = db.get('tempo_tasks', bid); db.insert('tempo_tasks', { project_id: id, parent_id: t.id, name: 'Nova subtarefa', status_id: t.status_id, status_inherited: true, deadline: null, notes: '', order: subtasksOf(t.id).length }); setTimeout(() => { const ins = $$('[data-pd="tname"]', ly.box); const last = ins.find(i => db.get('tempo_tasks', i.dataset.id)?.name === 'Nova subtarefa'); last?.select(); }, 30); }
     if (x === 'del-task') {
@@ -222,6 +232,13 @@ function bindProjectDrawer(ly, id, st) {
   });
   ly.box.addEventListener('submit', (e) => {
     e.preventDefault(); const form = e.target; const f = formData(form); const kind = form.dataset.form;
+    if (kind === 'add-ent') {
+      const lista = projEntregas(id); const tk = tasksOf(id); const ult = tk[tk.length - 1];
+      const ref = ult?.deadline || db.get('tempo_projects', id)?.deadline || null;
+      const nome = f.name.trim() || `ENTREGA ${String(lista.length + 1).padStart(2, '0')}`;
+      projEntregasSalvar(id, [...lista, { id: uid(), nome, dia: ref, hora: ult?.deadline_time || '19:00', depois: ult?.id || null }]);
+      db.emit(); setTimeout(() => ly.box.querySelector('[data-form="add-ent"] input')?.focus(), 30); return;
+    }
     if (kind === 'add-task') { if (!f.name.trim()) return; const pr = p(); db.insert('tempo_tasks', { project_id: id, parent_id: null, name: f.name.trim(), status_id: newTaskStatusId(id), status_inherited: true, ...ultimoPrazoDoProjeto(id), notes: '', order: tasksOf(id).length, work_type_id: null }); reopenProjectIfDone(id); logEvent('task', id, 'created', `Tarefa “${f.name.trim()}” criada`, null, null, { project_id: id }); setTimeout(() => ly.box.querySelector('[data-form="add-task"] input')?.focus(), 30); }
     if (kind === 'add-rev') {
       if (!f.description.trim()) return toast('Descreva o pedido de ajuste.');
@@ -250,7 +267,22 @@ function bindProjectDrawer(ly, id, st) {
     db.update('tempo_tasks', tt.id, { depends_on: (Array.isArray(tt?.depends_on) ? tt.depends_on : []).filter(d => d !== b.dataset.dep) }, true); render();
   });
   // data e hora do prazo da tarefa: o campo fica escondido atrás do texto; o clique abre o seletor do sistema
-  ly.box.addEventListener('click', (e) => { const inp = e.target.closest('.tk-data input, .tk-hora input'); if (inp) { try { inp.showPicker(); } catch (err) {} } });
+  ly.box.addEventListener('click', (e) => { const inp = e.target.closest('.tk-data input, .tk-hora input, .tk-ent-v input'); if (inp) { try { inp.showPicker(); } catch (err) {} } });
+  // entregas (deadlines): editar nome/data/hora, apagar, arrastar pelo ⠿ entre as tarefas
+  ly.box.addEventListener('change', (e) => {
+    const el = e.target.closest('[data-ent-f]'); if (!el) return; const eid = el.closest('[data-ent]')?.dataset.ent;
+    const v = el.dataset.entF === 'nome' ? el.value.trim() : el.value || null;
+    projEntregasSalvar(id, projEntregas(id).map(x => x.id === eid ? { ...x, [el.dataset.entF]: v } : x)); db.emit();
+  });
+  let entArr = null;
+  ly.box.addEventListener('dragstart', (e) => { const g = e.target.closest?.('[data-ent-grip]'); if (!g) return; entArr = g.closest('[data-ent]'); entArr.classList.add('arrastando'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', entArr.dataset.ent); } catch (err) {} });
+  ly.box.addEventListener('dragover', (e) => { if (!entArr) return; const alvo = e.target.closest?.('.tk, .tk-entrega'); if (!alvo || alvo === entArr) return; e.preventDefault();
+    const r = alvo.getBoundingClientRect(); alvo.parentNode.insertBefore(entArr, e.clientY < r.top + r.height / 2 ? alvo : alvo.nextSibling); });
+  ly.box.addEventListener('dragend', () => { if (!entArr) return; entArr.classList.remove('arrastando');
+    // fica depois da tarefa de topo que está logo acima (subtarefas contam como a tarefa mãe)
+    let ant = entArr.previousElementSibling; while (ant && !(ant.classList.contains('tk') && !ant.classList.contains('sub'))) ant = ant.previousElementSibling;
+    const depois = ant ? ant.querySelector('[data-pd="tname"]')?.dataset.id || null : null; const eid = entArr.dataset.ent; entArr = null;
+    projEntregasSalvar(id, projEntregas(id).map(x => x.id === eid ? { ...x, depois } : x)); db.emit(); ly.refresh(); });
   ly.box.addEventListener('change', async (e) => {
     const el = e.target.closest('[data-pd]'); if (!el) return;
     const k = el.dataset.pd; const pr = p();

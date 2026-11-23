@@ -65,7 +65,7 @@ function tkTempoHTML(t, liqMs, fila) {
   const estourou = prev > 0 && feito > prev + 0.5;
   const ok = !['done', 'cancelled'].includes(statusCat(t.status_id));
   const aviso1 = estourou && ok ? `<button class="tk-alerta" data-x="tk-alerta" data-k="estourou" data-id="${t.id}" data-tip="${esc(`Passou ${tkHHMM(feito - prev)} do previsto (${tkHHMM(prev)}).\nClique para ajustar.`)}">${icon('alert')}</button>` : '';
-  const aviso2 = r?.aviso && ok ? `<button class="tk-alerta" data-x="tk-alerta" data-k="prazo" data-id="${t.id}" data-tip="${esc(`Não dá tempo para a entrega (${tkQuando(r.entrega)}).\n${r.antes ? `Começa depois de “${r.antes.name}”, ~${tkQuando(r.ini)}` : `Começando agora`}; com ${tkHHMM(r.resto)} que faltam, fica pronta ~${tkQuando(r.fim)} (${tkHHMM(r.aviso.atraso)} depois).\nClique para ver as opções.`)}">${icon('alert')}</button>` : '';
+  const aviso2 = r?.aviso && ok ? `<button class="tk-alerta" data-x="tk-alerta" data-k="prazo" data-id="${t.id}" data-tip="${esc(`Não dá tempo para ${r.marco ? `a ${r.marco.nome || 'entrega'}` : 'a entrega'} (${tkQuando(r.entrega)}).\n${r.antes ? `Começa depois de “${r.antes.name}”, ~${tkQuando(r.ini)}` : `Começando agora`}; com ${tkHHMM(r.resto)} que faltam, fica pronta ~${tkQuando(r.fim)} (${tkHHMM(r.aviso.atraso)} depois).\nClique para ver as opções.`)}">${icon('alert')}</button>` : '';
   return `<div class="tk-tempo${estourou ? ' estourou' : ''}">
     <span class="tk-t1">${aviso1}<b>${tkHHMM(feito)}</b><i>(trabalhado)</i></span>
     <label class="tk-t2">${aviso2}<input class="tk-prev${pv.manual ? '' : ' sug'}${pv.chute ? ' chute' : ''}" value="${pv.manual ? tkHHMM(prev) : ''}" placeholder="${pv.manual ? '--:--' : '≈' + tkHHMM(prev)}" data-pd="tprev" data-id="${t.id}" aria-label="Tempo previsto (ex.: 2, 2:30, 1h30)" data-tip="${esc(tipPrev)}"><i>(previsto)</i></label>
@@ -197,6 +197,7 @@ function tkMotor(agora = new Date(), dias = 120) {
   const ativos = projects().filter(p => !p.archived && ['todo', 'active'].includes(statusCat(p.status_id)) && !statusParado(p.status_id));
   const itens = [];
   ativos.forEach(p => {
+    const entDe = typeof projEntregaDasTarefas === 'function' ? projEntregaDasTarefas(p.id) : {};
     const todas = db.where('tempo_tasks', t => t.project_id === p.id && !t.parent_id && !['done', 'cancelled'].includes(statusCat(t.status_id)));
     const abertas = todas.filter(t => !statusParado(t.status_id));   // esperando cliente/aprovação: fora da fila
     if (todas.length && !abertas.length) return;
@@ -204,7 +205,7 @@ function tkMotor(agora = new Date(), dias = 120) {
       const pv = tkPrev(t); const feito = taskMs(t.id) / 60e3;
       const prevSim = pv.manual ? pv.min * H.fator : pv.min;
       itens.push({ id: t.id, t, p, pid: p.id, nome: t.name, eu: souEu(t.owner), deps: (Array.isArray(t?.depends_on) ? t.depends_on : []).filter(d => abertas.some(x => x.id === d)),
-        resto: Math.ceil(Math.max(0, prevSim - feito) / 15 - 1e-6) * 15, feitoMin: feito, prev: pv.min, entrega: tkEntrega(t) || (p.deadline ? fimExp(p.deadline) : null), chave: `${t.deadline || p.deadline || '9999'}T${t.deadline_time || '99'}|${String(t.order ?? 0).padStart(5, '0')}` });
+        resto: Math.ceil(Math.max(0, prevSim - feito) / 15 - 1e-6) * 15, feitoMin: feito, prev: pv.min, entrega: (() => { const a = tkEntrega(t), b = entregaData(entDe[t.id]); return a && b ? (a < b ? a : b) : a || b || (p.deadline ? fimExp(p.deadline) : null); })(), marco: entDe[t.id] || null, chave: `${t.deadline || p.deadline || '9999'}T${t.deadline_time || '99'}|${String(t.order ?? 0).padStart(5, '0')}` });
     });
     else if (Number(p.estimated_hours) > 0) {
       const falta = Number(p.estimated_hours) * 60 - projectMs(p.id) / 60e3;

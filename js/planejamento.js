@@ -267,8 +267,12 @@ function planoItensDoDia(dia, porDia) {
   planoFeitosDoDia(dia).forEach(f => it.push({ k: 'feito', a: f.ini, b: f.fim, f }));
   (porDia[dia]?.blocos || []).forEach(bl => it.push({ k: 'plano', a: bl.ini, b: bl.fim, bl }));
   // linha de entrega: cada tarefa aberta com prazo neste dia (na hora da entrega; sem hora = fim do expediente)
-  db.where('tempo_tasks', t => t.deadline === dia && !['done', 'cancelled'].includes(statusCat(t.status_id)) && !(typeof statusParado === 'function' && statusParado(t.status_id))).forEach(t => {
-    const h = t.deadline_time ? planoHoraDe(t.deadline_time) : planoCfg().fim; if (h == null) return;
+  // entregas (deadlines) dos projetos ativos neste dia; e tarefa com hora de entrega própria
+  projects().filter(p => !p.archived && ['todo', 'active'].includes(statusCat(p.status_id))).forEach(p => (typeof projEntregas === 'function' ? projEntregas(p.id) : []).filter(e => e.dia === dia).forEach(e => {
+    const h = planoHoraDe(e.hora || '19:00'); if (h != null) it.push({ k: 'prazo', a: h, b: h + 0.001, ent: e, p });
+  }));
+  db.where('tempo_tasks', t => t.deadline === dia && t.deadline_time && !['done', 'cancelled'].includes(statusCat(t.status_id)) && !(typeof statusParado === 'function' && statusParado(t.status_id))).forEach(t => {
+    const h = planoHoraDe(t.deadline_time); if (h == null) return;
     it.push({ k: 'prazo', a: h, b: h + 0.001, t });
   });
   if (dia <= ymd(new Date())) { const pr = planoVsReal(dia); (pr?.blocos || []).filter(b => !b.ok && (dia < ymd(new Date()) || b.fim <= new Date().getHours() + new Date().getMinutes() / 60)).forEach(b => it.push({ k: 'naofeito', a: b.ini, b: b.fim, bl: b })); }
@@ -364,8 +368,10 @@ function planoItemHTML(x, dia, { alt, unico, auto }) {
     const l = x.k === 'todos' ? x.lista : [x.e]; const feito = l.every(e => e.feito);
     return `<div class="pl-marc${feito ? ' feito' : ''}" style="top:${y}px"${l.length === 1 ? ` data-act="todo-modal" data-id="${l[0].id}"` : ''} data-tip="${esc(`${l.length > 1 ? l.length + ' to-dos às ' : 'To-do às '}${planoHora(x.a)}\n` + l.map(e => (e.feito ? '✓ ' : '• ') + e.titulo).join('\n'))}"><i></i>${l.length > 1 ? l.length + ' · ' : ''}${planoHora(x.a)}</div>`;
   }
+  if (x.k === 'prazo' && x.ent) { const e = x.ent, p = x.p;
+    return `<div class="pl-prazo ent" data-dg="prazo" data-dia="${dia}" data-ent="${e.id}" data-pid="${p.id}" data-ini="${x.a}" data-fim="${x.a}" style="top:${y}px" data-tip="${esc(`Deadline: ${e.nome || 'Entrega'} · ${p.name}\n${fmtDate(dia)} às ${planoHora(x.a)}\nAs tarefas acima dela na lista do projeto não podem passar desta linha. Arraste para mudar o dia ou a hora.`)}"><span>${esc(e.nome || 'Entrega')}</span></div>`; }
   if (x.k === 'prazo') { const t = x.t; const p = db.get('tempo_projects', t.project_id);
-    return `<div class="pl-prazo" data-dg="prazo" data-dia="${dia}" data-id="${t.id}" data-ini="${x.a}" data-fim="${x.a}" style="top:${y}px" data-tip="${esc(`Entrega: ${t.name}${p ? ' · ' + p.name : ''}\n${planoHora(x.a)}${t.deadline_time ? '' : ' (sem hora: fim do expediente)'}\nAs tarefas não podem passar desta linha. Arraste para mudar a entrega (hora ou dia).`)}"><span>${esc(t.name)}</span></div>`; }
+    return `<div class="pl-prazo" data-dg="prazo" data-dia="${dia}" data-id="${t.id}" data-ini="${x.a}" data-fim="${x.a}" style="top:${y}px" data-tip="${esc(`Entrega da tarefa: ${t.name}${p ? ' · ' + p.name : ''}\n${planoHora(x.a)}\nArraste para mudar a entrega (hora ou dia).`)}"><span>${esc(t.name)}</span></div>`; }
   if (x.k === 'fixo') { const { n, m } = x;
     return `<div class="pl-fixo${x._fundo ? ' fundo' : ''}${m.ajustado ? ' ajustado' : ''}${m.real ? ' real' : ''}" data-dg="fixo" data-dia="${dia}" data-g="${esc(m.grupo)}" data-ini="${x.a}" data-fim="${x.b}" style="${pos}" data-tip="${esc(`${n}\n${planoHora(x.a)}–${planoHora(x.b)}${m.real ? '\nAjustado ao que aconteceu (bloco flexível)' : ''}${m.ajustado ? '\nMudado só neste dia' : ''}\nArraste ou puxe as bordas: muda só neste dia`)}"><span class="pl-tx"><b>${esc(n)}</b>${curto ? '' : `<em>${planoHora(x.a)}–${planoHora(x.b)}</em>`}</span><span class="pl-fx-bt">${m.ajustado ? `<button data-act="pl-fixo-reset" data-dia="${dia}" data-g="${esc(m.grupo)}" title="Voltar ao horário da rotina" aria-label="Voltar ao padrão">↺</button>` : ''}<button data-act="pl-fixo-off" data-dia="${dia}" data-g="${esc(m.grupo)}" title="Tirar só deste dia" aria-label="Tirar deste dia">×</button></span>${PL_PUX}</div>`; }
   if (x.k === 'evento') { const e = x.e; const bloq = e.origem === 'bloqueio';
@@ -905,6 +911,9 @@ ACTIONS['pl-encaixar'] = (el) => {
     } else if (x.kind === 'todo') {
       const n = db.get('tempo_notices', x.el.dataset.id);
       if (n) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), due: `${dia}T${planoHora(a)}`, end: b < 24 ? planoHora(b) : null, semHora: false } }, true);
+    } else if (x.kind === 'prazo' && x.el.dataset.ent) {
+      const pid = x.el.dataset.pid; projEntregasSalvar(pid, projEntregas(pid).map(z => z.id === x.el.dataset.ent ? { ...z, dia, hora: planoHora(a) } : z));
+      b = a;
     } else if (x.kind === 'prazo') {
       const t = db.get('tempo_tasks', x.el.dataset.id);
       if (t) { if (dia !== t.deadline) changeTaskDeadline(t, dia, 'Movido no calendário'); db.update('tempo_tasks', t.id, { deadline_time: planoHora(a) }, true); }

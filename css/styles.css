@@ -1777,24 +1777,24 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 /* Projeto › Tarefas — no tamanho do desenho do Tulio (px de tela): nome 15, responsável 12 negrito cinza, status 12,5,
    tempos 13 (rótulos 10), data 13 com "quando" 10,5 negrito, hora 13. Linhas de ~60 px, limpo. */
 .tk { border-bottom: 1px solid var(--line); }
-.tk-l { display: grid; grid-template-columns: minmax(110px, 1fr) 44px 116px 122px 80px 44px 40px; gap: 8px; align-items: center; padding: 10px 10px 10px 22px; min-height: 56px; }
+.tk-l { display: grid; grid-template-columns: minmax(110px, 1fr) 40px 100px 124px 72px 40px 44px; gap: 8px; align-items: center; padding: 9px 10px 9px 22px; min-height: 50px; }
 .tk.sub .tk-l { padding-left: 38px; }
 .tk-in { border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 2px 5px; margin-left: -6px; font: inherit; color: inherit; width: 100%; min-width: 0; }
 .tk-in:hover { border-color: var(--line); }
 .tk-in:focus { border-color: var(--accent); background: var(--surface); outline: none; }
 .tk-in::placeholder { color: var(--fg-3); }
 .tk-nome { display: flex; flex-direction: column; min-width: 0; }
-.tk-nome .n { font-size: 14px; font-weight: 500; color: var(--fg); }
-.tk.sub .tk-nome .n { font-size: 13px; }
-.tk-dep { font-size: 10px; font-weight: 500; color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tk-nome .n { font-size: 12px; font-weight: 500; color: var(--fg); }
+.tk.sub .tk-nome .n { font-size: 11.5px; }
+.tk-dep { font-size: 9.5px; font-weight: 500; color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tk-st { min-width: 0; }
-.tk-st .combo-btn .tag { font-size: 11.5px; padding: 3px 10px; }
-.tk-resp { font-size: 11.5px; font-weight: 600; color: var(--fg-3); }
+.tk-st .combo-btn .tag { font-size: 10px; padding: 2px 9px; }
+.tk-resp { font-size: 10px; font-weight: 600; color: var(--fg-3); }
 .tk-data, .tk-hora { position: relative; display: flex; flex-direction: column; cursor: pointer; color: var(--fg-3); min-width: 0; }
-.tk-dv { font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tk-dv { font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tk-hora .tk-dv.prev { opacity: .55; }
 .tk-data input, .tk-hora input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
-.tk-rel { font-size: 9px; color: var(--fg-3); white-space: nowrap; }
+.tk-rel { font-size: 9.5px; color: var(--fg-3); white-space: nowrap; }
 .tk-rel.hoje { color: #E5487A; font-weight: 700; }
 .tk-rel.amanha { color: #E8893A; font-weight: 700; }
 .tk-rel.late { color: var(--danger); font-weight: 700; }
@@ -1806,15 +1806,15 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .tk-mais-p svg { width: 13px; height: 13px; flex: none; }
 .tk.aberta { background: var(--surface-2); }
 .tk-nova { display: flex; align-items: center; gap: 10px; padding: 12px 20px; }
-.tk-nova .tk-in { font-size: 14px; margin-left: 0; }
+.tk-nova .tk-in { font-size: 12px; margin-left: 0; }
 .tk-nova-i { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 5px; background: var(--accent); color: #fff; flex: none; }
 .tk-nova-i svg { width: 14px; height: 14px; }
 /* Trabalhado / previsto, com ⚠ */
 .tk-tempo { display: flex; flex-direction: column; gap: 1px; font-variant-numeric: tabular-nums; }
 .tk-t1, .tk-t2 { display: flex; align-items: center; gap: 4px; position: relative; padding-left: 15px; white-space: nowrap; }
-.tk-t1 b { font-weight: 500; font-size: 11.5px; color: var(--fg-3); min-width: 34px; }
-.tk-t1 i, .tk-t2 i { font-style: normal; font-size: 9px; color: color-mix(in srgb, var(--fg-3) 55%, transparent); }
-.tk-prev { width: 38px; border: 1px solid transparent; background: transparent; border-radius: 4px; padding: 0 2px; margin-left: -3px; font: inherit; font-size: 11.5px; color: color-mix(in srgb, var(--fg-3) 50%, transparent); }
+.tk-t1 b { font-weight: 500; font-size: 10px; color: var(--fg-3); min-width: 30px; }
+.tk-t1 i, .tk-t2 i { font-style: normal; font-size: 10px; color: color-mix(in srgb, var(--fg-3) 55%, transparent); }
+.tk-prev { width: 34px; border: 1px solid transparent; background: transparent; border-radius: 4px; padding: 0 2px; margin-left: -3px; font: inherit; font-size: 10px; color: color-mix(in srgb, var(--fg-3) 50%, transparent); }
 .tk-prev:hover { border-color: var(--line); }
 .tk-prev:focus { border-color: var(--accent); background: var(--surface); color: var(--fg); outline: none; }
 .tk-prev::placeholder { color: color-mix(in srgb, var(--fg-3) 50%, transparent); }
@@ -1824,7 +1824,7 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 
 .tk-prev.sug::placeholder { font-style: normal; color: color-mix(in srgb, var(--fg-3) 70%, transparent); }
 .tk-prev.chute::placeholder { color: color-mix(in srgb, #E8893A 70%, transparent); }
-.tk-prev.sug { width: 46px; }
+.tk-prev.sug { width: 40px; }
 /* Calendário: item que bate com outro na faixa do meio; registro que juntou um compromisso da agenda */
 .pl-grade .choque { box-shadow: inset 0 0 0 2px #E5484D !important; }
 .pl-feito-ag { position: absolute; top: 2px; right: 3px; display: inline-flex; opacity: .7; }
@@ -1873,3 +1873,27 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .tk-st .combo-btn .tag { max-width: 100%; white-space: nowrap; }
 .tk-st .combo-btn { padding: 0; }
 .tk-st .combo-btn .chev { display: none; }
+
+/* Entrega (deadline) entre as tarefas: faixa roxa — ⠿ NOME ……… DEADLINE data hora */
+.tk-entrega { display: flex; align-items: stretch; margin: 0 -1px; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .02em; }
+.tk-ent-a, .tk-ent-b { display: flex; align-items: center; gap: 8px; background: var(--accent); padding: 5px 12px 5px 10px; }
+.tk-ent-a { border-radius: 0 6px 0 0; width: 34%; }
+.tk-ent-b { border-radius: 6px 0 0 0; width: 46%; justify-content: flex-start; }
+.tk-ent-b .tk-ent-x { margin-left: auto; }
+.tk-entrega.arrastando { opacity: .5; }
+.tk-ent-grip { cursor: grab; display: inline-flex; color: color-mix(in srgb, #fff 80%, transparent); padding: 2px; }
+.tk-ent-grip svg { width: 8px; height: 12px; fill: currentColor; }
+.tk-ent-nome { background: transparent; border: 1px solid transparent; border-radius: 4px; color: #fff; font: inherit; text-transform: uppercase; padding: 1px 4px; width: 100%; min-width: 0; }
+.tk-ent-nome:hover { border-color: color-mix(in srgb, #fff 40%, transparent); }
+.tk-ent-nome:focus { outline: none; border-color: #fff; background: color-mix(in srgb, #fff 15%, transparent); }
+.tk-ent-nome::placeholder { color: color-mix(in srgb, #fff 60%, transparent); }
+.tk-ent-linha { flex: 1; border-bottom: 2px solid var(--accent); }
+.tk-ent-dl { opacity: .85; margin-right: 6px; }
+.tk-ent-v { position: relative; cursor: pointer; font-variant-numeric: tabular-nums; padding: 1px 4px; border-radius: 4px; }
+.tk-ent-v:hover { background: color-mix(in srgb, #fff 15%, transparent); }
+.tk-ent-v input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.tk-ent-x { border: 0; background: none; color: color-mix(in srgb, #fff 70%, transparent); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
+.tk-ent-x:hover { color: #fff; }
+.pl-grade > .pl-prazo.ent { border-top-color: var(--accent); border-top-width: 2px; }
+.pl-grade > .pl-prazo.ent::before { background: var(--accent); }
+.pl-grade > .pl-prazo.ent span { color: var(--accent); text-transform: uppercase; }
