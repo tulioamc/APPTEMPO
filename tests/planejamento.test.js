@@ -25,7 +25,7 @@ test('segunda tem o bloco do Rafa; a tela abre', () => {
   const m = setup();
   const { jan } = m.planoJanelas('2026-11-23');
   assert.deepEqual(jan, [[9, 11.5], [14, 19]]);
-  assert.ok(m.VIEWS.plano().html.includes('Semana de'));
+  assert.ok(m.VIEWS.plano().html.includes('pl-semana-h'));
 });
 test('bloco arrastado fica no horário escolhido e o resto se encaixa em volta', () => {
   const m = setup();

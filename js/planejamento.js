@@ -429,15 +429,16 @@ function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0
 }
 const planoRegua = (alt = PL_ALT) => `<div class="pl-horas" style="height:${24 * alt}px">${Array.from({ length: 24 }, (_, h) => `<div class="pl-h" style="top:${h * alt}px">${String(h).padStart(2, '0')}h</div>`).join('')}</div>`;
 
-/* Semana: segunda a domingo, várias semanas lado a lado com rolagem horizontal (8 antes, 12 depois). */
+/* Semana: só os 7 dias da semana escolhida (segunda a domingo). Sem rolagem para os lados: as setas, "Hoje" e o
+   arrastar para os lados no trackpad trocam a semana. Assim a tela não tem posição para perder ao redesenhar
+   (antes eram 21 semanas lado a lado e a rolagem lateral pulava de semana em alguns redesenhos). */
+const planoSegunda = (d) => { const x = new Date((typeof d === 'string' ? d : ymd(d)) + 'T12:00:00'); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return ymd(x); };
 function planoSemanaHTML(porDia) {
-  const hoje = new Date(); hoje.setHours(12, 0, 0, 0);
-  const seg = new Date(hoje); seg.setDate(hoje.getDate() - ((hoje.getDay() + 6) % 7));
-  const ini = new Date(seg); ini.setDate(seg.getDate() - 8 * 7);
-  const dias = Array.from({ length: 21 * 7 }, (_, i) => { const d = new Date(ini); d.setDate(ini.getDate() + i); return ymd(d); });
+  const seg = PLANO.semIni || planoSegunda(new Date());
+  const dias = Array.from({ length: 7 }, (_, i) => planoDiaMais(seg, i));
   const lt = Math.max(0, ...dias.map(d => planoEventos(d).filter(e => e.diaTodo).length));
-  const cols = dias.map(d => planoColHTML(d, porDia, { linhasTopo: lt, semana: new Date(d + 'T12:00:00').getDay() === 1 ? `Semana de ${fmtDate(d)}` : '' })).join('');
-  return `<div class="pl-scroll pl-semscroll" data-pl-scroll data-pl-sem="${ymd(seg)}"><div class="pl-semana pl-semana-h" style="--lt:${lt * 20}px">
+  const cols = dias.map(d => planoColHTML(d, porDia, { linhasTopo: lt })).join('');
+  return `<div class="pl-scroll pl-semscroll" data-pl-scroll data-pl-sem="${seg}"><div class="pl-semana pl-semana-h" style="--lt:${lt * 20}px">
     <div class="pl-regua-col"><div class="pl-cab pl-cab-vazio"></div>${lt ? `<div style="height:${lt * 20}px"></div>` : ''}${planoRegua()}</div>${cols}</div></div>`;
 }
 
@@ -590,7 +591,7 @@ VIEWS.plano = () => {
     titulo = ''; nav = `<button class="btn sm ghost" data-act="pl-mes-hoje">Hoje</button>`;
     corpo = planoMesHTML(porDia);
   } else {
-    titulo = 'Semana'; nav = `<button class="btn sm" data-act="pl-sem" data-d="-1" aria-label="Semana anterior">${icon('chevL')}</button><button class="btn sm" data-act="pl-sem" data-d="1" aria-label="Próxima semana">${icon('chevR')}</button><button class="btn sm ghost" data-act="pl-sem" data-d="0">Hoje</button>`;
+    titulo = (() => { const seg = PLANO.semIni || planoSegunda(new Date()); const dom = planoDiaMais(seg, 6); return `${fmtDate(seg).slice(0, 5)} – ${fmtDate(dom)}`; })(); nav = `<button class="btn sm" data-act="pl-sem" data-d="-1" aria-label="Semana anterior">${icon('chevL')}</button><button class="btn sm" data-act="pl-sem" data-d="1" aria-label="Próxima semana">${icon('chevR')}</button><button class="btn sm ghost" data-act="pl-sem" data-d="0">Hoje</button>`;
     corpo = planoSemanaHTML(porDia);
   }
   const nota = `Planejado = suas tarefas abertas de todos os projetos, uma por vez, pela entrega mais perto e pelas dependências, com o tempo previsto de cada uma (até ${cfg.horasDia} h por dia útil). Cheio = planejado (mais claro = colocado pelo app; fixado à mão fica forte) · chip com bolinha = registrado · cinza = rotina · tracejado = compromisso (bloqueio ou Google Agenda). Arraste ou puxe as bordas do que não é registro; a janelinha mostra o horário novo.${semEst.length ? ` ${semEst.length} projeto(s) ativo(s) sem horas estimadas não entram.` : ''}`;
@@ -609,19 +610,16 @@ function planoGradeRolar(semana = false, irHoje = false) {
   sc.scrollTop = PLANO.gradeTop;
   if (semana) {
     const regua0 = sc.querySelector('.pl-regua-col')?.offsetWidth || 44;
-    sc.style.setProperty('--plw', Math.max(110, Math.floor((sc.clientWidth - regua0 - 8) / 7) - 6) + 'px');
-    const alvo = sc.querySelector(`[data-pl-col="${sc.dataset.plSem}"]`);
-    const regua = sc.querySelector('.pl-regua-col')?.offsetWidth || 44;
-    // volta para o mesmo dia que estava à esquerda (não para o mesmo pixel: a largura das colunas pode mudar entre um
-    // redesenho e outro, e o pixel antigo caía em outra semana)
-    // O "encaixe" nas segundas (scroll-snap) anima a rolagem; durante esse tempo os eventos de rolagem não contam como
-    // você rolando (antes, cada redesenho guardava um ponto do meio da animação e a semana ia andando para trás).
-    const anc = !irHoje && PLANO.semAnc ? sc.querySelector(`[data-pl-col="${PLANO.semAnc.dia}"]`) : null;
-    sc._restaurando = Date.now();
-    sc.style.scrollSnapType = 'none';
-    if (anc) sc.scrollLeft = anc.offsetLeft - regua - 4 + PLANO.semAnc.dx;
-    else if (alvo) { sc.scrollLeft = alvo.offsetLeft - regua - 4; PLANO.semAnc = { dia: alvo.dataset.plCol, dx: 0 }; }
-    requestAnimationFrame(() => requestAnimationFrame(() => { sc.style.scrollSnapType = ''; }));
+    sc.style.setProperty('--plw', Math.max(90, Math.floor((sc.clientWidth - regua0 - 8) / 7) - 6) + 'px');
+    sc.scrollLeft = 0;
+    // trackpad para os lados troca a semana (um gesto = uma semana)
+    if (!sc._plSwipe) { sc._plSwipe = true; let acc = 0, ult = 0;
+      sc.addEventListener('wheel', (e) => {
+        if (e.ctrlKey || e.altKey || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+        e.preventDefault(); const agora = Date.now(); if (agora - ult < 700) return;
+        acc += e.deltaX; if (Math.abs(acc) < 60) return;
+        const d = acc > 0 ? 1 : -1; acc = 0; ult = agora; ACTIONS['pl-sem']({ dataset: { d: String(d) } });
+      }, { passive: false }); }
   }
   // sinais de que é VOCÊ rolando: roda/trackpad, toque, teclado, ou clicar na própria barra de rolagem. Clicar num bloco
   // não conta (o clique redesenha a tela, e a rolagem que o redesenho provoca era guardada como se fosse sua).
@@ -634,10 +632,8 @@ function planoGradeRolar(semana = false, irHoje = false) {
     PLANO.gradeTop = sc.scrollTop;
     // só guarda a posição quando é VOCÊ rolando (roda do mouse, trackpad, toque, teclado, arrastar a barra) — rolagens
     // que o navegador faz sozinho ao redesenhar ou encaixar nas segundas não contam
-    const voce = sc._usuario && Date.now() - sc._usuario < 1500 && !(sc._restaurando > sc._usuario);
-    if (semana && voce) { const regua = sc.querySelector('.pl-regua-col')?.offsetWidth || 44; const x = sc.scrollLeft + regua + 4;
-      const col = [...sc.querySelectorAll('[data-pl-col]')].find(c => c.offsetLeft + c.offsetWidth > x);
-      if (col) PLANO.semAnc = { dia: col.dataset.plCol, dx: sc.scrollLeft - (col.offsetLeft - regua - 4) }; }
+
+
   }, { passive: true }); }
 }
 /* Mês: abre (e "Hoje" volta) com a semana de hoje inteira, encostada no topo da janela, logo abaixo do nome do mês. */
@@ -669,15 +665,9 @@ ACTIONS['pl-ir-dia'] = (el) => { PLANO.dia = el.dataset.dia; PLANO.modo = 'dia';
 ACTIONS['pl-nav'] = (el) => { const d = Number(el.dataset.d); if (!d) PLANO.dia = null; else PLANO.dia = planoDiaMais(PLANO.dia || ymd(new Date()), d); render(); };
 ACTIONS['pl-mes-hoje'] = () => { PLANO.mesAnc = null; planoMesRolar(true); };
 ACTIONS['pl-sem'] = (el) => {
-  const sc = document.querySelector('[data-pl-scroll]'); if (!sc) return;
-  const d = Number(el.dataset.d); if (!d) return planoGradeRolar(true, true);
-  // vai direto para a segunda da semana anterior/seguinte (sem animação: um redesenho no meio parava no meio do caminho)
-  const regua = sc.querySelector('.pl-regua-col')?.offsetWidth || 44;
-  const atual = PLANO.semAnc?.dia || sc.dataset.plSem; const seg = new Date(atual + 'T12:00:00'); seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7) + d * 7);
-  const alvo = sc.querySelector(`[data-pl-col="${ymd(seg)}"]`); if (!alvo) return;
-  sc._restaurando = Date.now(); sc.style.scrollSnapType = 'none';
-  sc.scrollLeft = alvo.offsetLeft - regua - 4; PLANO.semAnc = { dia: ymd(seg), dx: 0 };
-  requestAnimationFrame(() => requestAnimationFrame(() => { sc.style.scrollSnapType = ''; }));
+  const d = Number(el.dataset.d);
+  PLANO.semIni = d ? planoDiaMais(PLANO.semIni || planoSegunda(new Date()), d * 7) : planoSegunda(new Date());
+  render();
 };
 ACTIONS['pl-rafa-ir'] = (el) => { if (typeof RF !== 'undefined') RF.ym = el.dataset.dia.slice(0, 7); go('rafa'); };
 ACTIONS['pl-dia'] = (el) => {
