@@ -66,6 +66,7 @@ const COMBO_TARGETS = {
   'proj-pay': (id, v) => { setPaymentStatus(db.get('tempo_projects', id), v); },
   'proj-client': (id, v) => { const p = db.get('tempo_projects', id); const from = clientOf(p)?.name; db.update('tempo_projects', id, { client_id: v }, true); logEvent('project', id, 'client', `Cliente: ${from || '—'} → ${db.get('tempo_clients', v)?.name}`); db.emit(); },
   'task-status': (id, v) => { setTaskStatus(db.get('tempo_tasks', id), v); },
+  'proj-wt': (id, v) => { projSetWorkType(db.get('tempo_projects', id), v || null); },
   'task-wt': (id, v) => { db.update('tempo_tasks', id, { work_type_id: v || null }); },
   'quote-status': (id, v) => { db.update('tempo_quotes', id, { status_id: v }); },
   'rb-pay': (id, v) => { db.update('tempo_reimb_rows', id, { pay_id: v }); },
@@ -74,5 +75,5 @@ const COMBO_TARGETS = {
 };
 ACTIONS.combo = (el, e) => {
   e?.stopPropagation?.();
-  openCombo(el, { kind: el.dataset.kind, value: el.dataset.value, allowEmpty: el.dataset.target === 'task-wt', onPick: (v) => { COMBO_TARGETS[el.dataset.target](el.dataset.id, v); } });
+  openCombo(el, { kind: el.dataset.kind, value: el.dataset.value, allowEmpty: el.dataset.target === 'task-wt' || el.dataset.target === 'proj-wt', onPick: (v) => { COMBO_TARGETS[el.dataset.target](el.dataset.id, v); } });
 };

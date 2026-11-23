@@ -96,13 +96,12 @@ document.addEventListener('mousedown', (e) => {
   if (e.target.closest?.('.filters')) return;
   S.fltOpen = {}; render();
 });
-ACTIONS['flt-set'] = (el) => { fltState(el.dataset.ns)[el.dataset.k] = el.dataset.v; if (el.dataset.ns === 'proj' && el.dataset.k === 'situ') db.setSetting('projSitu', el.dataset.v); render(); };
+ACTIONS['flt-set'] = (el) => { fltState(el.dataset.ns)[el.dataset.k] = el.dataset.v; render(); };
 ACTIONS['flt-clear'] = (el) => { const f = fltState(el.dataset.ns); ['q', 'agency', 'client', 'status', 'pay', 'wt', 'year', 'month', 'from', 'to'].forEach(k => { if (k in f) f[k] = ''; }); render(); };
 
 const SITU_OPTS = [['all', 'Todos'], ['active', 'Ativos'], ['done', 'Concluídos'], ['falta', 'Falta pagamento']];
 VIEWS.projects = () => {
   const f = S.proj;
-  if (f.situ === undefined) f.situ = db.setting('projSitu', 'active') || 'active';
   const list = filterProjects(f);
   const views = [['table', 'Tabela', 'table'], ['board', 'Quadro', 'board'], ['list', 'Lista', 'list'], ['cal', 'Calendário', 'cal']];
   let body = '';
@@ -200,6 +199,14 @@ const projectTypeOpts = (current) => {
   return ['', ...names, ...extra, ...cur];
 };
 const isVideoType = (t) => /^Vídeo/.test(t || '');
+/* Muda o tipo de trabalho do projeto e leva junto as tarefas que estavam no tipo antigo (ou sem tipo);
+   tarefa mudada à mão para outro tipo fica como está. */
+function projSetWorkType(p, wt, antes = p?.work_type_id || null) {
+  if (!p) return;
+  db.update('tempo_projects', p.id, { work_type_id: wt }, true);
+  db.where('tempo_tasks', t => t.project_id === p.id && (!t.work_type_id || t.work_type_id === antes)).forEach(t => db.update('tempo_tasks', t.id, { work_type_id: wt }, true));
+  db.emit();
+}
 function openProjectForm(id, clientId, onCreated) {
   const p = id ? db.get('tempo_projects', id) : null;
   const l = openLayer({
@@ -207,6 +214,7 @@ function openProjectForm(id, clientId, onCreated) {
     <form class="db" id="pf">
       <div class="field"><label for="pf-name">Nome do projeto *</label><input id="pf-name" class="input" name="name" required value="${esc(p?.name || '')}" autofocus></div>
       <div class="field"><label for="pf-client">Cliente *</label><div class="row" style="flex-wrap:nowrap"><select id="pf-client" class="input" name="client_id" required>${clientSelectOptions(p?.client_id || clientId)}</select><button type="button" class="btn" data-x="newclient">${icon('plus')} Cliente</button></div><span class="hint">A agência vem do cadastro do cliente.</span></div>
+      <div class="field"><label for="pf-wt">Tipo de trabalho${p ? '' : ' *'}</label><select id="pf-wt" class="input" name="work_type_id" ${p ? '' : 'required'}>${options(workTypes(), p?.work_type_id, { empty: true, emptyLabel: 'Escolha…' })}</select><span class="hint">As tarefas herdam; dá para mudar em cada tarefa sem mexer no projeto.</span></div>
       <div class="field"><label for="pf-type">Tipo</label><select id="pf-type" class="input" name="project_type">${projectTypeOpts(p?.project_type).map(t => `<option value="${t}" ${(p?.project_type || '') === t ? 'selected' : ''}>${t || 'Não definido'}</option>`).join('')}</select></div>
       <div class="grid2">
         <div class="field"><label for="pf-st">Status</label><select id="pf-st" class="input" name="status_id">${options(statuses('work'), p?.status_id || statusByCat('work', 'todo')?.id)}</select></div>
@@ -232,10 +240,13 @@ function openProjectForm(id, clientId, onCreated) {
     const f = formData($('#pf', l.box));
     if (!f.name.trim()) return toast('Dê um nome ao projeto.');
     if (!f.client_id) return toast('Escolha o cliente.');
-    const data = { name: f.name.trim(), client_id: f.client_id, project_type: f.project_type || null, budget: numIn(f.budget), estimated_hours: numIn(f.estimated_hours), revisions_included: numIn(f.revisions_included), notes: f.notes, description: f.description };
+    if (!p && !f.work_type_id) return toast('Escolha o tipo de trabalho.');
+    const data = { name: f.name.trim(), client_id: f.client_id, work_type_id: f.work_type_id || (p ? p.work_type_id : null) || null, project_type: f.project_type || null, budget: numIn(f.budget), estimated_hours: numIn(f.estimated_hours), revisions_included: numIn(f.revisions_included), notes: f.notes, description: f.description };
     const payId = feePayId(f.payment_status_id, l.box);
     if (p) {
+      const wtAntes = p.work_type_id || null;
       db.update('tempo_projects', p.id, data, true);
+      if ((f.work_type_id || null) !== wtAntes) projSetWorkType(p, f.work_type_id || null, wtAntes);
       if (f.status_id !== p.status_id) setProjectStatus(p, f.status_id);
       if (payId !== p.payment_status_id) setPaymentStatus(p, payId);
       if ((f.deadline || '') !== (p.deadline || '')) changeDeadline(p, f.deadline, 'Editado no formulário');

@@ -39,6 +39,7 @@ function pdOverview(p) {
   <div class="props">
     <span class="k">Status</span><div>${comboBtn('work', p.status_id, 'proj-status', p.id)} <span class="small faint">propaga para tarefas que herdam</span></div>
     <span class="k">Pagamento</span><div>${comboBtn('payment', p.payment_status_id, 'proj-pay', p.id)}</div>
+    <span class="k">Tipo de trabalho</span><div>${comboBtn('wt', p.work_type_id, 'proj-wt', p.id)} <span class="small faint">tarefas herdam; mudar uma tarefa não muda o projeto</span></div>
     <span class="k">Prazo atual</span><div class="row" data-dias-wrap><input type="date" class="input sm" style="width:auto" value="${p.deadline || ''}" data-pd="deadline">${emDiasHTML(false)} ${deadlineCell(p)}</div>
     <span class="k">Prazo original</span><div class="row"><input type="date" class="input sm" style="width:auto" value="${p.deadline_original || ''}" data-pd="orig" aria-label="Prazo original"> ${changes.length ? `<span class="small muted">· ${changes.length} adiamento(s)</span>` : ''}</div>
     <span class="k">Entrega</span><div>${p.sent_at ? fmtDateTime(p.sent_at) : '—'} ${del ? (del.late ? `<span class="tag c-red">${del.days} dia(s) de atraso</span>` : `<span class="tag c-green">no prazo</span>`) : ''}</div>
@@ -57,30 +58,29 @@ function pdOverview(p) {
 
 function pdTasks(p) {
   const tks = tasksOf(p.id);
-  // Uma linha por tarefa só com o essencial; o resto (tipo, herdar, dependências, subtarefa, ajuste, excluir) abre ao clicar na seta.
-  const relDia = (d) => { if (!d) return ''; const n = Math.round((new Date(d + 'T12:00:00') - new Date(ymd(new Date()) + 'T12:00:00')) / 864e5); return n === 0 ? 'hoje' : n === 1 ? 'amanhã' : n === -1 ? 'ontem' : n > 0 ? `em ${n} dias` : `${-n} dias atrás`; };
+  // Uma linha por tarefa: nome (largo, com "Depende de" embaixo), status, responsável, data e hora do prazo (com quanto falta).
+  // ▶ e a seta das opções aparecem ao passar o mouse; a seta abre tipo, herdar, dependências, subtarefa, ajuste, excluir.
   const row = (t, isSub) => {
     const liq = isSub ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : taskMs(t.id);
     const bruto = db.where('tempo_time_entries', e => (isSub ? e.task_id === t.id : (e.task_id === t.id || subtasksOf(t.id).some(x => x.id === e.task_id)))).reduce((s, e) => s + entryBrutoMs(e), 0);
     const est = estimadoDaTarefa(t); const aberto = TK_ABERTAS.has(t.id);
     const deps = (Array.isArray(t.depends_on) ? t.depends_on : []).map(d => db.get('tempo_tasks', d)?.name).filter(Boolean);
-    const atras = t.deadline && t.deadline < ymd(new Date()) && statusCat(t.status_id) !== 'done';
-    const tempo = liq || est ? `${liq ? fmtDur(liq) : '0min'}${est ? ` <span class="faint">de ${fmtH(est * 36e5)}</span>` : ''}` : '';
+    const rel = tkPrazoRel(t);
     return `<div class="tk ${isSub ? 'sub' : ''}${aberto ? ' aberta' : ''}">
     <div class="tk-l">
-      ${comboBtn('work', t.status_id, 'task-status', t.id)}
-      <div class="tk-nome"><input class="tk-in n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome">${deps.length ? `<span class="tk-dep">depois de ${esc(deps.join(', '))}</span>` : ''}</div>
-      <input class="tk-in tk-resp" value="${esc(t.owner || '')}" placeholder="Responsável" data-pd="owner" data-id="${t.id}" aria-label="Responsável">
-      <label class="tk-prazo${atras ? ' late' : ''}" data-tip="Prazo"><input type="date" class="tk-in" value="${t.deadline || ''}" data-pd="tdl" data-id="${t.id}" aria-label="Prazo"><span>${relDia(t.deadline)}</span></label>
-      <span class="tk-tempo mono small" data-tip="${esc(`Líquido ${fmtDur(liq)} · bruto (com pausas) ${fmtDur(bruto)}${est ? ' · estimado ' + fmtH(est * 36e5) : ''}`)}">${tempo}</span>
-      ${!t.owner || t.owner === 'Eu' ? `<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` : '<span class="faint small tk-terc" data-tip="Terceiro: sem apontamento de horas">terceiro</span>'}
-      <button class="btn sm icon ghost tk-mais" data-x="tk-abrir" data-id="${t.id}" aria-label="${aberto ? 'Fechar' : 'Mais opções'}" aria-expanded="${aberto}">${icon(aberto ? 'chevU' : 'chevD')}</button>
+      <div class="tk-nome"><input class="tk-in n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome"${liq || est ? ` data-tip="${esc(`Líquido ${fmtDur(liq)} · bruto ${fmtDur(bruto)}${est ? ' · estimado ' + fmtH(est * 36e5) : ''}`)}"` : ''}>${deps.length ? `<span class="tk-dep">(Depende de ${deps.length > 1 ? deps.length + ' tarefas' : esc(deps[0])})</span>` : ''}</div>
+      <div class="tk-st">${comboBtn('work', t.status_id, 'task-status', t.id)}</div>
+      <input class="tk-in tk-resp" value="${esc(t.owner || '')}" placeholder="—" data-pd="owner" data-id="${t.id}" aria-label="Responsável">
+      <label class="tk-data"><span class="tk-dv">${t.deadline ? fmtDate(t.deadline) : '<span class="faint">sem prazo</span>'}</span>${rel ? `<span class="tk-rel ${rel.c}">${rel.txt}</span>` : ''}<input type="date" value="${t.deadline || ''}" data-pd="tdl" data-id="${t.id}" aria-label="Prazo"></label>
+      <label class="tk-hora"><span class="tk-dv">${t.deadline_time ? t.deadline_time.replace(':', 'h') : '<span class="faint">--h--</span>'}</span><input type="time" value="${t.deadline_time || ''}" data-pd="thora" data-id="${t.id}" aria-label="Hora do prazo"></label>
+      <span class="tk-acoes">${souEu(t.owner) ? `<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` : ''}<button class="btn sm icon ghost" data-x="tk-abrir" data-id="${t.id}" aria-label="${aberto ? 'Fechar' : 'Mais opções'}" aria-expanded="${aberto}">${icon(aberto ? 'chevU' : 'chevD')}</button></span>
     </div>
     ${aberto ? `<div class="tk-mais-p">
       ${t.status_inherited !== false ? `<span class="small muted" data-tip="Mudar o status do projeto muda o desta tarefa também">${icon('layers')} Segue o status do projeto</span>` : `<button class="btn sm" data-x="inherit" data-id="${t.id}" data-tip="Esta tarefa foi mudada à mão e não segue mais o status do projeto">${icon('undo')} Voltar a seguir o projeto</button>`}
       ${!isSub ? comboBtn('wt', t.work_type_id, 'task-wt', t.id) : ''}
       ${!isSub ? depsHTML(t) : ''}
       <span class="grow"></span>
+      ${liq || est ? `<span class="mono small muted">${fmtDur(liq)}${est ? ' de ' + fmtH(est * 36e5) : ''}</span>` : ''}
       ${!isSub ? `<button class="btn sm ghost" data-x="add-sub" data-id="${t.id}">${icon('plus')} Subtarefa</button>` : ''}
       ${!isSub && !ADJUST_RE.test(t.name) ? `<button class="btn sm ghost" data-x="add-adjust" data-id="${t.id}" data-tip="Registrar um ajuste desta tarefa (cria [Ajuste NN] para você preencher o prazo)">Ajuste</button>` : ''}
       <button class="btn sm icon ghost" data-x="del-task" data-id="${t.id}" aria-label="Excluir">${icon('trash')}</button>
@@ -92,6 +92,20 @@ function pdTasks(p) {
   <form class="tk-nova" data-form="add-task"><span class="tk-nova-i">${icon('plus')}</span><input class="tk-in grow" name="name" placeholder="Nova tarefa (Enter para adicionar)" aria-label="Nova tarefa"></form></div></div>`;
 }
 const TK_ABERTAS = new Set();
+/* Quanto falta para o prazo da tarefa: "Hoje, em 03h21" / "Amanhã" / "2 dias" / "Atrasada 1 dia". */
+function tkPrazoRel(t) {
+  if (!t.deadline || statusCat(t.status_id) === 'done') return null;
+  const hoje = ymd(new Date()); const n = Math.round((new Date(t.deadline + 'T12:00:00') - new Date(hoje + 'T12:00:00')) / 864e5);
+  if (n < 0) return { txt: `Atrasada ${-n} dia${n < -1 ? 's' : ''}`, c: 'late' };
+  if (n === 0) {
+    if (!t.deadline_time) return { txt: 'Hoje', c: 'hoje' };
+    const ms = new Date(t.deadline + 'T' + t.deadline_time + ':00') - Date.now(); const m = Math.round(Math.abs(ms) / 60e3);
+    const hm = `${String(Math.floor(m / 60)).padStart(2, '0')}h${String(m % 60).padStart(2, '0')}`;
+    return ms >= 0 ? { txt: `Hoje, em ${hm}`, c: 'hoje' } : { txt: `Atrasada ${hm}`, c: 'late' };
+  }
+  if (n === 1) return { txt: 'Amanhã', c: 'amanha' };
+  return { txt: `${n} dias`, c: '' };
+}
 
 function pdTime(p) {
   const es = db.where('tempo_time_entries', e => e.project_id === p.id).sort((a, b) => new Date(entryStart(b)) - new Date(entryStart(a)));
@@ -231,6 +245,8 @@ function bindProjectDrawer(ly, id, st) {
     const tt = db.get('tempo_tasks', b.dataset.id); if (!tt) return;
     db.update('tempo_tasks', tt.id, { depends_on: (tt.depends_on || []).filter(d => d !== b.dataset.dep) }, true); render();
   });
+  // data e hora do prazo da tarefa: o campo fica escondido atrás do texto; o clique abre o seletor do sistema
+  ly.box.addEventListener('click', (e) => { const inp = e.target.closest('.tk-data input, .tk-hora input'); if (inp) { try { inp.showPicker(); } catch (err) {} } });
   ly.box.addEventListener('change', async (e) => {
     const el = e.target.closest('[data-pd]'); if (!el) return;
     const k = el.dataset.pd; const pr = p();
@@ -249,6 +265,7 @@ function bindProjectDrawer(ly, id, st) {
     if (k === 'tname') { if (el.value.trim()) { db.update('tempo_tasks', el.dataset.id, { name: el.value.trim() }, true); render(); } }
     if (k === 'tstatus') setTaskStatus(db.get('tempo_tasks', el.dataset.id), el.value);
     if (k === 'twt') { db.update('tempo_tasks', el.dataset.id, { work_type_id: el.value || null }, true); render(); }
+    if (k === 'thora') { db.update('tempo_tasks', el.dataset.id, { deadline_time: el.value || null }, true); render(); return; }
     if (k === 'owner') { db.update('tempo_tasks', el.dataset.id, { owner: el.value.trim() || null }, true); render(); return; }
     if (k === 'dep-add') { if (!el.value) return; const tt = db.get('tempo_tasks', el.dataset.id); if (tt) { db.update('tempo_tasks', tt.id, { depends_on: [...(tt.depends_on || []), el.value] }, true); render(); } return; }
     if (k === 'tdl') {
@@ -260,7 +277,7 @@ function bindProjectDrawer(ly, id, st) {
 }
 /* Janelinha do fluxo de vídeo: pergunta quem faz as etapas de terceiros (opcional). */
 function openVideoFlowDialog(pid, onDone) {
-  const ext = VIDEO_FLOW.filter(s => s.owner !== 'Eu');
+  const ext = VIDEO_FLOW.filter(s => !souEu(s.owner));
   const l = openLayer({
     html: `<div class="dh"><h2>Fluxo de vídeo</h2></div><div class="db"><div class="stack" style="gap:10px"><span class="small muted">Quem vai fazer as etapas de terceiros? É opcional, dá para preencher depois.</span>${ext.map(s => `<div class="field"><label for="vf-${s.key}">${s.name}</label><input id="vf-${s.key}" class="input" name="${s.key}" placeholder="${esc(s.owner)}"></div>`).join('')}</div></div>
     <div class="df"><button class="btn" data-x="no">Cancelar</button><button class="btn primary" data-x="yes" autofocus>Criar fluxo</button></div>`

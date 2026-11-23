@@ -8,7 +8,8 @@ VIEWS.tasks = () => {
     if (f.project && t.project_id !== f.project) return false;
     if (f.status && t.status_id !== f.status) return false;
     const cat = statusCat(t.status_id);
-    if (f.mine === 'open' && ['done', 'cancelled'].includes(cat)) return false;
+    // Ativas: tarefa aberta de projeto ativo (projeto concluído/cancelado fica de fora)
+    if (f.mine === 'open' && (['done', 'cancelled'].includes(cat) || ['done', 'cancelled'].includes(statusCat(p.status_id)))) return false;
     if (f.mine === 'done' && cat !== 'done') return false;
     if (q && ![t.name, p.name, clientOf(p)?.name].some(x => (x || '').toLowerCase().includes(q))) return false;
     return true;
@@ -26,7 +27,7 @@ VIEWS.tasks = () => {
   const html = `<div class="panel">
     <div class="filters">
       <input id="tk-q" class="input search" placeholder="Buscar tarefa, projeto ou cliente" value="${esc(f.q)}" data-input="tk" data-k="q">
-      <div class="seg">${[['open', 'Abertas'], ['all', 'Todas'], ['done', 'Concluídas']].map(([v, l]) => `<button class="${f.mine === v ? 'on' : ''}" data-act="tk-set" data-k="mine" data-v="${v}">${l}</button>`).join('')}</div>
+      <div class="seg">${[['open', 'Ativas'], ['all', 'Todas'], ['done', 'Concluídas']].map(([v, l]) => `<button class="${f.mine === v ? 'on' : ''}" data-act="tk-set" data-k="mine" data-v="${v}">${l}</button>`).join('')}</div>
       <select id="tk-p" class="input" data-on="tk" data-k="project" aria-label="Projeto">${options(projects().sort((a, b) => a.name.localeCompare(b.name)), f.project, { empty: true, emptyLabel: 'Todos os projetos', label: p => `${clientOf(p)?.name || ''} · ${p.name}` })}</select>
       <select id="tk-s" class="input" data-on="tk" data-k="status" aria-label="Status">${options(statuses('work'), f.status, { empty: true, emptyLabel: 'Todos os status' })}</select>
       <span class="grow"></span>${colsBtn('tasks')}
@@ -503,7 +504,7 @@ function openQuote(id, preset = {}) {
       const nome = varios ? `${data.name} · ${g.nome || 'Entrega ' + (gi + 1)}` : data.name;
       const budget = varios && pg ? Math.round(data.value * pg.parte * 100) / 100 : data.value;
       const horas = varios && pg ? Math.round((pg.h + (k.reun || 0) * pg.parte) * 10) / 10 : data.est_hours;
-      const p = db.insert('tempo_projects', { name: nome, client_id: data.client_id, description: data.notes, status_id: statusByCat('work', 'todo').id, payment_status_id: statuses('payment')[0].id, deadline: null, deadline_original: null, budget, remaining_override: null, estimated_hours: horas, revisions_included: data.revisions_included, notes: '', archived: false, approved_at: nowISO(), quote_id: qid }, true);
+      const p = db.insert('tempo_projects', { name: nome, client_id: data.client_id, work_type_id: data.work_type_id || null, description: data.notes, status_id: statusByCat('work', 'todo').id, payment_status_id: statuses('payment')[0].id, deadline: null, deadline_original: null, budget, remaining_override: null, estimated_hours: horas, revisions_included: data.revisions_included, notes: '', archived: false, approved_at: nowISO(), quote_id: qid }, true);
       const etapas = g ? data.calc.lines.filter(ln => ln.grp === g.id && ((ln.name || '').trim() || Number(ln.h))) : [];
       if (etapas.length) etapas.forEach((ln, i) => {
         const h = horasEtapa(data.calc, ln) * k.cx;

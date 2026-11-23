@@ -222,12 +222,14 @@ function setTaskStatus(t, statusId) {
 /* Fluxo pré-montado de vídeo: cada etapa com seu responsável e as dependências entre elas. */
 const VIDEO_FLOW = [
   { key: 'roteiro', name: 'Roteiro', owner: 'Roteirista', after: [] },
-  { key: 'conceito', name: 'Conceito (KV)', owner: 'Eu', after: ['roteiro'] },
-  { key: 'storyboard', name: 'Storyboard', owner: 'Eu', after: ['conceito'] },
+  { key: 'conceito', name: 'Conceito (KV)', owner: 'Tulio', after: ['roteiro'] },
+  { key: 'storyboard', name: 'Storyboard', owner: 'Tulio', after: ['conceito'] },
   { key: 'locucao', name: 'Locução', owner: 'Locutor', after: ['conceito'] },
-  { key: 'animacao', name: 'Animação', owner: 'Eu', after: ['storyboard', 'locucao'] },
-  { key: 'sonorizacao', name: 'Sonorização', owner: 'Eu', after: ['animacao'] },
+  { key: 'animacao', name: 'Animação', owner: 'Tulio', after: ['storyboard', 'locucao'] },
+  { key: 'sonorizacao', name: 'Sonorização', owner: 'Tulio', after: ['animacao'] },
 ];
+/* Responsável é você: vazio, "Eu" ou "Tulio"/"Túlio" (padrão das tarefas novas). */
+const souEu = (owner) => !owner || /^(eu|t[uú]lio)$/i.test(String(owner).trim());
 function createVideoFlow(pid, names = {}) {
   const todo = db.where('tempo_status_options', s => s.kind === 'work' && s.category === 'todo')[0];
   const ids = {};

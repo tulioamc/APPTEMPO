@@ -4,7 +4,7 @@
 const S = {
   route: 'timesheet',
   tsDay: ymd(new Date()),
-  proj: { view: 'table', q: '', agency: '', client: '', status: '', pay: '', wt: '', year: '', month: '', from: '', to: '', situ: 'all', sort: { key: 'deadline', dir: 1 },
+  proj: { view: 'table', q: '', agency: '', client: '', status: '', pay: '', wt: '', year: '', month: '', from: '', to: '', situ: 'active', sort: { key: 'deadline', dir: 1 },
           cols: null, hidden: null, calMonth: null },
   task: { q: '', project: '', status: '', mine: 'open' },
   quote: { q: '', status: '' },

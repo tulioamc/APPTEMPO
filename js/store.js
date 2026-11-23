@@ -118,6 +118,12 @@ const db = {
   where(t, fn) { return this.data[t].filter(fn); },
   insert(t, row, silent) {
     const r = { id: uid(), created_at: nowISO(), ...row };
+    if (t === 'tempo_tasks' && !r.owner) r.owner = 'Tulio';   // responsável padrão de tarefa nova
+    if (t === 'tempo_tasks' && !r.work_type_id && r.project_id) {   // tarefa nova herda o tipo de trabalho do projeto (ou da tarefa mãe)
+      const mae = r.parent_id ? (this.data.tempo_tasks || []).find(x => x.id === r.parent_id) : null;
+      const pj = (this.data.tempo_projects || []).find(x => x.id === r.project_id);
+      r.work_type_id = mae?.work_type_id || pj?.work_type_id || null;
+    }
     this.data[t].push(r); undoPush({ k: 'insert', t, id: r.id }); this.push(this.adapter.insert(t, r)); if (!silent) this.emit(); return r;
   },
   update(t, id, patch, silent) {

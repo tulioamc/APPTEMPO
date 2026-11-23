@@ -56,6 +56,7 @@ create table if not exists tempo_projects (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   client_id uuid references tempo_clients(id) on delete restrict,
+  work_type_id uuid,                                                -- tipo de trabalho; tarefas novas herdam
   quote_id uuid,
   name text not null,
   description text, notes text,
@@ -77,6 +78,7 @@ create table if not exists tempo_tasks (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   project_id uuid not null references tempo_projects(id) on delete cascade,
   parent_id uuid references tempo_tasks(id) on delete cascade,      -- preenchido = subtarefa
+  deadline_time text,                                               -- hora do prazo (HH:MM), opcional
   depends_on jsonb not null default '[]'::jsonb,                    -- ids das tarefas que precisam terminar antes
   owner text,                                                        -- responsável: null/'Eu' = eu (com apontamento); outro nome = terceiro (sem apontamento)
   pos jsonb,                                                         -- posição do nó no editor de fluxo {x,y}
