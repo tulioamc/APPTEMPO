@@ -4,9 +4,10 @@ const { rest } = require('../../lib/tempo-server');
 module.exports = async (req, res) => {
   const { code, state, error } = req.query || {};
   if (error || !code || !state) return res.redirect(302, '/?gmail=erro');
+  // serve ao Gmail e ao Google Agenda (provider gcal): o state guardado diz qual é
 
   const rows = await rest(
-    `tempo_integrations?provider=eq.gmail&oauth_state=eq.${encodeURIComponent(state)}&select=id`
+    `tempo_integrations?oauth_state=eq.${encodeURIComponent(state)}&select=id,provider`
   );
   if (!rows || !rows.length) return res.redirect(302, '/?gmail=estado-invalido');
 
@@ -39,7 +40,9 @@ module.exports = async (req, res) => {
       updated_at: new Date().toISOString(),
     }),
   });
+  const prov = rows[0].provider || 'gmail';
+  const nome = prov === 'gcal' ? 'Google Agenda' : 'Gmail';
   // janela pequena do login: avisa o app e fecha; se não for janela, segue para o app
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.end(`<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;padding:24px">Gmail conectado. Pode fechar esta janela.<script>try{window.opener&&window.opener.postMessage('gmail-ok','*')}catch(e){}window.close();setTimeout(function(){location.href='/?gmail=ok'},400)</script>`);
+  res.end(`<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;padding:24px">${nome} conectado. Pode fechar esta janela.<script>try{window.opener&&window.opener.postMessage('${prov}-ok','*')}catch(e){}window.close();setTimeout(function(){location.href='/?${prov}=ok'},400)</script>`);
 };
