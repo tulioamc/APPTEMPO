@@ -121,6 +121,7 @@ window.DB_COLUMNS = {
   "work_type_id",
   "deadline",
   "deadline_time",
+  "est_min",
   "notes",
   "order",
   "created_at",

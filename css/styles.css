@@ -1776,7 +1776,7 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 
 /* Projeto › Tarefas: uma linha por tarefa (nome largo, status, responsável, data, hora); ▶ e seta só no hover */
 .tk { border-bottom: 1px solid var(--line); }
-.tk-l { display: grid; grid-template-columns: minmax(220px,1fr) 190px 110px 130px 64px 64px; gap: 12px; align-items: center; padding: 14px 18px 14px 24px; min-height: 64px; }
+.tk-l { display: grid; grid-template-columns: minmax(200px,1fr) 90px 180px 190px 140px 64px 64px; gap: 12px; align-items: center; padding: 14px 18px 14px 24px; min-height: 64px; }
 .tk.sub .tk-l { padding-left: 48px; }
 .tk-in { border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 3px 6px; margin-left: -7px; font: inherit; color: inherit; width: 100%; min-width: 0; }
 .tk-in:hover { border-color: var(--line); }
@@ -1806,3 +1806,20 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 @media (max-width: 860px) { .tk-l { grid-template-columns: 1fr auto 110px 56px; } .tk-resp, .tk-acoes { display: none; } }
 .tk-data input:focus, .tk-hora input:focus { opacity: 1; background: var(--surface); border: 1px solid var(--accent); border-radius: 6px; font: inherit; color: var(--fg); }
 .tk-st .combo-btn .tag { font-size: .92rem; padding: 5px 14px; }
+
+/* Trabalhado / previsto, com ⚠ */
+.tk-tempo { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; }
+.tk-t1, .tk-t2 { display: flex; align-items: center; gap: 6px; position: relative; padding-left: 22px; }
+.tk-t1 b { font-weight: 500; font-size: .98rem; color: var(--fg-3); min-width: 46px; }
+.tk-t1 i, .tk-t2 i { font-style: normal; font-size: .78rem; color: color-mix(in srgb, var(--fg-3) 60%, transparent); }
+.tk-prev { width: 52px; border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 0 3px; margin-left: -4px; font: inherit; font-size: .98rem; color: color-mix(in srgb, var(--fg-3) 55%, transparent); }
+.tk-prev:hover { border-color: var(--line); }
+.tk-prev:focus { border-color: var(--accent); background: var(--surface); color: var(--fg); outline: none; }
+.tk-prev::placeholder { color: color-mix(in srgb, var(--fg-3) 45%, transparent); }
+.tk-tempo.estourou .tk-t1 b, .tk-tempo.estourou .tk-t1 i { color: #E5484D; }
+.tk-alerta { position: absolute; left: 0; top: 50%; transform: translateY(-50%); border: 0; background: none; padding: 0; color: #E5484D; cursor: pointer; display: inline-flex; }
+.tk-alerta svg { width: 17px; height: 17px; fill: currentColor; stroke: #fff; }
+
+.tk-prev.sug::placeholder { font-style: italic; color: color-mix(in srgb, var(--fg-3) 70%, transparent); }
+.tk-prev.chute::placeholder { color: color-mix(in srgb, #E8893A 70%, transparent); }
+.tk-prev.sug { width: 60px; }

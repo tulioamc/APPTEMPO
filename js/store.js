@@ -106,7 +106,7 @@ const db = {
     } catch (e) { /* sem rede: tenta de novo na próxima vez */ }
   },
   subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
-  emit() { this.listeners.forEach(fn => fn()); },
+  emit() { this.ver = (this.ver || 0) + 1; this.listeners.forEach(fn => fn()); },
   /* Envia ao adapter sem travar a interface; falhas aparecem na barra lateral. */
   push(p) {
     this.writes = (this.writes || 0) + 1; this.pending = (this.pending || 0) + 1; this.saveCacheSoon();

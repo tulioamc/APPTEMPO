@@ -37,14 +37,14 @@ function aggItens(agora = new Date()) {
     const { porDia } = planejar(planoProjetos(), agora, AGG_DIAS_PLANO);
     Object.entries(porDia).forEach(([dia, v]) => {
       const juntos = [];
-      (v.blocos || []).slice().sort((a, b) => a.ini - b.ini).forEach(b => { const l = juntos[juntos.length - 1]; if (l && l.pid === b.pid && b.ini - l.fim < 0.02) l.fim = b.fim; else juntos.push({ ...b }); });
+      (v.blocos || []).slice().sort((a, b) => a.ini - b.ini).forEach(b => { const l = juntos[juntos.length - 1]; if (l && l.pid === b.pid && l.tid === b.tid && b.ini - l.fim < 0.02) l.fim = b.fim; else juntos.push({ ...b }); });
       const conta = {};
       juntos.forEach(b => {
         if (dia === hoje && aggISO(dia, b.fim) <= agora.toISOString()) return;
         const p = db.get('tempo_projects', b.pid); if (!p) return;
         conta[b.pid] = (conta[b.pid] || 0) + 1;
         const ab = typeof agencyAbbr === 'function' ? agencyAbbr(agencyOf(p)) : '';
-        itens.push({ key: `plano:${dia}:${b.pid}:${conta[b.pid]}`, titulo: `${ab ? '[' + ab + '] ' : ''}${p.name}`, ini: aggISO(dia, b.ini), fim: aggISO(dia, b.fim), descricao: `Planejado pelo Tempo · ${clientOf(p)?.name || ''}` });
+        itens.push({ key: `plano:${dia}:${b.pid}:${conta[b.pid]}`, titulo: `${ab ? '[' + ab + '] ' : ''}${b.tarefa ? b.tarefa + ' · ' : ''}${p.name}`, ini: aggISO(dia, b.ini), fim: aggISO(dia, b.fim), descricao: `Planejado pelo Tempo · ${clientOf(p)?.name || ''}` });
       });
     });
   }
