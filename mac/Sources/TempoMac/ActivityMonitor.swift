@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreAudio
 
 /// Contexto de uso: app em primeiro plano, e (se permitido) pasta e nome do arquivo da janela ativa.
 struct Context: Equatable {
@@ -82,9 +83,29 @@ final class ActivityMonitor {
         tick()
     }
 
+    /// Microfone em uso por algum app (Meet, Zoom, Teams, FaceTime, ligação do WhatsApp…): está em reunião.
+    static func microfoneEmUso() -> Bool {
+        var dev = AudioDeviceID(0); var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &dev) == noErr, dev != 0 else { return false }
+        var running: UInt32 = 0; size = UInt32(MemoryLayout<UInt32>.size)
+        addr.mSelector = kAudioDevicePropertyDeviceIsRunningSomewhere
+        guard AudioObjectGetPropertyData(dev, &addr, 0, nil, &size, &running) == noErr else { return false }
+        return running != 0
+    }
+    /// Apps e sites onde ficar de mãos paradas com o microfone ligado é reunião.
+    private static let appsDeReuniao: Set<String> = ["com.google.Chrome", "com.apple.Safari", "company.thebrowser.Browser", "us.zoom.xos", "com.microsoft.teams", "com.microsoft.teams2", "com.apple.FaceTime", "net.whatsapp.WhatsApp", "desktop.WhatsApp", "com.hnc.Discord", "com.tinyspeck.slackmacgap"]
+    private var emReuniao = false
+
     func tick() {
         let now = Date()
-        let idle = idleSeconds()
+        var idle = idleSeconds()
+        // Reunião: microfone ligado → mouse e teclado parados não são pausa. Sem mexer em nada (ou com o app da chamada
+        // na frente), o tempo vira "Reunião"; usando outro programa durante a chamada, conta o programa normalmente.
+        let mic = Self.microfoneEmUso()
+        let frente = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+        emReuniao = mic && (idle >= idleLimit || Self.appsDeReuniao.contains(frente))
+        if mic { idle = 0 }
         if now.timeIntervalSince(lastSaved) >= 60 {   // grava o último uso no máximo uma vez por minuto
             lastSaved = now
             defaults.set(now.addingTimeInterval(-idle).timeIntervalSince1970, forKey: lastActiveKey)
@@ -103,7 +124,7 @@ final class ActivityMonitor {
             current = nil
             segStart = now
         }
-        let ctx = currentContext()
+        let ctx = emReuniao ? reuniaoContext() : currentContext()
         if ctx != current {
             closeSegment(at: now)
             current = ctx
@@ -128,11 +149,11 @@ final class ActivityMonitor {
     /// Sites do Chrome que contam. Só o título da aba ativa é lido (não há endereço, histórico nem outros sites).
     /// (texto que aparece no título da aba, nome que aparece no Tempo)
     static let chromeSites: [(match: String, label: String)] = [
+        ("Google Meet", "Reunião"), ("Meet –", "Reunião"), ("Meet -", "Reunião"), ("meet.google.com", "Reunião"),
         ("Behance", "Behance"), ("Pinterest", "Pinterest"), ("Magnific", "Magnific"),
         ("Claude", "Claude"), ("ChatGPT", "ChatGPT"),
         ("Google Docs", "Docs"), ("Documentos Google", "Docs"), ("Google Sheets", "Sheets"), ("Planilhas Google", "Sheets"),
         ("Google Slides", "Slides"), ("Apresentações Google", "Slides"), ("Gmail", "Gmail"), ("Google Drive", "Drive"),
-        ("Google Meet", "Reunião"), ("Meet –", "Reunião"),
     ]
 
     private func currentContext() -> Context? {
@@ -172,6 +193,12 @@ final class ActivityMonitor {
             }
         }
         return Context(app: name, bundle: bundle, doc: doc, folder: folder)
+    }
+
+    /// Contexto de reunião: o app da frente com o "site/arquivo" Reunião — o mesmo formato do Google Meet no Chrome.
+    private func reuniaoContext() -> Context {
+        let app = NSWorkspace.shared.frontmostApplication
+        return Context(app: app?.localizedName ?? "Chamada", bundle: app?.bundleIdentifier ?? "tempo.reuniao", doc: "Reunião", folder: nil)
     }
 
     /// Janela do app: a em foco; se o app não informa, a janela principal; se também não, a primeira aberta.

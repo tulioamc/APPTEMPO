@@ -1767,3 +1767,9 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 /* calculadora do valor da hora (janelinha) */
 .vh-btn svg { width: 15px; height: 15px; }
 .layer .vh-pop, .vh-pop { max-width: 560px; }
+
+/* Sessão atual: caminho agência › cliente › projeto em chips */
+.path-chips{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px}
+.path-chips .sep{color:var(--fg-3)}
+.path-chip{text-decoration:none;display:inline-flex}
+.path-chip:hover .tag{filter:brightness(.95);outline:1px solid var(--line)}

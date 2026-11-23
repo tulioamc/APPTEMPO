@@ -10,16 +10,18 @@ function selPath(sel) {
 function selPathLinksHTML(sel) {
   const a = db.get('tempo_agencies', sel.agency_id), c = db.get('tempo_clients', sel.client_id), p = db.get('tempo_projects', sel.project_id), t = db.get('tempo_tasks', sel.task_id), sb = db.get('tempo_tasks', sel.sub_id);
   const ag = a || (c?.agency_id ? db.get('tempo_agencies', c.agency_id) : null);
-  const link = (txt, attrs) => `<a href="#" class="path-link" ${attrs}>${esc(txt)}</a>`;
+  // Chips no padrão do app: agência (caixa alta), cliente e projeto coloridos; tarefas em chip neutro. Cada chip abre o item.
+  const link = (html, attrs) => `<a href="#" class="path-chip" ${attrs}>${html}</a>`;
+  const neutro = (txt) => `<span class="tag tg">${esc(txt)}</span>`;
   const parts = [
-    ag ? link(ag.name, `data-act="party-open" data-kind="agency" data-id="${ag.id}"`) : (c && !c.agency_id ? '<span>Direto</span>' : null),
-    c ? link(c.name, `data-act="party-open" data-kind="client" data-id="${c.id}"`) : null,
-    p ? link(p.name, `data-act="proj-open" data-id="${p.id}"`) : null,
-    t && p ? link(t.name, `data-act="proj-open" data-id="${p.id}" data-tab="tasks"`) : null,
-    sb && p ? link(sb.name, `data-act="proj-open" data-id="${p.id}" data-tab="tasks"`) : null,
+    ag ? link(agencyTag(ag), `data-act="party-open" data-kind="agency" data-id="${ag.id}"`) : (c && !c.agency_id ? '<span class="faint small">Direto</span>' : null),
+    c ? link(tag(c.name, c.color, { fg: partyFg('client', c.id) }), `data-act="party-open" data-kind="client" data-id="${c.id}"`) : null,
+    p ? link(tag(p.name, p.color || c?.color), `data-act="proj-open" data-id="${p.id}"`) : null,
+    t && p ? link(neutro(t.name), `data-act="proj-open" data-id="${p.id}" data-tab="tasks"`) : null,
+    sb && p ? link(neutro(sb.name), `data-act="proj-open" data-id="${p.id}" data-tab="tasks"`) : null,
   ].filter(Boolean);
   if (!parts.length) return pathHTML([]);
-  return parts.map((x, i) => i === parts.length - 1 ? `<b>${x}</b>` : `${x}<span class="sep">›</span>`).join('');
+  return `<span class="path-chips">${parts.join('<span class="sep">›</span>')}</span>`;
 }
 function pathHTML(parts) { return parts.length ? parts.map((x, i) => i === parts.length - 1 ? `<b>${esc(x)}</b>` : `<span>${esc(x)}</span><span class="sep">›</span>`).join('') : '<span class="faint">Sessão avulsa, sem projeto</span>'; }
 function entrySel(e) { const t = db.get('tempo_tasks', e.task_id); return { agency_id: e.agency_id || '', client_id: e.client_id || '', project_id: e.project_id || '', task_id: t?.parent_id ? t.parent_id : (t?.id || ''), sub_id: t?.parent_id ? t.id : '' }; }
