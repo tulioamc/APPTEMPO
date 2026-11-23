@@ -1,9 +1,9 @@
 /* =====================================================================
    PREFERÊNCIAS
    ===================================================================== */
-const PREF_TABS = [['appearance', 'Aparência', 'gear'], ['types', 'Tipos de trabalho', 'tag'], ['extypes', 'Tipos de despesa', 'layers'], ['programs', 'Programas', 'tag'], ['status', 'Status', 'spin'], ['reminders', 'Lembretes', 'bell'], ['timesheet', 'Time Sheet', 'clock'], ['periods', 'Férias e viagens', 'cal'], ['data', 'Dados e backup', 'db'], ['integrations', 'Integrações', 'layers']];
+const PREF_TABS = [['valorhora', 'Valor da hora', 'money'], ['appearance', 'Aparência', 'gear'], ['types', 'Tipos de trabalho', 'tag'], ['extypes', 'Tipos de despesa', 'layers'], ['programs', 'Programas', 'tag'], ['status', 'Status', 'spin'], ['reminders', 'Lembretes', 'bell'], ['timesheet', 'Time Sheet', 'clock'], ['periods', 'Férias e viagens', 'cal'], ['data', 'Dados e backup', 'db'], ['integrations', 'Integrações', 'layers']];
 VIEWS.prefs = () => {
-  const body = { appearance: prefAppearance, types: prefTypes, extypes: prefExTypes, programs: programasPanel, status: prefStatus, reminders: prefReminders, timesheet: prefTimesheet, periods: prefPeriods, data: prefData, integrations: prefIntegrations }[S.pref]();
+  const body = { valorhora: prefValorHora, appearance: prefAppearance, types: prefTypes, extypes: prefExTypes, programs: programasPanel, status: prefStatus, reminders: prefReminders, timesheet: prefTimesheet, periods: prefPeriods, data: prefData, integrations: prefIntegrations }[S.pref]();
   return { title: 'Configurações', html: `<div class="row" style="justify-content:flex-end;margin-bottom:8px"><button class="btn sm" data-act="go" data-route="import">Importar do Notion</button></div><div class="pref-layout"><nav class="pref-nav">${PREF_TABS.map(([k, l, i]) => `<button class="nav-btn ${S.pref === k ? 'active' : ''}" data-act="pref-tab" data-v="${k}">${icon(i)}<span>${l}</span></button>`).join('')}</nav><div class="stack" style="min-width:0">${body}${logRetentionPanel()}</div></div>` };
 };
 ACTIONS['pref-tab'] = (el) => { S.pref = el.dataset.v; render(); };
@@ -409,3 +409,86 @@ CHANGES['font-upload'] = (el) => {
 ACTIONS['font-pick'] = () => { const i = document.getElementById('font-file'); if (i) i.click(); };
 
 ACTIONS['theme-mode'] = (el) => { themeDraft = { ...themeDraftGet(), mode: el.dataset.v }; themePreview = themeDraft; applyAppearance(); render(); };
+
+/* Valor da hora: o valor padrão (usado nos orçamentos e no "quanto teria custado") e uma calculadora.
+   A calculadora mostra o resultado na hora; o valor padrão só muda em "Salvar novo valor da hora". */
+const VH_SEMANAS = 52 / 12;   // 4,33 semanas por mês
+function vhCalc(c) {
+  const h = Number(c.horas) || 0, d = Number(c.dias) || 0, r = Number(c.receber) || 0, imp = c.imposto ? (Number(c.pct) || 0) : 0;
+  const horasMes = h * d * VH_SEMANAS; if (!horasMes || !r) return { horasMes, hora: 0 };
+  const bruto = imp > 0 && imp < 100 ? r / (1 - imp / 100) : r;
+  return { horasMes, bruto, hora: bruto / horasMes };
+}
+/* Calculadora (mesma na aba e na janelinha): data-vh nos campos, resultado em [data-vh-val] e [data-vh-det]. */
+function vhCalcHTML(c, r, botao) {
+  return `<div class="vh-calc stack" style="gap:12px">
+      <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+        <div class="field"><label>Horas por dia</label><input class="input mono" type="number" min="0" step="0.5" value="${c.horas}" data-vh="horas"></div>
+        <div class="field"><label>Dias por semana</label><input class="input mono" type="number" min="0" max="7" step="1" value="${c.dias}" data-vh="dias"></div>
+        <div class="field"><label>Quanto quero receber por mês (R$)</label><input class="input mono" type="number" min="0" step="100" value="${c.receber}" data-vh="receber"></div>
+        <div class="field"><span class="lbl">Impostos</span><div class="row" style="gap:10px;align-items:center"><label class="check small"><input type="checkbox" data-vh="imposto" ${c.imposto ? 'checked' : ''}> Somar impostos</label>${vhImpostoMedio() ? '<span class="small faint" title="Média das notas fiscais">média das notas</span>' : ''}<input class="input mono" type="number" min="0" max="60" step="0.1" value="${c.pct}" data-vh="pct" style="width:80px" aria-label="Percentual de imposto" ${c.imposto ? '' : 'disabled'}><span class="small muted">%</span></div></div>
+      </div>
+      <div class="row between" style="align-items:flex-end;flex-wrap:wrap;gap:12px">
+        <div><div class="small muted" data-vh-det>${vhDetalhe(c, r)}</div><div style="font-size:2em;font-weight:800" class="mono" data-vh-val>${fmtMoney(r.hora) || 'R$ —'}<span class="small muted" style="font-weight:500"> /hora</span></div></div>
+        ${botao}
+      </div>
+    </div>`;
+}
+/* Imposto médio: % do DAS sobre o declarado no Simples, média dos últimos 6 meses que têm os dois (aba Notas fiscais). */
+function vhImpostoMedio() {
+  if (typeof nfMesesSimples !== 'function') return null;
+  const l = nfMesesSimples().filter(m => m.pct != null && m.pct > 0).slice(0, 6);
+  return l.length ? { pct: Math.round(l.reduce((t, m) => t + m.pct, 0) / l.length * 100) / 100, n: l.length, de: l[l.length - 1].ym, ate: l[0].ym } : null;
+}
+const vhInicial = () => { const med = vhImpostoMedio(); const c = { horas: 8, dias: 5, receber: 30000, imposto: false, pct: 6, ...(db.setting('calcHora', {}) || {}) }; if (med) c.pct = med.pct; return c; };
+function prefValorHora() {
+  const atual = Number(precoBase().hora) || 0;
+  const c = vhInicial(); const r = vhCalc(c);
+  return `<div class="panel"><div class="panel-h"><h3>Valor da hora</h3></div><div class="panel-b stack" style="gap:14px">
+    <div class="kpi" style="max-width:320px"><span class="k">Valor padrão da hora</span><span class="v">${fmtMoney(atual)}</span><span class="s">usado nos orçamentos e no "quanto teria custado" dos projetos</span></div>
+    ${(() => { const med = vhImpostoMedio(); return `<div class="small">${med ? `<b>Imposto médio: ${String(med.pct).replace('.', ',')}%</b> <span class="muted">— DAS ÷ receita declarada no Simples, média de ${med.n} ${med.n === 1 ? 'mês' : 'meses'} (${rbLabel(med.de)} a ${rbLabel(med.ate)}), pela aba Notas fiscais. A calculadora já usa esse %.</span>` : '<span class="muted">Imposto médio: ainda sem declaração do Simples com DAS na aba Notas fiscais; a calculadora usa o % que você digitar.</span>'}</div>`; })()}
+    <div class="lbl">Calculadora</div>
+    ${vhCalcHTML(c, r, `<button class="btn primary" data-act="vh-salvar">Salvar novo valor da hora</button>`)}
+  </div></div>`;
+}
+const vhDetalhe = (c, r) => r.horasMes ? `${String(c.horas).replace('.', ',')}h × ${c.dias} dias × 4,33 semanas = ${fmtH(r.horasMes * 36e5)} por mês${c.imposto && Number(c.pct) ? ` · ${fmtMoney(c.receber)} + ${String(c.pct).replace('.', ',')}% de imposto = ${fmtMoney(r.bruto)}` : ''}` : 'Preencha horas, dias e quanto quer receber.';
+function vhLer(root) {
+  const v = (k) => root.querySelector(`[data-vh="${k}"]`);
+  return { horas: Number(v('horas')?.value) || 0, dias: Number(v('dias')?.value) || 0, receber: Number(v('receber')?.value) || 0, imposto: !!v('imposto')?.checked, pct: Number(v('pct')?.value) || 0 };
+}
+if (typeof document !== 'undefined' && document.addEventListener) {
+  const atualiza = (e) => {
+    const root = e.target.closest && e.target.closest('.vh-calc'); if (!root || !e.target.closest('[data-vh]')) return;
+    const c = vhLer(root); const pct = root.querySelector('[data-vh="pct"]'); if (pct) pct.disabled = !c.imposto;
+    const r = vhCalc(c); const val = root.querySelector('[data-vh-val]'), det = root.querySelector('[data-vh-det]');
+    if (val) val.innerHTML = `${fmtMoney(r.hora) || 'R$ —'}<span class="small muted" style="font-weight:500"> /hora</span>`;
+    if (det) det.textContent = vhDetalhe(c, r);
+  };
+  document.addEventListener('input', atualiza); document.addEventListener('change', atualiza);
+}
+/* Salva: sem alvo, troca o valor padrão; com alvo (o campo de valor-hora ao lado do botão), preenche esse campo. */
+async function vhSalvar(root, alvoId, depois) {
+  const c = vhLer(root); const r = vhCalc(c); if (!(r.hora > 0)) return toast('Preencha a calculadora primeiro.');
+  const novo = Math.round(r.hora * 100) / 100;
+  db.setSetting('calcHora', c);
+  const alvo = alvoId ? document.getElementById(alvoId) : null;
+  if (alvo) {
+    alvo.disabled = false;
+    alvo.value = alvo.hasAttribute('data-money') ? fmtMoney(novo) : String(novo);
+    alvo.dispatchEvent(new Event('input', { bubbles: true })); alvo.dispatchEvent(new Event('change', { bubbles: true }));
+    toast(`Valor-hora preenchido: ${fmtMoney(novo)}`); depois && depois(); return;
+  }
+  if (!await confirmBox({ title: 'Salvar novo valor da hora?', body: `O valor padrão passa de ${fmtMoney(Number(precoBase().hora) || 0)} para ${fmtMoney(novo)}.`, ok: 'Salvar' })) return;
+  db.setSetting('precoBase', { ...(db.setting('precoBase', null) || {}), hora: novo });
+  db.emit(); toast(`Valor da hora: ${fmtMoney(novo)}`); depois && depois();
+}
+ACTIONS['vh-salvar'] = (el) => vhSalvar(el.closest('.vh-calc') || document, null);
+/* Botão "calculadora" ao lado de todo campo de valor-hora. alvoId = id do campo (vazio = valor padrão). */
+const vhBotaoHTML = (alvoId = '') => `<button type="button" class="btn sm ghost vh-btn" data-act="vh-abrir" data-alvo="${alvoId}" title="Calculadora do valor da hora" aria-label="Calculadora do valor da hora">${icon('calc')}</button>`;
+ACTIONS['vh-abrir'] = (el) => {
+  const alvo = el.dataset.alvo || ''; const c = vhInicial(); const r = vhCalc(c);
+  const l = openLayer({ html: `<div class="dh"><h2>Calculadora do valor da hora</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db">${vhCalcHTML(c, r, `<button class="btn primary" data-vh-ok>Salvar novo valor da hora</button>`)}</div>` });
+  l.box.classList.add('vh-pop');
+  l.box.addEventListener('click', (e) => { if (e.target.closest('[data-vh-ok]')) vhSalvar(l.box.querySelector('.vh-calc'), alvo, () => l.close()); });
+};

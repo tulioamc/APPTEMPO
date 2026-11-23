@@ -225,9 +225,9 @@ function openQuote(id, preset = {}) {
   const camposCalc = (c) => `
       <div class="panel"><div class="panel-h"><h3>Valor-hora</h3><span class="small muted">hora base e multiplicadores ficam salvos</span></div><div class="panel-b stack">
         <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
-          <div class="field" style="max-width:180px"><label for="cc-hb">Hora base</label><input id="cc-hb" class="input mono" data-pb="hora" ${moneyAttrs(rates.hora)} ${st.outro ? 'disabled' : ''}></div>
+          <div class="field" style="max-width:230px"><label for="cc-hb">Hora base</label><div class="row" style="gap:4px;flex-wrap:nowrap"><input id="cc-hb" class="input mono" data-pb="hora" ${moneyAttrs(rates.hora)} ${st.outro ? 'disabled' : ''}>${st.outro || typeof vhBotaoHTML !== 'function' ? '' : vhBotaoHTML('cc-hb')}</div></div>
           <label class="check small" style="padding-bottom:8px"><input type="checkbox" data-outro ${st.outro ? 'checked' : ''}> Outro valor-hora</label>
-          ${st.outro ? `<div class="field" style="max-width:180px"><label for="cc-cr">Valor-hora deste orçamento</label><input id="cc-cr" class="input mono" data-st="customRate" ${moneyAttrs(st.customRate)}></div>` : ''}
+          ${st.outro ? `<div class="field" style="max-width:230px"><label for="cc-cr">Valor-hora deste orçamento</label><div class="row" style="gap:4px;flex-wrap:nowrap"><input id="cc-cr" class="input mono" data-st="customRate" ${moneyAttrs(st.customRate)}>${typeof vhBotaoHTML === 'function' ? vhBotaoHTML('cc-cr') : ''}</div></div>` : ''}
         </div>
         ${st.outro ? '' : [['porte', 'Porte', PORTES], ['mercado', 'Mercado', MERCADOS]].map(([k, lab, lista]) => `<div class="row" style="flex-wrap:wrap;gap:10px"><span class="lbl" style="min-width:70px">${lab}</span><div class="seg">${lista.map(([vv, nome]) => `<button type="button" class="${st[k] === vv ? 'on' : ''}" data-mult="${k}" data-v="${vv}">${nome} <span class="faint">${fmtX(rates[k][vv])}</span></button>`).join('')}</div><label class="small muted">multiplicador <input type="number" step="0.05" min="0" class="input sm" style="width:80px" data-pbm="${k}" value="${rates[k][st[k]]}" aria-label="Multiplicador de ${lab.toLowerCase()}"></label></div>`).join('')}
         <div class="small" data-rate-txt>${calcRateTxt()}</div>

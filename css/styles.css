@@ -1764,3 +1764,6 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .pl-grade > .pl-fixo, .pl-grade > .pl-fixo.fundo { background: color-mix(in oklab, var(--accent) 8%, var(--surface-1, #fff)) !important; color: var(--accent) !important; border: 0 !important; border-radius: 5px !important; }
 .pl-grade > .pl-fixo.fundo.real { background: color-mix(in oklab, var(--accent) 5%, var(--surface-1, #fff)) !important; }
 .pl-mc-tt.sem-linha { border-top: 0; padding-top: 0; }
+/* calculadora do valor da hora (janelinha) */
+.vh-btn svg { width: 15px; height: 15px; }
+.layer .vh-pop, .vh-pop { max-width: 560px; }
