@@ -18,7 +18,7 @@ function flowPositions(tasks) {
     if (depth[t.id] !== undefined) return depth[t.id];
     if (stack.has(t.id)) return 0;
     stack.add(t.id);
-    const deps = (t.depends_on || []).map(x => byId[x]).filter(Boolean);
+    const deps = (Array.isArray(t?.depends_on) ? t.depends_on : []).map(x => byId[x]).filter(Boolean);
     depth[t.id] = deps.length ? Math.max(...deps.map(x => d(x, stack))) + 1 : 0;
     return depth[t.id];
   };
@@ -40,7 +40,7 @@ function dependsOnChain(from, to, tasks) {
   while (stack.length) {
     const id = stack.pop(); if (seen.has(id)) continue; seen.add(id);
     if (id === to) return true;
-    (byId[id]?.depends_on || []).forEach(x => stack.push(x));
+    (Array.isArray(byId[id]?.depends_on) ? byId[id]?.depends_on : []).forEach(x => stack.push(x));
   }
   return false;
 }
@@ -62,7 +62,7 @@ function flowHTML(pid) {
   const nodes = tasks.map(t => {
     const ps = pos[t.id];
     const cost = flowCostOf(t.id);
-    const deps = (t.depends_on || []).filter(d => tasks.some(x => x.id === d));
+    const deps = (Array.isArray(t?.depends_on) ? t.depends_on : []).filter(d => tasks.some(x => x.id === d));
     return `<div class="fnode" data-fid="${t.id}" style="left:${ps.x}px;top:${ps.y}px;width:${FN_W}px">
       <div class="fnode-h" data-fdrag="${t.id}"><span class="fnode-name">${esc(t.name)}</span><button type="button" class="btn icon ghost sm" data-fdel="${t.id}" aria-label="Remover etapa" title="Remover etapa">${icon('x')}</button></div>
       <div class="fnode-b">
@@ -75,7 +75,7 @@ function flowHTML(pid) {
       <span class="fport fout" data-fout="${t.id}" title="Arraste daqui para liberar outra etapa" aria-label="Saída"></span>
     </div>`;
   }).join('');
-  const edges = tasks.flatMap(t => (t.depends_on || []).filter(d => tasks.some(x => x.id === d)).map(d => {
+  const edges = tasks.flatMap(t => (Array.isArray(t?.depends_on) ? t.depends_on : []).filter(d => tasks.some(x => x.id === d)).map(d => {
     const a = pos[d], b = pos[t.id];
     return `<path class="fhit" data-edge data-from="${d}" data-to="${t.id}" d="${edgePath(a, b)}"></path><path class="fedge" d="${edgePath(a, b)}"></path>`;
   })).join('');
@@ -118,7 +118,7 @@ function redrawEdges(box, pid, tmp) {
   canvas.querySelectorAll('path.fedge:not(.fedge-tmp)').forEach(p => p.remove());
   const svg = canvas.querySelector('svg');
   let html = '';
-  tasks.forEach(t => (t.depends_on || []).forEach(d => {
+  tasks.forEach(t => (Array.isArray(t?.depends_on) ? t.depends_on : []).forEach(d => {
     if (!pos[d] || !pos[t.id]) return;
     const dd = edgePath(pos[d], pos[t.id]);
     html += `<path class="fhit" data-edge data-from="${d}" data-to="${t.id}" d="${dd}"></path><path class="fedge" d="${dd}"></path>`;
@@ -178,9 +178,9 @@ function bindFlow(ly, pid) {
         if (tid && tid !== d.from) {
           const tasks = flowTasks(pid);
           const tt = tasks.find(t => t.id === tid);
-          if (tt && (tt.depends_on || []).includes(d.from)) toast('Já está ligado');
+          if (tt && (Array.isArray(tt?.depends_on) ? tt.depends_on : []).includes(d.from)) toast('Já está ligado');
           else if (dependsOnChain(d.from, tid, tasks)) toast('Essa ligação criaria um ciclo');
-          else { db.update('tempo_tasks', tid, { depends_on: [...(tt.depends_on || []), d.from] }, true); db.emit(); }
+          else { db.update('tempo_tasks', tid, { depends_on: [...(Array.isArray(tt?.depends_on) ? tt.depends_on : []), d.from] }, true); db.emit(); }
         }
         ly.refresh();
       }
@@ -193,7 +193,7 @@ function bindFlow(ly, pid) {
     const edge = e.target.closest('[data-edge]');
     if (edge) {
       const t = db.get('tempo_tasks', edge.dataset.to); if (!t) return;
-      db.update('tempo_tasks', t.id, { depends_on: (t.depends_on || []).filter(x => x !== edge.dataset.from) }, true);
+      db.update('tempo_tasks', t.id, { depends_on: (Array.isArray(t?.depends_on) ? t.depends_on : []).filter(x => x !== edge.dataset.from) }, true);
       db.emit(); ly.refresh(); return;
     }
     const nw = e.target.closest('[data-fnew]');
@@ -210,7 +210,7 @@ function bindFlow(ly, pid) {
       confirmBox({ title: 'Remover etapa?', body: `“${esc(t.name)}” sai do fluxo. As ligações dela são removidas; o custo de terceiro continua no financeiro, sem tarefa.`, ok: 'Remover', danger: true }).then(ok => {
         if (!ok) return;
         db.remove('tempo_tasks', t.id);
-        flowTasks(pid).forEach(x => { if ((x.depends_on || []).includes(t.id)) db.update('tempo_tasks', x.id, { depends_on: x.depends_on.filter(d => d !== t.id) }, true); });
+        flowTasks(pid).forEach(x => { if ((Array.isArray(x?.depends_on) ? x.depends_on : []).includes(t.id)) db.update('tempo_tasks', x.id, { depends_on: x.depends_on.filter(d => d !== t.id) }, true); });
         db.emit(); ly.refresh();
       });
     }

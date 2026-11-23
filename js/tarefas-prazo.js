@@ -201,7 +201,7 @@ function tkMotor(agora = new Date(), dias = 120) {
     if (abertas.length) abertas.forEach(t => {
       const pv = tkPrev(t); const feito = taskMs(t.id) / 60e3;
       const prevSim = pv.manual ? pv.min * H.fator : pv.min;
-      itens.push({ id: t.id, t, p, pid: p.id, nome: t.name, eu: souEu(t.owner), deps: (t.depends_on || []).filter(d => abertas.some(x => x.id === d)),
+      itens.push({ id: t.id, t, p, pid: p.id, nome: t.name, eu: souEu(t.owner), deps: (Array.isArray(t?.depends_on) ? t.depends_on : []).filter(d => abertas.some(x => x.id === d)),
         resto: Math.max(0, prevSim - feito), feitoMin: feito, prev: pv.min, entrega: tkEntrega(t) || (p.deadline ? fimExp(p.deadline) : null), chave: `${t.deadline || p.deadline || '9999'}T${t.deadline_time || '99'}|${String(t.order ?? 0).padStart(5, '0')}` });
     });
     else if (Number(p.estimated_hours) > 0) {

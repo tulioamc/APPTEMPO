@@ -246,7 +246,7 @@ function bindProjectDrawer(ly, id, st) {
     const of = e.target.closest('[data-x="open-flow"]'); if (of) { openFlowEditor(of.dataset.id); return; }
     const b = e.target.closest('[data-x="dep-del"]'); if (!b) return;
     const tt = db.get('tempo_tasks', b.dataset.id); if (!tt) return;
-    db.update('tempo_tasks', tt.id, { depends_on: (tt.depends_on || []).filter(d => d !== b.dataset.dep) }, true); render();
+    db.update('tempo_tasks', tt.id, { depends_on: (Array.isArray(tt?.depends_on) ? tt.depends_on : []).filter(d => d !== b.dataset.dep) }, true); render();
   });
   // data e hora do prazo da tarefa: o campo fica escondido atrás do texto; o clique abre o seletor do sistema
   ly.box.addEventListener('click', (e) => { const inp = e.target.closest('.tk-data input, .tk-hora input'); if (inp) { try { inp.showPicker(); } catch (err) {} } });
@@ -271,7 +271,7 @@ function bindProjectDrawer(ly, id, st) {
     if (k === 'tprev') { const m = tkLerMin(el.value); if (el.value.trim() && m === null) { toast('Não entendi o tempo. Use 2, 2:30, 1h30 ou 90m.'); return; } db.update('tempo_tasks', el.dataset.id, { est_min: m || null }, true); render(); return; }
     if (k === 'thora') { db.update('tempo_tasks', el.dataset.id, { deadline_time: el.value || null }, true); render(); return; }
     if (k === 'owner') { db.update('tempo_tasks', el.dataset.id, { owner: el.value.trim() || null }, true); render(); return; }
-    if (k === 'dep-add') { if (!el.value) return; const tt = db.get('tempo_tasks', el.dataset.id); if (tt) { db.update('tempo_tasks', tt.id, { depends_on: [...(tt.depends_on || []), el.value] }, true); render(); } return; }
+    if (k === 'dep-add') { if (!el.value) return; const tt = db.get('tempo_tasks', el.dataset.id); if (tt) { db.update('tempo_tasks', tt.id, { depends_on: [...(Array.isArray(tt?.depends_on) ? tt.depends_on : []), el.value] }, true); render(); } return; }
     if (k === 'tdl') {
       const t = db.get('tempo_tasks', el.dataset.id); if (!t) return;
       if (!await taskDeadlineFlow(t, el.value || null)) { el.value = t.deadline || ''; return; }
