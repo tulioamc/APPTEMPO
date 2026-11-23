@@ -97,8 +97,8 @@ async function tkAlerta(t, k) {
 function choiceBox({ title, body, opts }) {
   return new Promise(res => {
     let feito = false;
-    const l = openLayer({ html: `<div class="dh">${icon('alert')}<h2>${esc(title)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div><div class="db"><p style="margin:0 0 12px">${body}</p><div class="stack" style="gap:6px">${opts.map(([k, l]) => `<button class="btn" style="justify-content:flex-start" data-c="${k}">${esc(l)}</button>`).join('')}</div></div>`, onClose: () => { if (!feito) res(null); } });
-    l.box.addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; feito = true; res(b.dataset.c); l.close(); });
+    const l = openLayer({ html: `<div class="dh">${icon('alert')}<h2>${esc(title)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div><div class="db"><p style="margin:0 0 12px">${body}</p><div class="stack" style="gap:6px">${opts.map(([k, l], i) => `<button class="btn${i === 0 ? ' primary' : ''}" style="justify-content:flex-start" data-c="${k}">${esc(l)}</button>`).join('')}</div></div><div class="df"><button class="btn ghost" data-c="__cancelar">Cancelar</button></div>`, onClose: () => { if (!feito) res(null); } });
+    l.box.addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; feito = true; res(b.dataset.c === '__cancelar' ? null : b.dataset.c); l.close(); });
   });
 }
 
@@ -279,11 +279,19 @@ function tkMotor(agora = new Date(), dias = 120) {
   Object.values(res).forEach(x => x.blocos.forEach(b => {
     const v = porDia[b.dia] ||= { blocos: [], fixos: [], horas: 0, cap: capMin(b.dia) / 60 };
     const atr = !!(x.entrega && diaDe(b.dia, b.fim) > x.entrega);
-    const l = v.blocos.find(y => y.tid === (x.t?.id || null) && y.pid === x.pid && Math.abs(y.fim - b.ini) < 0.02 && !!y.pin === !!b.pin);
-    if (l) { l.fim = b.fim; l.h = l.fim - l.ini; } else v.blocos.push({ pid: x.pid, tid: x.t?.id || null, tarefa: x.t ? x.t.name : null, ini: b.ini, fim: b.fim, h: b.fim - b.ini, atrasado: atr, pin: b.pin || null });
+    v.blocos.push({ pid: x.pid, tid: x.t?.id || null, tarefa: x.t ? x.t.name : null, ini: b.ini, fim: b.fim, h: b.fim - b.ini, atrasado: atr, pins: b.pin ? [b.pin] : [] });
     v.horas += b.fim - b.ini;
   }));
-  Object.values(porDia).forEach(v => v.blocos.sort((a, b) => a.ini - b.ini));
+  // pedaços colados da mesma tarefa (mesmo projeto e mesmo nome) viram um bloco só, fixado ou não
+  Object.values(porDia).forEach(v => {
+    const ord = v.blocos.sort((a, b) => a.ini - b.ini); const out = [];
+    ord.forEach(b => {
+      const l = out.find(y => y.pid === b.pid && (y.tid === b.tid || (y.tarefa && y.tarefa === b.tarefa)) && Math.abs(y.fim - b.ini) < 0.02);
+      if (l) { l.fim = Math.max(l.fim, b.fim); l.h = l.fim - l.ini; l.pins.push(...b.pins); l.atrasado = l.atrasado || b.atrasado; } else out.push(b);
+    });
+    out.forEach(b => { b.pin = b.pins[0] || null; });
+    v.blocos = out;
+  });
   // 5) o que não cabe, por projeto (para o aviso do Calendário)
   const porProj = {};
   Object.values(res).filter(x => x.entrega && x.fim > x.entrega).forEach(x => { porProj[x.pid] = Math.max(porProj[x.pid] || 0, (x.fim - x.entrega) / 36e5); });

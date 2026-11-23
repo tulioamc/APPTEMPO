@@ -1838,3 +1838,5 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .pl-todo-ck.on svg { color: #fff; width: 10px; height: 10px; }
 .pl-grade > .pl-evento.todo.atrasado { background: color-mix(in oklab, #E5484D 12%, var(--surface-1, #fff)) !important; color: #C62F33 !important; border-color: #E5484D !important; }
 .pl-filtros button.erro { color: var(--danger); }
+/* Calendário: item selecionado com Shift */
+.pl-grade .pl-sel { outline: 2px solid var(--accent) !important; outline-offset: 1px; z-index: 50 !important; }

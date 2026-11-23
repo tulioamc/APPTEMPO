@@ -218,7 +218,7 @@ function planejarPorProjeto(lista, hoje = new Date(), dias = 60) {
   return { porDia, estouro };
 }
 
-const PLANO = { modo: null, dia: null, mesTop: null, semLeft: null, gradeTop: null, porDia: {} };
+const PLANO = { modo: null, dia: null, mesTop: null, semLeft: null, gradeTop: null, porDia: {}, sel: new Set() };
 const planoHora = (h) => { const m = Math.round(h * 60); return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
 let PL_ALT = 44;   // px por hora (zoom: Alt + rolagem do mouse na grade; fica salvo em 'planoZoom')
 const planoModo = () => PLANO.modo || db.setting('planoModo', 'semana');
@@ -369,7 +369,7 @@ function planoItemHTML(x, dia, { alt, unico, auto }) {
   if (x.k === 'feito') { const f = x.f; const pr = db.get('tempo_projects', f.pid);
     return `<div class="pl-feito${x.agenda ? ' com-agenda' : ''}" style="${pos};--fc:${planoCor(f.pid)}" data-tip="${esc(`Registrado: ${pr?.name || 'Sem projeto'}${pr ? '\n' + (clientOf(pr)?.name || '') : ''}\n${planoHora(f.ini)}–${planoHora(f.fim)} · ${fmtH(f.ms)} trabalhado${x.agenda ? '\n' + x.agenda.map(e => `Agenda: ${e.titulo} (${planoHora(e.ini)}–${planoHora(e.fim)})`).join('\n') : ''}`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"` : ''}>${h >= 15 ? `<span class="pl-tx"><b>${esc(pr?.name || 'Sem projeto')}</b>` : '<span class="pl-tx">'}${h >= 34 ? `<em>${x.agenda ? esc(x.agenda[0].titulo) + ' · ' : unico && pr ? esc(clientOf(pr)?.name || '') + ' · ' : ''}${fmtH(f.ms)}</em>` : ''}</span>${x.agenda ? `<span class="pl-feito-ag">${icon('calendar')}</span>` : ''}</div>`; }
   const b = x.bl; const p = db.get('tempo_projects', b.pid); const c = planoCor(b.pid);
-  return `<div class="pl-bloco${b.atrasado ? ' late' : ''}${b.pin ? ' pin' : ' auto'}" data-dg="plano" data-dia="${dia}" data-pid="${b.pid}" data-tid="${b.tid || ''}" data-pin="${b.pin || ''}" data-ini="${b.ini}" data-fim="${b.fim}" style="${pos};--fc:${c}" data-act="proj-open" data-id="${b.pid}" data-tip="${esc(`Planejado: ${b.tarefa ? b.tarefa + ' · ' : ''}${p?.name}\n${clientOf(p)?.name || ''}\n${planoHora(b.ini)}–${planoHora(b.fim)} · ${fmtH(b.h * 36e5)}${b.atrasado ? '\nDepois do prazo' : ''}${b.pin ? '\nFixado à mão' : '\nColocado pelo app · arraste para mudar o horário ou o dia'}`)}"><span class="pl-tx"><b>${p && typeof agencyAbbr === 'function' && agencyAbbr(agencyOf(p)) ? '[' + esc(agencyAbbr(agencyOf(p))) + '] ' : ''}${esc(b.tarefa || p?.name || '')}</b>${curto ? '' : `<em>${b.tarefa ? esc(p?.name || '') + ' · ' : ''}${planoHora(b.ini)} · ${fmtH(b.h * 36e5)}${unico && p ? ' · ' + esc(clientOf(p)?.name || '') : ''}</em>`}</span>${b.pin ? `<button class="pl-unpin" data-act="pl-unpin" data-id="${b.pin}" title="Soltar: o app volta a encaixar este bloco sozinho" aria-label="Soltar bloco">×</button>` : ''}${PL_PUX}</div>`;
+  return `<div class="pl-bloco${b.atrasado ? ' late' : ''}${b.pin ? ' pin' : ' auto'}" data-dg="plano" data-dia="${dia}" data-pid="${b.pid}" data-tid="${b.tid || ''}" data-pin="${(b.pins || (b.pin ? [b.pin] : [])).join(',')}" data-ini="${b.ini}" data-fim="${b.fim}" style="${pos};--fc:${c}" data-act="proj-open" data-id="${b.pid}" data-tip="${esc(`Planejado: ${b.tarefa ? b.tarefa + ' · ' : ''}${p?.name}\n${clientOf(p)?.name || ''}\n${planoHora(b.ini)}–${planoHora(b.fim)} · ${fmtH(b.h * 36e5)}${b.atrasado ? '\nDepois do prazo' : ''}${b.pin ? '\nFixado à mão' : '\nColocado pelo app · arraste para mudar o horário ou o dia'}`)}"><span class="pl-tx"><b>${p && typeof agencyAbbr === 'function' && agencyAbbr(agencyOf(p)) ? '[' + esc(agencyAbbr(agencyOf(p))) + '] ' : ''}${esc(b.tarefa || p?.name || '')}</b>${curto ? '' : `<em>${b.tarefa ? esc(p?.name || '') + ' · ' : ''}${planoHora(b.ini)} · ${fmtH(b.h * 36e5)}${unico && p ? ' · ' + esc(clientOf(p)?.name || '') : ''}</em>`}</span>${b.pin ? `<button class="pl-unpin" data-act="pl-unpin" data-id="${b.pin}" title="Soltar: o app volta a encaixar este bloco sozinho" aria-label="Soltar bloco">×</button>` : ''}${PL_PUX}</div>`;
 }
 /* Coluna de um dia: cabeçalho, linha "dia todo" (to-do só com data, evento de dia inteiro) e a grade de 24 h. */
 /* Chips do dia (Alice e Rafa) e notas do dia, iguais no Mês, na Semana e no Dia; respeitam os filtros. */
@@ -400,7 +400,9 @@ function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0
     let h = planoItemHTML(x, dia, { alt, unico });
     if (x._choque) h = h.replace('class="', 'class="choque ').replace('data-tip="', 'data-tip="⚠ Bate no horário com outro item.&#10;');
     if (x._z) h = h.replace('style="', `style="z-index:${2 + x._z};`);
-    return h.replace(/^<div /, `<div data-fk="${esc(x._fk || '')}" data-lane="${x._lane ?? ''}" `);
+    const sk = x.k === 'plano' ? `p:${dia}:${x.bl.tid || x.bl.pid}:${x.bl.ini.toFixed(2)}` : x.k === 'todo' ? 't:' + x.e.id : '';
+    if (sk && PLANO.sel.has(sk)) h = h.replace('class="', 'class="pl-sel ');
+    return h.replace(/^<div /, `<div data-fk="${esc(x._fk || '')}" data-lane="${x._lane ?? ''}" data-sk="${esc(sk)}" `);
   }).join('');
   const agora = dia === hoje ? (() => { const n = new Date(); const h = n.getHours() + n.getMinutes() / 60; return `<div class="pl-agora" style="top:${h * alt}px"></div>`; })() : '';
   const h = v?.horas || 0, est = planoEsticados()[dia], fer = planoFer(dia);
@@ -617,18 +619,29 @@ function planoMesRolar(forcarHoje = false) {
     const h = sc.querySelector('[data-hoje]');
     if (h) { const rot = sc.querySelector('.pl-mes-rot'); const alto = rot ? rot.offsetHeight : 0;
       sc.scrollTop = Math.max(0, h.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - alto - 6); }
-  } else sc.scrollTop = PLANO.mesTop;
-  if (!sc._plScroll) { sc._plScroll = true; sc.addEventListener('scroll', () => { PLANO.mesTop = sc.scrollTop; }, { passive: true }); }
+  } else {
+    // volta para o mesmo dia que estava no topo (a altura das linhas muda conforme o conteúdo, então o pixel antigo pulava)
+    const c = PLANO.mesAnc ? sc.querySelector(`.pl-mc[data-dia="${PLANO.mesAnc.dia}"]`) : null;
+    sc.scrollTop = c ? c.offsetTop + PLANO.mesAnc.dy : PLANO.mesTop;
+  }
+  if (!sc._plScroll) { sc._plScroll = true; sc.addEventListener('scroll', () => {
+    PLANO.mesTop = sc.scrollTop;
+    const c = [...sc.querySelectorAll('.pl-mc')].find(x => x.offsetTop + x.offsetHeight > sc.scrollTop);
+    if (c) PLANO.mesAnc = { dia: c.dataset.dia, dy: sc.scrollTop - c.offsetTop };
+  }, { passive: true }); }
 }
 ACTIONS['pl-modo'] = (el) => { PLANO.modo = el.dataset.m; db.setSetting('planoModo', el.dataset.m); render(); };
 ACTIONS['pl-ir-dia'] = (el) => { PLANO.dia = el.dataset.dia; PLANO.modo = 'dia'; render(); };
 ACTIONS['pl-nav'] = (el) => { const d = Number(el.dataset.d); if (!d) PLANO.dia = null; else PLANO.dia = planoDiaMais(PLANO.dia || ymd(new Date()), d); render(); };
-ACTIONS['pl-mes-hoje'] = () => planoMesRolar(true);
+ACTIONS['pl-mes-hoje'] = () => { PLANO.mesAnc = null; planoMesRolar(true); };
 ACTIONS['pl-sem'] = (el) => {
   const sc = document.querySelector('[data-pl-scroll]'); if (!sc) return;
   const d = Number(el.dataset.d); if (!d) return planoGradeRolar(true, true);
-  const col = sc.querySelector('.pl-dia'); const w = col ? col.offsetWidth + 6 : 160;
-  sc.scrollBy({ left: d * 7 * w, behavior: 'smooth' });
+  // vai direto para a segunda da semana anterior/seguinte (sem animação: um redesenho no meio parava no meio do caminho)
+  const regua = sc.querySelector('.pl-regua-col')?.offsetWidth || 44;
+  const atual = PLANO.semAnc?.dia || sc.dataset.plSem; const seg = new Date(atual + 'T12:00:00'); seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7) + d * 7);
+  const alvo = sc.querySelector(`[data-pl-col="${ymd(seg)}"]`); if (!alvo) return;
+  sc.scrollLeft = alvo.offsetLeft - regua - 4; PLANO.semAnc = { dia: ymd(seg), dx: 0 };
 };
 ACTIONS['pl-rafa-ir'] = (el) => { if (typeof RF !== 'undefined') RF.ym = el.dataset.dia.slice(0, 7); go('rafa'); };
 ACTIONS['pl-dia'] = (el) => {
@@ -658,7 +671,7 @@ ACTIONS['pl-bloq'] = (el) => {
 };
 
 
-ACTIONS['pl-unpin'] = (el) => { db.setSetting('planoPins', planoPins().filter(p => p.id !== el.dataset.id)); render(); };
+ACTIONS['pl-unpin'] = (el) => { const ids = (el.closest('[data-pin]')?.dataset.pin || el.dataset.id || '').split(',').filter(Boolean); db.setSetting('planoPins', planoPins().filter(p => !ids.includes(p.id))); render(); };
 /* Sexta: troca só esta sexta entre T e A no Dias de Rafa (fica como marcada à mão). */
 ACTIONS['pl-sexta'] = (el) => {
   const dia = el.dataset.dia; const novo = planoSextaRafa(dia) ? 'A' : 'T';
@@ -732,7 +745,7 @@ ACTIONS['pl-encaixar'] = (el) => {
    planejado → fica fixado · rotina → só naquele dia · to-do → muda o to-do · bloqueio → muda o bloqueio. */
 (function () {
   if (typeof document === 'undefined' || !document.addEventListener) return;
-  let d = null, mexeu = false, tip = null;
+  let d = null, mexeu = false, tip = null, selClick = false;
   const q = (h) => Math.round(h * 4) / 4;
   const calc = (x, dy) => {
     const dh = dy / PL_ALT; let a = x.ini, b = x.fim;
@@ -745,8 +758,12 @@ ACTIONS['pl-encaixar'] = (el) => {
     if (e.button !== 0 || !e.target.closest) return;
     if (e.target.closest('.pl-unpin, .pl-fx-bt')) return;
     const el = e.target.closest('[data-dg]'); if (!el) return;
+    // Shift + clique: seleciona/desseleciona (para arrastar vários juntos)
+    if (e.shiftKey && el.dataset.sk) { const k = el.dataset.sk; PLANO.sel.has(k) ? PLANO.sel.delete(k) : PLANO.sel.add(k); el.classList.toggle('pl-sel', PLANO.sel.has(k)); selClick = true; return; }
     const modo = e.target.closest('.dg-t') ? 'top' : e.target.closest('.dg-b') ? 'bot' : 'move';
-    d = { el, modo, kind: el.dataset.dg, dia: el.dataset.dia, ini: Number(el.dataset.ini), fim: Number(el.dataset.fim), y0: e.clientY, x0: e.clientX, top0: el.offsetTop, h0: el.offsetHeight };
+    const grupo = modo === 'move' && el.dataset.sk && PLANO.sel.has(el.dataset.sk) && PLANO.sel.size > 1
+      ? [...document.querySelectorAll('[data-sk]')].filter(o => o !== el && PLANO.sel.has(o.dataset.sk)) : [];
+    d = { el, grupo, modo, kind: el.dataset.dg, dia: el.dataset.dia, ini: Number(el.dataset.ini), fim: Number(el.dataset.fim), y0: e.clientY, x0: e.clientX, top0: el.offsetTop, h0: el.offsetHeight };
     mexeu = false;
   }, true);
   document.addEventListener('pointermove', (e) => {
@@ -756,6 +773,7 @@ ACTIONS['pl-encaixar'] = (el) => {
     const [a, b] = calc(d, dy);
     d.el.style.top = (a * PL_ALT) + 'px'; d.el.style.height = Math.max(10, (b - a) * PL_ALT - 2) + 'px';
     if (d.modo === 'move') d.el.style.transform = `translateX(${dx}px)`;
+    d.grupo.forEach(o => { o.style.transform = `translate(${dx}px, ${(a - d.ini) * PL_ALT}px)`; o.classList.add('arrastando'); });
     const hh = (h) => planoHora(h).replace(':', 'h').replace(/h00$/, 'h');
     tip.textContent = d.modo === 'top' ? `Novo início: ${hh(a)}` : d.modo === 'bot' ? `Novo fim: ${hh(b)}` : `Novo horário: ${hh(a)}–${hh(b)}`;
     tip.dataset.sub = `${fmtH((b - a) * 36e5)}${d.modo === 'move' ? (['plano', 'bloq', 'todo'].includes(d.kind) ? ' · para o lado: outro dia ou outra faixa' : ' · para o lado: outra faixa') : ''}`;
@@ -779,10 +797,24 @@ ACTIONS['pl-encaixar'] = (el) => {
       const f = { ...planoFaixaFix(), [x.el.dataset.fk]: faixa }; db.setSetting('planoFaixaFix', f);
       if (Math.abs(e.clientY - x.y0) < 6) { db.emit(); render(); return; }   // só mudou de faixa
     }
+    // vários selecionados (Shift): todos andam o mesmo tanto, em hora e em dia, sem perguntas
+    if (x.grupo.length) {
+      const dh = a - x.ini; const dd = Math.round((new Date(dia + 'T12:00:00') - new Date(x.dia + 'T12:00:00')) / 864e5);
+      const mais = (d0, n) => { const t = new Date(d0 + 'T12:00:00'); t.setDate(t.getDate() + n); return ymd(t); };
+      let pins = planoPins(); const novos = [];
+      [x.el, ...x.grupo].forEach(o => {
+        const ini = Number(o.dataset.ini) + dh, fim = Number(o.dataset.fim) + dh, nd = mais(o.dataset.dia, dd);
+        if (o.dataset.dg === 'plano') { const ids = (o.dataset.pin || '').split(',').filter(Boolean); pins = pins.filter(p => !ids.includes(p.id)); novos.push({ id: uid(), dia: nd, pid: o.dataset.pid, tid: o.dataset.tid || null, ini, h: fim - ini }); }
+        else if (o.dataset.dg === 'todo') { const n = db.get('tempo_notices', o.dataset.id); if (n) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), due: `${nd}T${planoHora(ini)}`, end: fim < 24 ? planoHora(fim) : null, semHora: false } }, true); }
+      });
+      db.setSetting('planoPins', [...pins, ...novos]); PLANO.sel.clear(); db.emit(); render();
+      toast(`${x.grupo.length + 1} itens movidos`); return;
+    }
     if (x.kind === 'plano') {
       const pid = x.el.dataset.pid, tid = x.el.dataset.tid || null; const cfg = planoCfg();
       // só o bloco arrastado sai do lugar (os outros pedaços da mesma tarefa ficam)
-      let base = planoPins().filter(p => !x.el.dataset.pin || p.id !== x.el.dataset.pin);
+      const meus = (x.el.dataset.pin || '').split(',').filter(Boolean);
+      let base = planoPins().filter(p => !meus.includes(p.id));
       // puxou por cima de outro pedaço da mesma tarefa no mesmo dia: junta num bloco só
       const mesma = (p) => p.dia === dia && (tid ? p.tid === tid : (p.pid === pid && !p.tid));
       const junta = base.filter(p => mesma(p) && Number(p.ini) <= b + 0.01 && Number(p.ini) + Number(p.h) >= a - 0.01);
@@ -806,14 +838,29 @@ ACTIONS['pl-encaixar'] = (el) => {
       }
       // passou do fim do expediente: continua no próximo dia útil?
       const ult = partes[partes.length - 1];
-      if (ult && ult.fim > cfg.fim + 1e-6 && ult.ini < cfg.fim && typeof confirmBox === 'function') {
+      if (ult && ult.fim > cfg.fim + 1e-6 && ult.ini < cfg.fim && typeof choiceBox === 'function') {
         const prox = (() => { const n = new Date(dia + 'T12:00:00'); do { n.setDate(n.getDate() + 1); } while (!planoDiaUtil(ymd(n))); return ymd(n); })();
         const resto = ult.fim - cfg.fim;
-        if (await confirmBox({ title: `Passa das ${planoHora(cfg.fim).replace(':00', 'h')}`, body: `Sobram ${fmtH(resto * 36e5)} depois das ${planoHora(cfg.fim)}. Continuar em ${fmtDate(prox)} a partir das ${planoHora(cfg.inicio)}, num bloco separado?`, ok: 'Sim, no próximo dia', no: 'Não, fica no mesmo dia' })) {
-          ult.fim = cfg.fim; partes.push({ dia: prox, ini: cfg.inicio, fim: cfg.inicio + resto });
+        const v = await choiceBox({ title: `Passa das ${planoHora(cfg.fim).replace(':00', 'h')}`, body: `Sobram ${fmtH(resto * 36e5)} depois das ${planoHora(cfg.fim)}. Continuar em ${fmtDate(prox)} a partir das ${planoHora(cfg.inicio)}, num bloco separado?`, opts: [['prox', 'Sim, no próximo dia'], ['mesmo', 'Não, fica no mesmo dia']] });
+        if (v === null) { render(); return; }   // Cancelar: o bloco volta para onde estava
+        if (v === 'prox') { ult.fim = cfg.fim; partes.push({ dia: prox, ini: cfg.inicio, fim: cfg.inicio + resto }); }
+      }
+      // andou ou cresceu para frente no mesmo dia: empurra os blocos fixados que vêm logo depois (em cadeia, pulando a
+      // rotina). Puxando para trás, só o arrastado anda.
+      const empurrados = [];
+      if (dia === x.dia && (a > x.ini + 1e-6 || b > x.fim + 1e-6)) {
+        const fx = planoFixosDoDia(dia).slice().sort((p, q) => p[0] - q[0]);
+        let cur = partes.filter(pt => pt.dia === dia).reduce((m, pt) => Math.max(m, pt.fim), b);
+        const outros = (PLANO.porDia[dia]?.blocos || []).filter(o => (o.pins || []).length && !(o.pins || []).some(id => meus.includes(id)) && o.ini >= x.ini - 1e-6).sort((p, q) => p.ini - q.ini);
+        for (const o of outros) {
+          if (o.ini >= cur - 1e-6) break;
+          let ini = cur; for (let k = 0; k < 10; k++) { const f = fx.find(z => z[0] < ini + o.h - 1e-6 && z[1] > ini + 1e-6); if (!f) break; ini = f[1]; }
+          base = base.filter(p => !o.pins.includes(p.id));
+          empurrados.push({ id: uid(), dia, pid: o.pid, tid: o.tid || null, ini, h: o.h }); cur = ini + o.h;
         }
       }
-      db.setSetting('planoPins', [...base, ...partes.map(pt => ({ id: uid(), dia: pt.dia, pid, tid, ini: pt.ini, h: pt.fim - pt.ini }))]);
+      db.setSetting('planoPins', [...base, ...empurrados, ...partes.map(pt => ({ id: uid(), dia: pt.dia, pid, tid, ini: pt.ini, h: pt.fim - pt.ini }))]);
+      if (empurrados.length) toast(`${empurrados.length} bloco${empurrados.length > 1 ? 's' : ''} empurrado${empurrados.length > 1 ? 's' : ''} para frente`);
       if (junta.length) toast('Pedaços juntados num bloco só');
       a = partes[0].ini; b = partes[partes.length - 1].fim;
     } else if (x.kind === 'fixo') {
@@ -828,7 +875,12 @@ ACTIONS['pl-encaixar'] = (el) => {
     toast(`${x.kind === 'fixo' ? 'Só neste dia: ' : x.kind === 'plano' ? 'Fixado: ' : ''}${dia !== x.dia ? fmtDate(dia) + ' ' : ''}${planoHora(a)}–${planoHora(b)}`);
   });
   // o clique que termina um arrasto não abre nada
-  document.addEventListener('click', (e) => { if (mexeu && e.target.closest && e.target.closest('[data-dg]')) { e.stopPropagation(); e.preventDefault(); mexeu = false; } }, true);
+  document.addEventListener('click', (e) => {
+    if ((mexeu || selClick) && e.target.closest && e.target.closest('[data-dg]')) { e.stopPropagation(); e.preventDefault(); mexeu = false; selClick = false; return; }
+    // clique no vazio da grade ou Esc limpa a seleção
+    if (PLANO.sel.size && e.target.classList && e.target.classList.contains('pl-grade')) { PLANO.sel.clear(); document.querySelectorAll('.pl-sel').forEach(o => o.classList.remove('pl-sel')); }
+  }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && PLANO.sel.size) { PLANO.sel.clear(); document.querySelectorAll('.pl-sel').forEach(o => o.classList.remove('pl-sel')); } });
   // mês: janela com o dia em detalhe ao passar o mouse
   let pop = null, popDia = null, timer = null;
   const fecha = () => { clearTimeout(timer); timer = null; if (pop) { pop.remove(); pop = null; popDia = null; } };
