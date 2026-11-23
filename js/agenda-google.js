@@ -80,11 +80,11 @@ async function aggSync(manual = false) {
   if (!manual && document.hidden) return;
   AGG.rodando = true; if (manual) render();
   try {
-    if (AGG.status === null || manual) { const s = await aggApi('sync'); AGG.status = !!s.connected; AGG.conta = s.account_email; }
+    if (AGG.status === null || manual) { const s = await aggApi('sync'); AGG.status = !!s.connected; AGG.conta = s.account_email; AGG.contas = s.contas || []; }
     if (!AGG.status) return;
     const r = await aggApi('sync', { method: 'POST', body: JSON.stringify(aggItens()) });
     if (r.erro) { AGG.erro = r.erro === 'api-desligada' ? 'A API do Google Agenda não está ligada no projeto do Google Cloud.' : r.erro; return; }
-    AGG.erro = null; AGG.ultimo = new Date(); AGG.n = r.feitos;
+    AGG.erro = null; AGG.ultimo = new Date(); AGG.n = r.feitos; AGG.contas = r.contas || AGG.contas; AGG.errosContas = r.erros || [];
     aggAplicar(r.editados);
     const novos = JSON.stringify(r.eventos || []);
     if (novos !== JSON.stringify(db.setting('agendaEventos', []) || [])) { db.setSetting('agendaEventos', r.eventos || []); db.emit(); }
@@ -93,19 +93,42 @@ async function aggSync(manual = false) {
   finally { AGG.rodando = false; if (manual || AGG.erro) render(); }
 }
 
-/* Botão no Calendário: conectar ou sincronizar agora. */
+/* Botão no Calendário: conectar ou abrir as contas (sincronizar agora, adicionar outra conta, desconectar). */
 function aggBotaoHTML() {
   if (AGG.status === false) return `<button class="btn sm" data-act="agg-conectar">${icon('calendar')} Conectar Google Agenda</button>`;
   const quando = AGG.ultimo ? AGG.ultimo.toTimeString().slice(0, 5) : '';
-  const tip = AGG.erro ? 'Erro: ' + AGG.erro : `Google Agenda${AGG.conta ? ' · ' + AGG.conta : ''}${quando ? '\nSincronizado às ' + quando : ''}\nTo-dos e planejado vão para a agenda "Tempo"; os outros compromissos vêm para cá. Clique para sincronizar agora.`;
-  return `<button class="btn sm${AGG.erro ? ' danger' : ''}" data-act="agg-sync" data-tip="${esc(tip)}"${AGG.rodando ? ' disabled' : ''}>${icon('calendar')} ${AGG.rodando ? 'Sincronizando…' : AGG.erro ? 'Google Agenda: erro' : 'Google' + (quando ? ' · ' + quando : '')}</button>`;
+  const erro = AGG.erro || (AGG.errosContas || []).length;
+  const tip = AGG.erro ? 'Erro: ' + AGG.erro : `Google Agenda${quando ? ' · sincronizado às ' + quando : ''}\n${(AGG.contas || []).map(c => c.email).join('\n')}`;
+  return `<button class="btn sm${erro ? ' danger' : ''}" data-act="agg-contas" data-tip="${esc(tip)}">${icon('calendar')} ${AGG.rodando ? 'Sincronizando…' : erro ? 'Google Agenda: erro' : 'Google' + (quando ? ' · ' + quando : '')}</button>`;
+}
+function aggContasHTML() {
+  const errDe = (email) => (AGG.errosContas || []).find(e => e.conta === email);
+  const linhas = (AGG.contas || []).map(c => { const e = errDe(c.email);
+    return `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)"><div><b>${esc(c.email || 'Conta Google')}</b><div class="small muted">${c.principal ? 'Principal: guarda a agenda "Tempo" (to-dos e planejado) e traz as outras agendas' : 'Só traz as agendas desta conta'}</div>${e ? `<div class="small" style="color:var(--danger)">${e.erro === 'api-desligada' ? 'A API do Google Agenda não está ligada no Google Cloud.' : esc(e.erro)}</div>` : ''}</div><button class="btn sm ghost" data-x="rem" data-p="${esc(c.provider)}">Desconectar</button></div>`; }).join('');
+  return `<div class="dh">${icon('calendar')}<h2>Google Agenda</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+  <div class="db">${AGG.erro ? `<div class="banner danger small">${esc(AGG.erro)}</div>` : ''}${linhas || '<div class="muted">Nenhuma conta conectada.</div>'}
+  <div class="small muted" style="margin-top:10px">${AGG.ultimo ? 'Sincronizado às ' + AGG.ultimo.toTimeString().slice(0, 5) + '. ' : ''}Sincroniza sozinho a cada 5 min com o app aberto.</div></div>
+  <div class="df"><button class="btn" data-x="add">${icon('plus')} Adicionar outra conta</button><span class="grow"></span><button class="btn primary" data-x="sync">Sincronizar agora</button></div>`;
+}
+ACTIONS['agg-contas'] = () => {
+  const l = openLayer({ html: aggContasHTML() });
+  l.box.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-x]'); if (!b) return;
+    if (b.dataset.x === 'sync') { l.close(); aggSync(true); }
+    else if (b.dataset.x === 'add') { l.close(); aggConectar(true); }
+    else if (b.dataset.x === 'rem') {
+      if (!(await confirmBox({ title: 'Desconectar conta?', body: 'Os eventos dela somem do Calendário do Tempo na próxima sincronização.', ok: 'Desconectar', danger: true }))) return;
+      try { await aggApi('sync', { method: 'POST', body: JSON.stringify({ remover: b.dataset.p }) }); l.close(); AGG.status = null; aggSync(true); } catch (err) { toast('Não consegui: ' + err.message); }
+    }
+  });
+};
+async function aggConectar(nova = false) {
+  const w = window.open('about:blank', 'tempo-gcal', 'width=480,height=680');
+  try { const r = await aggApi('start' + (nova ? '?nova=1' : '')); if (w && !w.closed) w.location.href = r.url; else location.href = r.url; }
+  catch (e) { if (w) w.close(); toast('Não consegui conectar: ' + e.message); }
 }
 ACTIONS['agg-sync'] = () => aggSync(true);
-ACTIONS['agg-conectar'] = async () => {
-  const w = window.open('about:blank', 'tempo-gcal', 'width=480,height=680');
-  try { const r = await aggApi('start'); if (w && !w.closed) w.location.href = r.url; else location.href = r.url; }
-  catch (e) { if (w) w.close(); toast('Não consegui conectar: ' + e.message); }
-};
+ACTIONS['agg-conectar'] = () => aggConectar(false);
 window.addEventListener('message', (e) => { if (e.origin !== location.origin) return; if (e.data === 'gcal-ok') { toast('Google Agenda conectado'); AGG.status = null; aggSync(true); } });
 if (typeof window !== 'undefined' && !window.__aggTimer) {
   window.__aggTimer = true;

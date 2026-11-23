@@ -45,13 +45,20 @@ function corpo(it) {
 module.exports = async (req, res) => {
   const user = await userFromRequest(req);
   if (!user) return res.status(401).json({ error: 'entre na sua conta' });
-  const rows = await rest(`tempo_integrations?provider=eq.gcal&user_id=eq.${user.id}&select=id,account_email,last_sync_at,refresh_token`);
-  const integ = rows && rows[0];
-  const conectado = !!(integ && integ.refresh_token);
-  if (req.method !== 'POST') return res.json({ connected: conectado, account_email: integ ? integ.account_email : null, last_sync_at: integ ? integ.last_sync_at : null });
-  if (!conectado) return res.json({ connected: false });
-
+  // várias contas Google: "gcal" é a principal (guarda a agenda "Tempo"); "gcal:xxxx" são as outras (só leitura)
+  const rows = (await rest(`tempo_integrations?provider=like.gcal*&user_id=eq.${user.id}&select=id,provider,account_email,last_sync_at,refresh_token&order=created_at.asc`)) || [];
+  const contas = rows.filter(r => r.refresh_token);
+  const integ = contas.find(r => r.provider === 'gcal') || contas[0];
+  const conectado = !!integ;
+  const lista = contas.map(r => ({ provider: r.provider, email: r.account_email, principal: r === integ, last_sync_at: r.last_sync_at }));
+  if (req.method !== 'POST') return res.json({ connected: conectado, account_email: integ ? integ.account_email : null, contas: lista });
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+  if (body.remover) {   // desconectar uma conta
+    const r = rows.find(x => x.provider === body.remover);
+    if (r) await rest(`tempo_integrations?id=eq.${r.id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+    return res.json({ ok: true });
+  }
+  if (!conectado) return res.json({ connected: false });
   const itens = Array.isArray(body.itens) ? body.itens.slice(0, 600) : [];
   const desde = new Date(body.desde || Date.now() - 7 * 864e5).toISOString();
   const ate = new Date(body.ate || Date.now() + 30 * 864e5).toISOString();
@@ -97,20 +104,30 @@ module.exports = async (req, res) => {
     await emLotes(mudar, 8, x => g(token, `/calendars/${cid}/events/${encodeURIComponent(x.ev.id)}`, { method: 'PATCH', body: JSON.stringify(x.patch) }));
     await emLotes(apagar, 8, ev => g(token, `/calendars/${cid}/events/${encodeURIComponent(ev.id)}`, { method: 'DELETE' }).catch(() => null));
 
-    // 3) compromissos das outras agendas (sem feriados nem aniversários: o Tempo já tem os feriados)
-    const outras = cals.filter(c => c.id !== cal.id && c.selected !== false && !c.hidden && !/#holiday@|#contacts@|addressbook#/.test(c.id));
-    const eventos = [];
-    await emLotes(outras, 5, async c => {
-      const evs = await todos(token, `/calendars/${encodeURIComponent(c.id)}/events?singleEvents=true&orderBy=startTime&maxResults=2500&timeMin=${encodeURIComponent(desde)}&timeMax=${encodeURIComponent(ate)}`).catch(() => []);
-      evs.forEach(ev => {
-        if (ev.status === 'cancelled' || !ev.start) return;
-        const eu = (ev.attendees || []).find(a => a.self); if (eu && eu.responseStatus === 'declined') return;
-        eventos.push({ id: c.id + '|' + ev.id, ini: iniDe(ev), fim: fimDe(ev), titulo: ev.summary || '(sem título)', agenda: c.summaryOverride || c.summary || '', diaTodo: !!ev.start.date, livre: ev.transparency === 'transparent' });
+    // 3) compromissos das outras agendas, de todas as contas (sem feriados nem aniversários: o Tempo já tem os feriados).
+    //    A mesma agenda compartilhada em duas contas e o mesmo convite nas duas entram uma vez só.
+    const eventos = [], erros = [], vistasCal = new Set([cal.id]), vistosEv = new Set();
+    const leContas = async (conta, tk, lista) => {
+      const outras = lista.filter(c => !vistasCal.has(c.id) && c.selected !== false && !c.hidden && !/#holiday@|#contacts@|addressbook#/.test(c.id) && !(c.summary === 'Tempo' && c.accessRole === 'owner'));
+      outras.forEach(c => vistasCal.add(c.id));
+      await emLotes(outras, 5, async c => {
+        const evs = await todos(tk, `/calendars/${encodeURIComponent(c.id)}/events?singleEvents=true&orderBy=startTime&maxResults=2500&timeMin=${encodeURIComponent(desde)}&timeMax=${encodeURIComponent(ate)}`).catch(() => []);
+        evs.forEach(ev => {
+          if (ev.status === 'cancelled' || !ev.start) return;
+          const eu = (ev.attendees || []).find(a => a.self); if (eu && eu.responseStatus === 'declined') return;
+          const k = (ev.iCalUID || ev.id) + '|' + iniDe(ev); if (vistosEv.has(k)) return; vistosEv.add(k);
+          eventos.push({ id: c.id + '|' + ev.id, ini: iniDe(ev), fim: fimDe(ev), titulo: ev.summary || (ev.visibility === 'private' ? 'Ocupado' : '(sem título)'), agenda: c.summaryOverride || c.summary || '', conta, diaTodo: !!ev.start.date, livre: ev.transparency === 'transparent' });
+        });
       });
-    });
+    };
+    await leContas(integ.account_email, token, cals);
+    for (const r of contas.filter(x => x !== integ)) {
+      try { const tk = await gmailAccessToken(r.refresh_token); await leContas(r.account_email, tk, await todos(tk, '/users/me/calendarList?maxResults=250')); }
+      catch (e) { erros.push({ conta: r.account_email, erro: /has not been used|is disabled/i.test(e.message) ? 'api-desligada' : e.message }); }
+    }
     eventos.sort((a, b) => ms(a.ini) - ms(b.ini));
-    await rest(`tempo_integrations?id=eq.${integ.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ last_sync_at: new Date().toISOString() }) });
-    res.json({ connected: true, conta: integ.account_email, eventos, editados, feitos: { criados: criar.length, mudados: mudar.length, apagados: apagar.length } });
+    await rest(`tempo_integrations?id=in.(${contas.map(r => r.id).join(',')})`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ last_sync_at: new Date().toISOString() }) });
+    res.json({ connected: true, conta: integ.account_email, contas: lista, erros, eventos, editados, feitos: { criados: criar.length, mudados: mudar.length, apagados: apagar.length } });
   } catch (e) {
     const semApi = /has not been used|is disabled|accessNotConfigured/i.test(e.message);
     res.status(200).json({ connected: true, erro: semApi ? 'api-desligada' : e.message });

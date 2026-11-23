@@ -7,7 +7,7 @@ module.exports = async (req, res) => {
   // serve ao Gmail e ao Google Agenda (provider gcal): o state guardado diz qual é
 
   const rows = await rest(
-    `tempo_integrations?oauth_state=eq.${encodeURIComponent(state)}&select=id,provider`
+    `tempo_integrations?oauth_state=eq.${encodeURIComponent(state)}&select=id,provider,user_id`
   );
   if (!rows || !rows.length) return res.redirect(302, '/?gmail=estado-invalido');
 
@@ -40,7 +40,16 @@ module.exports = async (req, res) => {
       updated_at: new Date().toISOString(),
     }),
   });
-  const prov = rows[0].provider || 'gmail';
+  let prov = rows[0].provider || 'gmail';
+  // conta Google já conectada em outra linha da agenda: atualiza aquela e descarta esta
+  if (prov.startsWith('gcal') && info.email) {
+    const mesmas = await rest(`tempo_integrations?user_id=eq.${rows[0].user_id}&provider=like.gcal*&account_email=eq.${encodeURIComponent(info.email)}&id=neq.${rows[0].id}&select=id`);
+    if (mesmas && mesmas.length) {
+      await rest(`tempo_integrations?id=eq.${mesmas[0].id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ refresh_token: tokens.refresh_token, updated_at: new Date().toISOString() }) });
+      await rest(`tempo_integrations?id=eq.${rows[0].id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+    }
+  }
+  if (prov.startsWith('gcal')) prov = 'gcal';
   const nome = prov === 'gcal' ? 'Google Agenda' : 'Gmail';
   // janela pequena do login: avisa o app e fecha; se não for janela, segue para o app
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

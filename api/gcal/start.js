@@ -7,10 +7,13 @@ module.exports = async (req, res) => {
   const user = await userFromRequest(req);
   if (!user) return res.status(401).json({ error: 'entre na sua conta para conectar o Google Agenda' });
   const state = crypto.randomBytes(24).toString('hex');
+  // ?nova=1: mais uma conta Google (só leitura das agendas dela); a primeira ("gcal") guarda a agenda "Tempo"
+  const tem = await rest(`tempo_integrations?provider=eq.gcal&user_id=eq.${user.id}&select=refresh_token`);
+  const provider = req.query && req.query.nova && tem && tem[0] && tem[0].refresh_token ? 'gcal:' + crypto.randomBytes(4).toString('hex') : 'gcal';
   await rest('tempo_integrations?on_conflict=user_id,provider', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ user_id: user.id, provider: 'gcal', oauth_state: state }),
+    body: JSON.stringify({ user_id: user.id, provider, oauth_state: state }),
   });
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
@@ -18,7 +21,7 @@ module.exports = async (req, res) => {
     response_type: 'code',
     scope: 'openid email https://www.googleapis.com/auth/calendar',
     access_type: 'offline',
-    prompt: 'consent',
+    prompt: 'consent select_account',
     state,
   });
   res.json({ url: 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString() });
