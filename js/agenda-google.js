@@ -43,7 +43,7 @@ function aggItens(agora = new Date()) {
         if (dia === hoje && aggISO(dia, b.fim) <= agora.toISOString()) return;
         const p = db.get('tempo_projects', b.pid); if (!p) return;
         conta[b.pid] = (conta[b.pid] || 0) + 1;
-        const ab = typeof agencyAbbr === 'function' ? agencyAbbr(agencyOf(p)) : '';
+        const ab = clientOf(p)?.name || '';
         itens.push({ key: `plano:${dia}:${b.pid}:${conta[b.pid]}`, titulo: `${ab ? '[' + ab + '] ' : ''}${b.tarefa ? b.tarefa + ' · ' : ''}${p.name}`, ini: aggISO(dia, b.ini), fim: aggISO(dia, b.fim), descricao: `Planejado pelo Tempo · ${clientOf(p)?.name || ''}` });
       });
     });

@@ -1774,54 +1774,56 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .path-chip{text-decoration:none;display:inline-flex}
 .path-chip:hover .tag{filter:brightness(.95);outline:1px solid var(--line)}
 
-/* Projeto › Tarefas: uma linha por tarefa (nome largo, status, responsável, data, hora); ▶ e seta só no hover */
+/* Projeto › Tarefas — no tamanho do desenho do Tulio (px de tela): nome 15, responsável 12 negrito cinza, status 12,5,
+   tempos 13 (rótulos 10), data 13 com "quando" 10,5 negrito, hora 13. Linhas de ~60 px, limpo. */
 .tk { border-bottom: 1px solid var(--line); }
-.tk-l { display: grid; grid-template-columns: minmax(200px,1fr) 90px 180px 190px 140px 64px 64px; gap: 12px; align-items: center; padding: 14px 18px 14px 24px; min-height: 64px; }
-.tk.sub .tk-l { padding-left: 48px; }
-.tk-in { border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 3px 6px; margin-left: -7px; font: inherit; color: inherit; width: 100%; min-width: 0; }
+.tk-l { display: grid; grid-template-columns: minmax(150px, 1fr) 56px 140px 138px 100px 58px 34px; gap: 10px; align-items: center; padding: 11px 14px 11px 20px; min-height: 60px; }
+.tk.sub .tk-l { padding-left: 38px; }
+.tk-in { border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 2px 5px; margin-left: -6px; font: inherit; color: inherit; width: 100%; min-width: 0; }
 .tk-in:hover { border-color: var(--line); }
 .tk-in:focus { border-color: var(--accent); background: var(--surface); outline: none; }
 .tk-in::placeholder { color: var(--fg-3); }
 .tk-nome { display: flex; flex-direction: column; min-width: 0; }
-.tk-nome .n { font-size: 1.12rem; font-weight: 500; color: var(--fg); }
-.tk.sub .tk-nome .n { font-size: 1rem; }
-.tk-dep { font-size: .8rem; font-weight: 500; color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tk-nome .n { font-size: 15px; font-weight: 500; color: var(--fg); }
+.tk.sub .tk-nome .n { font-size: 14px; }
+.tk-dep { font-size: 11px; font-weight: 500; color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tk-st { min-width: 0; }
-.tk-resp { font-size: .9rem; font-weight: 600; color: var(--fg-3); }
-.tk-data, .tk-hora { position: relative; display: flex; flex-direction: column; cursor: pointer; color: var(--fg-3); }
-.tk-dv { font-size: .95rem; font-variant-numeric: tabular-nums; }
+.tk-st .combo-btn .tag { font-size: 12.5px; padding: 3px 11px; }
+.tk-resp { font-size: 12px; font-weight: 600; color: var(--fg-3); }
+.tk-data, .tk-hora { position: relative; display: flex; flex-direction: column; cursor: pointer; color: var(--fg-3); min-width: 0; }
+.tk-dv { font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tk-hora .tk-dv.prev { font-style: italic; opacity: .7; }
 .tk-data input, .tk-hora input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
-.tk-rel { font-size: .78rem; color: var(--fg-3); }
-.tk-rel.hoje { color: #B5306F; font-weight: 700; }
+.tk-rel { font-size: 10.5px; color: var(--fg-3); white-space: nowrap; }
+.tk-rel.hoje { color: #E5487A; font-weight: 700; }
 .tk-rel.amanha { color: #E8893A; font-weight: 700; }
 .tk-rel.late { color: var(--danger); font-weight: 700; }
 .tk-acoes { display: flex; justify-content: flex-end; opacity: 0; transition: opacity .12s; }
 .tk:hover .tk-acoes, .tk.aberta .tk-acoes, .tk-acoes:focus-within { opacity: 1; }
-.tk-mais-p { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 0 18px 12px 24px; }
+.tk-acoes .btn { padding: 2px; }
+.tk-mais-p { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 0 14px 10px 20px; font-size: 12px; }
+.tk-mais-p svg { width: 13px; height: 13px; flex: none; }
 .tk.aberta { background: var(--surface-2); }
-.tk-nova { display: flex; align-items: center; gap: 10px; padding: 14px 24px; }
-.tk-nova .tk-in { font-size: 1.05rem; margin-left: 0; }
-.tk-nova-i { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 5px; background: var(--accent); color: #fff; flex: none; }
-.tk-nova-i svg { width: 15px; height: 15px; }
-.tk-data input:focus, .tk-hora input:focus { opacity: 1; background: var(--surface); border: 1px solid var(--accent); border-radius: 6px; font: inherit; color: var(--fg); }
-.tk-st .combo-btn .tag { font-size: .92rem; padding: 5px 14px; }
-
+.tk-nova { display: flex; align-items: center; gap: 10px; padding: 12px 20px; }
+.tk-nova .tk-in { font-size: 14px; margin-left: 0; }
+.tk-nova-i { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 5px; background: var(--accent); color: #fff; flex: none; }
+.tk-nova-i svg { width: 14px; height: 14px; }
 /* Trabalhado / previsto, com ⚠ */
-.tk-tempo { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; }
-.tk-t1, .tk-t2 { display: flex; align-items: center; gap: 6px; position: relative; padding-left: 22px; }
-.tk-t1 b { font-weight: 500; font-size: .98rem; color: var(--fg-3); min-width: 46px; }
-.tk-t1 i, .tk-t2 i { font-style: normal; font-size: .78rem; color: color-mix(in srgb, var(--fg-3) 60%, transparent); }
-.tk-prev { width: 52px; border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 0 3px; margin-left: -4px; font: inherit; font-size: .98rem; color: color-mix(in srgb, var(--fg-3) 55%, transparent); }
+.tk-tempo { display: flex; flex-direction: column; gap: 1px; font-variant-numeric: tabular-nums; }
+.tk-t1, .tk-t2 { display: flex; align-items: center; gap: 5px; position: relative; padding-left: 18px; white-space: nowrap; }
+.tk-t1 b { font-weight: 500; font-size: 13px; color: var(--fg-3); min-width: 38px; }
+.tk-t1 i, .tk-t2 i { font-style: normal; font-size: 10px; color: color-mix(in srgb, var(--fg-3) 55%, transparent); }
+.tk-prev { width: 44px; border: 1px solid transparent; background: transparent; border-radius: 4px; padding: 0 2px; margin-left: -3px; font: inherit; font-size: 13px; color: color-mix(in srgb, var(--fg-3) 50%, transparent); }
 .tk-prev:hover { border-color: var(--line); }
 .tk-prev:focus { border-color: var(--accent); background: var(--surface); color: var(--fg); outline: none; }
-.tk-prev::placeholder { color: color-mix(in srgb, var(--fg-3) 45%, transparent); }
+.tk-prev::placeholder { color: color-mix(in srgb, var(--fg-3) 50%, transparent); }
 .tk-tempo.estourou .tk-t1 b, .tk-tempo.estourou .tk-t1 i { color: #E5484D; }
 .tk-alerta { position: absolute; left: 0; top: 50%; transform: translateY(-50%); border: 0; background: none; padding: 0; color: #E5484D; cursor: pointer; display: inline-flex; }
-.tk-alerta svg { width: 17px; height: 17px; fill: currentColor; stroke: #fff; }
+.tk-alerta svg { width: 14px; height: 14px; fill: currentColor; stroke: #fff; }
 
 .tk-prev.sug::placeholder { font-style: italic; color: color-mix(in srgb, var(--fg-3) 70%, transparent); }
 .tk-prev.chute::placeholder { color: color-mix(in srgb, #E8893A 70%, transparent); }
-.tk-prev.sug { width: 60px; }
+.tk-prev.sug { width: 56px; }
 /* Calendário: item que bate com outro na faixa do meio; registro que juntou um compromisso da agenda */
 .pl-grade .choque { box-shadow: inset 0 0 0 2px #E5484D !important; }
 .pl-feito-ag { position: absolute; top: 2px; right: 3px; display: inline-flex; opacity: .7; }
@@ -1841,23 +1843,9 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .pl-grade .pl-sel { outline: 2px solid var(--accent) !important; outline-offset: 1px; z-index: 50 !important; }
 .pl-reorg { border: 1px solid var(--line); background: var(--surface-1, #fff); border-radius: 5px; font-size: .8em; line-height: 1; padding: 2px 5px; cursor: pointer; color: var(--fg-3); margin-right: 4px; }
 .pl-reorg:hover { color: var(--accent); border-color: var(--accent); }
-/* Tarefas dentro da janela do projeto (estreita): tudo menor e cabendo */
+/* Tarefas na janela bem estreita: some responsável e hora */
 .tk-lista { container-type: inline-size; }
-@container (max-width: 900px) {
-  .tk-l { grid-template-columns: minmax(110px, 1fr) 50px 138px 122px 98px 42px 40px; gap: 8px; padding: 9px 10px 9px 16px; min-height: 50px; }
-  .tk-nome .n { font-size: .98rem; }
-  .tk-dep { font-size: .72rem; }
-  .tk-resp { font-size: .82rem; }
-  .tk-st .combo-btn .tag { font-size: .8rem; padding: 3px 9px; }
-  .tk-t1, .tk-t2 { padding-left: 18px; gap: 4px; }
-  .tk-t1 b, .tk-prev { font-size: .86rem; }
-  .tk-t1 i, .tk-t2 i { font-size: .68rem; }
-  .tk-prev, .tk-prev.sug { width: 58px; }
-  .tk-dv { font-size: .86rem; }
-  .tk-rel { font-size: .7rem; }
-  .tk-nova { padding: 10px 16px; }
-}
-@container (max-width: 640px) { .tk-l { grid-template-columns: minmax(100px, 1fr) 120px 128px 104px 40px; } .tk-resp, .tk-hora { display: none; } }
+@container (max-width: 600px) { .tk-l { grid-template-columns: minmax(110px, 1fr) 120px 140px 100px 36px; } .tk-resp, .tk-hora { display: none; } }
 .tk.tk-foco { background: color-mix(in oklab, var(--accent) 10%, transparent); transition: background .3s; }
 /* Agência/cliente: blocos que recolhem e mudam de lugar */
 .pty-sec { margin-top: 14px; }
@@ -1870,3 +1858,9 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .pty-sec.arrastando { opacity: .45; }
 .pty-sec.fechada { margin-top: 8px; }
 .party-ag { border: 0; background: none; padding: 0; cursor: pointer; display: inline-flex; margin: 2px 0 4px; }
+/* Calendário: linha de entrega (azul, fina) e chip do cliente nos blocos */
+.pl-grade > .pl-prazo { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px solid #2563EB; z-index: 90; cursor: ns-resize; touch-action: none; }
+.pl-grade > .pl-prazo::before { content: ''; position: absolute; left: -3px; top: -4.5px; width: 7px; height: 7px; border-radius: 50%; background: #2563EB; }
+.pl-grade > .pl-prazo span { position: absolute; right: 2px; top: -13px; font-weight: 700 !important; font-size: 9.5px !important; line-height: 1.2 !important; color: #2563EB; background: color-mix(in oklab, var(--surface-1, #fff) 85%, transparent); padding: 0 3px; border-radius: 3px; max-width: 95%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.pl-grade > .pl-prazo::after { content: ''; position: absolute; left: 0; right: 0; top: -5px; height: 10px; }
+.pl-cli { font-size: .82em !important; padding: 0 5px !important; margin-right: 4px; vertical-align: 1px; border-radius: 4px; }

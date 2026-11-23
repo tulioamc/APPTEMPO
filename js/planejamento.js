@@ -266,8 +266,13 @@ function planoItensDoDia(dia, porDia) {
   });
   planoFeitosDoDia(dia).forEach(f => it.push({ k: 'feito', a: f.ini, b: f.fim, f }));
   (porDia[dia]?.blocos || []).forEach(bl => it.push({ k: 'plano', a: bl.ini, b: bl.fim, bl }));
+  // linha de entrega: cada tarefa aberta com prazo neste dia (na hora da entrega; sem hora = fim do expediente)
+  db.where('tempo_tasks', t => t.deadline === dia && !['done', 'cancelled'].includes(statusCat(t.status_id)) && !(typeof statusParado === 'function' && statusParado(t.status_id))).forEach(t => {
+    const h = t.deadline_time ? planoHoraDe(t.deadline_time) : planoCfg().fim; if (h == null) return;
+    it.push({ k: 'prazo', a: h, b: h + 0.001, t });
+  });
   if (dia <= ymd(new Date())) { const pr = planoVsReal(dia); (pr?.blocos || []).filter(b => !b.ok && (dia < ymd(new Date()) || b.fim <= new Date().getHours() + new Date().getMinutes() / 60)).forEach(b => it.push({ k: 'naofeito', a: b.ini, b: b.fim, bl: b })); }
-  const tipoFiltro = { fixo: 'rotina', todo: 'todos', todos: 'todos', feito: 'trabalho', plano: 'trabalho' };
+  const tipoFiltro = { fixo: 'rotina', todo: 'todos', todos: 'todos', feito: 'trabalho', plano: 'trabalho', prazo: 'trabalho' };
   return it.filter(x => x.b > x.a && (!tipoFiltro[x.k] || planoMostra(tipoFiltro[x.k])));
 }
 /* Lado a lado: itens que se sobrepõem dividem a largura (colunas por grupo de sobreposição). */
@@ -316,8 +321,10 @@ function planoCascata(itens) {
   }
   return [...fundo, ...ord];
 }
-function planoFaixas(itens, unico = true, dia = '') {
-  if (!unico) return planoCascata(itens);
+function planoFaixas(itens0, unico = true, dia = '') {
+  const prazos = itens0.filter(x => x.k === 'prazo'); prazos.forEach(x => { x._left = 0; x._w = 100; x._z = 90; });
+  const itens = itens0.filter(x => x.k !== 'prazo');
+  if (!unico) return [...planoCascata(itens), ...prazos];
   const fix = planoFaixaFix(); const lanes = [[], [], []];
   itens.forEach(x => {
     let l = x.k === 'evento' && x.e?.origem === 'bloqueio' ? 1 : (PL_FAIXA[x.k] ?? 1);
@@ -330,7 +337,7 @@ function planoFaixas(itens, unico = true, dia = '') {
     if (li === 1 && x._n > 1 && ['plano', 'todo', 'todos'].includes(x.k)) x._choque = true;
     out.push(x);
   }));
-  return out;
+  return [...out, ...prazos];
 }
 function planoFaixasLivre(itens) {
   const ord = itens.slice().sort((x, y) => x.a - y.a || (y.b - y.a) - (x.b - x.a));
@@ -346,6 +353,8 @@ function planoFaixasLivre(itens) {
   return ord;
 }
 /* Puxadores de cima e de baixo (blocos que não são registro). */
+/* Chip do cliente (na cor dele) no começo dos blocos de trabalho; o cliente diz mais que a agência. */
+const planoCliChip = (p) => { const c = p && clientOf(p); return c ? `<span class="tag tg pl-cli" style="${cssTb(c.color)}${partyFg('client', c.id) ? ';color:' + partyFg('client', c.id) : ''}">${esc(c.name)}</span>` : ''; };
 const PL_PUX = '<i class="dg-t" title="Puxe para mudar o começo"></i><i class="dg-b" title="Puxe para mudar o fim"></i>';
 function planoItemHTML(x, dia, { alt, unico, auto }) {
   const y = x.a * alt, h = (x.b - x.a) * alt;
@@ -355,6 +364,8 @@ function planoItemHTML(x, dia, { alt, unico, auto }) {
     const l = x.k === 'todos' ? x.lista : [x.e]; const feito = l.every(e => e.feito);
     return `<div class="pl-marc${feito ? ' feito' : ''}" style="top:${y}px"${l.length === 1 ? ` data-act="todo-modal" data-id="${l[0].id}"` : ''} data-tip="${esc(`${l.length > 1 ? l.length + ' to-dos às ' : 'To-do às '}${planoHora(x.a)}\n` + l.map(e => (e.feito ? '✓ ' : '• ') + e.titulo).join('\n'))}"><i></i>${l.length > 1 ? l.length + ' · ' : ''}${planoHora(x.a)}</div>`;
   }
+  if (x.k === 'prazo') { const t = x.t; const p = db.get('tempo_projects', t.project_id);
+    return `<div class="pl-prazo" data-dg="prazo" data-dia="${dia}" data-id="${t.id}" data-ini="${x.a}" data-fim="${x.a}" style="top:${y}px" data-tip="${esc(`Entrega: ${t.name}${p ? ' · ' + p.name : ''}\n${planoHora(x.a)}${t.deadline_time ? '' : ' (sem hora: fim do expediente)'}\nAs tarefas não podem passar desta linha. Arraste para mudar a entrega (hora ou dia).`)}"><span>${esc(t.name)}</span></div>`; }
   if (x.k === 'fixo') { const { n, m } = x;
     return `<div class="pl-fixo${x._fundo ? ' fundo' : ''}${m.ajustado ? ' ajustado' : ''}${m.real ? ' real' : ''}" data-dg="fixo" data-dia="${dia}" data-g="${esc(m.grupo)}" data-ini="${x.a}" data-fim="${x.b}" style="${pos}" data-tip="${esc(`${n}\n${planoHora(x.a)}–${planoHora(x.b)}${m.real ? '\nAjustado ao que aconteceu (bloco flexível)' : ''}${m.ajustado ? '\nMudado só neste dia' : ''}\nArraste ou puxe as bordas: muda só neste dia`)}"><span class="pl-tx"><b>${esc(n)}</b>${curto ? '' : `<em>${planoHora(x.a)}–${planoHora(x.b)}</em>`}</span><span class="pl-fx-bt">${m.ajustado ? `<button data-act="pl-fixo-reset" data-dia="${dia}" data-g="${esc(m.grupo)}" title="Voltar ao horário da rotina" aria-label="Voltar ao padrão">↺</button>` : ''}<button data-act="pl-fixo-off" data-dia="${dia}" data-g="${esc(m.grupo)}" title="Tirar só deste dia" aria-label="Tirar deste dia">×</button></span>${PL_PUX}</div>`; }
   if (x.k === 'evento') { const e = x.e; const bloq = e.origem === 'bloqueio';
@@ -369,7 +380,7 @@ function planoItemHTML(x, dia, { alt, unico, auto }) {
   if (x.k === 'feito') { const f = x.f; const pr = db.get('tempo_projects', f.pid);
     return `<div class="pl-feito${x.agenda ? ' com-agenda' : ''}" style="${pos};--fc:${planoCor(f.pid)}" data-tip="${esc(`Registrado: ${pr?.name || 'Sem projeto'}${pr ? '\n' + (clientOf(pr)?.name || '') : ''}\n${planoHora(f.ini)}–${planoHora(f.fim)} · ${fmtH(f.ms)} trabalhado${x.agenda ? '\n' + x.agenda.map(e => `Agenda: ${e.titulo} (${planoHora(e.ini)}–${planoHora(e.fim)})`).join('\n') : ''}`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"` : ''}>${h >= 15 ? `<span class="pl-tx"><b>${esc(pr?.name || 'Sem projeto')}</b>` : '<span class="pl-tx">'}${h >= 34 ? `<em>${x.agenda ? esc(x.agenda[0].titulo) + ' · ' : unico && pr ? esc(clientOf(pr)?.name || '') + ' · ' : ''}${fmtH(f.ms)}</em>` : ''}</span>${x.agenda ? `<span class="pl-feito-ag">${icon('calendar')}</span>` : ''}</div>`; }
   const b = x.bl; const p = db.get('tempo_projects', b.pid); const c = planoCor(b.pid);
-  return `<div class="pl-bloco${b.atrasado ? ' late' : ''}${b.pin ? ' pin' : ' auto'}" data-dg="plano" data-dia="${dia}" data-pid="${b.pid}" data-tid="${b.tid || ''}" data-pin="${(b.pins || (b.pin ? [b.pin] : [])).join(',')}" data-ini="${b.ini}" data-fim="${b.fim}" style="${pos};--fc:${c}" data-act="proj-open" data-id="${b.pid}"${b.tid ? ` data-tab="tasks" data-tk="${b.tid}"` : ''} data-tip="${esc(`Planejado: ${b.tarefa ? b.tarefa + ' · ' : ''}${p?.name}\n${clientOf(p)?.name || ''}\n${planoHora(b.ini)}–${planoHora(b.fim)} · ${fmtH(b.h * 36e5)}${b.atrasado ? '\nDepois do prazo' : ''}${b.pin ? '\nFixado à mão' : '\nColocado pelo app · arraste para mudar o horário ou o dia'}`)}"><span class="pl-tx"><b>${p && typeof agencyAbbr === 'function' && agencyAbbr(agencyOf(p)) ? '[' + esc(agencyAbbr(agencyOf(p))) + '] ' : ''}${esc(b.tarefa || p?.name || '')}</b>${curto ? '' : `<em>${b.tarefa ? esc(p?.name || '') + ' · ' : ''}${planoHora(b.ini)} · ${fmtH(b.h * 36e5)}${unico && p ? ' · ' + esc(clientOf(p)?.name || '') : ''}</em>`}</span>${b.pin ? `<button class="pl-unpin" data-act="pl-unpin" data-id="${b.pin}" title="Soltar: o app volta a encaixar este bloco sozinho" aria-label="Soltar bloco">×</button>` : ''}${PL_PUX}</div>`;
+  return `<div class="pl-bloco${b.atrasado ? ' late' : ''}${b.pin ? ' pin' : ' auto'}" data-dg="plano" data-dia="${dia}" data-pid="${b.pid}" data-tid="${b.tid || ''}" data-pin="${(b.pins || (b.pin ? [b.pin] : [])).join(',')}" data-ini="${b.ini}" data-fim="${b.fim}" style="${pos};--fc:${c}" data-act="proj-open" data-id="${b.pid}"${b.tid ? ` data-tab="tasks" data-tk="${b.tid}"` : ''} data-tip="${esc(`Planejado: ${b.tarefa ? b.tarefa + ' · ' : ''}${p?.name}\n${clientOf(p)?.name || ''}\n${planoHora(b.ini)}–${planoHora(b.fim)} · ${fmtH(b.h * 36e5)}${b.atrasado ? '\nDepois do prazo' : ''}${b.pin ? '\nFixado à mão' : '\nColocado pelo app · arraste para mudar o horário ou o dia'}`)}"><span class="pl-tx"><b>${planoCliChip(p)}${esc(b.tarefa || p?.name || '')}</b>${curto ? '' : `<em>${b.tarefa ? esc(p?.name || '') + ' · ' : ''}${planoHora(b.ini)} · ${fmtH(b.h * 36e5)}${unico && p ? ' · ' + esc(clientOf(p)?.name || '') : ''}</em>`}</span>${b.pin ? `<button class="pl-unpin" data-act="pl-unpin" data-id="${b.pin}" title="Soltar: o app volta a encaixar este bloco sozinho" aria-label="Soltar bloco">×</button>` : ''}${PL_PUX}</div>`;
 }
 /* Coluna de um dia: cabeçalho, linha "dia todo" (to-do só com data, evento de dia inteiro) e a grade de 24 h. */
 /* Chips do dia (Alice e Rafa) e notas do dia, iguais no Mês, na Semana e no Dia; respeitam os filtros. */
@@ -495,7 +506,7 @@ function planoMesCelHTML(dia, porDia, hoje, cfg) {
         <div class="pl-mc-n"><b>${n === 1 ? dt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '') : n}</b><span class="pl-mc-chips"><button class="pl-mc-nota" data-act="rafa-open" data-day="${dia}" title="Adicionar nota (as mesmas de Dias de Rafa)" aria-label="Adicionar nota">${icon('plus')}</button>${al}${verRafa ? planoRafaLetraHTML(dia) : ''}</span></div>
         ${topo}
       </div>
-      ${horarios.length || previstos.length ? `<div class="pl-mc-dir" data-pl-noclick>${previstos.map(pid => { const p = db.get('tempo_projects', pid); const ab = p && typeof agencyAbbr === 'function' ? agencyAbbr(agencyOf(p)) : ''; const nm = `${ab ? '[' + ab + '] ' : ''}${p?.name || 'Sem projeto'}`;
+      ${horarios.length || previstos.length ? `<div class="pl-mc-dir" data-pl-noclick>${previstos.map(pid => { const p = db.get('tempo_projects', pid); const cl = p ? clientOf(p)?.name : ''; const nm = `${cl ? '[' + cl + '] ' : ''}${p?.name || 'Sem projeto'}`;
         return `<div class="pl-mc-prev${plan[pid] && dia === hoje ? ' hoje' : ''}" style="--fc:${planoCor(pid === '_' ? null : pid)}" title="${esc(`Previsto: ${nm} · ${fmtH(plan[pid] * 36e5)}`)}"><span>${esc(nm)}</span><em>${fmtH(plan[pid] * 36e5)}</em></div>`; }).join('')}${horarios.map(h => `<div class="pl-mc-hr ${h.cls}" title="${esc(planoHora(h.ini) + ' ' + h.titulo)}"><b>${planoHora(h.ini)}</b> ${esc(h.titulo)}</div>`).join('')}</div>` : ''}
       ${pids.length && verTrab ? `<div class="pl-mc-reg"><div class="pl-mc-tt${!topo.trim() && !(horarios.length || previstos.length) ? ' sem-linha' : ''}"><span>Tempo trabalhado</span><em>${fmtH(tot * 36e5)}</em></div>${proj}</div>` : ''}
     </div>
@@ -560,6 +571,7 @@ function planoDiaHTML(dia, porDia) {
 }
 
 VIEWS.plano = () => {
+  PLANO.desenhando = Date.now();   // a rolagem que o redesenho provocar não é guardada
   if (!window.__plZoomT || !PL_ALT) PL_ALT = Math.max(16, Math.min(160, Number(db.setting('planoZoom', 44)) || 44));
   if (typeof rafaAutoPreencher === 'function') rafaAutoPreencher();
   const lista = planoProjetos(); const cfg = planoCfg(); const modo = planoModo();
@@ -611,8 +623,14 @@ function planoGradeRolar(semana = false, irHoje = false) {
     else if (alvo) { sc.scrollLeft = alvo.offsetLeft - regua - 4; PLANO.semAnc = { dia: alvo.dataset.plCol, dx: 0 }; }
     requestAnimationFrame(() => requestAnimationFrame(() => { sc.style.scrollSnapType = ''; }));
   }
-  if (!sc._plScroll) { ['wheel', 'pointerdown', 'touchstart', 'keydown'].forEach(ev => sc.addEventListener(ev, () => { sc._usuario = Date.now(); }, { passive: true })); }
+  // sinais de que é VOCÊ rolando: roda/trackpad, toque, teclado, ou clicar na própria barra de rolagem. Clicar num bloco
+  // não conta (o clique redesenha a tela, e a rolagem que o redesenho provoca era guardada como se fosse sua).
+  if (!sc._plScroll) {
+    ['wheel', 'touchstart', 'keydown'].forEach(ev => sc.addEventListener(ev, () => { sc._usuario = Date.now(); }, { passive: true }));
+    sc.addEventListener('pointerdown', (e) => { if (e.target === sc) sc._usuario = Date.now(); }, { passive: true });
+  }
   if (!sc._plScroll) { sc._plScroll = true; sc.addEventListener('scroll', () => {
+    if (PLANO.desenhando && Date.now() - PLANO.desenhando < 250) return;   // rolagem provocada pelo redesenho
     PLANO.gradeTop = sc.scrollTop;
     // só guarda a posição quando é VOCÊ rolando (roda do mouse, trackpad, toque, teclado, arrastar a barra) — rolagens
     // que o navegador faz sozinho ao redesenhar ou encaixar nas segundas não contam
@@ -634,7 +652,13 @@ function planoMesRolar(forcarHoje = false) {
     const c = PLANO.mesAnc ? sc.querySelector(`.pl-mc[data-dia="${PLANO.mesAnc.dia}"]`) : null;
     sc.scrollTop = c ? c.offsetTop + PLANO.mesAnc.dy : PLANO.mesTop;
   }
+  if (!sc._plScroll) {
+    ['wheel', 'touchstart', 'keydown'].forEach(ev => sc.addEventListener(ev, () => { sc._usuario = Date.now(); }, { passive: true }));
+    sc.addEventListener('pointerdown', (e) => { if (e.target === sc) sc._usuario = Date.now(); }, { passive: true });
+  }
   if (!sc._plScroll) { sc._plScroll = true; sc.addEventListener('scroll', () => {
+    if (PLANO.desenhando && Date.now() - PLANO.desenhando < 250) return;
+    if (!(sc._usuario && Date.now() - sc._usuario < 1500)) return;   // só a rolagem que você faz
     PLANO.mesTop = sc.scrollTop;
     const c = [...sc.querySelectorAll('.pl-mc')].find(x => x.offsetTop + x.offsetHeight > sc.scrollTop);
     if (c) PLANO.mesAnc = { dia: c.dataset.dia, dy: sc.scrollTop - c.offsetTop };
@@ -792,7 +816,7 @@ ACTIONS['pl-encaixar'] = (el) => {
     if (d.modo === 'move') d.el.style.transform = `translateX(${dx}px)`;
     d.grupo.forEach(o => { o.style.transform = `translate(${dx}px, ${(a - d.ini) * PL_ALT}px)`; o.classList.add('arrastando'); });
     const hh = (h) => planoHora(h).replace(':', 'h').replace(/h00$/, 'h');
-    tip.textContent = d.modo === 'top' ? `Novo início: ${hh(a)}` : d.modo === 'bot' ? `Novo fim: ${hh(b)}` : `Novo horário: ${hh(a)}–${hh(b)}`;
+    tip.textContent = d.kind === 'prazo' ? `Entrega: ${hh(a)}` : d.modo === 'top' ? `Novo início: ${hh(a)}` : d.modo === 'bot' ? `Novo fim: ${hh(b)}` : `Novo horário: ${hh(a)}–${hh(b)}`;
     tip.dataset.sub = `${fmtH((b - a) * 36e5)}${d.modo === 'move' ? (['plano', 'bloq', 'todo'].includes(d.kind) ? ' · para o lado: outro dia ou outra faixa' : ' · para o lado: outra faixa') : ''}`;
     tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 12) + 'px';
   });
@@ -804,7 +828,7 @@ ACTIONS['pl-encaixar'] = (el) => {
     let dia = x.dia; let faixa = null;
     const col = x.modo === 'move' ? document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-pl-col]') : null;
     x.el.style.pointerEvents = ''; x.el.style.transform = '';
-    if (col && col.dataset.plCol !== x.dia && ['plano', 'bloq', 'todo'].includes(x.kind)) dia = col.dataset.plCol;
+    if (col && col.dataset.plCol !== x.dia && ['plano', 'bloq', 'todo', 'prazo'].includes(x.kind)) dia = col.dataset.plCol;
     else if (col && col.dataset.plCol === x.dia && x.el.dataset.fk && x.el.dataset.lane !== '') {   // mesmo dia, outra terça parte: troca a faixa só deste item
       const r = col.querySelector('.pl-grade')?.getBoundingClientRect() || col.getBoundingClientRect();
       const l = Math.max(0, Math.min(2, Math.floor((e.clientX - r.left) / (r.width / 3))));
@@ -889,6 +913,10 @@ ACTIONS['pl-encaixar'] = (el) => {
     } else if (x.kind === 'todo') {
       const n = db.get('tempo_notices', x.el.dataset.id);
       if (n) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), due: `${dia}T${planoHora(a)}`, end: b < 24 ? planoHora(b) : null, semHora: false } }, true);
+    } else if (x.kind === 'prazo') {
+      const t = db.get('tempo_tasks', x.el.dataset.id);
+      if (t) { if (dia !== t.deadline) changeTaskDeadline(t, dia, 'Movido no calendário'); db.update('tempo_tasks', t.id, { deadline_time: planoHora(a) }, true); }
+      b = a;
     } else if (x.kind === 'bloq') {
       db.setSetting('planoBloqueios', planoBloqueios().map(bq => bq.id === x.el.dataset.id ? { ...bq, dia, ini: a, fim: b } : bq));
     }
