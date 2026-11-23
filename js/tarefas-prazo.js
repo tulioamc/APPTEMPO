@@ -194,10 +194,12 @@ function tkMotor(agora = new Date(), dias = 120) {
   const diaDe = (dia, h) => new Date(new Date(dia + 'T00:00:00').getTime() + h * 36e5);
   const fimExp = (dia) => diaDe(dia, cfg.fim);
   // 1) itens
-  const ativos = projects().filter(p => !p.archived && ['todo', 'active'].includes(statusCat(p.status_id)));
+  const ativos = projects().filter(p => !p.archived && ['todo', 'active'].includes(statusCat(p.status_id)) && !statusParado(p.status_id));
   const itens = [];
   ativos.forEach(p => {
-    const abertas = db.where('tempo_tasks', t => t.project_id === p.id && !t.parent_id && !['done', 'cancelled'].includes(statusCat(t.status_id)));
+    const todas = db.where('tempo_tasks', t => t.project_id === p.id && !t.parent_id && !['done', 'cancelled'].includes(statusCat(t.status_id)));
+    const abertas = todas.filter(t => !statusParado(t.status_id));   // esperando cliente/aprovação: fora da fila
+    if (todas.length && !abertas.length) return;
     if (abertas.length) abertas.forEach(t => {
       const pv = tkPrev(t); const feito = taskMs(t.id) / 60e3;
       const prevSim = pv.manual ? pv.min * H.fator : pv.min;

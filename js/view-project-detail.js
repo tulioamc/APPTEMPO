@@ -89,13 +89,14 @@ function pdTasks(p) {
   </div>`;
   };
   return `${typeof tkResolverBarraHTML === 'function' ? tkResolverBarraHTML(p.id) : ''}<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px"><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
-  <div class="panel"><div class="panel-b tight">${tks.length ? tks.map(t => row(t) + subtasksOf(t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}
+  <div class="panel tk-lista"><div class="panel-b tight">${tks.length ? tks.map(t => row(t) + subtasksOf(t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}
   <form class="tk-nova" data-form="add-task"><span class="tk-nova-i">${icon('plus')}</span><input class="tk-in grow" name="name" placeholder="Nova tarefa (Enter para adicionar)" aria-label="Nova tarefa"></form></div></div>`;
 }
 const TK_ABERTAS = new Set();
 /* Quanto falta para o prazo da tarefa: "Hoje, em 03h21" / "Amanhã" / "2 dias" / "Atrasada 1 dia". */
 function tkPrazoRel(t) {
-  if (!t.deadline || statusCat(t.status_id) === 'done') return null;
+  if (!t.deadline || ['done', 'cancelled'].includes(statusCat(t.status_id))) return null;
+  if (typeof statusParado === 'function' && statusParado(t.status_id)) return { txt: db.get('tempo_status_options', t.status_id)?.name || 'Parado', c: '' };
   const hoje = ymd(new Date()); const n = Math.round((new Date(t.deadline + 'T12:00:00') - new Date(hoje + 'T12:00:00')) / 864e5);
   if (n < 0) return { txt: `Atrasada ${-n} dia${n < -1 ? 's' : ''}`, c: 'late' };
   if (n === 0) {

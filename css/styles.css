@@ -1803,7 +1803,6 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .tk-nova .tk-in { font-size: 1.05rem; margin-left: 0; }
 .tk-nova-i { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 5px; background: var(--accent); color: #fff; flex: none; }
 .tk-nova-i svg { width: 15px; height: 15px; }
-@media (max-width: 860px) { .tk-l { grid-template-columns: 1fr auto 110px 56px; } .tk-resp, .tk-acoes { display: none; } }
 .tk-data input:focus, .tk-hora input:focus { opacity: 1; background: var(--surface); border: 1px solid var(--accent); border-radius: 6px; font: inherit; color: var(--fg); }
 .tk-st .combo-btn .tag { font-size: .92rem; padding: 5px 14px; }
 
@@ -1842,3 +1841,21 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .pl-grade .pl-sel { outline: 2px solid var(--accent) !important; outline-offset: 1px; z-index: 50 !important; }
 .pl-reorg { border: 1px solid var(--line); background: var(--surface-1, #fff); border-radius: 5px; font-size: .8em; line-height: 1; padding: 2px 5px; cursor: pointer; color: var(--fg-3); margin-right: 4px; }
 .pl-reorg:hover { color: var(--accent); border-color: var(--accent); }
+/* Tarefas dentro da janela do projeto (estreita): tudo menor e cabendo */
+.tk-lista { container-type: inline-size; }
+@container (max-width: 900px) {
+  .tk-l { grid-template-columns: minmax(110px, 1fr) 50px 138px 122px 98px 42px 40px; gap: 8px; padding: 9px 10px 9px 16px; min-height: 50px; }
+  .tk-nome .n { font-size: .98rem; }
+  .tk-dep { font-size: .72rem; }
+  .tk-resp { font-size: .82rem; }
+  .tk-st .combo-btn .tag { font-size: .8rem; padding: 3px 9px; }
+  .tk-t1, .tk-t2 { padding-left: 18px; gap: 4px; }
+  .tk-t1 b, .tk-prev { font-size: .86rem; }
+  .tk-t1 i, .tk-t2 i { font-size: .68rem; }
+  .tk-prev, .tk-prev.sug { width: 58px; }
+  .tk-dv { font-size: .86rem; }
+  .tk-rel { font-size: .7rem; }
+  .tk-nova { padding: 10px 16px; }
+}
+@container (max-width: 640px) { .tk-l { grid-template-columns: minmax(100px, 1fr) 120px 128px 104px 40px; } .tk-resp, .tk-hora { display: none; } }
+.tk.tk-foco { background: color-mix(in oklab, var(--accent) 10%, transparent); transition: background .3s; }

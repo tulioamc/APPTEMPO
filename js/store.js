@@ -118,7 +118,7 @@ const db = {
   where(t, fn) { return this.data[t].filter(fn); },
   insert(t, row, silent) {
     const r = { id: uid(), created_at: nowISO(), ...row };
-    if (t === 'tempo_tasks' && !r.owner) r.owner = 'Tulio';   // responsável padrão de tarefa nova
+    if (t === 'tempo_tasks' && !r.owner) r.owner = 'Túlio';   // responsável padrão de tarefa nova
     if (t === 'tempo_tasks' && !r.work_type_id && r.project_id) {   // tarefa nova herda o tipo de trabalho do projeto (ou da tarefa mãe)
       const mae = r.parent_id ? (this.data.tempo_tasks || []).find(x => x.id === r.parent_id) : null;
       const pj = (this.data.tempo_projects || []).find(x => x.id === r.project_id);

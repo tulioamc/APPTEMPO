@@ -125,7 +125,12 @@ function projectTable(list) {
   if (!list.length) return `<div class="empty">${icon('search')}<b>Nenhum projeto com esses filtros</b><button class="btn sm" data-act="flt-clear" data-ns="proj">Limpar filtros</button></div>`;
   return gridTable({ id: 'projects', cols: PCOLS, rows: list, defHidden: DEFAULT_PHIDDEN, defSort: { key: 'deadline', dir: 1 }, rowAttrs: p => `data-act="proj-open" data-id="${p.id}"`, rowById: (id) => db.get('tempo_projects', id) });
 }
-ACTIONS['proj-open'] = (el) => openProject(el.dataset.id, el.dataset.tab || 'time');
+ACTIONS['proj-open'] = (el) => {
+  const tk = el.dataset.tk;   // bloco de tarefa no Calendário: abre o projeto já na tarefa, aberta e destacada
+  if (tk && typeof TK_ABERTAS !== 'undefined') TK_ABERTAS.add(tk);
+  openProject(el.dataset.id, el.dataset.tab || 'time');
+  if (tk) setTimeout(() => { const r = document.querySelector(`[data-pd="tname"][data-id="${tk}"]`)?.closest('.tk'); if (r) { r.scrollIntoView({ block: 'center' }); r.classList.add('tk-foco'); setTimeout(() => r.classList.remove('tk-foco'), 2000); } }, 120);
+};
 function projectBoard(list) {
   return `<div class="kanban">${statuses('work').map(s => {
     const items = list.filter(p => p.status_id === s.id);

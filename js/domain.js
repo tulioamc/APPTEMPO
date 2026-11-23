@@ -222,12 +222,16 @@ function setTaskStatus(t, statusId) {
 /* Fluxo pré-montado de vídeo: cada etapa com seu responsável e as dependências entre elas. */
 const VIDEO_FLOW = [
   { key: 'roteiro', name: 'Roteiro', owner: 'Roteirista', after: [] },
-  { key: 'conceito', name: 'Conceito (KV)', owner: 'Tulio', after: ['roteiro'] },
-  { key: 'storyboard', name: 'Storyboard', owner: 'Tulio', after: ['conceito'] },
+  { key: 'conceito', name: 'Conceito (KV)', owner: 'Túlio', after: ['roteiro'] },
+  { key: 'storyboard', name: 'Storyboard', owner: 'Túlio', after: ['conceito'] },
   { key: 'locucao', name: 'Locução', owner: 'Locutor', after: ['conceito'] },
-  { key: 'animacao', name: 'Animação', owner: 'Tulio', after: ['storyboard', 'locucao'] },
-  { key: 'sonorizacao', name: 'Sonorização', owner: 'Tulio', after: ['animacao'] },
+  { key: 'animacao', name: 'Animação', owner: 'Túlio', after: ['storyboard', 'locucao'] },
+  { key: 'sonorizacao', name: 'Sonorização', owner: 'Túlio', after: ['animacao'] },
 ];
+/* Status "parado": esperando outra pessoa ou pausado (Aguardando cliente, Enviado, Aprovação, Stand by). Não entra no
+   planejamento e não fica "atrasado". */
+const STATUS_PARADO_RE = /aguardando|enviado|aprova|stand ?by|pausad/i;
+function statusParado(id) { const s = db.get('tempo_status_options', id); return !!s && s.category === 'active' && STATUS_PARADO_RE.test(s.name || ''); }
 /* Prazo da tarefa criada por último no projeto (tarefa nova começa com ele). */
 function ultimoPrazoDoProjeto(pid) {
   const t = db.where('tempo_tasks', x => x.project_id === pid && x.deadline).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
