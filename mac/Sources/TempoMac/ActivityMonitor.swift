@@ -195,10 +195,36 @@ final class ActivityMonitor {
         return Context(app: name, bundle: bundle, doc: doc, folder: folder)
     }
 
-    /// Contexto de reunião: o app da frente com o "site/arquivo" Reunião — o mesmo formato do Google Meet no Chrome.
+    /// Contexto de reunião. Se alguma aba do Chrome (mesmo atrás, em outra janela) está numa chamada — Meet, Zoom,
+    /// Teams —, a reunião é do Chrome; senão, do app da frente. O "site/arquivo" é sempre "Reunião", como o Meet no Chrome.
     private func reuniaoContext() -> Context {
+        if let site = chamadaNoChrome() { return Context(app: "Google Chrome", bundle: "com.google.Chrome", doc: site, folder: nil) }
         let app = NSWorkspace.shared.frontmostApplication
         return Context(app: app?.localizedName ?? "Chamada", bundle: app?.bundleIdentifier ?? "tempo.reuniao", doc: "Reunião", folder: nil)
+    }
+
+    private var chamadaCache: (at: Date, site: String?) = (.distantPast, nil)
+    /// Procura nas abas abertas do Chrome (todas as janelas) um endereço de chamada. Pergunta ao Chrome no máximo a cada 30 s;
+    /// na primeira vez o macOS pede permissão ("Tempo quer controlar o Google Chrome").
+    private func chamadaNoChrome() -> String? {
+        if Date().timeIntervalSince(chamadaCache.at) < 30 { return chamadaCache.site }
+        var achou: String? = nil
+        if NSRunningApplication.runningApplications(withBundleIdentifier: "com.google.Chrome").first != nil {
+            let script = "tell application \"Google Chrome\" to get URL of every tab of every window"
+            var err: NSDictionary?
+            if let out = NSAppleScript(source: script)?.executeAndReturnError(&err) {
+                var urls: [String] = []
+                func junta(_ d: NSAppleEventDescriptor) {
+                    if d.numberOfItems > 0 { for i in 1...d.numberOfItems { if let x = d.atIndex(i) { junta(x) } } }
+                    else if let t = d.stringValue { urls.append(t) }
+                }
+                junta(out)
+                let chamadas = ["meet.google.com/", "zoom.us/wc", "app.zoom.us", "teams.microsoft.com", "teams.live.com", "whereby.com", "discord.com/channels"]
+                if urls.contains(where: { u in chamadas.contains { u.contains($0) } && !u.hasSuffix("meet.google.com/") && !u.contains("meet.google.com/landing") }) { achou = "Reunião" }
+            }
+        }
+        chamadaCache = (Date(), achou)
+        return achou
     }
 
     /// Janela do app: a em foco; se o app não informa, a janela principal; se também não, a primeira aberta.
