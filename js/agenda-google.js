@@ -69,7 +69,7 @@ function aggAplicar(editados) {
       const h = Math.max(0.25, (fim - ini) / 36e5);
       const pins = planoPins().filter(p => !(p.pid === pid && (p.dia === diaAntes || p.dia === dia)));
       pins.push({ id: uid(), dia, pid, ini: hIni, h, google: true });
-      db.setSetting('planoPins', pins); n++;
+      planoPinsSalvar(pins); n++;
     }
   });
   if (n) { toast(`${n} horário${n > 1 ? 's' : ''} mudado${n > 1 ? 's' : ''} no Google Agenda ${n > 1 ? 'vieram' : 'veio'} para o Tempo`); db.emit(); }

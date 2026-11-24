@@ -505,7 +505,7 @@ function bankSummaryHTML(entity) {
       <span><input type="checkbox" data-on="bank-sel" data-id="${t.id}" ${BANK.sel && BANK.sel[t.id] ? 'checked' : ''} aria-label="Selecionar lançamento"></span>
       <span class="mono small">${fmtDateShort(t.posted_on)}</span>
       <span class="bn" title="${esc(info?.nome || k)}">${esc(k)}${alias(k) ? ` <span class="faint">· ${esc(alias(k))}</span>` : ''} <button class="bank-cat-btn faint small" data-act="bank-alias" data-cp="${esc(k)}" title="Dar apelido">✎</button></span>
-      <span class="mono small" style="color:${t.scope === 'interna' ? 'var(--accent)' : t.flow === 'in' ? 'var(--ok)' : 'var(--danger)'}">${dotHTML(t.scope === 'interna' ? '#2563eb' : t.flow === 'in' ? '#22a06b' : '#d64545', t.scope === 'interna' ? 'Interno' : t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
+      <span class="mono small" style="color:${t.scope === 'interna' ? 'var(--accent)' : t.flow === 'in' ? 'var(--ok)' : 'var(--danger)'}">${dotHTML(t.scope === 'interna' ? '#2563eb' : t.flow === 'in' ? COR_OK : '#d64545', t.scope === 'interna' ? 'Interno' : t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
       <span class="small muted">${bankMethod(t)}</span>
       <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
       <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">${catTag(cat)}${autoCat[k] === cat ? ' <span class="faint small">sugerido</span>' : ''}</button>`
@@ -549,7 +549,7 @@ function bankSummaryHTML(entity) {
   const tabs = `<div class="seg" style="margin-bottom:12px;flex-wrap:wrap">${Object.entries(views).map(([k, [l]]) => `<button class="${cur === k ? 'on' : ''}" data-act="bank-rep" data-v="${k}">${l}</button>`).join('')}</div>`;
   const report = `<div class="panel bank-report"><div class="panel-h"><h3 class="row" style="gap:6px;align-items:center;flex-wrap:wrap">Relatório de <select data-on="bank-rmonth" class="input" style="width:auto;font:inherit;font-weight:600;padding:4px 8px">${[...new Set([ym, ...(BANK.all[entity] || []).filter(t => t.posted_on).map(t => t.posted_on.slice(0, 7))])].sort().reverse().map(m => `<option value="${m}" ${m === ym ? 'selected' : ''}>${rbLabel(m)}</option>`).join('')}</select></h3></div><div class="panel-b"><label class="row" style="gap:6px;margin-bottom:10px;align-items:center"><input type="checkbox" data-on="bank-reemb" ${BANK.reemb === true ? 'checked' : ''}> Mostrar reembolsos no relatório</label>${tabs}${views[cur][1]()}</div></div>`;
   const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
-  const GREEN = '#22a06b', RED = '#d64545';
+  const GREEN = COR_OK, RED = '#d64545';
   const fOn = bankFilterOn() || BANK.fOpen;
   if (BANK.cmp) return `${bar}${compareHTML(entity)}`;
   const inRep = bankInReportHTML(entity, ym, inBase, (t) => isExt(t) || (BANK.reemb !== true && isReimb(t)));
@@ -642,7 +642,7 @@ async function bankCnpjLookup(doc) {
 // Sugestão: primeiro pela atividade da empresa (CNPJ), depois pelo nome.
 // Meio de pagamento pela origem do lançamento (conta de cartão, memo do Pix, etc.).
 const METHODS = ['Crédito', 'Débito', 'Pix', 'Outro'];
-const GREEN = '#22a06b', RED = '#d64545', PF_C = '#2E43D6', PJ_C = '#b45309';
+const GREEN = COR_OK, RED = '#d64545', PF_C = '#2E43D6', PJ_C = '#b45309';
 const CHART_PAL = ['#2E43D6', '#22a06b', '#d64545', '#b45309', '#7c3aed', '#0ea5a4', '#db2777', '#64748b', '#84cc16', '#f59e0b'];
 const CAT_COLORS = ['#B9C8F5', '#A8DCC4', '#F5B5B5', '#F2D39B', '#D2BEF5', '#A6E3E1', '#F7C2DA', '#C9D1DC', '#D7EFA6', '#F8E08E', '#B7D9F7', '#E8C79B', '#C7CBFA', '#B6E2C6', '#F1B3C0', '#A7E6DC', '#E3B8F5', '#F2D27A', '#A5EDEF', '#FBC7A4', '#C3CAD6', '#CFE7A0'];
 const chartCat = (k) => exColor(exKeyOf(k));   // mesma cor que o tipo tem em Despesas
@@ -894,7 +894,7 @@ CHANGES['bank-cmp-add'] = (el) => { const v = el.value; if (!v) return; const l 
 ACTIONS['bank-cmp-rm'] = (el) => { const v = el.dataset.k; const l = cmpMonthsOf(); if (l.length > 1) BANK.cmpList = l.filter(m => m !== v); render(); };
 // Comparador: quantos meses quiser (até 6), lado a lado, com números, barras e tabela.
 function compareHTML(entity) {
-  const GREEN = '#22a06b', RED = '#d64545';
+  const GREEN = COR_OK, RED = '#d64545';
   const months = [...new Set((BANK.all[entity] || []).filter(t => t.scope !== 'interna' && t.posted_on).map(t => t.posted_on.slice(0, 7)))].sort().reverse();
   const L = cmpMonthsOf();
   const col = (i) => CMP_COLS[i % CMP_COLS.length];
@@ -904,7 +904,7 @@ function compareHTML(entity) {
   const diff = (a, b, inverse) => {
     const d = a - b, pct = b ? Math.round(d / Math.abs(b) * 100) : null;
     const good = inverse ? d <= 0 : d >= 0;
-    return `<span style="color:${d === 0 ? 'var(--fg-2)' : good ? GREEN : RED};font-weight:600">${d === 0 ? '—' : (d > 0 ? '▲ ' : '▼ ') + fmtMoney0(Math.abs(d))}${pct !== null && d !== 0 ? ` <span class="small">(${pct > 0 ? '+' : ''}${pct}%)</span>` : ''}</span>`;
+    return `<span style="color:${d === 0 ? 'var(--fg-2)' : good ? 'var(--ok-ink)' : RED};font-weight:600">${d === 0 ? '—' : (d > 0 ? '▲ ' : '▼ ') + fmtMoney0(Math.abs(d))}${pct !== null && d !== 0 ? ` <span class="small">(${pct > 0 ? '+' : ''}${pct}%)</span>` : ''}</span>`;
   };
   const kpi = (label, key, inverse) => `<div class="kpi" style="flex:1;min-width:200px">
       <span class="k">${label}</span>

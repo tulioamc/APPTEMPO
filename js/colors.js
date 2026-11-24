@@ -9,6 +9,8 @@ const PRESET_COLORS = [
   ['#CFE59A', 'Lima'], ['#AEDFC0', 'Verde'], ['#A6DCD7', 'Turquesa'], ['#AFCBF3', 'Azul'],
   ['#C2C5F6', 'Índigo'], ['#D6C1F2', 'Roxo'], ['#F2BAD4', 'Rosa'], ['#F2B3AC', 'Vermelho']
 ];
+/* O verde de concluído/positivo do app inteiro (24/11). Texto verde sobre fundo claro: var(--ok-ink). */
+const COR_OK = '#77DB89';
 const LEGACY_COLOR = { gray: '#D9DCE2', brown: '#E6CDB9', orange: '#F7C6A0', yellow: '#F4DE8C', green: '#AEDFC0', blue: '#AFCBF3', purple: '#D6C1F2', pink: '#F2BAD4', red: '#F2B3AC', teal: '#A6DCD7', lime: '#CFE59A', indigo: '#C2C5F6' };
 const COLORS = PRESET_COLORS.map(c => c[0]);
 const COLOR_NAMES = Object.fromEntries(PRESET_COLORS);

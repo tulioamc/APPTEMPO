@@ -42,10 +42,20 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 /* Desfazer (Ctrl+Z / ⌘Z): cada alteração de dados vira uma operação inversa na pilha.
    Configurações (tempo_settings) ficam de fora: são preferências de tela, não lançamentos. */
 const UNDO_SKIP = new Set(['tempo_settings', 'tempo_notices', 'tempo_reminders', 'tempo_status_history']);
-const UNDO_MAX = 60;
+/* Do que fica de fora, entra no desfazer só o que é trabalho de planejamento: blocos fixados, bloqueios, ajustes de rotina e
+   de dia, faixas, entregas (configurações) e to-dos. Mexer no Calendário nunca é definitivo (24/11). */
+const UNDO_SETTINGS = new Set(['planoPins', 'planoBloqueios', 'planoRotinaDia', 'planoRotina', 'planoFaixaFix', 'planoDias', 'projEntregas']);
+const undoEntra = (t, row) => !UNDO_SKIP.has(t) || (t === 'tempo_settings' && !!row && UNDO_SETTINGS.has(row.key)) || (t === 'tempo_notices' && !!row && row.kind === 'todo');
+const UNDO_MAX = 80;
 const undoStack = [];
 let undoing = false;
-const undoPush = (op) => { if (undoing || UNDO_SKIP.has(op.t)) return; undoStack.push(op); if (undoStack.length > UNDO_MAX) undoStack.shift(); };
+/* Grupo: tudo o que uma ação do Calendário muda (ex.: prazo + histórico + bloco) vira UM passo do desfazer. */
+let undoGrupo = null;
+const undoPush = (op, row) => {
+  if (undoing || !undoEntra(op.t, row)) return;
+  if (undoGrupo) { op.g = undoGrupo.id; op.r = undoGrupo.rotulo; }
+  undoStack.push(op); if (undoStack.length > UNDO_MAX) undoStack.shift();
+};
 
 const CACHE_KEY = 'tempo-cache-v1';
 const db = {
@@ -130,30 +140,43 @@ const db = {
       const pj = (this.data.tempo_projects || []).find(x => x.id === r.project_id);
       r.work_type_id = mae?.work_type_id || pj?.work_type_id || null;
     }
-    this.data[t].push(r); undoPush({ k: 'insert', t, id: r.id }); this.push(this.adapter.insert(t, r)); if (!silent) this.emit(); return r;
+    this.data[t].push(r); undoPush({ k: 'insert', t, id: r.id }, r); this.push(this.adapter.insert(t, r)); if (!silent) this.emit(); return r;
   },
   update(t, id, patch, silent) {
     const r = this.get(t, id); if (!r) return null;
     const prev = {}; ['updated_at', ...Object.keys(patch)].forEach(k => { prev[k] = r[k] === undefined ? null : clone(r[k]); });
-    if (!(t === 'tempo_time_entries' && r.state === 'running')) undoPush({ k: 'update', t, id, prev });   // o cronômetro atualiza sozinho: não entra no desfazer
+    if (!(t === 'tempo_time_entries' && r.state === 'running')) undoPush({ k: 'update', t, id, prev }, r);   // o cronômetro atualiza sozinho: não entra no desfazer
     Object.assign(r, patch, { updated_at: nowISO() }); this.push(this.adapter.update(t, id, patch)); if (!silent) this.emit(); return r;
   },
   remove(t, id, silent) {
     const i = this.data[t].findIndex(r => r.id === id); if (i < 0) return;
-    undoPush({ k: 'remove', t, row: clone(this.data[t][i]) });
+    undoPush({ k: 'remove', t, row: clone(this.data[t][i]) }, this.data[t][i]);
     this.data[t].splice(i, 1); this.push(this.adapter.remove(t, id)); if (!silent) this.emit();
   },
-  /* Desfaz a última alteração. Devolve false se não há nada a desfazer. */
+  /* Desfaz a última alteração (ou o grupo inteiro de uma ação do Calendário). Devolve false se não há nada a desfazer. */
   undo() {
     const op = undoStack.pop(); if (!op) return false;
+    const grupo = [op]; while (op.g && undoStack.length && undoStack[undoStack.length - 1].g === op.g) grupo.push(undoStack.pop());
     undoing = true;
     try {
-      if (op.k === 'insert') { this.remove(op.t, op.id, true); }
-      else if (op.k === 'update') {
-        const r = this.get(op.t, op.id); if (r) { Object.assign(r, op.prev); this.push(this.adapter.update(op.t, op.id, op.prev)); }
-      } else if (op.k === 'remove') { this.data[op.t].push(op.row); this.push(this.adapter.insert(op.t, op.row)); }
+      grupo.forEach(o => {
+        if (o.k === 'insert') { this.remove(o.t, o.id, true); }
+        else if (o.k === 'update') {
+          const r = this.get(o.t, o.id); if (r) { Object.assign(r, o.prev); this.push(this.adapter.update(o.t, o.id, o.prev)); }
+        } else if (o.k === 'remove') { this.data[o.t].push(o.row); this.push(this.adapter.insert(o.t, o.row)); }
+      });
     } finally { undoing = false; }
     this.emit(); return true;
+  },
+  /* Rótulo do que o próximo desfazer desfaz (null se não há nada). */
+  desfazerRotulo() { const op = undoStack[undoStack.length - 1]; return op && op.r ? op.r : null; },   // só ações agrupadas (Calendário): o botão do cabeçalho nunca desfaz coisa de outra tela
+  /* Roda `fn` como UMA ação desfazível. Se `fn` der erro no meio, tudo o que ela já tinha mudado volta como estava. */
+  agrupar(rotulo, fn) {
+    if (undoGrupo) return fn();
+    undoGrupo = { id: uid(), rotulo }; const n0 = undoStack.length;
+    try { return fn(); }
+    catch (e) { const g = undoGrupo.id; undoGrupo = null; while (undoStack.length > n0 && undoStack[undoStack.length - 1].g === g) this.undo(); throw e; }
+    finally { undoGrupo = null; }
   },
   snapshot() { return clone(this.data); },
   restore(snap) { const d = this.empty(); TABLES.forEach(t => d[t] = Array.isArray(snap[t]) ? snap[t] : []); this.data = d; this.push(this.adapter.replaceAll(d)); this.emit(); },

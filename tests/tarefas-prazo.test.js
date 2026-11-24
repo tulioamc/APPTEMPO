@@ -2,7 +2,7 @@
 const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 const setup = () => {
-  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/planejamento.js', 'js/view-rafa.js', 'js/tarefas-prazo.js'],
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/plano-seguro.js', 'js/planejamento.js', 'js/view-rafa.js', 'js/tarefas-prazo.js'],
     ['db', 'planejar', 'tkMotor', 'tkSugestao', 'tkPrev', 'tkLerMin', 'tkFila'], { statusCat: (id) => String(id || '').replace(/^s-/, '') || undefined, VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {}, toast() {}, render() {}, go() {} });
   m.db.data = m.db.empty(); m.db.loaded = true;
   const st = (cat) => ({ id: 's-' + cat, kind: 'work', category: cat, name: cat });
@@ -48,4 +48,15 @@ test('fila única: uma tarefa por vez em todos os projetos, pela entrega; aviso 
   // o planejado do Calendário são esses blocos, com o nome da tarefa
   const dia = mo2.porDia['2026-11-24'].blocos;
   assert.ok(dia.some(b => b.tarefa === 'kv') && dia.every(b => b.fim <= 12 + 1e-9 || b.ini >= 14));
+});
+test('bloco fixado de outra tarefa não divide a tarefa: ela vai inteira para depois dele (só a rotina divide)', () => {
+  const m = setup();
+  m.db.data.tempo_projects = [proj('a')];
+  m.db.data.tempo_tasks = [tarefa('t1', 'a', { est_min: 120, deadline: '2026-11-30' }), tarefa('t2', 'a', { est_min: 60, deadline: '2026-11-30', order: 1 })];
+  // t2 fixada às 10h–11h na terça; t1 (2h) começaria 9h e seria cortada pelo bloco de t2
+  m.db.data.tempo_settings = [{ id: 'pp', key: 'planoPins', value: [{ id: 'p1', dia: '2026-11-24', pid: 'a', tid: 't2', ini: 10, h: 1 }] }];
+  const mo = m.tkMotor(new Date(2026, 10, 24, 9, 0), 10);
+  const b = mo.itens.t1.blocos;
+  assert.ok(b.every(x => !(x.dia === '2026-11-24' && x.ini < 10 && x.fim > 9)), 'não usa 9h–10h para depois continuar');
+  assert.equal(b[0].ini, 11);
 });

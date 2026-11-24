@@ -3,8 +3,8 @@ const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 
 const setup = () => {
-  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/planejamento.js', 'js/view-rafa.js'], ['db', 'planejar', 'planoProjetos', 'planoJanelas', 'planoEventos', 'planoFixosDoDia', 'rafaQuemAuto', 'rafaMarcar', 'VIEWS'],
-    { VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {}, toast() {}, render() {}, go() {} });
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/plano-seguro.js', 'js/planejamento.js', 'js/view-rafa.js'], ['db', 'planejar', 'planoProjetos', 'planoJanelas', 'planoEventos', 'planoFixosDoDia', 'rafaQuemAuto', 'rafaMarcar', 'VIEWS'],
+    { VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {}, statusCat: (id) => String(id || '').replace(/^s-/, '') || undefined, toast() {}, render() {}, go() {} });
   m.db.data = m.db.empty(); m.db.loaded = true;
   return m;
 };
@@ -30,6 +30,7 @@ test('segunda tem o bloco do Rafa; a tela abre', () => {
 test('bloco arrastado fica no horário escolhido e o resto se encaixa em volta', () => {
   const m = setup();
   const p1 = { id: 'a', name: 'A', deadline: '2026-11-30' }, p2 = { id: 'b', name: 'B', deadline: '2026-11-19' };
+  m.db.data.tempo_projects = [p1, p2];   // o bloco fixado só vale se o projeto existe (plano-seguro.js)
   m.db.setSetting('planoPins', [{ id: 'x', dia: '2026-11-17', pid: 'a', ini: 9, h: 2 }]);
   const { porDia } = m.planejar([{ p: p2, falta: 4, prazo: p2.deadline }, { p: p1, falta: 6, prazo: p1.deadline }], new Date(2026, 10, 17, 8, 0));
   const bl = porDia['2026-11-17'].blocos;

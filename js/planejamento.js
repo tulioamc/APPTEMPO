@@ -78,7 +78,7 @@ function planoInicioDia(dia, cfg = planoCfg()) {
   const manha = planoFixosDoDia(dia).filter(f => f[0] < cfg.inicio && f[1] <= cfg.inicio);
   return manha.length ? Math.min(cfg.inicio, Math.max(...manha.map(f => f[1]))) : cfg.inicio;
 }
-const planoPins = () => db.setting('planoPins', []) || [];
+/* planoPins / planoPinsSalvar (porta única dos blocos fixados) ficam em plano-seguro.js */
 /* Compromissos de fora: Google (servidor, 'agendaEventos') + Calendário da Apple (app do Mac, 'agendaEventosMac'),
    sem repetir o mesmo evento que chega pelos dois caminhos (mesmo id do iCal, ou mesmo título e início). */
 /* Cada conta (Gmail, brenda.ag, iCloud…) pode ser escondida na visualização do Calendário; escondida, continua ocupando o planejamento. */
@@ -176,8 +176,11 @@ function planoProjetos() {
    tarefa, dependências, entregas, horas livres e blocos fixados à mão. `lista` fica só por compatibilidade. */
 function planejar(lista, hoje = new Date(), dias = 60) {
   if (typeof tkMotor !== 'function') return planejarPorProjeto(lista, hoje, dias);   // sem a fila de tarefas (testes antigos)
-  const m = tkMotor(hoje, Math.max(dias, 60));
-  return { porDia: m.porDia, estouro: m.estouro };
+  try { const m = tkMotor(hoje, Math.max(dias, 60)); PLANO.erroMotor = null; return { porDia: m.porDia, estouro: m.estouro }; }
+  catch (e) {   // o cálculo quebrou (dado estranho): mostra o último plano que funcionou, em vez de apagar o Calendário
+    console.error('Plano:', e); PLANO.erroMotor = String(e?.message || e);
+    const u = typeof tkUltimoBom === 'function' ? tkUltimoBom() : null; return u ? { porDia: u.porDia, estouro: u.estouro } : { porDia: {}, estouro: [] };
+  }
 }
 
 /* Distribuição antiga, só por projeto (horas estimadas), usada quando a fila de tarefas não está carregada. */
@@ -268,14 +271,11 @@ function planoItensDoDia(dia, porDia) {
   planoFeitosDoDia(dia).forEach(f => it.push({ k: 'feito', a: f.ini, b: f.fim, f }));
   (porDia[dia]?.blocos || []).forEach(bl => it.push({ k: 'plano', a: bl.ini, b: bl.fim, bl }));
   // linha de entrega: cada tarefa aberta com prazo neste dia (na hora da entrega; sem hora = fim do expediente)
-  // entregas (deadlines) dos projetos ativos neste dia; e tarefa com hora de entrega própria
+  // entregas (deadlines) dos projetos ativos neste dia
   projects().filter(p => !p.archived && ['todo', 'active'].includes(statusCat(p.status_id))).forEach(p => (typeof projEntregas === 'function' ? projEntregas(p.id) : []).filter(e => e.dia === dia).forEach(e => {
     const h = planoHoraDe(e.hora || '19:00'); if (h != null) it.push({ k: 'prazo', a: h, b: h + 0.001, ent: e, p });
   }));
-  db.where('tempo_tasks', t => t.deadline === dia && t.deadline_time && !['done', 'cancelled'].includes(statusCat(t.status_id)) && !(typeof statusParado === 'function' && statusParado(t.status_id))).forEach(t => {
-    const h = planoHoraDe(t.deadline_time); if (h == null) return;
-    it.push({ k: 'prazo', a: h, b: h + 0.001, t });
-  });
+  // só as entregas (deadlines) viram linha; a hora de entrega de cada tarefa não aparece mais na grade (pedido do Tulio, 24/11)
   if (dia <= ymd(new Date())) { const pr = planoVsReal(dia); (pr?.blocos || []).filter(b => !b.ok && (dia < ymd(new Date()) || b.fim <= new Date().getHours() + new Date().getMinutes() / 60)).forEach(b => it.push({ k: 'naofeito', a: b.ini, b: b.fim, bl: b })); }
   const tipoFiltro = { fixo: 'rotina', todo: 'todos', todos: 'todos', feito: 'trabalho', plano: 'trabalho', prazo: 'trabalho', naofeito: 'naofeito' };
   return it.filter(x => x.b > x.a && (!tipoFiltro[x.k] || planoMostra(tipoFiltro[x.k])));
@@ -446,7 +446,7 @@ function planoLivres(dia, porDia) {
 function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0, cabecalho = true, semana = '' } = {}) {
   const cfg = planoCfg(); const v = porDia[dia]; const util = planoDiaUtil(dia); const hoje = ymd(new Date());
   const itens = planoFaixas(planoJuntaAgenda(planoRegistro15(planoItensDoDia(dia, porDia))), unico, dia).map(x => {
-    let h = planoItemHTML(x, dia, { alt, unico });
+    let h; try { h = planoItemHTML(x, dia, { alt, unico }); } catch (e) { console.error('Calendário: item com problema', x?.k, e); PLANO.itensRuins = (PLANO.itensRuins || 0) + 1; return ''; }
     if (x._choque) h = h.replace('class="', 'class="choque ').replace('data-tip="', 'data-tip="⚠ Bate no horário com outro item.&#10;');
     if (x._z) h = h.replace('style="', `style="z-index:${2 + x._z};`);
     const sk = x.k === 'plano' ? `p:${dia}:${x.bl.tid || x.bl.pid}:${x.bl.ini.toFixed(2)}` : x.k === 'todo' ? 't:' + x.e.id : '';
@@ -617,16 +617,16 @@ function planoDiaHTML(dia, porDia) {
    Barra = do começo ao fim da tarefa pelo planejamento (cor do cliente; verde se concluída). Deadline (entrega) = linha
    roxa no dia e hora; prazo da tarefa = bandeirinha. Dependências = setas. Arrastar a barra para os lados muda o prazo
    da tarefa em dias (o planejamento se reorganiza). */
-let PLG_W = 76; const PLG_ROW = 30;
+let PLG_W = 76; const PLG_ROW = 30; const PLG_MAX = 720;   // zoom máximo: ~60 px por hora, dá para ler tarefa de 30 min
 let PLG_DIAS = 21;   // quantos dias cabem na largura (refeito a cada desenho, conforme o zoom)
-const planoGanttIni = () => PLANO.ganttIni || planoDiaMais(planoSegunda(new Date()), 0);
+const planoGanttIni = () => PLANO.ganttIni || (PLG_W >= 300 ? ymd(new Date()) : planoSegunda(new Date()));   // zoom grande abre em hoje (a semana toda não cabe)
 function planoGanttX(t, ini) {   // Date|ms → px (horas de trabalho 8h–20h ocupam a largura do dia)
   const d = new Date(t); const di = daysBetween(ini, ymd(d)); const h = d.getHours() + d.getMinutes() / 60;
   return (di + Math.max(0, Math.min(1, (h - 8) / 12))) * PLG_W;
 }
 function planoGanttHTML() {
-  if (!window.__plgZoomT) PLG_W = Math.max(28, Math.min(220, Number(db.setting('planoGanttZoom', 76)) || 76));
-  PLG_DIAS = Math.max(7, Math.min(90, Math.ceil((((typeof window !== 'undefined' && window.innerWidth) || 1400) - 340) / PLG_W)));
+  if (!window.__plgZoomT) PLG_W = Math.max(28, Math.min(PLG_MAX, Number(db.setting('planoGanttZoom', 76)) || 76));
+  PLG_DIAS = Math.max(2, Math.min(90, Math.ceil((((typeof window !== 'undefined' && window.innerWidth) || 1400) - 340) / PLG_W)));
   const ini = planoGanttIni(); const fim = planoDiaMais(ini, PLG_DIAS); const hoje = ymd(new Date());
   let itens = {}; try { itens = (typeof tkMotor === 'function' ? tkMotor(new Date(), 120).itens : {}) || {}; } catch (e) {}
   const projs = db.all('tempo_projects').filter(p => !p.archived && ['todo', 'active'].includes(statusCat(p.status_id)) && tasksOf(p.id).length);
@@ -653,7 +653,10 @@ function planoGanttHTML() {
       if (a != null && b > 0 && a < W) {
         const l = Math.max(0, a), w = Math.max(10, Math.min(W, b) - l); const late = !!x?.aviso;
         pos[t.id] = { a: l, b: l + w, y: y + PLG_ROW / 2 };
-        barras.push(`<div class="plg-bar${ok ? ' ok' : ''}${late ? ' late' : ''}${parado ? ' parado' : ''}" data-plg="${t.id}" style="top:${y + 6}px;left:${l}px;width:${w}px;--cc:${cc};--ct:${typeof textOn === 'function' ? textOn(cc) : '#fff'}" data-tip="${esc(`${t.name} · ${p.name}${x?.ini && !ok ? `\nDo planejamento: ${fmtDate(ymd(x.ini))} ${planoHora(x.ini.getHours() + x.ini.getMinutes() / 60)} → ${fmtDate(ymd(x.fim))} ${planoHora(x.fim.getHours() + x.fim.getMinutes() / 60)}` : ''}${t.deadline ? `\nPrazo: ${fmtDate(t.deadline)}${t.deadline_time ? ' ' + t.deadline_time : ''}` : ''}${late ? '\n⚠ passa do prazo' : ''}${ok ? '\nConcluída' : '\nArraste para os lados para mudar o prazo (dias)'}`)}">${late ? '⚠ ' : ''}${esc(t.name)}</div>`);
+        const rotulo = `${late ? '⚠ ' : ''}${t.name}`; const cabe = w >= rotulo.length * 6.2 + 14;   // o nome só fica dentro se couber; senão vai ao lado, legível
+        const hh = (d) => planoHora(d.getHours() + d.getMinutes() / 60).replace(':', 'h').replace(/h00$/, 'h');
+        if (!cabe) marcas.push(`<span class="plg-bl${late ? ' late' : ''}" style="top:${y + 6}px;left:${l + w + 6}px">${esc(rotulo)}${PLG_W >= 300 && x?.ini && !ok ? `<i>${hh(x.ini)}–${hh(x.fim)}</i>` : ''}</span>`);
+        barras.push(`<div class="plg-bar${ok ? ' ok' : ''}${late ? ' late' : ''}${parado ? ' parado' : ''}${cabe ? '' : ' sem-texto'}" data-plg="${t.id}" style="top:${y + 6}px;left:${l}px;width:${w}px;--cc:${cc};--ct:${typeof textOn === 'function' ? textOn(cc) : '#fff'}" data-tip="${esc(`${t.name} · ${p.name}${x?.ini && !ok ? `\nDo planejamento: ${fmtDate(ymd(x.ini))} ${planoHora(x.ini.getHours() + x.ini.getMinutes() / 60)} → ${fmtDate(ymd(x.fim))} ${planoHora(x.fim.getHours() + x.fim.getMinutes() / 60)}` : ''}${t.deadline ? `\nPrazo: ${fmtDate(t.deadline)}${t.deadline_time ? ' ' + t.deadline_time : ''}` : ''}${late ? '\n⚠ passa do prazo' : ''}${ok ? '\nConcluída' : '\nArraste para os lados para mudar o prazo (dias)'}`)}">${cabe ? esc(rotulo) : ''}</div>`);
       }
       if (t.deadline && !ok) { const xd = planoGanttX(new Date(`${t.deadline}T${t.deadline_time || '19:00'}:00`), ini); if (xd >= 0 && xd <= W) marcas.push(`<span class="plg-flag" style="top:${y + 4}px;left:${xd - 5}px" title="Prazo da tarefa">${icon('flag')}</span>`); }
       y += PLG_ROW;
@@ -666,8 +669,9 @@ function planoGanttHTML() {
   const setas = []; projs.forEach(p => tasksOf(p.id).forEach(t => (Array.isArray(t.depends_on) ? t.depends_on : []).forEach(d => { const A = pos[d], B = pos[t.id]; if (!A || !B) return;
     const mx = Math.max(A.b + 6, B.a - 8); setas.push(`<path d="M${A.b} ${A.y} H${mx} V${B.y} H${B.a - 2}" />`); })));
   const H = Math.max(y, PLG_ROW * 3);
-  const cab = dias.map((d, i) => { const dd = new Date(d + 'T12:00:00'); const off = !planoDiaUtil(d); return `<div class="plg-dia${d === hoje ? ' hoje' : ''}${off ? ' off' : ''}" style="left:${i * PLG_W}px;width:${PLG_W}px"><span>${dd.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span><b>${dd.getDate()}</b></div>`; }).join('');
-  const fundo = dias.map((d, i) => `<div class="plg-col${d === hoje ? ' hoje' : ''}${!planoDiaUtil(d) ? ' off' : ''}" style="left:${i * PLG_W}px;width:${PLG_W}px"></div>`).join('');
+  const horas = PLG_W >= 300 ? [10, 12, 14, 16, 18].map(h => `<i class="plg-hh" style="left:${(h - 8) / 12 * 100}%">${h}h</i>`).join('') : '';
+  const cab = dias.map((d, i) => { const dd = new Date(d + 'T12:00:00'); const off = !planoDiaUtil(d); return `<div class="plg-dia${d === hoje ? ' hoje' : ''}${off ? ' off' : ''}${horas ? ' com-horas' : ''}" style="left:${i * PLG_W}px;width:${PLG_W}px"><span>${dd.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span><b>${dd.getDate()}</b>${horas}</div>`; }).join('');
+  const fundo = dias.map((d, i) => `<div class="plg-col${d === hoje ? ' hoje' : ''}${!planoDiaUtil(d) ? ' off' : ''}${PLG_W >= 200 ? ' hrs' : ''}" style="left:${i * PLG_W}px;width:${PLG_W}px;--hw:${(PLG_W / 12).toFixed(2)}px"></div>`).join('');
   const agora = (() => { const x = planoGanttX(Date.now(), ini); return x >= 0 && x <= W ? `<div class="plg-agora" style="left:${x}px"></div>` : ''; })();
   if (!projs.length) return '<div class="empty small">Nenhum projeto ativo com tarefas.</div>';
   return `<div class="plg"><div class="plg-esq"><div class="plg-cab-esq">Projeto · tarefa</div><div class="plg-nomes" style="height:${H}px">${linhas.join('')}</div></div>
@@ -682,10 +686,10 @@ ACTIONS['plg-nav'] = (el) => { const d = Number(el.dataset.d); PLANO.ganttIni = 
   document.addEventListener('pointermove', (e) => { if (!drag) return; const dx = e.clientX - drag.x0; if (Math.abs(dx) > 4) drag.moved = true; drag.el.style.left = (drag.l0 + Math.round(dx / PLG_W) * PLG_W) + 'px'; });
   document.addEventListener('pointerup', (e) => { if (!drag) return; const d = drag; drag = null; const n = Math.round((e.clientX - d.x0) / PLG_W); if (!d.moved || !n) { d.el.style.left = d.l0 + 'px'; return; }
     const t = db.get('tempo_tasks', d.el.dataset.plg); if (!t) return; const base = t.deadline || ymd(new Date());
-    const novo = planoDiaMais(base, n); db.update('tempo_tasks', t.id, { deadline: novo }); toast(`Prazo de “${t.name}”: ${fmtDate(novo)}`); });
+    const novo = planoDiaMais(base, n); planoMudar('Prazo movido', () => changeTaskDeadline(t, novo, 'Movido no Gantt'), `Prazo de “${esc(t.name)}”: ${fmtDate(novo)}`); });
 })();
 VIEWS.plano = () => {
-  PLANO.desenhando = Date.now();   // a rolagem que o redesenho provocar não é guardada
+  PLANO.itensRuins = 0; PLANO.desenhando = Date.now();   // a rolagem que o redesenho provocar não é guardada
   if (!window.__plZoomT || !PL_ALT) PL_ALT = Math.max(16, Math.min(160, Number(db.setting('planoZoom', 44)) || 44));
   if (typeof rafaAutoPreencher === 'function') rafaAutoPreencher();
   const lista = planoProjetos(); const cfg = planoCfg(); const modo = planoModo();
@@ -711,8 +715,8 @@ VIEWS.plano = () => {
     corpo = planoSemanaHTML(porDia);
   }
   const nota = `Planejado = suas tarefas abertas de todos os projetos, uma por vez, pela entrega mais perto e pelas dependências, com o tempo previsto de cada uma (até ${cfg.horasDia} h por dia útil). Cheio = planejado (mais claro = colocado pelo app; fixado à mão fica forte) · chip com bolinha = registrado · cinza = rotina · tracejado = compromisso (bloqueio ou Google Agenda). Arraste ou puxe as bordas do que não é registro; a janelinha mostra o horário novo.${semEst.length ? ` ${semEst.length} projeto(s) ativo(s) sem horas estimadas não entram.` : ''}`;
-  const html = `${estouro.length ? `<div class="panel" style="border-color:var(--warn)"><div class="panel-b small"><b>Não cabe no prazo:</b> ${estouro.map(x => `${esc(x.p.name)} (faltam ${fmtH(x.horas * 36e5)} até ${fmtDate(x.p.deadline)})`).join(' · ')}. Estique algum dia (+) ou mude o prazo.</div></div>` : ''}
-    <div class="panel"><div class="panel-h">${seg}${nav}${titulo ? `<h3>${esc(titulo)}</h3>` : ''}<span class="grow"></span>${planoFiltroHTML()}<button class="btn sm" data-act="pl-bloq">${icon('plus')} Bloqueio</button></div>
+  const html = `${PLANO.erroMotor ? `<div class="banner danger small row" style="margin:0 0 8px">${icon('alert')} Não consegui recalcular o plano agora; estou mostrando o último que funcionou. <span class="grow"></span><button class="btn sm" data-act="pl-saude">Ver</button></div>` : ''}${estouro.length ? `<div class="panel" style="border-color:var(--warn)"><div class="panel-b small"><b>Não cabe no prazo:</b> ${estouro.map(x => `${esc(x.p.name)} (faltam ${fmtH(x.horas * 36e5)} até ${fmtDate(x.p.deadline)})`).join(' · ')}. Estique algum dia (+) ou mude o prazo.</div></div>` : ''}
+    <div class="panel"><div class="panel-h">${seg}${nav}${titulo ? `<h3>${esc(titulo)}</h3>` : ''}<span class="grow"></span>${planoSaudeHTML()}${planoDesfazerHTML()}${planoFiltroHTML()}<button class="btn sm" data-act="pl-bloq">${icon('plus')} Bloqueio</button></div>
       <div class="panel-b">${corpo}<div class="small muted" style="margin-top:8px">${nota}</div></div></div>
     ${planoRotinaHTML()}`;
   // restaura a rolagem logo depois de desenhar (antes de o navegador mandar qualquer evento de rolagem da troca)
@@ -790,10 +794,10 @@ ACTIONS['pl-dia'] = (el) => {
   const m = { ...planoEsticados() }; const cfg = planoCfg();
   const v = Math.max(0, Math.min(14, (m[el.dataset.dia] ?? cfg.horasDia) + Number(el.dataset.d)));
   if (v === cfg.horasDia) delete m[el.dataset.dia]; else m[el.dataset.dia] = v;
-  db.setSetting('planoDias', m); render();
+  planoMudar('Horas do dia mudadas', () => db.setSetting('planoDias', m), false);
 };
 
-ACTIONS['pl-bloq-del'] = (el) => { db.setSetting('planoBloqueios', planoBloqueios().filter(b => b.id !== el.dataset.id)); render(); };
+ACTIONS['pl-bloq-del'] = (el) => planoMudar('Bloqueio removido', () => db.setSetting('planoBloqueios', planoBloqueios().filter(b => b.id !== el.dataset.id)));
 
 ACTIONS['pl-bloq'] = (el) => {
   const diaPre = el?.dataset?.dia || (planoModo() === 'dia' && PLANO.dia) || ymd(new Date());
@@ -807,8 +811,8 @@ ACTIONS['pl-bloq'] = (el) => {
     const h = (v) => { const [a, b] = String(v || '').split(':').map(Number); return a + (b || 0) / 60; };
     const ini = h($('#pb-i', l.box).value), fim = h($('#pb-f', l.box).value), dia = $('#pb-d', l.box).value;
     if (!dia || !(fim > ini)) return toast('Confira o dia e os horários.');
-    db.setSetting('planoBloqueios', [...planoBloqueios(), { id: uid(), dia, ini, fim, nome: $('#pb-n', l.box).value.trim() }]);
-    l.close(); render(); toast('Bloqueio marcado; o plano se reorganiza em volta');
+    const nome = $('#pb-n', l.box).value.trim(); l.close();
+    planoMudar('Bloqueio marcado', () => db.setSetting('planoBloqueios', [...planoBloqueios(), { id: uid(), dia, ini, fim, nome }]), 'Bloqueio marcado; o plano se reorganiza em volta');
   });
 };
 
@@ -816,7 +820,7 @@ ACTIONS['pl-bloq'] = (el) => {
 ACTIONS['pl-reorg'] = async (el) => {
   const dia = el.dataset.dia; const n = planoPins().filter(p => p.dia === dia).length;
   if (!await confirmBox({ title: 'Reorganizar o dia?', body: `Solta ${n} bloco${n > 1 ? 's' : ''} fixado${n > 1 ? 's' : ''} em ${fmtDate(dia)}. O app encaixa as tarefas de novo nas horas livres, pela entrega e pelas dependências.`, ok: 'Reorganizar' })) return;
-  db.setSetting('planoPins', planoPins().filter(p => p.dia !== dia)); db.emit(); render(); toast('Dia reorganizado');
+  planoMudar('Dia reorganizado', () => planoPinsSalvar(planoPins().filter(p => p.dia !== dia)));
 };
 ACTIONS['pl-livre'] = (el) => planoCriarMenu(el.dataset.dia, Number(el.dataset.a), Math.min(Number(el.dataset.b), Number(el.dataset.a) + 1));
 /* Empurrar para amanhã: blocos fixados de hoje (de agora em diante) e to-dos abertos de hoje com hora vão para o próximo dia útil, no mesmo horário. */
@@ -828,11 +832,15 @@ ACTIONS['pl-empurrar'] = async (el) => {
   if (!pins.length && !todos.length) return toast('Nada fixado nem to-do com hora para empurrar. O planejado já se reorganiza sozinho.');
   if (!await confirmBox({ title: 'Empurrar para amanhã?', body: `${pins.length ? `${pins.length} bloco(s) fixado(s)` : ''}${pins.length && todos.length ? ' e ' : ''}${todos.length ? `${todos.length} to-do(s)` : ''} vão para ${fmtDate(prox)}, no mesmo horário. O resto do planejado se reorganiza sozinho.`, ok: 'Empurrar' })) return;
   const ids = new Set(pins.map(p => p.id));
-  db.setSetting('planoPins', planoPins().map(p => ids.has(p.id) ? { ...p, dia: prox } : p));
-  todos.forEach(n => db.update('tempo_notices', n.id, { data: { ...n.data, due: prox + n.data.due.slice(10) } }, true));
-  db.emit(); render(); toast(`Levado para ${fmtDate(prox)}`);
+  planoMudar(`Levado para ${fmtDate(prox)}`, () => {
+    // os que chegam entram no mesmo horário; quem já estava lá e fica por baixo vai para depois (sem sobrepor)
+    const movidos = planoPins().filter(p => ids.has(p.id)).map(p => ({ ...p, dia: prox }));
+    const r = planoEmpurrar(planoPins().filter(p => !ids.has(p.id)), movidos.map(p => ({ dia: prox, ini: Number(p.ini), fim: Number(p.ini) + Number(p.h) })), planoOcupadosDoDia, { dias: [prox], proximoDia: planoProximoUtil });
+    planoPinsSalvar([...r.base, ...r.empurrados, ...movidos]);
+    todos.forEach(n => db.update('tempo_notices', n.id, { data: { ...n.data, due: prox + n.data.due.slice(10) } }, true));
+  });
 };
-ACTIONS['pl-unpin'] = (el) => { const ids = (el.closest('[data-pin]')?.dataset.pin || el.dataset.id || '').split(',').filter(Boolean); db.setSetting('planoPins', planoPins().filter(p => !ids.includes(p.id))); render(); };
+ACTIONS['pl-unpin'] = (el) => { const ids = (el.closest('[data-pin]')?.dataset.pin || el.dataset.id || '').split(',').filter(Boolean); planoMudar('Bloco solto', () => planoPinsSalvar(planoPins().filter(p => !ids.includes(p.id))), 'Bloco solto: o app encaixa de novo'); };
 /* Sexta: troca só esta sexta entre T e A no Dias de Rafa (fica como marcada à mão). */
 ACTIONS['pl-sexta'] = (el) => {
   const dia = el.dataset.dia; const novo = planoSextaRafa(dia) ? 'A' : 'T';
@@ -879,8 +887,8 @@ ACTIONS['pl-rot-del'] = (el) => { const ontem = (() => { const d = new Date(); d
   planoRotinaSalvar(planoRotina().flatMap(r => r.id !== el.dataset.id ? [r] : (r.desde || '') >= hoje ? [] : [{ ...r, ate: ontem }])); render(); toast('Bloco tirado da rotina de hoje em diante'); };
 ACTIONS['pl-rot-novo'] = () => { planoRotinaSalvar([...planoRotina(), { id: uid(), grupo: uid(), nome: 'Novo bloco', ini: 15, fim: 16, dias: [1, 2, 3, 4, 5], repete: 'semanal', rafa: '', flex: false, desde: ymd(new Date()), ate: null }]); render(); };
 /* Ajuste de um dia só: tirar o bloco fixo daquele dia, ou voltar ao padrão. */
-ACTIONS['pl-fixo-off'] = (el) => { const m = { ...planoRotinaDia() }; m[el.dataset.dia] = { ...(m[el.dataset.dia] || {}), [el.dataset.g]: { off: true } }; db.setSetting('planoRotinaDia', m); render(); toast('Tirado só deste dia'); };
-ACTIONS['pl-fixo-reset'] = (el) => { const m = { ...planoRotinaDia() }; const d = { ...(m[el.dataset.dia] || {}) }; delete d[el.dataset.g]; m[el.dataset.dia] = d; db.setSetting('planoRotinaDia', m); render(); };
+ACTIONS['pl-fixo-off'] = (el) => { const m = { ...planoRotinaDia() }; m[el.dataset.dia] = { ...(m[el.dataset.dia] || {}), [el.dataset.g]: { off: true } }; planoMudar('Tirado só deste dia', () => db.setSetting('planoRotinaDia', m)); };
+ACTIONS['pl-fixo-reset'] = (el) => { const m = { ...planoRotinaDia() }; const d = { ...(m[el.dataset.dia] || {}) }; delete d[el.dataset.g]; m[el.dataset.dia] = d; planoMudar('Voltou ao horário da rotina', () => db.setSetting('planoRotinaDia', m)); };
 
 /* To-do sem data → primeiro horário livre do dia (a partir de agora, se for hoje), com 30 min ou a estimativa. */
 ACTIONS['pl-encaixar'] = (el) => {
@@ -896,8 +904,7 @@ ACTIONS['pl-encaixar'] = (el) => {
   }
   if (achou == null) achou = Math.max(agora, planoInicioDia(dia));
   const fim = achou + dur; const hm = (h) => planoHora(h);
-  db.update('tempo_notices', n.id, { data: { ...(n.data || {}), due: `${dia}T${hm(achou)}`, end: fim < 24 ? hm(fim) : null, semHora: false } }, true);
-  db.emit(); toast(`Encaixado: ${fmtDate(dia)} ${hm(achou)}–${hm(fim)}`);
+  planoMudar('To-do encaixado', () => db.update('tempo_notices', n.id, { data: { ...(n.data || {}), due: `${dia}T${hm(achou)}`, end: fim < 24 ? hm(fim) : null, semHora: false } }, true), `Encaixado: ${fmtDate(dia)} ${hm(achou)}–${hm(fim)}`);
 };
 
 /* ---------- Arrastar e puxar (tudo que não é registro) ----------
@@ -958,28 +965,36 @@ ACTIONS['pl-encaixar'] = (el) => {
       const f = { ...planoFaixaFix(), [x.el.dataset.fk]: faixa }; db.setSetting('planoFaixaFix', f);
       if (Math.abs(e.clientY - x.y0) < 6) { db.emit(); render(); return; }   // só mudou de faixa
     }
-    // vários selecionados (Shift): todos andam o mesmo tanto, em hora e em dia, sem perguntas
+    // vários selecionados (Shift): todos andam o mesmo tanto, em hora e em dia, sem perguntas (mas nunca um por cima do outro)
     if (x.grupo.length) {
-      const dh = a - x.ini; const dd = Math.round((new Date(dia + 'T12:00:00') - new Date(x.dia + 'T12:00:00')) / 864e5);
-      const mais = (d0, n) => { const t = new Date(d0 + 'T12:00:00'); t.setDate(t.getDate() + n); return ymd(t); };
-      let pins = planoPins(); const novos = [];
-      [x.el, ...x.grupo].forEach(o => {
-        const ini = Number(o.dataset.ini) + dh, fim = Number(o.dataset.fim) + dh, nd = mais(o.dataset.dia, dd);
-        if (o.dataset.dg === 'plano') { const ids = (o.dataset.pin || '').split(',').filter(Boolean); pins = pins.filter(p => !ids.includes(p.id)); novos.push({ id: uid(), dia: nd, pid: o.dataset.pid, tid: o.dataset.tid || null, ini, h: fim - ini }); }
-        else if (o.dataset.dg === 'todo') { const n = db.get('tempo_notices', o.dataset.id); if (n) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), due: `${nd}T${planoHora(ini)}`, end: fim < 24 ? planoHora(fim) : null, semHora: false } }, true); }
+      const todos = [x.el, ...x.grupo];
+      let dh = a - x.ini; dh = Math.max(-Math.min(...todos.map(o => Number(o.dataset.ini))), Math.min(24 - Math.max(...todos.map(o => Number(o.dataset.fim))), dh));
+      const dd = Math.round((new Date(dia + 'T12:00:00') - new Date(x.dia + 'T12:00:00')) / 864e5);
+      PLANO.sel.clear();
+      planoMudar(`${todos.length} itens movidos`, () => {
+        let pins = planoPins(); const novos = [];
+        todos.forEach(o => {
+          const ini = Number(o.dataset.ini) + dh, fim = Number(o.dataset.fim) + dh, nd = planoDiaMais(o.dataset.dia, dd);
+          if (o.dataset.dg === 'plano') { const ids = (o.dataset.pin || '').split(',').filter(Boolean); pins = pins.filter(p => !ids.includes(p.id)); novos.push({ id: uid(), dia: nd, pid: o.dataset.pid, tid: o.dataset.tid || null, ini, h: fim - ini }); }
+          else if (o.dataset.dg === 'todo') { const n = db.get('tempo_notices', o.dataset.id); if (n) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), due: `${nd}T${planoHora(ini)}`, end: fim < 24 ? planoHora(fim) : null, semHora: false } }, true); }
+        });
+        const r = planoEmpurrar(pins, novos.map(n => ({ dia: n.dia, ini: n.ini, fim: n.ini + n.h })), planoOcupadosDoDia, { proximoDia: planoProximoUtil });
+        planoPinsSalvar([...r.base, ...r.empurrados, ...novos]);
       });
-      db.setSetting('planoPins', [...pins, ...novos]); PLANO.sel.clear(); db.emit(); render();
-      toast(`${x.grupo.length + 1} itens movidos`); return;
+      return;
     }
+    let novosPins = null, extra = '';   // bloco planejado: a lista nova de fixados sai depois das perguntas
     if (x.kind === 'plano') {
       const pid = x.el.dataset.pid, tid = x.el.dataset.tid || null; const cfg = planoCfg();
-      // só o bloco arrastado sai do lugar (os outros pedaços da mesma tarefa ficam)
+      // só o bloco arrastado sai do lugar (os outros pedaços da mesma tarefa ficam). A lista de fixados é sempre lida na hora:
+      // enquanto uma janela de pergunta está aberta, ela pode ter mudado.
       const meus = (x.el.dataset.pin || '').split(',').filter(Boolean);
-      let base = planoPins().filter(p => !meus.includes(p.id));
+      const outros = () => planoPins().filter(p => !meus.includes(p.id));
       // puxou por cima de outro pedaço da mesma tarefa no mesmo dia: junta num bloco só
       const mesma = (p) => p.dia === dia && (tid ? p.tid === tid : (p.pid === pid && !p.tid));
-      const junta = base.filter(p => mesma(p) && Number(p.ini) <= b + 0.01 && Number(p.ini) + Number(p.h) >= a - 0.01);
-      if (junta.length) { a = Math.min(a, ...junta.map(p => Number(p.ini))); b = Math.max(b, ...junta.map(p => Number(p.ini) + Number(p.h))); base = base.filter(p => !junta.includes(p)); }
+      const junta = outros().filter(p => mesma(p) && Number(p.ini) <= b + 0.01 && Number(p.ini) + Number(p.h) >= a - 0.01);
+      if (junta.length) { a = Math.min(a, ...junta.map(p => Number(p.ini))); b = Math.max(b, ...junta.map(p => Number(p.ini) + Number(p.h))); }
+      const semJunta = () => outros().filter(p => !junta.some(j => j.id === p.id));
       let partes = [{ dia, ini: a, fim: b }];
       // passou por cima da rotina: em paralelo ou dividir em volta dela? (juntando pedaços, fica um bloco só)
       const bate = junta.length ? [] : planoFixosDoDia(dia).filter(f => f[0] < b - 1e-6 && f[1] > a + 1e-6);
@@ -1000,51 +1015,46 @@ ACTIONS['pl-encaixar'] = (el) => {
       // passou do fim do expediente: continua no próximo dia útil?
       const ult = partes[partes.length - 1];
       if (ult && ult.fim > cfg.fim + 1e-6 && ult.ini < cfg.fim && typeof choiceBox === 'function') {
-        const prox = (() => { const n = new Date(dia + 'T12:00:00'); do { n.setDate(n.getDate() + 1); } while (!planoDiaUtil(ymd(n))); return ymd(n); })();
+        const prox = planoProximoUtil(dia);
         const resto = ult.fim - cfg.fim;
         const v = await choiceBox({ title: `Passa das ${planoHora(cfg.fim).replace(':00', 'h')}`, body: `Sobram ${fmtH(resto * 36e5)} depois das ${planoHora(cfg.fim)}. Continuar em ${fmtDate(prox)} a partir das ${planoHora(cfg.inicio)}, num bloco separado?`, opts: [['prox', 'Sim, no próximo dia'], ['mesmo', 'Não, fica no mesmo dia']] });
         if (v === null) { render(); return; }   // Cancelar: o bloco volta para onde estava
         if (v === 'prox') { ult.fim = cfg.fim; partes.push({ dia: prox, ini: cfg.inicio, fim: cfg.inicio + resto }); }
       }
       // nunca deixa dois blocos fixados um em cima do outro: o arrastado fica onde você soltou e os fixados que ele cobre
-      // (no dia de destino) vão para logo depois dele, em cadeia, pulando a rotina. Os que não encostam ficam onde estão.
-      const empurrados = [];
-      partes.map(pt => pt.dia).filter((v, i, l) => l.indexOf(v) === i).forEach(dd => {
-        const fx = planoFixosDoDia(dd).slice().sort((p, q) => p[0] - q[0]);
-        const ocup = partes.filter(pt => pt.dia === dd).map(pt => [pt.ini, pt.fim]);
-        const outros = base.filter(p => p.dia === dd).sort((p, q) => Number(p.ini) - Number(q.ini));
-        outros.forEach(o => {
-          const h = Number(o.h); let ini = Number(o.ini);
-          for (let k = 0; k < 20; k++) {
-            const bate = ocup.find(([u, v]) => u < ini + h - 1e-6 && v > ini + 1e-6);
-            const rot = fx.find(z => z[0] < ini + h - 1e-6 && z[1] > ini + 1e-6);
-            if (bate) ini = bate[1]; else if (rot && ini !== Number(o.ini)) ini = rot[1]; else break;
-          }
-          if (Math.abs(ini - Number(o.ini)) > 1e-6) { base = base.filter(p => p.id !== o.id); empurrados.push({ ...o, ini }); }
-          ocup.push([ini, ini + h]);
-        });
-      });
-      db.setSetting('planoPins', [...base, ...empurrados, ...partes.map(pt => ({ id: uid(), dia: pt.dia, pid, tid, ini: pt.ini, h: pt.fim - pt.ini }))]);
-      if (empurrados.length) toast(`${empurrados.length} bloco${empurrados.length > 1 ? 's' : ''} empurrado${empurrados.length > 1 ? 's' : ''} para frente`);
-      if (junta.length) toast('Pedaços juntados num bloco só');
+      // vão para logo depois dele, em cadeia, pulando a rotina. Os que não encostam ficam onde estão. Bateu em outra atividade:
+      // pergunta antes de mexer nela (ela nunca é dividida: vai inteira para depois).
+      const empurra = () => planoEmpurrar(semJunta(), partes, planoOcupadosDoDia, { proximoDia: planoProximoUtil });
+      let r = empurra();
+      if (r.empurrados.length && typeof choiceBox === 'function') {
+        const nomes = r.empurrados.map(planoNomePin).join(', ');
+        const v = await choiceBox({ title: 'Mexer nas outras atividades?', body: `O bloco bate com <b>${esc(nomes)}</b>.`, opts: [['empurrar', 'Sim: empurrar para depois deste (inteiras, sem dividir)'], ['ficar', 'Não: deixar onde estão (fica sobreposto)']] });
+        if (v === null) { render(); return; }
+        r = v === 'ficar' ? { base: semJunta(), empurrados: [] } : empurra();   // relê: a lista pode ter mudado com a janela aberta
+      }
+      novosPins = [...r.base, ...r.empurrados, ...partes.map(pt => ({ id: uid(), dia: pt.dia, pid, tid, ini: pt.ini, h: pt.fim - pt.ini }))];
+      if (r.empurrados.length) extra += ` · ${r.empurrados.length} bloco${r.empurrados.length > 1 ? 's' : ''} empurrado${r.empurrados.length > 1 ? 's' : ''}`;
+      if (junta.length) extra += ' · pedaços juntados';
       a = partes[0].ini; b = partes[partes.length - 1].fim;
-    } else if (x.kind === 'fixo') {
-      const m = { ...planoRotinaDia() }; m[x.dia] = { ...(m[x.dia] || {}), [x.el.dataset.g]: { ini: a, fim: b } }; db.setSetting('planoRotinaDia', m);
-    } else if (x.kind === 'todo') {
-      const n = db.get('tempo_notices', x.el.dataset.id);
-      if (n) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), due: `${dia}T${planoHora(a)}`, end: b < 24 ? planoHora(b) : null, semHora: false } }, true);
-    } else if (x.kind === 'prazo' && x.el.dataset.ent) {
-      const pid = x.el.dataset.pid; projEntregasSalvar(pid, projEntregas(pid).map(z => z.id === x.el.dataset.ent ? { ...z, dia, hora: planoHora(a) } : z));
-      b = a;
-    } else if (x.kind === 'prazo') {
-      const t = db.get('tempo_tasks', x.el.dataset.id);
-      if (t) { if (dia !== t.deadline) changeTaskDeadline(t, dia, 'Movido no calendário'); db.update('tempo_tasks', t.id, { deadline_time: planoHora(a) }, true); }
-      b = a;
-    } else if (x.kind === 'bloq') {
-      db.setSetting('planoBloqueios', planoBloqueios().map(bq => bq.id === x.el.dataset.id ? { ...bq, dia, ini: a, fim: b } : bq));
     }
-    db.emit(); render();
-    toast(`${x.kind === 'fixo' ? 'Só neste dia: ' : x.kind === 'plano' ? 'Fixado: ' : ''}${dia !== x.dia ? fmtDate(dia) + ' ' : ''}${planoHora(a)}–${planoHora(b)}`);
+    if (x.kind === 'prazo') b = a;
+    const ROT = { plano: 'Bloco fixado', fixo: 'Rotina mudada só neste dia', todo: 'To-do movido', prazo: 'Entrega movida', bloq: 'Bloqueio movido' };
+    planoMudar(ROT[x.kind] || 'Item movido', () => {
+      if (x.kind === 'plano') planoPinsSalvar(novosPins);
+      else if (x.kind === 'fixo') {
+        const m = { ...planoRotinaDia() }; m[x.dia] = { ...(m[x.dia] || {}), [x.el.dataset.g]: { ini: a, fim: b } }; db.setSetting('planoRotinaDia', m);
+      } else if (x.kind === 'todo') {
+        const n = db.get('tempo_notices', x.el.dataset.id);
+        if (n) db.update('tempo_notices', n.id, { data: { ...(n.data || {}), due: `${dia}T${planoHora(a)}`, end: b < 24 ? planoHora(b) : null, semHora: false } }, true);
+      } else if (x.kind === 'prazo' && x.el.dataset.ent) {
+        const pid = x.el.dataset.pid; projEntregasSalvar(pid, projEntregas(pid).map(z => z.id === x.el.dataset.ent ? { ...z, dia, hora: planoHora(a) } : z));
+      } else if (x.kind === 'prazo') {
+        const t = db.get('tempo_tasks', x.el.dataset.id);
+        if (t) { if (dia !== t.deadline) changeTaskDeadline(t, dia, 'Movido no calendário'); db.update('tempo_tasks', t.id, { deadline_time: planoHora(a) }, true); }
+      } else if (x.kind === 'bloq') {
+        db.setSetting('planoBloqueios', planoBloqueios().map(bq => bq.id === x.el.dataset.id ? { ...bq, dia, ini: a, fim: b } : bq));
+      }
+    }, `${x.kind === 'fixo' ? 'Só neste dia: ' : x.kind === 'plano' ? 'Fixado: ' : ''}${dia !== x.dia ? fmtDate(dia) + ' ' : ''}${planoHora(a)}${x.kind === 'prazo' ? '' : '–' + planoHora(b)}${extra}`);
   });
   // o clique que termina um arrasto não abre nada
   document.addEventListener('click', (e) => {
@@ -1115,10 +1125,18 @@ function planoCriarMenu(dia, a, b, fim) {
   l.box.addEventListener('click', (e) => {
     const bt = e.target.closest('[data-pn]'); if (!bt) return;
     const nome = l.box.querySelector('#pn-t').value.trim(), pid = l.box.querySelector('#pn-p').value;
-    if (bt.dataset.pn === 'bloq') db.setSetting('planoBloqueios', [...planoBloqueios(), { id: uid(), dia, ini: a, fim: b, nome: nome || 'Bloqueio' }]);
-    else if (bt.dataset.pn === 'todo') { if (!nome) return toast('Escreva o nome do to-do.'); db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: nome, body: '', data: { due: `${dia}T${planoHora(a)}`, end: b < 24 ? planoHora(b) : null, semHora: false }, decision: '', decided_at: null, snooze_until: null }, true); }
-    else { if (!pid) return toast('Escolha o projeto.'); db.setSetting('planoPins', [...planoPins(), { id: uid(), dia, pid, ini: a, h: b - a }]); }
-    l.close(); db.emit(); render(); toast('Criado');
+    if (bt.dataset.pn === 'todo' && !nome) return toast('Escreva o nome do to-do.');
+    if (bt.dataset.pn === 'proj' && !pid) return toast('Escolha o projeto.');
+    l.close();
+    planoMudar('Criado', () => {
+      if (bt.dataset.pn === 'bloq') db.setSetting('planoBloqueios', [...planoBloqueios(), { id: uid(), dia, ini: a, fim: b, nome: nome || 'Bloqueio' }]);
+      else if (bt.dataset.pn === 'todo') db.insert('tempo_notices', { kind: 'todo', key: '', status: 'open', title: nome, body: '', data: { due: `${dia}T${planoHora(a)}`, end: b < 24 ? planoHora(b) : null, semHora: false }, decision: '', decided_at: null, snooze_until: null }, true);
+      else {   // bloco de projeto: se cair em cima de outro fixado, o outro vai para depois (nunca sobrepõe)
+        const novo = { id: uid(), dia, pid, ini: a, h: b - a };
+        const r = planoEmpurrar(planoPins(), [{ dia, ini: a, fim: b }], planoOcupadosDoDia, { proximoDia: planoProximoUtil });
+        planoPinsSalvar([...r.base, ...r.empurrados, novo]);
+      }
+    });
   });
 }
 /* Semana: ao mudar o tamanho da janela, os 7 dias continuam cabendo na largura. */
@@ -1151,9 +1169,9 @@ if (typeof document !== 'undefined' && document.addEventListener) {
   const zoom = (fator, clientX) => {
     const area = document.querySelector('.plg-area'); if (!area) return;
     const x = clientX - area.getBoundingClientRect().left; const dia = x / PLG_W;           // dia sob o cursor
-    const novo = Math.max(28, Math.min(220, Math.round(PLG_W * fator))); if (novo === PLG_W) return;
+    const novo = Math.max(28, Math.min(PLG_MAX, Math.round(PLG_W * fator))); if (novo === PLG_W) return;
     // mantém o dia sob o cursor no lugar: ajusta o começo em dias inteiros
-    const desl = Math.round(dia - x / novo); if (desl) PLANO.ganttIni = planoDiaMais(planoGanttIni(), desl);
+    const desl = Math.round(dia - x / novo); PLANO.ganttIni = planoDiaMais(planoGanttIni(), desl);   // fixa o começo antes de mudar o zoom (o padrão depende dele)
     PLG_W = novo; render();
     clearTimeout(window.__plgZoomT); window.__plgZoomT = setTimeout(() => { db.setSetting('planoGanttZoom', PLG_W); window.__plgZoomT = null; }, 500);
   };
