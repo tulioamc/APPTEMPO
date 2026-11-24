@@ -60,3 +60,20 @@ test('bloco fixado de outra tarefa não divide a tarefa: ela vai inteira para de
   assert.ok(b.every(x => !(x.dia === '2026-11-24' && x.ini < 10 && x.fim > 9)), 'não usa 9h–10h para depois continuar');
   assert.equal(b[0].ini, 11);
 });
+test('rotina maleável (almoço): o plano só passa por cima quando a tarefa não cabe na entrega; inegociável nunca', () => {
+  const m = setup();
+  m.db.data.tempo_projects = [proj('a')];
+  const agora = new Date(2026, 11, 1, 9, 0);   // terça 1/12, 9h
+  // cabe sem passar pelo almoço: respeita 12h–14h
+  m.db.data.tempo_tasks = [tarefa('t', 'a', { est_min: 240, deadline: '2026-12-01', deadline_time: '19:00' })];
+  let mo = m.tkMotor(agora, 10);
+  assert.ok(mo.itens.t.blocos.every(b => b.fim <= 12 + 1e-6 || b.ini >= 14 - 1e-6));
+  // 6 h até as 15h: só cabe passando por cima do almoço (maleável) → 9h–15h
+  m.db.data.tempo_tasks = [tarefa('t', 'a', { est_min: 360, deadline: '2026-12-01', deadline_time: '15:00' })];
+  mo = m.tkMotor(agora, 10);
+  assert.equal(mo.itens.t.blocos[0].ini, 9); assert.equal(mo.itens.t.fim.getHours(), 15); assert.ok(!mo.itens.t.aviso);
+  // almoço fixado (inegociável): volta a respeitar o almoço e avisa o atraso
+  m.db.setSetting('planoRotina', [{ id: 'x', grupo: 'almoco', nome: 'Almoço', ini: 12, fim: 14, dias: [2], repete: 'semanal', desde: '2000-01-01', ate: null, rafa: '', flex: true, pin: true }]);
+  mo = m.tkMotor(agora, 10);
+  assert.ok(mo.itens.t.blocos.every(b => b.fim <= 12 + 1e-6 || b.ini >= 14 - 1e-6)); assert.ok(mo.itens.t.aviso);
+});

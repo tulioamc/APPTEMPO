@@ -229,11 +229,12 @@ function tkMotor(agora = new Date(), dias = 120) {
   const dependentesDe = (tid) => { const out = new Set(); if (!tid) return out; let mudou = true;
     while (mudou) { mudou = false; itens.forEach(z => { if (z.t && !out.has(z.id) && z.deps.some(d => d === tid || out.has(d))) { out.add(z.id); mudou = true; } }); }
     return out; };
-  const janDe = (dia, meuTid = null) => {
-    const ck = dia + '|' + (meuTid || ''); if (janCache[ck]) return janCache[ck];
+  // solto: os blocos maleáveis da rotina (almoço, jantar, academia) não tiram horário — só quando a tarefa não cabe na entrega (24/11)
+  const janDe = (dia, meuTid = null, solto = false) => {
+    const ck = dia + '|' + (meuTid || '') + (solto ? '|s' : ''); if (janCache[ck]) return janCache[ck];
     if (!planoDiaUtil(dia)) return (janCache[ck] = { jan: [], fixos: [] });
     const dep = dependentesDe(meuTid);
-    const r = planoJanelas(dia, cfg); let jan = r.jan;
+    const r = planoJanelas(dia, cfg, { solto }); let jan = r.jan;
     pins.filter(pn => pn.dia === dia && !(pn.tid && dep.has(pn.tid))).forEach(pn => { const a = Number(pn.ini), b = a + Number(pn.h); jan = jan.flatMap(([x, y]) => b <= x || a >= y ? [[x, y]] : [[x, Math.min(a, y)], [Math.max(b, x), y]].filter(([u, v]) => v - u > 0.01)); });
     if (dia === hoje) jan = jan.map(([x, y]) => [Math.max(x, Math.ceil(nowH * 4) / 4), y]).filter(([x, y]) => y - x > 0.01);
     return (janCache[ck] = { jan, fixos: r.fixos });
@@ -252,7 +253,7 @@ function tkMotor(agora = new Date(), dias = 120) {
     return Math.min(Math.min(24, ...depois), Math.ceil((bq0 + resta / 60) * 4 - 1e-6) / 4);
   };
   // anda `min` minutos a partir de `ini` (na sua fila, gastando a capacidade do dia, ou só calculando para terceiros)
-  const andar = (ini, min, gasta, meuTid = null) => {
+  const andar = (ini, min, gasta, meuTid = null, solto = false) => {
     // a tarefa não é dividida por bloco de OUTRA tarefa (fixado à mão): só a rotina, compromissos e o fim do dia dividem.
     // Se no meio dela aparece um bloco de outra tarefa, ela recomeça inteira depois dele (24/11).
     const dep0 = dependentesDe(meuTid);
@@ -262,7 +263,7 @@ function tkMotor(agora = new Date(), dias = 120) {
     for (let tent = 0; tent < 60; tent++) {
       let falta = min; const blocos = []; let d = ymd(comeco); let fim = comeco; let ult = null; let conflito = null;
       for (let i = 0; i < dias + 7 && falta > 0.5 && d <= limite && !conflito; i++) {
-        const { jan } = janDe(d, meuTid); const h0 = d === ymd(comeco) ? comeco.getHours() + comeco.getMinutes() / 60 : 0;
+        const { jan } = janDe(d, meuTid, solto); const h0 = d === ymd(comeco) ? comeco.getHours() + comeco.getMinutes() / 60 : 0;
         for (const [a, b] of jan) {
           if (falta <= 0.5) break;
           let cap = gasta === true ? capMin(d) - (usado[d] || 0) : Infinity; if (cap <= 0.5) break;
@@ -320,7 +321,11 @@ function tkMotor(agora = new Date(), dias = 120) {
       if (x.eu) { if (cursor > ini) { ini = cursor; if (quem) antes = quem.t || quem.p; }
         // passa da entrega respeitando o limite de horas do dia? usa as horas livres além do limite até a entrega (24/11)
         const antesU = { ...usado }; let r = andar(ini, resto, true, x.t?.id);
-        if (x.entrega && r.fim > x.entrega) { Object.keys(usado).forEach(k => delete usado[k]); Object.assign(usado, antesU); const r2 = andar(ini, resto, 'livre', x.t?.id); if (r2.fim < r.fim) r = r2; else { Object.keys(usado).forEach(k => delete usado[k]); Object.assign(usado, antesU); r = andar(ini, resto, true, x.t?.id); } }
+        const volta = () => { Object.keys(usado).forEach(k => delete usado[k]); Object.assign(usado, antesU); };
+        if (x.entrega && r.fim > x.entrega) { volta(); const r2 = andar(ini, resto, 'livre', x.t?.id); if (r2.fim < r.fim) r = r2; else { volta(); r = andar(ini, resto, true, x.t?.id); } }
+        // ainda passa da entrega? usa também o horário dos blocos maleáveis da rotina (almoço, jantar, academia), só se adiantar
+        if (x.entrega && r.fim > x.entrega) { const u1 = { ...usado }; volta(); const r3 = andar(ini, resto, 'livre', x.t?.id, true);
+          if (r3.fim < r.fim) r = r3; else { Object.keys(usado).forEach(k => delete usado[k]); Object.assign(usado, u1); } }
         blocos.push(...r.blocos); fim = r.fim > fim ? r.fim : fim; cursor = r.fim; quem = x; }
       else { const r = andar(ini, resto, false, x.t?.id); fim = r.fim > fim ? r.fim : fim; }
     }

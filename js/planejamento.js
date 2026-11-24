@@ -34,6 +34,10 @@ function planoRotina() {
   }
   return PLANO_ROTINA_PADRAO.map(x => ({ id: 'pad-' + x.grupo, repete: 'semanal', desde: '2000-01-01', ate: null, rafa: '', flex: false, ...x }));
 }
+/* Pin (24/11): inegociável (fixado: Rafa, buscar, arrumar, acordar…) × maleável (almoço, jantar, academia).
+   O plano automático pode passar por cima de um bloco maleável quando precisa (a tarefa não cabe na entrega sem ele). */
+const PL_MALEAVEL = ['academia', 'almoco', 'almoco-seg', 'jantar'];
+const planoRotinaPin = (r) => (r && typeof r.pin === 'boolean') ? r.pin : !PL_MALEAVEL.includes(r?.grupo);
 const planoRotinaDia = () => db.setting('planoRotinaDia', {}) || {};
 const planoRafa = (dia) => (typeof rafaQuem === 'function' ? rafaQuem(dia) : null);
 const planoOntem = (dia) => { const d = new Date(dia + 'T12:00:00'); d.setDate(d.getDate() - 1); return ymd(d); };
@@ -70,7 +74,7 @@ function planoFixosDoDia(dia) {
     let ini = a ? Number(a.ini) : Number(r.ini), fim = a ? Number(a.fim) : Number(r.fim);
     let real = false;
     if (r.flex && !a) { const x = planoFlexAjusta(dia, ini, fim); if (!x) return null; real = x[0] !== ini || x[1] !== fim; [ini, fim] = x; }
-    return [ini, fim, r.nome, { grupo: r.grupo, rid: r.id, ajustado: !!a, flex: !!r.flex, real }];
+    return [ini, fim, r.nome, { grupo: r.grupo, rid: r.id, ajustado: !!a, flex: !!r.flex, real, pin: planoRotinaPin(r) }];
   }).filter(Boolean).sort((x, y) => x[0] - y[0]);
 }
 /* Início do trabalho no dia: 9h, ou antes se a rotina da manhã acaba antes disso (ex.: volta às 8h40 → trabalha 8h40). */
@@ -159,11 +163,11 @@ function planoDiaUtil(dia) {
   return !fer && !ferias;
 }
 /* Janelas livres do dia (horas decimais), descontando fixos e bloqueios. */
-function planoJanelas(dia, cfg = planoCfg()) {
-  const wd = new Date(dia + 'T12:00:00').getDay();
+/* solto: true = os blocos maleáveis da rotina não tiram horário (o plano passa por cima deles quando precisa). */
+function planoJanelas(dia, cfg = planoCfg(), { solto = false } = {}) {
   const tira = [...planoFixosDoDia(dia), ...planoEventos(dia, true).filter(ev => !ev.diaTodo && ev.ocupa !== false).map(ev => [ev.ini, ev.fim, ev.titulo])].sort((a, b) => a[0] - b[0]);
   let jan = [[planoInicioDia(dia, cfg), cfg.fim + Math.max(0, (planoEsticados()[dia] || cfg.horasDia) - cfg.horasDia)]];
-  tira.forEach(([a, b]) => { jan = jan.flatMap(([x, y]) => b <= x || a >= y ? [[x, y]] : [[x, Math.min(a, y)], [Math.max(b, x), y]].filter(([p, q]) => q - p > 0.01)); });
+  tira.filter(f => !(solto && f[3] && f[3].pin === false)).forEach(([a, b]) => { jan = jan.flatMap(([x, y]) => b <= x || a >= y ? [[x, y]] : [[x, Math.min(a, y)], [Math.max(b, x), y]].filter(([p, q]) => q - p > 0.01)); });
   return { jan, fixos: tira };
 }
 /* Horas que faltam em cada projeto ativo com estimativa. */
@@ -271,6 +275,8 @@ function planoItensDoDia(dia, porDia) {
   });
   planoFeitosDoDia(dia).forEach(f => it.push({ k: 'feito', a: f.ini, b: f.fim, f }));
   (porDia[dia]?.blocos || []).forEach(bl => it.push({ k: 'plano', a: bl.ini, b: bl.fim, bl }));
+  // bloco maleável que o plano usou: aparece esmaecido, com a dica explicando
+  it.forEach(x => { if (x.k === 'fixo' && x.m.pin === false && (porDia[dia]?.blocos || []).some(bl => bl.ini < x.b - 1e-6 && bl.fim > x.a + 1e-6)) x._porCima = true; });
   (porDia[dia]?.fantasmas || []).forEach(f => it.push({ k: 'fantasma', a: f.ini, b: f.fim, f }));
   // linha de entrega: cada tarefa aberta com prazo neste dia (na hora da entrega; sem hora = fim do expediente)
   // entregas (deadlines) dos projetos ativos neste dia
@@ -374,8 +380,8 @@ function planoItemHTML(x, dia, { alt, unico, auto }) {
     return `<div class="pl-prazo ent" data-dg="prazo" data-dia="${dia}" data-ent="${e.id}" data-pid="${p.id}" data-ini="${x.a}" data-fim="${x.a}" style="top:${y}px" data-tip="${esc(`Deadline: ${e.nome || 'Entrega'} · ${p.name}\n${fmtDate(dia)} às ${planoHora(x.a)}\nAs tarefas acima dela na lista do projeto não podem passar desta linha. Arraste para mudar o dia ou a hora.`)}"><span>${esc(e.nome || 'Entrega')}</span></div>`; }
   if (x.k === 'prazo') { const t = x.t; const p = db.get('tempo_projects', t.project_id);
     return `<div class="pl-prazo" data-dg="prazo" data-dia="${dia}" data-id="${t.id}" data-ini="${x.a}" data-fim="${x.a}" style="top:${y}px" data-tip="${esc(`Entrega da tarefa: ${t.name}${p ? ' · ' + p.name : ''}\n${planoHora(x.a)}\nArraste para mudar a entrega (hora ou dia).`)}"><span>${esc(t.name)}</span></div>`; }
-  if (x.k === 'fixo') { const { n, m } = x;
-    return `<div class="pl-fixo${x._fundo ? ' fundo' : ''}${m.ajustado ? ' ajustado' : ''}${m.real ? ' real' : ''}" data-dg="fixo" data-dia="${dia}" data-g="${esc(m.grupo)}" data-ini="${x.a}" data-fim="${x.b}" style="${pos}" data-tip="${esc(`${n}\n${planoHora(x.a)}–${planoHora(x.b)}${m.real ? '\nAjustado ao que aconteceu (bloco flexível)' : ''}${m.ajustado ? '\nMudado só neste dia' : ''}\nArraste ou puxe as bordas: muda só neste dia`)}"><span class="pl-tx"><b>${esc(n)}</b>${curto ? '' : `<em>${planoHora(x.a)}–${planoHora(x.b)}</em>`}</span><span class="pl-fx-bt">${m.ajustado ? `<button data-act="pl-fixo-reset" data-dia="${dia}" data-g="${esc(m.grupo)}" title="Voltar ao horário da rotina" aria-label="Voltar ao padrão">↺</button>` : ''}<button data-act="pl-fixo-off" data-dia="${dia}" data-g="${esc(m.grupo)}" title="Tirar só deste dia" aria-label="Tirar deste dia">×</button></span>${PL_PUX}</div>`; }
+  if (x.k === 'fixo') { const { n, m } = x; const pinTip = m.pin ? 'Inegociável (fixado): o plano nunca passa por cima. Clique para deixar maleável' : 'Maleável: quando uma tarefa não cabe até a entrega, o plano automático pode passar por cima. Clique para fixar (inegociável)';
+    return `<div class="pl-fixo${x._fundo ? ' fundo' : ''}${m.ajustado ? ' ajustado' : ''}${m.real ? ' real' : ''}${m.pin ? ' pin' : ' maleavel'}${x._porCima ? ' por-cima' : ''}" data-dg="fixo" data-dia="${dia}" data-g="${esc(m.grupo)}" data-ini="${x.a}" data-fim="${x.b}" style="${pos}" data-tip="${esc(`${n}\n${planoHora(x.a)}–${planoHora(x.b)}\n${m.pin ? 'Inegociável (fixado)' : 'Maleável'}${x._porCima ? '\nO plano passou por cima deste horário para a tarefa caber na entrega' : ''}${m.real ? '\nAjustado ao que aconteceu (bloco flexível)' : ''}${m.ajustado ? '\nMudado só neste dia' : ''}\nArraste ou puxe as bordas: muda só neste dia`)}"><span class="pl-tx"><b>${m.pin ? `<span class="pl-fx-pin" aria-hidden="true">${icon('pin')}</span>` : ''}${esc(n)}</b>${curto ? '' : `<em>${planoHora(x.a)}–${planoHora(x.b)}</em>`}</span><span class="pl-fx-bt"><button data-act="pl-rot-pin" data-rid="${esc(m.rid || '')}" data-g="${esc(m.grupo)}" title="${pinTip}" aria-label="${m.pin ? 'Deixar maleável' : 'Fixar (inegociável)'}" class="${m.pin ? 'on' : ''}">${icon('pin')}</button>${m.ajustado ? `<button data-act="pl-fixo-reset" data-dia="${dia}" data-g="${esc(m.grupo)}" title="Voltar ao horário da rotina" aria-label="Voltar ao padrão">↺</button>` : ''}<button data-act="pl-fixo-off" data-dia="${dia}" data-g="${esc(m.grupo)}" title="Tirar só deste dia" aria-label="Tirar deste dia">×</button></span>${PL_PUX}</div>`; }
   if (x.k === 'evento') { const e = x.e; const bloq = e.origem === 'bloqueio';
     return `<div class="pl-evento ${e.origem}"${bloq ? ` data-dg="bloq" data-dia="${dia}" data-id="${e.id}" data-ini="${x.a}" data-fim="${x.b}"` : ''} style="${pos}" data-tip="${esc(`${e.origem === 'google' ? 'Google Agenda' + (e.agenda ? ' · ' + e.agenda : '') : 'Bloqueio'}\n${e.titulo}\n${planoHora(e.ini)}–${planoHora(e.fim)}`)}">${icon(e.origem === 'google' ? 'calendar' : 'clock')}<span class="pl-tx"><b>${esc(e.titulo)}</b>${curto ? '' : `<em>${planoHora(e.ini)}–${planoHora(e.fim)}</em>`}</span>${bloq ? PL_PUX : ''}</div>`; }
   if (x.k === 'todo') { const e = x.e;
@@ -884,11 +890,12 @@ function planoRotinaHTML() {
     <input type="time" class="input sm" value="${planoHora(r.fim)}" data-on="pl-rot" data-id="${r.id}" data-f="fim" aria-label="Termina">
     <select class="input sm" data-on="pl-rot" data-id="${r.id}" data-f="rafa" aria-label="Com o Rafa" title="Liga o bloco ao Dias de Rafa"><option value="" ${!r.rafa ? 'selected' : ''}>Sempre</option><option value="T" ${r.rafa === 'T' ? 'selected' : ''}>Dia T</option><option value="manha" ${r.rafa === 'manha' ? 'selected' : ''}>Manhã depois de T</option></select>
     <label class="check small" title="Flexível: num dia que já passou, o bloco vira o espaço real sem trabalho registrado (ex.: almoço 12h–14h, trabalhou até 12h40 e voltou 13h50 → 12h40–13h50)"><input type="checkbox" data-on="pl-rot" data-id="${r.id}" data-f="flex" ${r.flex ? 'checked' : ''}> Flexível</label>
+    <button type="button" class="btn sm ghost icon pl-rot-pin${planoRotinaPin(r) ? ' on' : ''}" data-act="pl-rot-pin" data-rid="${r.id}" data-g="${esc(r.grupo)}" title="${planoRotinaPin(r) ? 'Inegociável (fixado): o plano automático nunca passa por cima. Clique para deixar maleável' : 'Maleável: quando uma tarefa não cabe até a entrega, o plano automático pode passar por cima (ex.: almoço, jantar, academia). Clique para fixar'}" aria-label="${planoRotinaPin(r) ? 'Inegociável' : 'Maleável'}">${icon('pin')}</button>
     <label class="check small" title="Mostrar este bloco no Mês, só na semana atual (desmarcado não aparece no Mês; Semana e Dia mostram sempre)"><input type="checkbox" data-on="pl-rot" data-id="${r.id}" data-f="mes" ${r.mes ? 'checked' : ''}> No mês</label>
     <select class="input sm" data-on="pl-rot" data-id="${r.id}" data-f="repete" aria-label="Repete"><option value="semanal" ${r.repete !== 'quinzenal' ? 'selected' : ''}>Toda semana</option><option value="quinzenal" ${r.repete === 'quinzenal' ? 'selected' : ''}>A cada 2 semanas</option></select>
     <button class="btn sm ghost icon" data-act="pl-rot-del" data-id="${r.id}" title="Tirar da rotina de hoje em diante" aria-label="Tirar">${icon('x')}</button></div>`;
   return `<div class="panel"><div class="panel-h"><h3>Rotina fixa</h3><span class="small muted">mudanças valem de hoje em diante; o passado não muda. Para mexer num dia só, arraste ou puxe o bloco no calendário. "Rafa" liga o bloco ao Dias de Rafa.</span><span class="grow"></span><button class="btn sm" data-act="pl-rot-novo">${icon('plus')} Bloco fixo</button></div>
-    <div class="panel-b"><div class="pl-rot-cab small muted"><span>Bloco</span><span>Dias</span><span>Começa</span><span>Termina</span><span>Rafa</span><span>Acompanha</span><span>Mês</span><span>Repete</span><span></span></div>${ativos.map(linha).join('')}</div></div>`;
+    <div class="panel-b"><div class="pl-rot-cab small muted"><span>Bloco</span><span>Dias</span><span>Começa</span><span>Termina</span><span>Rafa</span><span>Acompanha</span><span title="Pin = inegociável; sem pin = maleável (o plano pode passar por cima)">Fixo</span><span>Mês</span><span>Repete</span><span></span></div>${ativos.map(linha).join('')}</div></div>`;
 }
 CHANGES['pl-rot'] = (el) => {
   const f = el.dataset.f; let v = f === 'flex' || f === 'mes' ? el.checked : el.value;
@@ -901,7 +908,13 @@ CHANGES['pl-rot'] = (el) => {
 ACTIONS['pl-rot-dia'] = (el) => { const r = planoRotina().find(x => x.id === el.dataset.id); if (!r) return; const wd = Number(el.dataset.wd); const dias = (r.dias || []).includes(wd) ? r.dias.filter(x => x !== wd) : [...(r.dias || []), wd].sort(); planoRotinaMudar(r.id, { dias }); render(); };
 ACTIONS['pl-rot-del'] = (el) => { const ontem = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return ymd(d); })(); const hoje = ymd(new Date());
   planoRotinaSalvar(planoRotina().flatMap(r => r.id !== el.dataset.id ? [r] : (r.desde || '') >= hoje ? [] : [{ ...r, ate: ontem }])); render(); toast('Bloco tirado da rotina de hoje em diante'); };
-ACTIONS['pl-rot-novo'] = () => { planoRotinaSalvar([...planoRotina(), { id: uid(), grupo: uid(), nome: 'Novo bloco', ini: 15, fim: 16, dias: [1, 2, 3, 4, 5], repete: 'semanal', rafa: '', flex: false, desde: ymd(new Date()), ate: null }]); render(); };
+ACTIONS['pl-rot-novo'] = () => { planoRotinaSalvar([...planoRotina(), { id: uid(), grupo: uid(), nome: 'Novo bloco', ini: 15, fim: 16, dias: [1, 2, 3, 4, 5], repete: 'semanal', rafa: '', flex: false, pin: true, desde: ymd(new Date()), ate: null }]); render(); };
+/* Pin da rotina: inegociável × maleável. É a natureza do bloco (não muda horário), então vale para todas as versões dele. */
+ACTIONS['pl-rot-pin'] = (el) => {
+  const l = planoRotina(); const r = l.find(x => x.id === el.dataset.rid) || l.find(x => x.grupo === el.dataset.g); if (!r) return;
+  const novo = !planoRotinaPin(r);
+  planoMudar(novo ? `${r.nome}: inegociável` : `${r.nome}: maleável`, () => planoRotinaSalvar(l.map(x => x.grupo === r.grupo ? { ...x, pin: novo } : x)));
+};
 /* Ajuste de um dia só: tirar o bloco fixo daquele dia, ou voltar ao padrão. */
 ACTIONS['pl-fixo-off'] = (el) => { const m = { ...planoRotinaDia() }; m[el.dataset.dia] = { ...(m[el.dataset.dia] || {}), [el.dataset.g]: { off: true } }; planoMudar('Tirado só deste dia', () => db.setSetting('planoRotinaDia', m)); };
 ACTIONS['pl-fixo-reset'] = (el) => { const m = { ...planoRotinaDia() }; const d = { ...(m[el.dataset.dia] || {}) }; delete d[el.dataset.g]; m[el.dataset.dia] = d; planoMudar('Voltou ao horário da rotina', () => db.setSetting('planoRotinaDia', m)); };
