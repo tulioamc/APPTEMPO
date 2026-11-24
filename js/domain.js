@@ -452,6 +452,23 @@ function startEntry(sel, startMs = null) {
 }
 // troca: o tempo de agora até a volta vai para o projeto "to" (fica como "Trabalho em …", sem pausa)
 function pauseEntry(e, at, troca) { const segs = clone(e.segments); const last = segs[segs.length - 1]; last.e = at || nowISO(); if (troca) { last.why = 'moved'; last.troca = true; last.movedTo = troca.to; } db.update('tempo_time_entries', e.id, { state: 'paused', segments: segs }); }
+/* Tira o intervalo [a,b] dos trechos de uma sessão (pausas gravadas ou não), para o tempo poder ser computado em outra sessão sem sobrepor.
+   Trecho aberto fica intacto se começa depois de b; devolve quantos trechos mudaram. */
+function carveOutSegments(entryId, a, b, at = Date.now()) {
+  const e = db.get('tempo_time_entries', entryId); if (!e) return 0;
+  const T = (x) => new Date(x).getTime(); let n = 0; const out = [];
+  (e.segments || []).forEach(sg => {
+    if (!sg.s) { out.push(sg); return; }
+    const x = T(sg.s), aberto = !sg.e, y = aberto ? Math.max(at, b) : T(sg.e);
+    if (y <= a || x >= b) { out.push(sg); return; }
+    n++;
+    const { s: _s, e: _e, ...rest } = sg;
+    if (x < a) out.push({ ...sg, e: new Date(a).toISOString() });
+    if (y > b) out.push({ ...rest, s: new Date(b).toISOString(), e: aberto ? null : new Date(y).toISOString() });
+  });
+  if (n) db.update('tempo_time_entries', e.id, { segments: out });
+  return n;
+}
 function resumeEntry(e) { const segs = clone(e.segments); segs.push({ s: nowISO(), e: null }); db.update('tempo_time_entries', e.id, { state: 'running', segments: segs }); }
 /* Fim da sessão (1.2): se o último trecho é só ociosidade (nenhum registro de atividade nos últimos 2 min), corta no último sinal de atividade. */
 const STOP_IDLE_MS = 15 * 60e3;   // parada longa: mais de 15 min sem atividade

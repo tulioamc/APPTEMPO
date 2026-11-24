@@ -236,6 +236,7 @@ ACTIONS['ts-resume'] = async () => {
   const a = activeEntry(); if (a?.state !== 'paused') return;
   const last = a.segments?.[a.segments.length - 1];
   const pIni = last?.e ? new Date(last.e).getTime() : null;
+  const tRet = Date.now();
   resumeEntry(a); toast('Sessão retomada');
   if (!pIni) return;
   const an = analisePausa(pIni, Date.now());
@@ -247,7 +248,8 @@ ACTIONS['ts-resume'] = async () => {
     body: `Enquanto a sessão estava pausada (${fmtDur(an.total)}), ${fmtDur(an.other)} foram em outras atividades${an.resumo ? ` (${esc(an.resumo)})` : ''}. WhatsApp (${fmtDur(an.whats)}) e ociosidade (${fmtDur(an.idle)}) foram ignorados.${longa ? `<br><span class="small muted">${bloqueio ? 'O Mac bloqueou durante a pausa. ' : ''}Pausa longa: o padrão é não computar, a menos que você tenha trabalhado nesse tempo.</span>` : ''}`,
     ok: 'Escolher projeto ou tarefa', no: 'Não computar', padraoNao: longa });
   if (!ok) return;
-  const e = db.insert('tempo_time_entries', { project_id: null, client_id: null, agency_id: null, task_id: null, work_type_id: null, notes: 'Tempo pausado', revision_id: null, state: 'done', segments: [{ s: new Date(pIni).toISOString(), e: new Date(Date.now()).toISOString() }], edits: [] });
+  carveOutSegments(a.id, pIni, tRet);   // o intervalo sai das pausas da sessão original (um horário, uma sessão)
+  const e = db.insert('tempo_time_entries', { project_id: null, client_id: null, agency_id: null, task_id: null, work_type_id: null, notes: 'Tempo pausado', revision_id: null, state: 'done', segments: [{ s: new Date(pIni).toISOString(), e: new Date(tRet).toISOString() }], edits: [] });
   openEntryModal(e.id);
 };
 ACTIONS['ts-stop'] = async () => { let a = activeEntry(); if (!a) return; const todas = openEntries();
