@@ -415,7 +415,7 @@ function applyPause(a, n, mode) {
   if (mode === 'end') {
     segs = segs.filter(s => new Date(s.s) < new Date(f)); const last = segs[segs.length - 1]; if (last && (!last.e || new Date(last.e) > new Date(f))) last.e = f;
     db.update('tempo_time_entries', a.id, { segments: segs, state: 'done', edits: auditEdit(a, before, `Encerrada às ${fmtTime(f)} (sugestão de inatividade)`) }, true);
-    decideNotice(n, 'done', `Sessão encerrada às ${fmtTime(f)}`, { before });
+    decideNotice(n, 'done', `Sessão encerrada às ${fmtTime(f)}`);   // o antes fica no histórico de correções da sessão (a tabela de avisos não tem coluna para isso)
     pausesOf(a.id).forEach(o => decideNotice(o, 'ignored', 'Descartada ao encerrar a sessão'));
     return;
   }
@@ -426,7 +426,7 @@ function applyPause(a, n, mode) {
     if (!E0 || E0 > T) out.push({ s: t, e: s.e });
   });
   db.update('tempo_time_entries', a.id, { segments: out, edits: auditEdit(a, before, `Pausa de ${fmtDur(new Date(t) - new Date(f))} inserida (${fmtTime(f)}–${fmtTime(t)})`) }, true);
-  decideNotice(n, 'accepted', `Pausa inserida (${fmtTime(f)}–${fmtTime(t)})`, { before });
+  decideNotice(n, 'accepted', `Pausa inserida (${fmtTime(f)}–${fmtTime(t)})`);
 }
 function pauseSuggestionsHTML(a) {
   const list = pausesOf(a.id).sort((x, y) => x.data.from.localeCompare(y.data.from)); if (!list.length) return '';
