@@ -41,7 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window.title = "Tempo"
         window.delegate = self
         window.contentView = web
-        window.center()
+        // abre sempre ocupando a tela inteira (menos a barra de menus e o Dock), sem virar outra "mesa" do macOS
+        if let tela = NSScreen.main ?? NSScreen.screens.first { window.setFrame(tela.visibleFrame, display: true) } else { window.center() }
         window.makeKeyAndOrderFront(nil)
         web.load(URLRequest(url: siteURL))
 
