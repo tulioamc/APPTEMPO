@@ -106,3 +106,14 @@ test('combinado: o plano de hoje não anda com o relógio nem com o registrado d
   const mo = m.tkMotor(new Date(2026, 11, 1, 18, 45), 10);
   assert.equal(mo.itens.cur.blocos[0].dia, '2026-12-01'); assert.equal(mo.itens.cur.blocos[0].ini, 9);
 });
+test('dois blocos da mesma tarefa: o que sobra solto encosta no bloco que você puxou, mesmo longe', () => {
+  const m = setup();
+  m.db.data.tempo_projects = [proj('a')];
+  m.db.data.tempo_tasks = [tarefa('x', 'a', { est_min: 60, deadline: '2026-12-01', deadline_time: '12:00' }), tarefa('t', 'a', { est_min: 240, deadline: '2026-12-04', order: 1 })];
+  // puxou 1h da tarefa t para quarta 15h; as outras 3h vinham soltas na terça
+  m.db.data.tempo_settings = [{ id: 'pp', key: 'planoPins', value: [{ id: 'p1', dia: '2026-12-02', pid: 'a', tid: 't', ini: 15, h: 1 }] }];
+  const mo = m.tkMotor(new Date(2026, 11, 1, 8, 0), 10);
+  const bl = mo.itens.t.blocos.map(b => [b.dia, b.ini, b.fim]);
+  assert.deepEqual(bl[0], ['2026-12-02', 15, 16]);
+  assert.equal(bl[1][0], '2026-12-02'); assert.equal(bl[1][1], 16, 'o resto encosta às 16h');
+});
