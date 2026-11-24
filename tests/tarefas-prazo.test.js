@@ -77,3 +77,23 @@ test('rotina maleável (almoço): o plano só passa por cima quando a tarefa nã
   mo = m.tkMotor(agora, 10);
   assert.ok(mo.itens.t.blocos.every(b => b.fim <= 12 + 1e-6 || b.ini >= 14 - 1e-6)); assert.ok(mo.itens.t.aviso);
 });
+
+test('bloco fixado de quem ESPERA a tarefa não segura o horário dela (OOHs fixado às 9h não empurra o KV para 12h30)', () => {
+  const m = setup();
+  m.db.data.tempo_projects = [proj('a')];
+  m.db.data.tempo_tasks = [tarefa('kv', 'a', { est_min: 15, deadline: '2026-11-30' }), tarefa('ooh', 'a', { est_min: 120, deadline: '2026-11-30', depends_on: ['kv'], order: 1 })];
+  m.db.data.tempo_settings = [{ id: 'pp', key: 'planoPins', value: [{ id: 'p1', dia: '2026-11-25', pid: 'a', tid: 'ooh', ini: 9, h: 2 }] }];
+  const mo = m.tkMotor(new Date(2026, 10, 24, 19, 30), 10);   // hoje já acabou
+  const kv = mo.itens.kv.blocos[0];
+  assert.equal(kv.dia, '2026-11-25'); assert.equal(kv.ini, 9);
+  const ooh = mo.itens.ooh.blocos;
+  assert.ok(ooh.length && ooh.every(b => b.dia > '2026-11-25' || b.ini >= 9.25 - 1e-9), 'OOHs só depois do KV terminar');
+});
+test('o KV continua respeitando bloco fixado de tarefa que NÃO depende dele', () => {
+  const m = setup();
+  m.db.data.tempo_projects = [proj('a')];
+  m.db.data.tempo_tasks = [tarefa('kv', 'a', { est_min: 60, deadline: '2026-11-30' }), tarefa('x', 'a', { est_min: 120, deadline: '2026-11-30', order: 1 })];
+  m.db.data.tempo_settings = [{ id: 'pp', key: 'planoPins', value: [{ id: 'p1', dia: '2026-11-25', pid: 'a', tid: 'x', ini: 9, h: 2 }] }];
+  const mo = m.tkMotor(new Date(2026, 10, 24, 19, 30), 10);
+  assert.ok(mo.itens.kv.blocos.every(b => !(b.dia === '2026-11-25' && b.ini < 11 && b.fim > 9)));
+});

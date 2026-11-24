@@ -1,5 +1,11 @@
 # Tempo — ajustes pedidos
 
+## Regras permanentes (pedido do Tulio, 24/11/2026)
+- **Dica ao passar o mouse em todo botão:** botão novo ou alterado precisa de dica (hover) dizendo o que faz, principalmente os só com ícone; só dispensa se for muito óbvio (ex.: "Salvar" com texto).
+- **Também vale para informação solta** (um número, uma data, uma hora sem rótulo — ex.: hora/data de entrega da tarefa): ao passar o mouse, a dica diz do que se trata.
+- **PENDENTE — varredura geral:** passar por todas as telas e colocar a dica em todos os botões que ainda não têm (começar pelos só com ícone: Calendário, Time Sheet, Projetos, Tarefas, Financeiro).
+
+
 ## Situação na versão 2 (16/10/2026)
 - Feitos: 1, 2, 3, 4, 6, 7, 8.
 - Item 5: feito no que o navegador permite (computador suspenso + Chrome/Edge com detecção de ociosidade, sugestões Aceitar/Encerrar/Ignorar, ponte `window.TempoBridge.reportIdle`). App em uso (WhatsApp) e ociosidade em qualquer navegador → app de Mac.
@@ -873,3 +879,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V2.06.129 (24/11): Horas digitadas — hora da entrega (tarefa e entrega do projeto) agora é campo de digitar, em vez de menu; valores quebrados arredondam para 15 em 15 min. O mesmo para a previsão em horas de trabalho (tarefa e projeto).
 - V2.06.130 (24/11): (1) "Não rolou" virou botão (desligado por padrão): ao ligar, esmaece o calendário e mostra o plano da manhã por cima — verde = rolou, amarelo = não rolou como planejado mas houve trabalho no projeto depois, vermelho = não rolou e nada foi feito depois (a classificação é por projeto). (2) Motor: blocos fixados de quem espera uma tarefa (ex.: OOHs/DOOHs esperando KV Curitiba) não seguram mais o horário dessa tarefa — antes o Curitiba ia para 12h30 em vez das 9h.
 - V2.06.131 (24/11): Rotina fixa com pin — inegociável (fixado: Rafa, buscar, levar à escola, acordar/arrumar, volta) × maleável (almoço, jantar, academia). Pin no bloco do Calendário (aparece ao passar o mouse, com dica) e coluna "Fixo" em Rotina fixa; clicar troca e vale para o bloco todo (`pin` na regra; padrão em `PL_MALEAVEL`; bloco novo nasce fixado). Motor: quando uma tarefa não cabe até a entrega nem usando as horas livres além do limite, tenta de novo usando também o horário dos blocos maleáveis (`janDe(…, solto)`), só se adiantar; o bloco maleável usado aparece esmaecido com a dica "o plano passou por cima". Inegociável nunca é usado. Teste novo em tarefas-prazo; o teste aleatório conta o maleável como horário livre.
+- Testes: +2 (bloco fixado de quem espera não segura o horário de quem é esperado).
