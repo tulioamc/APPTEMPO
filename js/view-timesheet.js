@@ -545,7 +545,7 @@ function bindPicker(layer, sel, rerender) {
   draw();
 }
 const blankSel = () => ({ agency_id: '', client_id: '', project_id: '', task_id: '', sub_id: '' });
-function defaultWorkType(sel) { const t = db.get('tempo_tasks', sel.sub_id) || db.get('tempo_tasks', sel.task_id); const p = t?.parent_id ? db.get('tempo_tasks', t.parent_id) : null; return t?.work_type_id || p?.work_type_id || ''; }
+function defaultWorkType(sel) { const t = db.get('tempo_tasks', sel.sub_id) || db.get('tempo_tasks', sel.task_id); const p = t?.parent_id ? db.get('tempo_tasks', t.parent_id) : null; return t?.work_type_id || p?.work_type_id || db.get('tempo_projects', sel.project_id)?.work_type_id || ''; }
 
 /* "Comecei às": vazio = agora. Mostra as sugestões do log desde a última sessão. */
 function startFieldHTML(startMs) {

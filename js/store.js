@@ -119,6 +119,12 @@ const db = {
   insert(t, row, silent) {
     const r = { id: uid(), created_at: nowISO(), ...row };
     if (t === 'tempo_tasks' && !r.owner) r.owner = 'Túlio';   // responsável padrão de tarefa nova
+    if (t === 'tempo_time_entries' && !r.work_type_id && (r.task_id || r.project_id)) {   // sessão nova: tipo da tarefa (ou da mãe) ou do projeto
+      const tk = r.task_id ? (this.data.tempo_tasks || []).find(x => x.id === r.task_id) : null;
+      const mae = tk?.parent_id ? (this.data.tempo_tasks || []).find(x => x.id === tk.parent_id) : null;
+      const pj = r.project_id ? (this.data.tempo_projects || []).find(x => x.id === r.project_id) : null;
+      r.work_type_id = tk?.work_type_id || mae?.work_type_id || pj?.work_type_id || null;
+    }
     if (t === 'tempo_tasks' && !r.work_type_id && r.project_id) {   // tarefa nova herda o tipo de trabalho do projeto (ou da tarefa mãe)
       const mae = r.parent_id ? (this.data.tempo_tasks || []).find(x => x.id === r.parent_id) : null;
       const pj = (this.data.tempo_projects || []).find(x => x.id === r.project_id);
