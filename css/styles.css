@@ -2135,3 +2135,10 @@ kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--li
 .pl-fixo.por-cima { opacity: .45; background: repeating-linear-gradient(0deg, var(--surface-2) 0 4px, transparent 4px 8px); z-index: 0; }
 .pl-rot-pin { opacity: .35; }
 .pl-rot-pin.on { opacity: 1; color: var(--accent); }
+
+/* "Cor do cliente" (botão): planejado preenchido com a cor do cliente; chip invertido; texto segue a legibilidade (--ct) */
+.pl-grade > .pl-bloco.cc, .pl-grade > .pl-bloco.cc.auto { background: var(--cc) !important; color: var(--ct) !important; }
+.pl-grade > .pl-bloco.cc .pl-tx b, .pl-grade > .pl-bloco.cc .pl-tx em { color: var(--ct) !important; }
+.pl-grade > .pl-bloco.cc .pl-cli { background: var(--ct) !important; color: var(--cc) !important; border-color: transparent !important; }
+.seg.pl-filtros .pl-cc-btn { margin-left: 6px; text-decoration: none !important; border-left: 1px solid var(--line); }
+.seg.pl-filtros .pl-cc-btn.on { background: var(--accent); color: #fff; }
