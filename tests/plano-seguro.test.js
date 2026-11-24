@@ -107,13 +107,16 @@ test('diagnóstico: plano saudável não tem aviso', () => {
   assert.deepEqual(m.planoDiagnostico(AGORA).filter(x => x.nivel !== 'info'), []);
   assert.match(m.planoSaudeHTML(), /Plano em ordem/);
 });
-test('diagnóstico: bloco fixado maior que a tarefa sobra → avisa e o conserto apara só o que sobra', () => {
+test('bloco fixado maior que a tarefa: encolhe sozinho ao tamanho dela e o resto do horário fica livre (sem sobra, sem aviso)', () => {
   const m = setup(); const dia = amanha(m);
-  m.db.data.tempo_projects = [proj('a')]; m.db.data.tempo_tasks = [tarefa('t1', 'a', { est_min: 60 })];
+  m.db.data.tempo_projects = [proj('a')]; m.db.data.tempo_tasks = [tarefa('t1', 'a', { est_min: 60 }), tarefa('t2', 'a', { est_min: 60, order: 1, depends_on: ['t1'] })];
   setPins(m, [{ id: 'x', dia, pid: 'a', tid: 't1', ini: 10, h: 3 }]);
-  const l = ids(m.planoDiagnostico(AGORA), 'sobra:'); assert.equal(l.length, 1); assert.match(l[0].texto, /02:00/);
-  m.planoMudar('Conserto', l[0].corrigir.run, false);
-  assert.equal(m.planoPins()[0].h, 1); assert.equal(ids(m.planoDiagnostico(AGORA), 'sobra:').length, 0);
+  assert.equal(ids(m.planoDiagnostico(AGORA), 'sobra:').length, 0);
+  const mo = m.tkMotor(AGORA, 10);
+  assert.deepEqual(mo.itens.t1.blocos.map(b => [b.ini, b.fim]), [[10, 11]]);
+  assert.equal(mo.pinsSobra.length, 0);
+  assert.equal(mo.itens.t2.blocos[0].dia, dia); assert.equal(mo.itens.t2.blocos[0].ini, 11, 'a próxima encosta no fim do bloco');
+  assert.equal(m.planoPins()[0].h, 3, 'o salvo não muda');
 });
 test('diagnóstico: bloco fixado antes de a tarefa anterior terminar não fica segurando horas', () => {
   const m = setup(); const dia = amanha(m);

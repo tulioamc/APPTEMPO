@@ -233,7 +233,19 @@ function tkMotor(agora = new Date(), dias = 120) {
     andando.delete(x.id); visto.add(x.id); ordem.push(x); };
   [...itens].sort((a, b) => a.chave.localeCompare(b.chave)).forEach(ir);
   // 2) dias: janelas livres (menos os blocos fixados) e limite de horas
-  const pins = planoPins().filter(pn => pn.dia >= hoje);
+  // Bloco fixado maior que o que a tarefa precisa (24/11): o bloco encolhe ao tamanho da tarefa e o horário que sobra
+  // fica livre — o trabalho solto que vem depois sobe e encosta nele (sem bloco "o plano não usa"). Só nesta conta: o salvo não muda.
+  const pins = (() => {
+    const l = planoPins().filter(pn => pn.dia >= hoje).map(pn => ({ ...pn }));
+    const porTid = {}; l.filter(pn => pn.tid).forEach(pn => (porTid[pn.tid] ||= []).push(pn));
+    Object.entries(porTid).forEach(([tid, ps]) => {
+      const it = itens.find(z => z.t && z.t.id === tid && z.eu); if (!it) return;
+      let sobra = ps.reduce((t, pn) => t + Number(pn.h) * 60, 0) - it.resto; if (sobra < 15) return;
+      ps.sort((a, b) => (b.dia + String(b.ini).padStart(5, '0')).localeCompare(a.dia + String(a.ini).padStart(5, '0')));   // apara do último para o primeiro
+      ps.forEach(pn => { if (sobra < 15) return; const corta = Math.min(Number(pn.h) * 60 - 15, Math.floor(sobra / 15) * 15); if (corta <= 0) return; pn.h = Number(pn.h) - corta / 60; sobra -= corta; });
+    });
+    return l;
+  })();
   const janCache = {};
   // Quem espera esta tarefa (direto ou em cadeia): os blocos fixados deles NÃO seguram horário dela, senão um espera o outro (24/11)
   const dependentesDe = (tid) => { const out = new Set(); if (!tid) return out; let mudou = true;
