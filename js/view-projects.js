@@ -255,7 +255,7 @@ function openProjectForm(id, clientId, onCreated) {
         <div class="field"><label for="pf-pay">Pagamento</label><select id="pf-pay" class="input" name="payment_status_id">${options(statuses('payment'), p?.payment_status_id || statuses('payment')[0]?.id)}</select></div>
         <div class="field" id="pf-fee-wrap">${feeFieldInner(p, p?.client_id || clientId)}</div>
         <div class="field" data-dias-wrap><label for="pf-dl">Prazo</label><input id="pf-dl" type="date" class="input" name="deadline" value="${p?.deadline || ''}">${emDiasHTML(false)}</div>
-        <div class="field"><label for="pf-est">Horas estimadas</label><input id="pf-est" type="number" min="0" step="0.5" class="input" name="estimated_hours" value="${p?.estimated_hours ?? ''}"></div>
+        <div class="field"><label for="pf-est">Horas estimadas</label><input id="pf-est" type="number" min="0" step="0.25" class="input" name="estimated_hours" value="${p?.estimated_hours ?? ''}"></div>
         <div class="field"><label for="pf-bud">Orçamento</label><input id="pf-bud" class="input mono" name="budget" ${moneyAttrs(p?.budget)}></div>
         <div class="field"><label for="pf-rev">Rodadas de ajuste incluídas</label><input id="pf-rev" type="number" min="0" step="1" class="input" name="revisions_included" value="${p?.revisions_included ?? 2}"></div>
       </div>
@@ -275,7 +275,7 @@ function openProjectForm(id, clientId, onCreated) {
     if (!f.name.trim()) return toast('Dê um nome ao projeto.');
     if (!f.client_id) return toast('Escolha o cliente.');
     if (!p && !f.work_type_id) return toast('Escolha o tipo de trabalho.');
-    const data = { name: f.name.trim(), client_id: f.client_id, work_type_id: f.work_type_id || (p ? p.work_type_id : null) || null, project_type: f.project_type || null, budget: numIn(f.budget), estimated_hours: numIn(f.estimated_hours), revisions_included: numIn(f.revisions_included), notes: f.notes, description: f.description };
+    const data = { name: f.name.trim(), client_id: f.client_id, work_type_id: f.work_type_id || (p ? p.work_type_id : null) || null, project_type: f.project_type || null, budget: numIn(f.budget), estimated_hours: (v => v ? Math.round(v * 4) / 4 : v)(numIn(f.estimated_hours)), revisions_included: numIn(f.revisions_included), notes: f.notes, description: f.description };
     const payId = feePayId(f.payment_status_id, l.box);
     if (p) {
       const wtAntes = p.work_type_id || null;

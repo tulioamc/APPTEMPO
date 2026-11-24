@@ -2110,3 +2110,10 @@ kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--li
 .pl-fantasma { position: absolute; border: 1.5px dashed var(--fc, var(--fg-3)); border-radius: 6px; background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(138,144,159,.18) 6px 12px); color: var(--fg-2); font-size: 11px; overflow: hidden; padding: 2px 6px; cursor: grab; opacity: .85; }
 .pl-fantasma .pl-tx { display: flex; flex-direction: column; min-width: 0; }
 .pl-fantasma em { font-style: normal; color: var(--fg-3); }
+
+.tk-hora { cursor: text; }
+.tk-hin { width: 5.2em; border: 0; border-bottom: 1px dashed transparent; background: transparent; font: inherit; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--fg-2); padding: 0; text-align: left; outline: none; }
+.tk-hin:hover { border-bottom-color: var(--line-strong); }
+.tk-hin:focus { border-bottom: 1px solid var(--accent); color: var(--fg); }
+.tk-hin::placeholder { color: var(--fg-3); opacity: .7; }
+.tk-hin.ent { font-size: inherit; width: 3.6em; color: inherit; }

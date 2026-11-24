@@ -1,4 +1,17 @@
-/* Hora em passos de 15 min num <select> (o campo de hora escondido não abre no app do Mac). */
+/* Hora digitada (18, 18h, 18:30, 1830, 18h30): arredonda para 15 em 15 min. '' = sem hora; null = não entendi. */
+function horaLer(v) {
+  const t = String(v || '').trim().toLowerCase().replace(/\s+/g, ''); if (!t) return '';
+  let m, h, mi;
+  if ((m = /^(\d{1,2})(?::|h)(\d{1,2})?$/.exec(t))) { h = +m[1]; mi = +(m[2] || 0); }
+  else if ((m = /^(\d{1,2})$/.exec(t))) { h = +m[1]; mi = 0; }
+  else if ((m = /^(\d{1,2})(\d{2})$/.exec(t))) { h = +m[1]; mi = +m[2]; }
+  else return null;
+  if (h > 24 || mi > 59) return null;
+  let tot = Math.round((h * 60 + mi) / 15) * 15; tot = Math.min(tot, 23 * 60 + 45);
+  return String(Math.floor(tot / 60)).padStart(2, '0') + ':' + String(tot % 60).padStart(2, '0');
+}
+const horaTxt = (v) => v ? v.replace(':', 'h').replace(/h00$/, 'h') : '';
+/* (antes) Hora em passos de 15 min num <select> (o campo de hora escondido não abre no app do Mac). */
 const horaOpcoesHTML = (v) => `<option value="">—</option>` + Array.from({ length: 96 }, (_, i) => { const h = String(Math.floor(i / 4)).padStart(2, '0') + ':' + String(i % 4 * 15).padStart(2, '0'); return `<option value="${h}"${h === v ? ' selected' : ''}>${h.replace(':', 'h')}</option>`; }).join('') + (v && !/:(00|15|30|45)$/.test(v) ? `<option value="${v}" selected>${v.replace(':', 'h')}</option>` : '');
 /* =====================================================================
    DETALHE DO PROJETO (gaveta lateral)
@@ -76,7 +89,7 @@ function pdTasks(p) {
       <div class="tk-st">${comboBtn('work', t.status_id, 'task-status', t.id)}</div>
       ${tkTempoHTML(t, liq, fila)}
       <label class="tk-data"><span class="tk-dv">${t.deadline ? fmtDate(t.deadline) : '<span class="faint">sem prazo</span>'}</span>${rel ? `<span class="tk-rel ${rel.c}">${rel.txt}</span>` : ''}<input type="date" value="${t.deadline || ''}" data-pd="tdl" data-id="${t.id}" aria-label="Prazo"></label>
-      <label class="tk-hora"${!t.deadline_time && fila[t.id]?.fim && fila[t.id].resto > 0 ? ` data-tip="${esc(`Sem hora de entrega. Pelo planejamento fica pronta ${fmtDate(ymd(fila[t.id].fim))} às ${planoHora(fila[t.id].fim.getHours() + fila[t.id].fim.getMinutes() / 60)}.\nClique para definir a hora da entrega.`)}"` : ''}>${t.deadline_time ? `<span class="tk-dv">${t.deadline_time.replace(':', 'h')}</span>` : fila[t.id]?.fim && fila[t.id].resto > 0 ? `<span class="tk-dv prev">≈${planoHora(fila[t.id].fim.getHours() + fila[t.id].fim.getMinutes() / 60).replace(':', 'h')}</span>` : '<span class="tk-dv faint">--h--</span>'}<select data-pd="thora" data-id="${t.id}" aria-label="Hora do prazo">${horaOpcoesHTML(t.deadline_time || '')}</select></label>
+      <label class="tk-hora"${!t.deadline_time && fila[t.id]?.fim && fila[t.id].resto > 0 ? ` data-tip="${esc(`Sem hora de entrega. Pelo planejamento fica pronta ${fmtDate(ymd(fila[t.id].fim))} às ${planoHora(fila[t.id].fim.getHours() + fila[t.id].fim.getMinutes() / 60)}.\nClique para definir a hora da entrega.`)}"` : ''}><input class="tk-hin" data-pd="thora" data-id="${t.id}" value="${horaTxt(t.deadline_time)}" placeholder="${fila[t.id]?.fim && fila[t.id].resto > 0 ? `≈${planoHora(fila[t.id].fim.getHours() + fila[t.id].fim.getMinutes() / 60).replace(':', 'h')}`.replace(/h00$/, 'h') : '--h--'}" aria-label="Hora do prazo (digite 18h, 18:30…)" autocomplete="off"></label>
       <span class="tk-acoes">${souEu(t.owner) ? `<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` : ''}<button class="btn sm icon ghost" data-x="tk-abrir" data-id="${t.id}" aria-label="${aberto ? 'Fechar' : 'Mais opções'}" aria-expanded="${aberto}">${icon(aberto ? 'chevU' : 'chevD')}</button></span>
     </div>
     ${aberto ? `<div class="tk-mais-p">
@@ -95,7 +108,7 @@ function pdTasks(p) {
     <span class="tk-ent-linha"></span>
     <span class="tk-ent-b"><span class="tk-ent-dl">DEADLINE</span>
     <label class="tk-ent-v"><span>${e.dia ? fmtDate(e.dia) : 'data'}</span><input type="date" value="${e.dia || ''}" data-ent-f="dia" aria-label="Data da entrega"></label>
-    <label class="tk-ent-v"><span>${(e.hora || '19:00').replace(':', 'h')}</span><select data-ent-f="hora" aria-label="Hora da entrega">${horaOpcoesHTML(e.hora || '19:00')}</select></label>
+    <label class="tk-ent-v"><input class="tk-hin ent" data-ent-f="hora" value="${horaTxt(e.hora || '19:00')}" placeholder="19h" aria-label="Hora da entrega (digite 18h, 18:30…)" autocomplete="off"></label>
     <button type="button" class="tk-ent-x" data-x="ent-del" data-id="${e.id}" aria-label="Apagar entrega" title="Apagar entrega">×</button></span></div>`;
   const seq = projSequencia(p.id);
   return `${typeof tkResolverBarraHTML === 'function' ? tkResolverBarraHTML(p.id) : ''}<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px"><button class="btn sm" data-act="pd-cal" data-id="${p.id}">${icon('cal')} Ver no Calendário</button><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
@@ -273,7 +286,8 @@ function bindProjectDrawer(ly, id, st) {
   // entregas (deadlines): editar nome/data/hora, apagar, arrastar pelo ⠿ entre as tarefas
   ly.box.addEventListener('change', (e) => {
     const el = e.target.closest('[data-ent-f]'); if (!el) return; const eid = el.closest('[data-ent]')?.dataset.ent;
-    const v = el.dataset.entF === 'nome' ? el.value.trim() : el.value || null;
+    let v = el.dataset.entF === 'nome' ? el.value.trim() : el.value || null;
+    if (el.dataset.entF === 'hora') { const h = horaLer(el.value); if (h === null) { toast('Não entendi a hora. Use 18, 18h30 ou 18:30.'); render(); return; } v = h || null; }
     projEntregasSalvar(id, projEntregas(id).map(x => x.id === eid ? { ...x, [el.dataset.entF]: v } : x)); db.emit();
   });
   let entArr = null;
@@ -303,8 +317,8 @@ function bindProjectDrawer(ly, id, st) {
     if (k === 'tname') { if (el.value.trim()) { db.update('tempo_tasks', el.dataset.id, { name: el.value.trim() }, true); render(); } }
     if (k === 'tstatus') setTaskStatus(db.get('tempo_tasks', el.dataset.id), el.value);
     if (k === 'twt') { db.update('tempo_tasks', el.dataset.id, { work_type_id: el.value || null }, true); render(); }
-    if (k === 'tprev') { const m = tkLerMin(el.value); if (el.value.trim() && m === null) { toast('Não entendi o tempo. Use 2, 2:30, 1h30 ou 90m.'); return; } db.update('tempo_tasks', el.dataset.id, { est_min: m || null }, true); render(); return; }
-    if (k === 'thora') { db.update('tempo_tasks', el.dataset.id, { deadline_time: el.value || null }, true); render(); return; }
+    if (k === 'tprev') { const m = tkLerMin(el.value); if (el.value.trim() && m === null) { toast('Não entendi o tempo. Use 2, 2:30, 1h30 ou 90m.'); return; } db.update('tempo_tasks', el.dataset.id, { est_min: m ? Math.max(15, Math.round(m / 15) * 15) : null }, true); render(); return; }
+    if (k === 'thora') { const h = horaLer(el.value); if (h === null) { toast('Não entendi a hora. Use 18, 18h30 ou 18:30.'); render(); return; } db.update('tempo_tasks', el.dataset.id, { deadline_time: h || null }, true); render(); return; }
     if (k === 'owner') { db.update('tempo_tasks', el.dataset.id, { owner: el.value.trim() || null }, true); render(); return; }
     if (k === 'dep-add') { if (!el.value) return; const tt = db.get('tempo_tasks', el.dataset.id); if (tt) { db.update('tempo_tasks', tt.id, { depends_on: [...(Array.isArray(tt?.depends_on) ? tt.depends_on : []), el.value] }, true); render(); } return; }
     if (k === 'tdl') {
