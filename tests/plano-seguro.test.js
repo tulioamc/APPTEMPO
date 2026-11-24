@@ -197,7 +197,9 @@ test('aleatório: 400 cenários — o plano sempre segue as regras (sem sobrepor
     // "livres" inclui os blocos maleáveis da rotina (o plano pode passar por cima deles quando a tarefa não cabe na entrega)
     todos.filter(b => !b.pin).forEach(b => { const jan = m.planoJanelas(b.dia, undefined, { solto: true }).jan; const ult = jan.length ? jan[jan.length - 1][1] : -1; if (!jan.some(([x, y]) => b.ini >= x - 1e-6 && b.fim <= y + (y === ult ? 1 : 0) + 1e-6)) ruim(`${b.id} fora das horas livres em ${b.dia} (${b.ini}-${b.fim})`); });
     // nunca antes de agora
-    todos.forEach(b => { if (b.dia === '2026-11-24' && b.ini < 9 - 1e-6) ruim(`${b.id} começa antes de agora`); if (b.dia < '2026-11-24') ruim(`${b.id} no passado`); });
+    // hoje o plano vale desde o começo do dia (não anda com o relógio): nada antes do início do expediente
+    const ini0 = (m.planoJanelas('2026-11-24', undefined, { solto: true }).jan[0] || [9])[0];
+    todos.forEach(b => { if (!b.pin && b.dia === '2026-11-24' && b.ini < ini0 - 1e-6) ruim(`${b.id} começa antes do expediente`); if (b.dia < '2026-11-24') ruim(`${b.id} no passado`); });
     // dependência respeitada
     itens.filter(x => !emCiclo.has(x.id)).forEach(x => x.deps.forEach(d => { const dep = mo.itens[d]; if (!dep || emCiclo.has(d)) return;
       x.blocos.forEach(b => { const ini = new Date(`${b.dia}T00:00:00`).getTime() + b.ini * 36e5; if (ini < dep.fim.getTime() - 61e3) ruim(`${x.id} começa antes de ${d} terminar`); }); }));

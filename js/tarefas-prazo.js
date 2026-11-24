@@ -192,7 +192,17 @@ let _tkMotor = { k: null };
 const tkUltimoBom = () => _tkMotor.v || null;   // último plano calculado sem erro
 function tkMotor(agora = new Date(), dias = 120) {
   const k = tkCacheKey() + '|' + dias; if (_tkMotor.k === k) return _tkMotor.v;
-  const cfg = planoCfg(); const hoje = ymd(agora); const nowH = agora.getHours() + agora.getMinutes() / 60;
+  const cfg = planoCfg(); const hoje = ymd(agora);
+  // Combinado (24/11): o plano de HOJE não anda com o relógio nem é empurrado pelo que foi registrado. Ele é montado a partir
+  // do começo do dia, com o que faltava de cada tarefa ao começar o dia; o registrado de hoje corre em paralelo.
+  // Assim nada pula para outro horário ou outro dia ao longo do dia (amanhã em diante continua depois do plano de hoje).
+  const nowH = 0; const ancora = new Date(hoje + 'T00:00:00');
+  const d0Hoje = ancora.getTime(), d1Hoje = d0Hoje + 864e5; const hojeMs = { t: {}, p: {} };
+  db.all('tempo_time_entries').forEach(e => (e.segments || []).forEach(sg => {
+    if (!sg.s) return; const a = Math.max(d0Hoje, new Date(sg.s).getTime()), b = Math.min(d1Hoje, sg.e ? new Date(sg.e).getTime() : Date.now()); if (!(b > a)) return;
+    if (e.task_id) { hojeMs.t[e.task_id] = (hojeMs.t[e.task_id] || 0) + (b - a); const tk = db.get('tempo_tasks', e.task_id); if (tk?.parent_id) hojeMs.t[tk.parent_id] = (hojeMs.t[tk.parent_id] || 0) + (b - a); }
+    if (e.project_id) hojeMs.p[e.project_id] = (hojeMs.p[e.project_id] || 0) + (b - a);
+  }));
   const H = tkHistorico();
   const diaDe = (dia, h) => new Date(new Date(dia + 'T00:00:00').getTime() + h * 36e5);
   const fimExp = (dia) => diaDe(dia, cfg.fim);
@@ -205,13 +215,13 @@ function tkMotor(agora = new Date(), dias = 120) {
     const abertas = todas.filter(t => !statusParado(t.status_id));   // esperando cliente/aprovação: fora da fila
     if (todas.length && !abertas.length) return;
     if (abertas.length) abertas.forEach(t => {
-      const pv = tkPrev(t); const feito = taskMs(t.id) / 60e3;
+      const pv = tkPrev(t); const feito = Math.max(0, taskMs(t.id) - (hojeMs.t[t.id] || 0)) / 60e3;   // até ontem
       const prevSim = pv.manual ? pv.min * H.fator : pv.min;
       itens.push({ id: t.id, t, p, pid: p.id, nome: t.name, eu: souEu(t.owner), deps: (Array.isArray(t?.depends_on) ? t.depends_on : []).filter(d => abertas.some(x => x.id === d)),
         resto: Math.ceil(Math.max(0, (Number.isFinite(prevSim) ? prevSim : 60) - feito) / 15 - 1e-6) * 15, feitoMin: feito, prev: pv.min, entrega: (() => { const a = tkEntrega(t), b = tkDataOk(entregaData(entDe[t.id])); return a && b ? (a < b ? a : b) : a || b || (p.deadline ? tkDataOk(fimExp(p.deadline)) : null); })(), marco: entDe[t.id] || null, chave: `${t.deadline || p.deadline || '9999'}T${t.deadline_time || '99'}|${String(t.order ?? 0).padStart(5, '0')}` });
     });
     else if (Number(p.estimated_hours) > 0) {
-      const falta = Number(p.estimated_hours) * 60 - projectMs(p.id) / 60e3;
+      const falta = Number(p.estimated_hours) * 60 - Math.max(0, projectMs(p.id) - (hojeMs.p[p.id] || 0)) / 60e3;
       if (falta > 3) itens.push({ id: 'p:' + p.id, _q: 1, t: null, p, pid: p.id, nome: p.name, eu: true, deps: [], resto: Math.ceil(falta / 15) * 15, feitoMin: 0, prev: falta, entrega: p.deadline ? fimExp(p.deadline) : null, chave: `${p.deadline || '9999'}T99|00000` });
     }
   });
@@ -302,9 +312,9 @@ function tkMotor(agora = new Date(), dias = 120) {
     return { blocos, fim: falta > 0.5 ? new Date(limite + 'T23:59:00') : fim, sobrou: falta > 0.5 };
   };
   // 3) fila
-  const res = {}; let cursor = agora, quem = null;
+  const res = {}; let cursor = ancora, quem = null;
   ordem.forEach(x => {
-    let pronto = agora, antes = null;
+    let pronto = ancora, antes = null;
     x.deps.forEach(dd => { const r = res[dd]; if (r && r.fim > pronto) { pronto = r.fim; antes = porId[dd]?.t || null; } });
     let resto = x.resto; const blocos = []; let fim = pronto;
     // blocos fixados à mão deste projeto

@@ -83,7 +83,7 @@ test('bloco fixado de quem ESPERA a tarefa não segura o horário dela (OOHs fix
   m.db.data.tempo_projects = [proj('a')];
   m.db.data.tempo_tasks = [tarefa('kv', 'a', { est_min: 15, deadline: '2026-11-30' }), tarefa('ooh', 'a', { est_min: 120, deadline: '2026-11-30', depends_on: ['kv'], order: 1 })];
   m.db.data.tempo_settings = [{ id: 'pp', key: 'planoPins', value: [{ id: 'p1', dia: '2026-11-25', pid: 'a', tid: 'ooh', ini: 9, h: 2 }] }];
-  const mo = m.tkMotor(new Date(2026, 10, 24, 19, 30), 10);   // hoje já acabou
+  const mo = m.tkMotor(new Date(2026, 10, 25, 8, 0), 10);   // dia 25 começando
   const kv = mo.itens.kv.blocos[0];
   assert.equal(kv.dia, '2026-11-25'); assert.equal(kv.ini, 9);
   const ooh = mo.itens.ooh.blocos;
@@ -94,6 +94,15 @@ test('o KV continua respeitando bloco fixado de tarefa que NÃO depende dele', (
   m.db.data.tempo_projects = [proj('a')];
   m.db.data.tempo_tasks = [tarefa('kv', 'a', { est_min: 60, deadline: '2026-11-30' }), tarefa('x', 'a', { est_min: 120, deadline: '2026-11-30', order: 1 })];
   m.db.data.tempo_settings = [{ id: 'pp', key: 'planoPins', value: [{ id: 'p1', dia: '2026-11-25', pid: 'a', tid: 'x', ini: 9, h: 2 }] }];
-  const mo = m.tkMotor(new Date(2026, 10, 24, 19, 30), 10);
+  const mo = m.tkMotor(new Date(2026, 10, 25, 8, 0), 10);
   assert.ok(mo.itens.kv.blocos.every(b => !(b.dia === '2026-11-25' && b.ini < 11 && b.fim > 9)));
+});
+test('combinado: o plano de hoje não anda com o relógio nem com o registrado de outra tarefa', () => {
+  const m = setup();
+  m.db.data.tempo_projects = [proj('a')];
+  m.db.data.tempo_tasks = [tarefa('cur', 'a', { est_min: 120, deadline: '2026-12-01', deadline_time: '19:00' }), tarefa('rio', 'a', { est_min: 60, deadline: '2026-12-02', order: 1 })];
+  // trabalhou 3h em outra tarefa hoje de manhã; às 18h45 o Curitiba continua às 9h de hoje (em paralelo), não pula para amanhã
+  m.db.data.tempo_time_entries = [{ id: 'e', project_id: 'a', task_id: 'rio', state: 'done', segments: [{ s: new Date(2026, 11, 1, 9, 0).toISOString(), e: new Date(2026, 11, 1, 12, 0).toISOString() }] }];
+  const mo = m.tkMotor(new Date(2026, 11, 1, 18, 45), 10);
+  assert.equal(mo.itens.cur.blocos[0].dia, '2026-12-01'); assert.equal(mo.itens.cur.blocos[0].ini, 9);
 });

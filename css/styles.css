@@ -2150,3 +2150,6 @@ kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--li
 /* Cartão do Relatório de produtividade (hover da coluna) no mesmo padrão da dica (estilo 4, tamanho de letra igual) */
 .prod-tip { background: var(--accent-soft); border: 1px solid var(--accent-line); box-shadow: 0 4px 14px rgba(20,24,60,.08); font-size: .78em; line-height: 1.4; padding: 7px 11px; color: var(--fg); }
 .prod-tip-h { color: var(--accent); font-size: 1.05em; font-weight: 600; margin-bottom: 4px; }
+/* Bloco flutuando ao ser levado para outro dia (24/11) */
+.pl-dg-fly { opacity: .92; box-shadow: 0 8px 24px rgba(20,24,60,.22); border-radius: 4px; cursor: grabbing; }
+.pl-dg-orig { opacity: .35; }

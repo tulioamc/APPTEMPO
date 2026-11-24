@@ -960,7 +960,8 @@ ACTIONS['pl-encaixar'] = (el) => {
     const modo = e.target.closest('.dg-t') ? 'top' : e.target.closest('.dg-b') ? 'bot' : 'move';
     const grupo = modo === 'move' && el.dataset.sk && PLANO.sel.has(el.dataset.sk) && PLANO.sel.size > 1
       ? [...document.querySelectorAll('[data-sk]')].filter(o => o !== el && PLANO.sel.has(o.dataset.sk)) : [];
-    d = { el, grupo, modo, kind: el.dataset.dg, dia: el.dataset.dia, ini: Number(el.dataset.ini), fim: Number(el.dataset.fim), y0: e.clientY, x0: e.clientX, top0: el.offsetTop, h0: el.offsetHeight };
+    const rr = el.getBoundingClientRect();
+    d = { el, grupo, modo, kind: el.dataset.dg, dia: el.dataset.dia, ini: Number(el.dataset.ini), fim: Number(el.dataset.fim), y0: e.clientY, x0: e.clientX, top0: el.offsetTop, h0: el.offsetHeight, ox: e.clientX - rr.left, oy: e.clientY - rr.top, col0: el.closest('[data-pl-col]') };
     mexeu = false;
   }, true);
   document.addEventListener('pointermove', (e) => {
@@ -969,7 +970,16 @@ ACTIONS['pl-encaixar'] = (el) => {
     if (!mexeu) { mexeu = true; d.el.classList.add('arrastando'); tip = document.createElement('div'); tip.className = 'pl-dg-tip'; document.body.appendChild(tip); }
     const [a, b] = calc(d, dy);
     d.el.style.top = (a * PL_ALT) + 'px'; d.el.style.height = Math.max(10, (b - a) * PL_ALT - 2) + 'px';
-    if (d.modo === 'move') d.el.style.transform = `translateX(${dx}px)`;
+    // Fora do próprio dia (ex.: no Mês, ou levando para outro dia), o bloco "flutua" com o mouse até onde for solto (24/11)
+    const r0 = d.col0?.getBoundingClientRect(); const fora = d.modo === 'move' && (!r0 || e.clientX < r0.left || e.clientX > r0.right || !!d.el.closest('.pl-pop, [data-pl-mes]'));
+    if (fora) {
+      if (!d.fly) { d.fly = d.el.cloneNode(true); d.fly.classList.add('pl-dg-fly'); d.fly.removeAttribute('data-dg'); d.fly.style.cssText = `position:fixed;z-index:999;pointer-events:none;margin:0;transform:none;width:${Math.max(90, d.el.offsetWidth)}px;height:${Math.min(Math.max(22, d.el.offsetHeight), 90)}px`; document.body.appendChild(d.fly); }
+      d.fly.style.left = (e.clientX - Math.min(d.ox, d.fly.offsetWidth - 8)) + 'px'; d.fly.style.top = (e.clientY - Math.min(d.oy, 20)) + 'px';
+      d.el.style.transform = ''; d.el.classList.add('pl-dg-orig');
+    } else {
+      if (d.fly) { d.fly.remove(); d.fly = null; d.el.classList.remove('pl-dg-orig'); }
+      if (d.modo === 'move') d.el.style.transform = `translateX(${dx}px)`;
+    }
     d.grupo.forEach(o => { o.style.transform = `translate(${dx}px, ${(a - d.ini) * PL_ALT}px)`; o.classList.add('arrastando'); });
     const hh = (h) => planoHora(h).replace(':', 'h').replace(/h00$/, 'h');
     tip.textContent = d.kind === 'prazo' ? `Entrega: ${hh(a)}` : d.modo === 'top' ? `Novo início: ${hh(a)}` : d.modo === 'bot' ? `Novo fim: ${hh(b)}` : `Novo horário: ${hh(a)}–${hh(b)}`;
@@ -978,6 +988,7 @@ ACTIONS['pl-encaixar'] = (el) => {
   });
   document.addEventListener('pointerup', async (e) => {
     if (!d) return; const x = d; d = null; if (tip) { tip.remove(); tip = null; }
+    if (x.fly) { x.fly.remove(); x.fly = null; } x.el.classList.remove('pl-dg-orig');
     if (!mexeu) return;
     x.el.style.pointerEvents = 'none';
     let [a, b] = calc(x, e.clientY - x.y0);
