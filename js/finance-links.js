@@ -10,6 +10,9 @@ function bankFixedMatch(t) {
   const ym = (t.posted_on || '').slice(0, 7);
   const word = cp.split(/\s+/)[0];
   const meses = bankMonthsFor(ym);
+  const conhecido = bankLearnedNames(bankFixedLearned(), t);   // já vinculada antes (ou combinada à mão), por nome ou CPF/CNPJ
+  const porRegra = conhecido && bankPickExp(db.all('tempo_expenses').filter(e => e.kind === 'out' && meses.includes(e.month) && !linked.has(e.id) && conhecido.has(e.name)), ym);
+  if (porRegra) return porRegra;
   return bankPickExp(db.all('tempo_expenses').filter(e => {
     if (e.kind !== 'out' || !meses.includes(e.month) || linked.has(e.id) || !e.name || (e.amount ?? e.amount_sug) == null) return false;
     const nm = e.name.toLowerCase();

@@ -324,9 +324,18 @@ function bankFixedLearned() {
     const e = db.get('tempo_expenses', t.expense_id); if (!e || !e.name) return;
     const k = t.flow + '|' + bankCpKey(t.counterpart); // entrada e saída aprendem separado (ex.: BRENDA → Salário)
     (map[k] = map[k] || new Set()).add(e.name);
+    const dg = bankDocDigits(t.counterpart_doc); if (dg) (map['doc|' + t.flow + '|' + dg] = map['doc|' + t.flow + '|' + dg] || new Set()).add(e.name);   // a mesma pessoa/empresa também é reconhecida pelo CPF/CNPJ
+  });
+  // Regras combinadas à mão (ex.: comprovante de Pix do primeiro mês): { nome, doc, gasto, flow } → o gasto fixo desse nome
+  (db.setting('bankPagadores', []) || []).forEach(r => {
+    if (!r || !r.gasto) return; const fl = r.flow || 'out';
+    if (r.nome) { const k = fl + '|' + bankCpKey(r.nome); (map[k] = map[k] || new Set()).add(r.gasto); }
+    const dg = bankDocDigits(r.doc); if (dg) (map['doc|' + fl + '|' + dg] = map['doc|' + fl + '|' + dg] || new Set()).add(r.gasto);
   });
   return map;
 }
+const bankDocDigits = (d) => { const x = String(d || '').replace(/\D/g, ''); return x.length === 14 || x.length === 11 ? x : ''; };   // CNPJ ou CPF inteiro (CPF mascarado do extrato não vale)
+const bankLearnedNames = (learned, t) => learned[t.flow + '|' + bankCpKey(t.counterpart)] || learned['doc|' + t.flow + '|' + bankDocDigits(t.counterpart_doc)] || null;
 // Saída de uma contraparte já vinculada a um gasto fixo: liga sozinha ao gasto do mesmo nome e mês (valor com folga de 6%).
 async function bankAutoFixed() {
   const learned = bankFixedLearned();
@@ -334,10 +343,10 @@ async function bankAutoFixed() {
   const expenses = db.all('tempo_expenses');
   const todo = [];
   (BANK.every || []).forEach(t => {
-    const lk = t.flow + '|' + bankCpKey(t.counterpart);
-    if (t.expense_id || t.scope === 'interna' || !t.counterpart || !learned[lk]) return;
+    const names = bankLearnedNames(learned, t);
+    if (t.expense_id || t.scope === 'interna' || !t.counterpart || !names) return;
     const ym = (t.posted_on || '').slice(0, 7), amt = Math.abs(Number(t.amount));
-    const names = learned[lk]; const kind = t.flow === 'in' ? 'in' : 'out';
+    const kind = t.flow === 'in' ? 'in' : 'out';
     const meses = bankMonthsFor(ym);
     // Mês do lançamento ou o seguinte: se o deste mês já está ligado (ex.: salário de outubro pago em 30/09), vai para o próximo.
     let e = bankPickExp(expenses.filter(x => x.kind === kind && meses.includes(x.month) && !taken.has(x.id) && (x.amount ?? x.amount_sug) != null
