@@ -313,19 +313,10 @@ function planoFk(x, dia) {
    depois entra um pouco mais para a direita e fica por cima, então o texto de cima de cada bloco nunca é coberto.
    Os que começam juntos (até 20 min de diferença) dividem a largura lado a lado. */
 function planoCascata(itens) {
+  // 24/11: o que cai no mesmo horário divide a largura lado a lado (como no Dia), em vez de entrar em cascata por cima.
   const fundo = itens.filter(x => x.k === 'fixo'); fundo.forEach(x => { x._left = 0; x._w = 100; x._fundo = true; x._z = 0; });
-  const ord = itens.filter(x => x.k !== 'fixo').sort((x, y) => x.a - y.a || (y.b - y.a) - (x.b - x.a));
-  const PASSO = 14, JUNTO = 1 / 3; const feitos = [];
-  let i = 0;
-  while (i < ord.length) {
-    // grupo que começa junto
-    const g = [ord[i]]; let j = i + 1; while (j < ord.length && ord[j].a - ord[i].a < JUNTO) g.push(ord[j++]);
-    const ativos = feitos.filter(f => f.b > ord[i].a + 1e-6 && ord[i].a - f.a >= JUNTO);
-    const nivel = ativos.length ? Math.max(...ativos.map(f => f._nivel)) + 1 : 0;
-    const left = Math.min(60, nivel * PASSO), larg = (100 - left) / g.length;
-    g.forEach((x, k) => { x._nivel = nivel; x._left = left + k * larg; x._w = larg; x._z = feitos.length + k + 1; });
-    feitos.push(...g); i = j;
-  }
+  const ord = planoFaixasLivre(itens.filter(x => x.k !== 'fixo'));
+  ord.forEach((x, k) => { x._left = x._l * (100 / x._n); x._w = 100 / x._n; x._nivel = 0; x._z = k + 1; });
   return [...fundo, ...ord];
 }
 function planoFaixas(itens0, unico = true, dia = '') {
