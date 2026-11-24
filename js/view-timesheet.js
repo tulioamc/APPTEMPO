@@ -897,26 +897,56 @@ function openEntryModal(id, startIso = null, endIso = null) {
   });
 }
 
-/* Dica flutuante: qualquer elemento com data-tip (barras, chips, números de horas e %).
-   Com mais de uma linha, a primeira vira o título. */
-let stripTip = null;
+/* Dica flutuante (estilo 4, 24/11): lilás clarinho com borda, título azul e seta apontando para o elemento.
+   Vale para data-tip e, automaticamente, para o title de qualquer elemento e o aria-label de botões só com ícone,
+   datas e horas (o title vira data-tip para não aparecer a dica nativa do sistema). Com mais de uma linha, a primeira
+   é o título. Aparece depois de 300 ms parado em cima; elementos grandes (barras, blocos) ancoram no mouse. */
+let stripTip = null, tipAlvo = null, tipTimer = null, tipMouse = { x: 0, y: 0 };
+const TIP_SEL = '[data-tip], [title], button[aria-label], a[aria-label], select[aria-label], input[type="date"][aria-label], input[type="time"][aria-label], .tk-hin[aria-label]';
+function tipAlvoDe(t) {
+  // o mais perto do mouse ganha (ex.: o pin dentro do bloco da rotina mostra a dica dele, não a do bloco)
+  for (let el = t?.closest?.(TIP_SEL); el; el = el.parentElement?.closest?.(TIP_SEL)) {
+    if (el.dataset.tip) return el;
+    const ti = el.getAttribute('title'); if (ti) { el.dataset.tip = ti; el.removeAttribute('title'); return el; }
+    const al = el.getAttribute('aria-label');
+    if (al && ((el.tagName !== 'BUTTON' && el.tagName !== 'A') || !el.textContent.trim())) { el.dataset.tip = al; return el; }
+  }
+  return null;
+}
+function tipPos() {
+  if (!stripTip || !tipAlvo || !tipAlvo.isConnected) return;
+  const r = tipAlvo.getBoundingClientRect(); const grande = r.height > 60 || r.width > 260;
+  const ax = grande ? tipMouse.x : r.left + Math.min(r.width / 2, 14);
+  const topo = grande ? tipMouse.y - 10 : r.top - 8, base = grande ? tipMouse.y + 18 : r.bottom + 8;
+  const w = stripTip.offsetWidth, h = stripTip.offsetHeight;
+  const x = Math.max(8, Math.min(ax - 14, innerWidth - w - 8));
+  const embaixo = topo - h < 8;
+  stripTip.classList.toggle('embaixo', embaixo);
+  stripTip.style.setProperty('--seta', Math.max(8, Math.min(ax - x - 5, w - 18)) + 'px');
+  stripTip.style.left = x + 'px'; stripTip.style.top = (embaixo ? base : topo - h) + 'px';
+}
+function tipMostra() {
+  if (!tipAlvo || !tipAlvo.isConnected || !tipAlvo.dataset.tip) return;
+  if (!stripTip) { stripTip = document.createElement('div'); stripTip.className = 'strip-tip'; stripTip.setAttribute('role', 'tooltip'); document.body.appendChild(stripTip); }
+  const [tit, ...linhas] = tipAlvo.dataset.tip.split('\n');
+  const tempo = (l) => { const m = l.match(/^(.*): (\S[^:]*)$/); return m ? `${esc(m[1])}: <b>${esc(m[2])}</b>` : esc(l); };
+  stripTip.innerHTML = linhas.length ? `<div class="tip-h">${esc(tit)}</div>${linhas.map(l => `<div>${tempo(l)}</div>`).join('')}` : `<div class="tip-u">${esc(tit)}</div>`;
+  stripTip.style.display = 'block'; tipPos();
+}
+const tipEsconde = () => { clearTimeout(tipTimer); tipTimer = null; tipAlvo = null; if (stripTip) stripTip.style.display = 'none'; };
 document.addEventListener('mouseover', (e) => {
-  const b = e.target.closest?.('[data-tip]'); if (!b || !b.dataset.tip) return;
-  if (!stripTip) { stripTip = document.createElement('div'); stripTip.className = 'strip-tip'; document.body.appendChild(stripTip); }
-  if (b.classList.contains('act-b') || b.dataset.tip.includes('\n')) {
-    // dica de atividade: título (app + total) maior e em negrito; nas linhas, o tempo em negrito
-    const [tit, ...linhas] = b.dataset.tip.split('\n');
-    const tempo = (l) => { const m = l.match(/^(.*): (\S[^:]*)$/); return m ? `${esc(m[1])}: <b>${esc(m[2])}</b>` : esc(l); };
-    stripTip.innerHTML = `<div class="tip-h">${esc(tit)}</div>${linhas.map(l => `<div>${tempo(l)}</div>`).join('')}`;
-  } else stripTip.textContent = b.dataset.tip;
-  stripTip.style.display = 'block';
+  const b = tipAlvoDe(e.target); if (!b) return; if (b === tipAlvo) return;
+  tipAlvo = b; tipMouse = { x: e.clientX, y: e.clientY }; clearTimeout(tipTimer);
+  if (stripTip && stripTip.style.display === 'block') tipMostra();   // já estava aberta: troca na hora
+  else tipTimer = setTimeout(tipMostra, 300);
 });
 document.addEventListener('mousemove', (e) => {
-  if (!stripTip || stripTip.style.display !== 'block') return;
-  const x = Math.min(e.clientX + 12, innerWidth - stripTip.offsetWidth - 8);
-  stripTip.style.left = Math.max(8, x) + 'px'; stripTip.style.top = (e.clientY - stripTip.offsetHeight - 10 < 8 ? e.clientY + 16 : e.clientY - stripTip.offsetHeight - 10) + 'px';
+  tipMouse = { x: e.clientX, y: e.clientY };
+  if (stripTip && stripTip.style.display === 'block' && tipAlvo) { const r = tipAlvo.getBoundingClientRect(); if (r.height > 60 || r.width > 260) tipPos(); }
 });
-document.addEventListener('mouseout', (e) => { const b = e.target.closest?.('[data-tip]'); if (stripTip && b && !(e.relatedTarget && b.contains(e.relatedTarget))) stripTip.style.display = 'none'; });
+document.addEventListener('mouseout', (e) => { if (tipAlvo && !(e.relatedTarget && tipAlvo.contains(e.relatedTarget))) { const nx = tipAlvoDe(e.relatedTarget); if (nx !== tipAlvo) tipEsconde(); } });
+document.addEventListener('mousedown', tipEsconde, true);
+document.addEventListener('scroll', tipEsconde, true);
 /* Trecho movido para outro projeto: ao passar o mouse, os outros trechos da faixa esmaecem. */
 document.addEventListener('mouseover', (e) => { const m = e.target.closest?.('.act-moved'); const st = m?.closest('.act-strip'); if (!st) return; st.classList.add('mv-focus'); m.classList.add('mv-on'); });
 document.addEventListener('mouseout', (e) => { const m = e.target.closest?.('.act-moved'); const st = m?.closest('.act-strip'); if (!st) return; st.classList.remove('mv-focus'); m.classList.remove('mv-on'); });

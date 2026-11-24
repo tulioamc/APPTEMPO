@@ -789,9 +789,6 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px va
 /* pausas: mesma listra na linha do tempo principal e nas faixas da sessão (cor vem de --ph) */
 .seg-b.pausa, .day-strip .seg-b.pausa, .act-strip .seg-b.pausa { background: repeating-linear-gradient(0deg, var(--ph, #d1d1d1) 0 4px, var(--pg, color-mix(in oklab, var(--ph, #d1d1d1) 35%, var(--surface))) 4px 8px); box-shadow: none; opacity: .9; }
 
-.strip-tip { position: fixed; z-index: 450; display: none; pointer-events: none; background: var(--fg); color: var(--bg); padding: 6px 9px; border-radius: 6px; font-size: .8em; line-height: 1.4; white-space: pre-line; box-shadow: var(--shadow); max-width: 280px; }
-.strip-tip .tip-h { font-weight: 700; font-size: calc(1em + 5pt); line-height: 1.25; margin-bottom: 3px; }
-.strip-tip b { font-weight: 700; }
 
 /* gráficos de tempo */
 .hbars { display: flex; flex-direction: column; gap: 8px; }
@@ -2142,3 +2139,11 @@ kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--li
 .pl-grade > .pl-bloco.cc .pl-cli { background: var(--ct) !important; color: var(--cc) !important; border-color: transparent !important; }
 .seg.pl-filtros .pl-cc-btn { margin-left: 6px; text-decoration: none !important; border-left: 1px solid var(--line); }
 .seg.pl-filtros .pl-cc-btn.on { background: var(--accent); color: #fff; }
+
+/* Dica ao passar o mouse — estilo 4 (24/11): lilás clarinho, borda, título azul, seta para o elemento */
+.strip-tip { position: fixed; z-index: 450; display: none; pointer-events: none; background: var(--accent-soft); color: var(--fg); border: 1px solid var(--accent-line); padding: 7px 11px; border-radius: 8px; font-size: .78em; line-height: 1.4; white-space: pre-line; max-width: 280px; box-shadow: 0 4px 14px rgba(20,24,60,.08); --seta: 10px; }
+.strip-tip::after { content: ""; position: absolute; left: var(--seta); bottom: -5px; width: 8px; height: 8px; background: var(--accent-soft); border-right: 1px solid var(--accent-line); border-bottom: 1px solid var(--accent-line); transform: rotate(45deg); }
+.strip-tip.embaixo::after { bottom: auto; top: -5px; transform: rotate(225deg); }
+.strip-tip .tip-h { font-weight: 600; color: var(--accent); font-size: 1.05em; line-height: 1.3; margin-bottom: 2px; }
+.strip-tip .tip-u { font-weight: 500; }
+.strip-tip b { font-weight: 700; }
