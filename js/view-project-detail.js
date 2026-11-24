@@ -98,8 +98,8 @@ function pdTasks(p) {
   const seq = projSequencia(p.id);
   return `${typeof tkResolverBarraHTML === 'function' ? tkResolverBarraHTML(p.id) : ''}<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px"><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
   <div class="panel tk-lista"><div class="panel-b tight">${tks.length ? seq.map(x => x.tipo === 'entrega' ? entHTML(x.e) : row(x.t) + subtasksOf(x.t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}
-  <form class="tk-nova" data-form="add-task"><span class="tk-nova-i">${icon('plus')}</span><input class="tk-in grow" name="name" placeholder="Nova tarefa (Enter para adicionar)" aria-label="Nova tarefa"></form>
-  <form class="tk-nova" data-form="add-ent"><span class="tk-nova-i">${icon('plus')}</span><input class="tk-in grow" name="name" placeholder="Deadline (Enter para adicionar)" aria-label="Nova entrega (deadline)"></form></div></div>`;
+  <form class="tk-nova" data-form="add-task"><button type="submit" class="tk-nova-i" aria-label="Adicionar" title="Adicionar">${icon('plus')}</button><input class="tk-in grow" name="name" placeholder="Nova tarefa (Enter para adicionar)" aria-label="Nova tarefa"></form>
+  <form class="tk-nova" data-form="add-ent"><button type="submit" class="tk-nova-i" aria-label="Adicionar" title="Adicionar">${icon('plus')}</button><input class="tk-in grow" name="name" placeholder="Deadline (Enter para adicionar)" aria-label="Nova entrega (deadline)"></form></div></div>`;
 }
 const TK_ABERTAS = new Set();
 /* Quanto falta para o prazo da tarefa: "Hoje, em 03h21" / "Amanhã" / "2 dias" / "Atrasada 1 dia". */
@@ -239,7 +239,7 @@ function bindProjectDrawer(ly, id, st) {
       projEntregasSalvar(id, [...lista, { id: uid(), nome, dia: ref, hora: ult?.deadline_time || '19:00', depois: ult?.id || null }]);
       db.emit(); setTimeout(() => ly.box.querySelector('[data-form="add-ent"] input')?.focus(), 30); return;
     }
-    if (kind === 'add-task') { if (!f.name.trim()) return; const pr = p(); db.insert('tempo_tasks', { project_id: id, parent_id: null, name: f.name.trim(), status_id: newTaskStatusId(id), status_inherited: true, ...ultimoPrazoDoProjeto(id), notes: '', order: tasksOf(id).length, work_type_id: null }); reopenProjectIfDone(id); logEvent('task', id, 'created', `Tarefa “${f.name.trim()}” criada`, null, null, { project_id: id }); setTimeout(() => ly.box.querySelector('[data-form="add-task"] input')?.focus(), 30); }
+    if (kind === 'add-task') { if (!f.name.trim()) { form.querySelector('input')?.focus(); return; } const pr = p(); db.insert('tempo_tasks', { project_id: id, parent_id: null, name: f.name.trim(), status_id: newTaskStatusId(id), status_inherited: true, ...ultimoPrazoDoProjeto(id), notes: '', order: tasksOf(id).length, work_type_id: null }); reopenProjectIfDone(id); logEvent('task', id, 'created', `Tarefa “${f.name.trim()}” criada`, null, null, { project_id: id }); setTimeout(() => ly.box.querySelector('[data-form="add-task"] input')?.focus(), 30); }
     if (kind === 'add-rev') {
       if (!f.description.trim()) return toast('Descreva o pedido de ajuste.');
       const n = db.where('tempo_revisions', r => r.project_id === id).length + 1;

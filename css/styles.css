@@ -1807,8 +1807,9 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .tk.aberta { background: var(--surface-2); }
 .tk-nova { display: flex; align-items: center; gap: 10px; padding: 12px 20px; }
 .tk-nova .tk-in { font-size: 12px; margin-left: 0; }
-.tk-nova-i { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 5px; background: var(--accent); color: #fff; flex: none; }
+.tk-nova-i { border: 0; padding: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 5px; background: var(--accent); color: #fff; flex: none; }
 .tk-nova-i svg { width: 14px; height: 14px; }
+.tk-nova-i:hover { filter: brightness(1.1); }
 /* Trabalhado / previsto, com ⚠ */
 .tk-tempo { display: flex; flex-direction: column; gap: 1px; font-variant-numeric: tabular-nums; }
 .tk-t1, .tk-t2 { display: flex; align-items: center; gap: 4px; position: relative; padding-left: 15px; white-space: nowrap; }
