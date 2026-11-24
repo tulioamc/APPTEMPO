@@ -2106,3 +2106,7 @@ kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--li
 .cr-chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 .entry .ent-cut { opacity: .0; transition: opacity .12s; }
 .entry:hover .ent-cut { opacity: 1; }
+
+.pl-fantasma { position: absolute; border: 1.5px dashed var(--fc, var(--fg-3)); border-radius: 6px; background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(138,144,159,.18) 6px 12px); color: var(--fg-2); font-size: 11px; overflow: hidden; padding: 2px 6px; cursor: grab; opacity: .85; }
+.pl-fantasma .pl-tx { display: flex; flex-direction: column; min-width: 0; }
+.pl-fantasma em { font-style: normal; color: var(--fg-3); }

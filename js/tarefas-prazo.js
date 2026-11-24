@@ -325,6 +325,29 @@ function tkMotor(agora = new Date(), dias = 120) {
     }
     res[x.id] = out;
   });
+  // 3b) preencher buracos (24/11): tarefa sem dependência e sem bloco fixado, que cabe INTEIRA num horário livre mais cedo, vai para lá.
+  // O "livre" não deveria existir se há coisa na fila. Nunca divide a tarefa, nunca passa o limite de horas do dia e não mexe em bloco fixado.
+  ordem.forEach(x => {
+    const r = res[x.id]; if (!r || !x.eu || !x.t || x.deps.length || !r.blocos.length || r.blocos.some(b => b.pin)) return;
+    const min = r.blocos.reduce((t, b) => t + (b.fim - b.ini) * 60, 0); if (min < 15) return;
+    const o0 = r.blocos[0]; const outros = Object.values(res).filter(y => y !== r && y.blocos && y.blocos.length);
+    const horasDia = (dd) => outros.reduce((t, y) => t + y.blocos.filter(b => b.dia === dd).reduce((u, b) => u + b.fim - b.ini, 0), 0);
+    for (let d = new Date(hoje + 'T12:00:00'); ymd(d) <= o0.dia; d.setDate(d.getDate() + 1)) {
+      const dd = ymd(d); if (!planoDiaUtil(dd)) continue;
+      if ((horasDia(dd) + min / 60) > capMin(dd) / 60 + 1e-6) continue;
+      let livres = janDe(dd).jan.map(([a, b]) => [Math.ceil(a * 4 - 1e-6) / 4, Math.floor(b * 4 + 1e-6) / 4]);
+      outros.forEach(y => y.blocos.filter(b => b.dia === dd).forEach(b => { livres = livres.flatMap(([a, c]) => b.fim <= a || b.ini >= c ? [[a, c]] : [[a, Math.min(b.ini, c)], [Math.max(b.fim + cfg.folga, a), c]].filter(([u, w]) => w - u > 0.01)); }));
+      const T = (dia, h) => diaDe(dia, h).getTime();
+      const noMeio = (a) => { const A = T(dd, a), B = T(dd, a + min / 60); return outros.some(y => { const bl = y.blocos.filter(b => !b.pin).map(b => [T(b.dia, b.ini), T(b.dia, b.fim)]).sort((p, q) => p[0] - q[0]); return bl.some((pc, i) => i + 1 < bl.length && A < bl[i + 1][0] - 1e3 && B > pc[1] + 1e3); }); };
+      const ach = livres.find(([a, b]) => (b - a) * 60 >= min - 0.5 && !(dd === o0.dia && Math.ceil(a * 4 - 1e-6) / 4 >= o0.ini - 1e-6) && !noMeio(Math.ceil(a * 4 - 1e-6) / 4));
+      if (!ach) continue;
+      const ini = Math.ceil(ach[0] * 4 - 1e-6) / 4;
+      if (dd === hoje && ini < nowH - 1e-6) continue;
+      r.blocos = [{ dia: dd, ini, fim: ini + min / 60 }]; r.fim = diaDe(dd, ini + min / 60); r.ini = diaDe(dd, ini); r.antes = null;
+      if (r.aviso && (!x.entrega || r.fim <= x.entrega)) delete r.aviso;
+      break;
+    }
+  });
   // 4) planejado por dia (formato do Calendário)
   const porDia = {};
   for (let d = new Date(hoje + 'T12:00:00'), i = 0; i <= dias; i++, d.setDate(d.getDate() + 1)) {
@@ -334,7 +357,7 @@ function tkMotor(agora = new Date(), dias = 120) {
   Object.values(res).forEach(x => x.blocos.forEach(b => {
     const v = porDia[b.dia] ||= { blocos: [], fixos: [], horas: 0, cap: capMin(b.dia) / 60 };
     const atr = !!(x.entrega && diaDe(b.dia, b.fim) > x.entrega);
-    v.blocos.push({ pid: x.pid, tid: x.t?.id || null, tarefa: x.t ? x.t.name : null, ini: b.ini, fim: b.fim, h: b.fim - b.ini, atrasado: atr, pins: b.pin ? [b.pin] : [] });
+    v.blocos.push({ pid: x.pid, tid: x.t?.id || null, tarefa: x.t ? x.t.name : null, ini: b.ini, fim: b.fim, h: b.fim - b.ini, atrasado: atr, pins: b.pin ? [b.pin] : [], espera: x.antes ? (x.antes.name || null) : null });
     v.horas += b.fim - b.ini;
   }));
   // pedaços colados da mesma tarefa (mesmo projeto e mesmo nome) viram um bloco só, fixado ou não
@@ -364,6 +387,7 @@ function tkMotor(agora = new Date(), dias = 120) {
       else if (!pn.tid && !Object.values(res).some(r => r.pid === pn.pid && r.eu)) motivo = 'fora';
     }
     pinsSobra.push({ pin: pn.id, dia: pn.dia, pid: pn.pid, tid: pn.tid || null, ini, fim: pn.b, motivo });
+    if (porDia[pn.dia]) (porDia[pn.dia].fantasmas ||= []).push({ pin: pn.id, pid: pn.pid, tid: pn.tid || null, ini, fim: pn.b, motivo });
   }));
   const v = { itens: res, porDia, estouro, pinsSobra, ciclos, fator: H.fator, nFator: H.nFator };
   _tkMotor = { k, v }; return v;
