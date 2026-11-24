@@ -84,7 +84,7 @@ function pdTasks(p) {
     const rel = tkPrazoRel(t);
     return `<div class="tk ${isSub ? 'sub' : ''}${aberto ? ' aberta' : ''}">
     <div class="tk-l">
-      <div class="tk-nome"><input class="tk-in n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome"${liq || est ? ` data-tip="${esc(`Líquido ${fmtDur(liq)} · bruto ${fmtDur(bruto)}${est ? ' · estimado ' + fmtH(est * 36e5) : ''}`)}"` : ''}>${deps.length ? `<span class="tk-dep">(Depende de ${deps.length > 1 ? deps.length + ' tarefas' : esc(deps[0])})</span>` : ''}</div>
+      <div class="tk-nome">${!isSub ? `<span class="tk-grip" draggable="true" data-tk-grip data-tip="Arraste para mudar a ordem da tarefa na lista"><svg viewBox="0 0 8 12" aria-hidden="true"><circle cx="2" cy="2" r="1.1"/><circle cx="6" cy="2" r="1.1"/><circle cx="2" cy="6" r="1.1"/><circle cx="6" cy="6" r="1.1"/><circle cx="2" cy="10" r="1.1"/><circle cx="6" cy="10" r="1.1"/></svg></span>` : ''}<input class="tk-in n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome"${liq || est ? ` data-tip="${esc(`Líquido ${fmtDur(liq)} · bruto ${fmtDur(bruto)}${est ? ' · estimado ' + fmtH(est * 36e5) : ''}`)}"` : ''}>${deps.length ? `<span class="tk-dep">(Depende de ${deps.length > 1 ? deps.length + ' tarefas' : esc(deps[0])})</span>` : ''}</div>
       <input class="tk-in tk-resp" value="${esc(t.owner || '')}" placeholder="—" data-pd="owner" data-id="${t.id}" aria-label="Responsável">
       <div class="tk-st">${comboBtn('work', t.status_id, 'task-status', t.id)}</div>
       ${tkTempoHTML(t, liq, fila)}
@@ -97,6 +97,7 @@ function pdTasks(p) {
       ${!isSub ? comboBtn('wt', t.work_type_id, 'task-wt', t.id) : ''}
       ${!isSub ? depsHTML(t) : ''}
       <span class="grow"></span>
+      ${!isSub ? `<button class="btn sm ${t.sem_pressa ? '' : 'ghost'}" data-x="tk-sempressa" data-id="${t.id}" data-tip="${t.sem_pressa ? 'Sem pressa (ligado): vai depois de todas as outras tarefas no planejamento e anda conforme entram novas. Se tiver entrega, volta ao normal 2 dias úteis antes. Clique para desligar' : 'Sem pressa: a tarefa vai depois de todas as outras no planejamento e anda conforme entram novas; com entrega, volta ao normal 2 dias úteis antes para não passar do prazo'}">${t.sem_pressa ? '✓ ' : ''}Sem pressa</button>` : ''}
       ${!isSub ? `<button class="btn sm ghost" data-x="add-sub" data-id="${t.id}">${icon('plus')} Subtarefa</button>` : ''}
       ${!isSub && !ADJUST_RE.test(t.name) ? `<button class="btn sm ghost" data-x="add-adjust" data-id="${t.id}" data-tip="Registrar um ajuste desta tarefa (cria [Ajuste NN] para você preencher o prazo)">Ajuste</button>` : ''}
       <button class="btn sm icon ghost" data-x="del-task" data-id="${t.id}" aria-label="Excluir">${icon('trash')}</button>
@@ -110,8 +111,11 @@ function pdTasks(p) {
     <label class="tk-ent-v"><span>${e.dia ? fmtDate(e.dia) : 'data'}</span><input type="date" value="${e.dia || ''}" data-ent-f="dia" aria-label="Data da entrega"></label>
     <label class="tk-ent-v"><input class="tk-hin ent" data-ent-f="hora" value="${horaTxt(e.hora || '19:00')}" placeholder="19h" aria-label="Hora da entrega (digite 18h, 18:30…)" autocomplete="off"></label>
     <button type="button" class="tk-ent-x" data-x="ent-del" data-id="${e.id}" aria-label="Apagar entrega" title="Apagar entrega">×</button></span></div>`;
-  const seq = projSequencia(p.id);
-  return `${typeof tkResolverBarraHTML === 'function' ? tkResolverBarraHTML(p.id) : ''}<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px"><button class="btn sm" data-act="pd-cal" data-id="${p.id}">${icon('cal')} Ver no Calendário</button><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
+  // esconder cancelados (24/11): caixinha ao lado de "Ver no Calendário"; vale para todos os projetos
+  const semCanc = !!db.setting('tkEsconderCancelados', false);
+  const nCanc = tks.filter(t => statusCat(t.status_id) === 'cancelled').length;
+  const seq = projSequencia(p.id).filter(x => !(semCanc && x.tipo === 'tarefa' && statusCat(x.t.status_id) === 'cancelled'));
+  return `${typeof tkResolverBarraHTML === 'function' ? tkResolverBarraHTML(p.id) : ''}<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px">${nCanc ? `<label class="check small" style="margin-right:auto" data-tip="Esconde as tarefas canceladas desta lista (vale para todos os projetos)"><input type="checkbox" data-x-chk="esc-canc" ${semCanc ? 'checked' : ''}> Esconder canceladas (${nCanc})</label>` : ''}<button class="btn sm" data-act="pd-cal" data-id="${p.id}">${icon('cal')} Ver no Calendário</button><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
   <div class="panel tk-lista"><div class="panel-b tight">${tks.length ? seq.map(x => x.tipo === 'entrega' ? entHTML(x.e) : row(x.t) + subtasksOf(x.t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}
   <form class="tk-nova" data-form="add-task"><button type="submit" class="tk-nova-i" aria-label="Adicionar" title="Adicionar">${icon('plus')}</button><input class="tk-in grow" name="name" placeholder="Nova tarefa (Enter para adicionar)" aria-label="Nova tarefa"></form>
   <form class="tk-nova" data-form="add-ent"><button type="submit" class="tk-nova-i" aria-label="Adicionar" title="Adicionar">${icon('plus')}</button><input class="tk-in grow" name="name" placeholder="Deadline (Enter para adicionar)" aria-label="Nova entrega (deadline)"></form></div></div>`;
@@ -225,6 +229,7 @@ function bindProjectDrawer(ly, id, st) {
     if (x === 'tk-alerta') { e.preventDefault(); return tkAlerta(db.get('tempo_tasks', bid), b.dataset.k); }
     if (x === 'ent-del') { if (!await confirmBox({ title: 'Apagar esta entrega?', body: 'As tarefas continuam; só o deadline some.', ok: 'Apagar', danger: true })) return; projEntregasSalvar(id, projEntregas(id).filter(z => z.id !== bid)); db.emit(); return; }
     if (x === 'tk-abrir') { TK_ABERTAS.has(bid) ? TK_ABERTAS.delete(bid) : TK_ABERTAS.add(bid); ly.refresh(); return; }
+    if (x === 'tk-sempressa') { const t = db.get('tempo_tasks', bid); if (t) { db.update('tempo_tasks', t.id, { sem_pressa: !t.sem_pressa }, true); db.emit(); toast(t.sem_pressa ? 'Sem pressa desligado' : 'Sem pressa: vai depois de todas as outras'); } return; }
     if (x === 'add-sub') { const t = db.get('tempo_tasks', bid); db.insert('tempo_tasks', { project_id: id, parent_id: t.id, name: 'Nova subtarefa', status_id: t.status_id, status_inherited: true, deadline: null, notes: '', order: subtasksOf(t.id).length }); setTimeout(() => { const ins = $$('[data-pd="tname"]', ly.box); const last = ins.find(i => db.get('tempo_tasks', i.dataset.id)?.name === 'Nova subtarefa'); last?.select(); }, 30); }
     if (x === 'del-task') {
       const t = db.get('tempo_tasks', bid); const subs = subtasksOf(t.id);
@@ -290,6 +295,18 @@ function bindProjectDrawer(ly, id, st) {
     if (el.dataset.entF === 'hora') { const h = horaLer(el.value); if (h === null) { toast('Não entendi a hora. Use 18, 18h30 ou 18:30.'); render(); return; } v = h || null; }
     projEntregasSalvar(id, projEntregas(id).map(x => x.id === eid ? { ...x, [el.dataset.entF]: v } : x)); db.emit();
   });
+  // esconder canceladas
+  ly.box.addEventListener('change', (e) => { const c = e.target.closest?.('[data-x-chk="esc-canc"]'); if (!c) return; db.setSetting('tkEsconderCancelados', c.checked); db.emit(); ly.refresh(); });
+  // reordenar tarefas pela alça de 6 pontinhos (24/11): a ordem nova vira o "order" das tarefas de topo
+  let tkArr = null;
+  ly.box.addEventListener('dragstart', (e) => { const g = e.target.closest?.('[data-tk-grip]'); if (!g) return; tkArr = g.closest('.tk'); tkArr.classList.add('arrastando'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', 'tk'); } catch (err) { /* ok */ } });
+  ly.box.addEventListener('dragover', (e) => { if (!tkArr) return; const alvo = e.target.closest?.('.tk:not(.sub), .tk-entrega'); if (!alvo || alvo === tkArr) return; e.preventDefault();
+    const r = alvo.getBoundingClientRect(); alvo.parentNode.insertBefore(tkArr, e.clientY < r.top + r.height / 2 ? alvo : alvo.nextSibling); });
+  ly.box.addEventListener('dragend', () => { if (!tkArr) return; tkArr.classList.remove('arrastando'); tkArr = null;
+    const ids = [...ly.box.querySelectorAll('.tk:not(.sub) [data-pd="tname"]')].map(x => x.dataset.id);
+    const visto = new Set(ids); const resto = tasksOf(id).filter(t => !visto.has(t.id)).map(t => t.id);   // escondidas (canceladas) vão para o fim, na mesma ordem
+    [...ids, ...resto].forEach((tid, i) => { const t = db.get('tempo_tasks', tid); if (t && (t.order ?? 0) !== i) db.update('tempo_tasks', tid, { order: i }, true); });
+    db.emit(); ly.refresh(); });
   let entArr = null;
   ly.box.addEventListener('dragstart', (e) => { const g = e.target.closest?.('[data-ent-grip]'); if (!g) return; entArr = g.closest('[data-ent]'); entArr.classList.add('arrastando'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', entArr.dataset.ent); } catch (err) {} });
   ly.box.addEventListener('dragover', (e) => { if (!entArr) return; const alvo = e.target.closest?.('.tk, .tk-entrega'); if (!alvo || alvo === entArr) return; e.preventDefault();

@@ -218,7 +218,10 @@ test('aleatório: 400 cenários — o plano sempre segue as regras (sem sobrepor
     itens.filter(x => !emCiclo.has(x.id) && x.fim < new Date(2026, 11, 20)).forEach(x => { const soma = x.blocos.reduce((t, b) => t + (b.fim - b.ini) * 60, 0); if (soma > x.resto + 0.51) ruim(`${x.id}: planejou ${soma} min para ${x.resto}`); });
     // bloco fixado que sobrou é sempre explicado no diagnóstico (nunca um horário "fantasma")
     const sobra = new Set((mo.pinsSobra || []).map(s => s.pin)); const vistos = new Set(todos.filter(b => b.pin).map(b => b.pin));
-    m.planoPins().filter(p => p.dia >= '2026-11-24').forEach(p => { const sob = (mo.pinsSobra || []).find(s => s.pin === p.id); if (!vistos.has(p.id) && !sob && !(p.dia === '2026-11-24' && p.ini + p.h <= 9.01)) ruim(`bloco ${p.id} sumiu sem explicação`); });
+    m.planoPins().filter(p => p.dia >= '2026-11-24').forEach(p => { const sob = (mo.pinsSobra || []).find(s => s.pin === p.id); // (aparado ou juntado de propósito: a tarefa dele já está toda planejada com os outros pedaços)
+      const coberta = p.tid && mo.itens[p.tid] && mo.itens[p.tid].blocos.reduce((t, b) => t + (b.fim - b.ini) * 60, 0) >= mo.itens[p.tid].resto - 0.5 && mo.itens[p.tid].blocos.some(b => b.pin);
+      const junto = p.tid && m.planoPins().some(q => q.id !== p.id && q.tid === p.tid && q.dia === p.dia && Number(q.ini) < Number(p.ini) + Number(p.h) + 1e-6 && Number(q.ini) + Number(q.h) > Number(p.ini) - 1e-6);   // juntado com outro da mesma tarefa
+      if (!vistos.has(p.id) && !sob && !coberta && !junto && !(p.dia === '2026-11-24' && p.ini + p.h <= 9.01)) ruim(`bloco ${p.id} sumiu sem explicação`); });
     // planejar() e o Gantt nunca quebram
     try { m.planejar([], AGORA, 40); } catch (e) { ruim('planejar quebrou ' + e.message); }
   }

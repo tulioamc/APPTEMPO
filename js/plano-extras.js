@@ -4,7 +4,7 @@
 function planoBandejaLista() {
   let m; try { m = tkMotor(new Date(), 60); } catch (e) { return []; }
   return Object.values(m.itens).filter(x => x.t && x.eu && x.pid && (x.resto || 0) > 0)
-    .sort((a, b) => String(a.blocos?.[0] ? a.blocos[0].dia + String(a.blocos[0].ini).padStart(5, '0') : 'z').localeCompare(String(b.blocos?.[0] ? b.blocos[0].dia + String(b.blocos[0].ini).padStart(5, '0') : 'z'))).slice(0, 14)
+    .sort((a, b) => String(a.blocos?.[0] ? a.blocos[0].dia + (Number(a.blocos[0].ini) || 0).toFixed(3).padStart(7, '0') : 'z').localeCompare(String(b.blocos?.[0] ? b.blocos[0].dia + (Number(b.blocos[0].ini) || 0).toFixed(3).padStart(7, '0') : 'z'))).slice(0, 14)
     .map(x => ({ tid: x.t.id, pid: x.pid, nome: x.t.name, h: Math.max(0.25, Math.min(8, Math.round(x.resto / 15) / 4)) }));
 }
 const planoBandejaBtn = (modo) => (modo === 'dia' || modo === 'semana')
@@ -165,9 +165,16 @@ const planoMoverAmanha = (el) => planoMoverBloco(el, planoProximoUtil(el.dataset
 /* Fixar o dia: todos os blocos planejados do dia viram fixados como estão. Soltar o dia: tira todos os fixados dele. */
 function planoFixarDia(dia) {
   let m; try { m = tkMotor(new Date(), 60); } catch (_) { return; }
-  const soltos = (m.porDia[dia]?.blocos || []).filter(b => !b.pin);
+  const bl = m.porDia[dia]?.blocos || []; const soltos = bl.filter(b => !b.pin);
   if (!soltos.length) return toast('Nada solto para fixar neste dia');
-  planoMudar(`Dia fixado (${soltos.length} bloco${soltos.length > 1 ? 's' : ''})`, () => planoPinsSalvar([...planoPins(), ...soltos.map(b => ({ id: uid(), dia, pid: b.pid, tid: b.tid || null, ini: b.ini, h: b.fim - b.ini }))]));
+  planoMudar(`Dia fixado (${soltos.length} bloco${soltos.length > 1 ? 's' : ''})`, () => planoPinsSalvar(planoFixarDiaLista(planoPins(), dia, m)));
+}
+/* O dia fica salvo EXATAMENTE como aparece: os fixados antigos do dia saem e cada bloco da tela vira um fixado do tamanho
+   que está (um fixado encolhido ou juntado pelo plano não volta a crescer por cima de outro depois). Os que esperam outra
+   tarefa (não aparecem) continuam como estavam. */
+function planoFixarDiaLista(pins, dia, m) {
+  const bl = m.porDia[dia]?.blocos || []; const fant = new Set((m.pinsSobra || []).filter(q => q.dia === dia).map(q => q.pin));
+  return [...pins.filter(p => p.dia !== dia || fant.has(p.id)), ...bl.map(b => ({ id: uid(), dia, pid: b.pid, tid: b.tid || null, ini: b.ini, h: b.fim - b.ini }))];
 }
 function planoSoltarDia(dia) {
   const n = planoPins().filter(p => p.dia === dia).length; if (!n) return toast('Nenhum bloco fixado neste dia');

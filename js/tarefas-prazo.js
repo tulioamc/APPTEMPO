@@ -188,6 +188,19 @@ const tkPrevMin = (t) => tkPrev(t).min;
    do dia). Blocos fixados à mão (arrastados no Calendário) ficam onde estão e contam para as tarefas daquele projeto.
    Projeto ativo sem tarefas abertas usa as horas estimadas que faltam. Terceiros correm em paralelo.
    ===================================================================== */
+/* Ordem da fila. "Sem pressa" (24/11): vai depois de todas as outras e anda conforme entram novas; se tem entrega e ela
+   chega perto (2 dias úteis ou menos), volta para a ordem normal para não passar do prazo (e o aviso de prazo aparece). */
+function tkSemPressaAtiva(t, agora = new Date()) {
+  if (!t || !t.sem_pressa) return false;
+  if (!t.deadline) return true;
+  let d = new Date(agora); d.setHours(12, 0, 0, 0); let uteis = 0;
+  while (ymd(d) < t.deadline && uteis < 3) { d.setDate(d.getDate() + 1); if (typeof planoDiaUtil !== 'function' || planoDiaUtil(ymd(d))) uteis++; }
+  return uteis > 2;
+}
+function tkChave(t, p, agora) {
+  const base = `${t.deadline || p.deadline || '9999'}T${t.deadline_time || '99'}|${String(t.order ?? 0).padStart(5, '0')}`;
+  return tkSemPressaAtiva(t, agora) ? 'ZZZZ|' + base : base;
+}
 let _tkMotor = { k: null };
 const tkUltimoBom = () => _tkMotor.v || null;   // último plano calculado sem erro
 function tkMotor(agora = new Date(), dias = 120, opts = null) {
@@ -220,7 +233,7 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
       const pv = tkPrev(t); const feito = Math.max(0, taskMs(t.id) - (hojeMs.t[t.id] || 0)) / 60e3;   // até ontem
       const prevSim = pv.manual ? pv.min * H.fator : pv.min;
       itens.push({ id: t.id, t, p, pid: p.id, nome: t.name, eu: souEu(t.owner), deps: (Array.isArray(t?.depends_on) ? t.depends_on : []).filter(d => abertas.some(x => x.id === d)),
-        resto: Math.ceil(Math.max(0, (Number.isFinite(prevSim) ? prevSim : 60) - feito) / 15 - 1e-6) * 15, feitoMin: feito, prev: pv.min, entrega: (() => { const a = tkEntrega(t), b = tkDataOk(entregaData(entDe[t.id])); return a && b ? (a < b ? a : b) : a || b || (p.deadline ? tkDataOk(fimExp(p.deadline)) : null); })(), marco: entDe[t.id] || null, chave: `${t.deadline || p.deadline || '9999'}T${t.deadline_time || '99'}|${String(t.order ?? 0).padStart(5, '0')}` });
+        resto: Math.ceil(Math.max(0, (Number.isFinite(prevSim) ? prevSim : 60) - feito) / 15 - 1e-6) * 15, feitoMin: feito, prev: pv.min, entrega: (() => { const a = tkEntrega(t), b = tkDataOk(entregaData(entDe[t.id])); return a && b ? (a < b ? a : b) : a || b || (p.deadline ? tkDataOk(fimExp(p.deadline)) : null); })(), marco: entDe[t.id] || null, chave: tkChave(t, p, agora) });
     });
     else if (Number(p.estimated_hours) > 0) {
       const falta = Number(p.estimated_hours) * 60 - Math.max(0, projectMs(p.id) - (hojeMs.p[p.id] || 0)) / 60e3;
@@ -239,23 +252,22 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
   // fica livre — o trabalho solto que vem depois sobe e encosta nele (sem bloco "o plano não usa"). Só nesta conta: o salvo não muda.
   const pins = (() => {
     const l = (previa ? opts.pins : planoPins()).filter(pn => pn.dia >= hoje).map(pn => ({ ...pn }));
-    const porTid = {}; l.filter(pn => pn.tid).forEach(pn => (porTid[pn.tid] ||= []).push(pn));
-    Object.entries(porTid).forEach(([tid, ps]) => {
-      const it = itens.find(z => z.t && z.t.id === tid && z.eu); if (!it) return;
-      let sobra = ps.reduce((t, pn) => t + Number(pn.h) * 60, 0) - it.resto; if (sobra < 15) return;
-      ps.sort((a, b) => (b.dia + String(b.ini).padStart(5, '0')).localeCompare(a.dia + String(a.ini).padStart(5, '0')));   // apara do último para o primeiro
-      ps.forEach(pn => { if (sobra < 15) return; const corta = Math.min(Number(pn.h) * 60 - 15, Math.floor(sobra / 15) * 15); if (corta <= 0) return; pn.h = Number(pn.h) - corta / 60; sobra -= corta; });
-    });
     // Pedaços fixados da MESMA tarefa no mesmo dia, com horário livre entre eles (ex.: o almoço encolheu): o de trás sobe e
     // encosta no da frente (24/11). Nunca pula por cima de bloco fixado de outra tarefa. Só nesta conta: o salvo não muda.
     const grupos = {}; l.filter(pn => pn.tid).forEach(pn => (grupos[pn.tid + '|' + pn.dia] ||= []).push(pn));
+    // dois fixados da mesma tarefa no mesmo horário (encostados ou um por cima do outro) viram um só
+    Object.values(grupos).forEach(g => { g.sort((a, b) => Number(a.ini) - Number(b.ini));
+      for (let i = 1; i < g.length; i++) { const a = g[i - 1], b = g[i]; const fa = Number(a.ini) + Number(a.h);
+        if (Number(b.ini) < fa - 1e-6) { a.h = Math.max(fa, Number(b.ini) + Number(b.h)) - Number(a.ini); l.splice(l.indexOf(b), 1); g.splice(i, 1); i--; } } });
     Object.values(grupos).filter(g => g.length > 1).forEach(g => {
       g.sort((a, b) => Number(a.ini) - Number(b.ini)); const dia = g[0].dia, tid = g[0].tid;
       const outros = l.filter(pn => pn.dia === dia && pn.tid !== tid).map(pn => [Number(pn.ini), Number(pn.ini) + Number(pn.h)]);
       for (let i = 1; i < g.length; i++) {
         const pe = Number(g[i - 1].ini) + Number(g[i - 1].h), cur = g[i], ci = Number(cur.ini); if (ci <= pe + 0.01) continue;
-        if (outros.some(([a, b]) => a < ci - 1e-6 && b > pe + 1e-6)) continue;   // outra tarefa no meio: não mexe
+        // só o horário livre LOGO depois do pedaço da frente (encostado nele); outra tarefa mais adiante não impede
         let livres = planoJanelas(dia, cfg).jan.map(([a, b]) => [Math.max(a, pe), Math.min(b, ci)]).filter(([a, b]) => b - a > 0.24);
+        outros.forEach(([p, q]) => { livres = livres.flatMap(([a, b]) => q <= a || p >= b ? [[a, b]] : [[a, Math.min(p, b)], [Math.max(q, a), b]].filter(([u, v]) => v - u > 0.24)); });
+        livres = livres.filter(([a]) => a <= pe + 0.01).slice(0, 1);
         if (!livres.length) continue;
         let falta = Number(cur.h); const novos = [];
         livres.forEach(([a, b]) => { if (falta < 0.24) return; const t = Math.min(falta, Math.floor((b - a) * 4 + 1e-6) / 4); if (t < 0.24) return; novos.push({ ...cur, id: novos.length ? cur.id + '~' + novos.length : cur.id, ini: a, h: t }); falta -= t; });
@@ -263,6 +275,17 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
         if (falta > 0.24) novos.push({ ...cur, id: cur.id + '~r', ini: ci, h: falta });
         l.splice(l.indexOf(cur), 1, ...novos); g.splice(i, 1, ...novos); i += novos.length - 1;
       }
+    });
+    // depois de juntar: o que passa do que a tarefa precisa é aparado do último pedaço para o primeiro (pedaço inteiro
+    // sai se sobrar; o primeiro fica com pelo menos 15 min) — nada de bloco fixado sobrando "sem uso"
+    const porTid = {}; l.filter(pn => pn.tid).forEach(pn => (porTid[pn.tid] ||= []).push(pn));
+    Object.entries(porTid).forEach(([tid, ps]) => {
+      // tarefa que espera outra: os fixados dela podem nem valer (antes de a outra terminar) — não apara, o aviso explica
+      const it = itens.find(z => z.t && z.t.id === tid && z.eu); if (!it || it.deps.length) return;
+      let sobra = ps.reduce((t, pn) => t + Number(pn.h) * 60, 0) - it.resto; if (sobra < 15) return;
+      ps.sort((a, b) => (b.dia + (Number(b.ini) || 0).toFixed(3).padStart(7, '0')).localeCompare(a.dia + (Number(a.ini) || 0).toFixed(3).padStart(7, '0')));   // apara do último para o primeiro
+      ps.forEach((pn, i) => { if (sobra < 15) return; const min = i === ps.length - 1 ? 15 : 0; const corta = Math.min(Number(pn.h) * 60 - min, Math.floor(sobra / 15) * 15); if (corta <= 0) return; pn.h = Number(pn.h) - corta / 60; sobra -= corta; });
+      ps.filter(pn => Number(pn.h) < 0.24).forEach(pn => l.splice(l.indexOf(pn), 1));
     });
     return l;
   })();
@@ -284,7 +307,7 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
   const usado = {}; const capMin = (dia) => Math.min(planoEsticados()[dia] || cfg.horasDia, 24) * 60;
   pins.forEach(pn => { usado[pn.dia] = (usado[pn.dia] || 0) + Number(pn.h) * 60; });
   // blocos fixados: de uma tarefa (tid) só servem a ela; do projeto (sem tid) servem às tarefas dele, na ordem da fila
-  const pinPool = {}; pins.slice().sort((a, b) => (a.dia + String(a.ini).padStart(5, '0')).localeCompare(b.dia + String(b.ini).padStart(5, '0'))).forEach(pn => { (pinPool[pn.tid ? 't:' + pn.tid : 'p:' + pn.pid] ||= []).push({ ...pn, cur: Number(pn.ini), b: Number(pn.ini) + Number(pn.h) }); });
+  const pinPool = {}; pins.slice().sort((a, b) => (a.dia + (Number(a.ini) || 0).toFixed(3).padStart(7, '0')).localeCompare(b.dia + (Number(b.ini) || 0).toFixed(3).padStart(7, '0'))).forEach(pn => { (pinPool[pn.tid ? 't:' + pn.tid : 'p:' + pn.pid] ||= []).push({ ...pn, cur: Number(pn.ini), b: Number(pn.ini) + Number(pn.h) }); });
   const limite = ymd(new Date(agora.getTime() + dias * 864e5));
   // Regra do fim do dia (24/11): se o que sobra da tarefa depois do expediente é até 1h, o dia estica e ela termina nele;
   // mais que isso, a sobra vai inteira para o próximo dia. Nunca estica por cima de rotina, compromisso ou bloco de outra tarefa.
@@ -428,7 +451,8 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
       : x.antes ? `Fila: vem depois de “${x.antes.name}” (a entrega mais perto vai primeiro) · ${ent}`
       : x.blocos.some(z => z.pin) ? `Continua o bloco que você fixou · ${ent}`
       : `Primeiro da fila · ${ent}`;
-    v.blocos.push({ pid: x.pid, tid: x.t?.id || null, tarefa: x.t ? x.t.name : null, ini: b.ini, fim: b.fim, h: b.fim - b.ini, atrasado: atr, pins: b.pin ? [b.pin] : [], espera: x.antes ? (x.antes.name || null) : null, porque });
+    const porque2 = x.t && tkSemPressaAtiva(x.t, agora) && !b.pin ? porque + ' · sem pressa: vai depois de todas as outras' : x.t && x.t.sem_pressa && !b.pin ? porque + ' · era "sem pressa", mas a entrega está perto' : porque;
+    v.blocos.push({ pid: x.pid, tid: x.t?.id || null, tarefa: x.t ? x.t.name : null, ini: b.ini, fim: b.fim, h: b.fim - b.ini, atrasado: atr, pins: b.pin ? [String(b.pin).split('~')[0]] : [], espera: x.antes ? (x.antes.name || null) : null, porque: porque2 });
     v.horas += b.fim - b.ini;
   }));
   // pedaços colados da mesma tarefa (mesmo projeto e mesmo nome) viram um bloco só, fixado ou não
@@ -436,7 +460,7 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
     const ord = v.blocos.sort((a, b) => a.ini - b.ini); const out = [];
     ord.forEach(b => {
       const l = out.find(y => y.pid === b.pid && (y.tid === b.tid || (y.tarefa && y.tarefa === b.tarefa)) && Math.abs(y.fim - b.ini) < 0.02);
-      if (l) { l.fim = Math.max(l.fim, b.fim); l.h = l.fim - l.ini; l.pins.push(...b.pins); l.atrasado = l.atrasado || b.atrasado; } else out.push(b);
+      if (l) { l.fim = Math.max(l.fim, b.fim); l.h = l.fim - l.ini; l.pins.push(...b.pins.filter(q => !l.pins.includes(q))); l.atrasado = l.atrasado || b.atrasado; } else out.push(b);
     });
     out.forEach(b => { b.pin = b.pins[0] || null; });
     v.blocos = out;
@@ -457,9 +481,26 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
       else if (pn.tid && !it) motivo = tk && statusParado(tk.status_id) ? 'parada' : tk && !souEu(tk.owner) ? 'terceiro' : 'fora';
       else if (!pn.tid && !Object.values(res).some(r => r.pid === pn.pid && r.eu)) motivo = 'fora';
     }
-    pinsSobra.push({ pin: pn.id, dia: pn.dia, pid: pn.pid, tid: pn.tid || null, ini, fim: pn.b, motivo });
-    if (porDia[pn.dia]) (porDia[pn.dia].fantasmas ||= []).push({ pin: pn.id, pid: pn.pid, tid: pn.tid || null, ini, fim: pn.b, motivo });
+    const pid0 = String(pn.id).split('~')[0];   // pedaço de um fixado dividido pelo plano: aponta para o fixado salvo
+    pinsSobra.push({ pin: pid0, dia: pn.dia, pid: pn.pid, tid: pn.tid || null, ini, fim: pn.b, motivo });
+    if (porDia[pn.dia]) (porDia[pn.dia].fantasmas ||= []).push({ pin: pid0, pid: pn.pid, tid: pn.tid || null, ini, fim: pn.b, motivo });
   }));
   const v = { itens: res, porDia, estouro, pinsSobra, ciclos, fator: H.fator, nFator: H.nFator };
+  // conferência final (24/11): bloco fixado que sobrou SEM motivo numa tarefa já toda planejada = maior que o necessário.
+  // Apara essa sobra e refaz a conta uma vez, para o horário dela ficar livre de verdade (nada de horário "segurado" escondido).
+  if (!(opts && opts._r)) {
+    const cheia = (tid) => { const it = res[tid]; return it && it.eu && it.blocos.reduce((t, b) => t + (b.fim - b.ini) * 60, 0) >= it.resto - 0.5; };
+    const sem = pinsSobra.filter(q => !q.motivo && q.tid && cheia(q.tid));
+    if (sem.length) {
+      const base = (previa ? opts.pins : planoPins()).map(pn => {
+        const sb = sem.filter(q => q.pin === pn.id); if (!sb.length) return pn;
+        // a sobra sai do fim do bloco (o bloco pode ter sido dividido/juntado pelo plano: conta pelo tamanho, não pela posição)
+        const h = Number(pn.h) - sb.reduce((t, q) => t + (q.fim - q.ini), 0);
+        return h > 0.24 ? { ...pn, h: Math.round(h * 4) / 4 } : null;
+      }).filter(Boolean);
+      const v2 = tkMotor(agora, dias, { pins: base, _r: 1 });
+      if (!previa) _tkMotor = { k, v: v2 }; return v2;
+    }
+  }
   if (!previa) _tkMotor = { k, v }; return v;
 }

@@ -72,6 +72,18 @@ function planoEmpurrar(base0, partes, fixosDe, { dias = null, proximoDia = null 
       if (novo.dia === dd) ocup.push([Number(novo.ini), Number(novo.ini) + h]);
     });
   });
+  // quem foi para o próximo dia útil também não pode cair em cima de outro bloco de lá: empurra lá também, em cadeia (24/11)
+  const foram = empurrados.filter(n => !lista.includes(n.dia));
+  if (foram.length && (arguments[4] || 0) < 6) {
+    let todos = [...base, ...empurrados]; const mexidos = new Set(empurrados.map(n => n.id));
+    foram.forEach(n => {
+      const atual = todos.find(x => x.id === n.id) || n;
+      const r = planoEmpurrar(todos.filter(x => x.id !== atual.id), [{ dia: atual.dia, ini: Number(atual.ini), fim: Number(atual.ini) + Number(atual.h) }], fixosDe, { proximoDia }, (arguments[4] || 0) + 1);
+      r.empurrados.forEach(x => mexidos.add(x.id));
+      todos = [...r.base, ...r.empurrados, atual];
+    });
+    return { base: todos.filter(x => !mexidos.has(x.id)), empurrados: todos.filter(x => mexidos.has(x.id)) };
+  }
   return { base, empurrados };
 }
 

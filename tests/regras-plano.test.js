@@ -148,3 +148,24 @@ test('17. almoço encolheu: o pedaço fixado de trás da mesma tarefa sobe e ocu
     extra: [{ id: 'rd', key: 'planoRotinaDia', value: { '2026-12-17': { almoco: { ini: 12.5, fim: 13.5 } } } }] });
   assert.ok(bl(m.tkMotor(H(14, 8), 10), 'x').some(b => b[1] === 13.5), 'com outra tarefa fixada no meio, não pula por cima dela');
 });
+test('18. colou outra tarefa depois do almoço: o pedaço da tarefa empurrado para depois dela volta a encostar no bloco da manhã', () => {
+  const m = setup();
+  cfg(m, { tasks: [T('arg', 'a', { est_min: 240 }), T('proc', 'b', { est_min: 180, order: 1 })],
+    pins: [{ id: 'p1', dia: '2026-12-17', pid: 'a', tid: 'arg', ini: 8.75, h: 2.75 }, { id: 'pp', dia: '2026-12-17', pid: 'b', tid: 'proc', ini: 13.5, h: 3 }, { id: 'p2', dia: '2026-12-17', pid: 'a', tid: 'arg', ini: 16.5, h: 0.25 }],
+    extra: [{ id: 'rd', key: 'planoRotinaDia', value: { '2026-12-17': { almoco: { ini: 12.75, fim: 13.5 } } } }] });
+  const mo = m.tkMotor(H(14, 8), 10); const l = bl(mo, 'arg');
+  assert.ok(l.every(b => b[2] <= 12.75 + 1e-6), 'a ARG toda antes do almoço: ' + JSON.stringify(l));
+  assert.equal(horas(l), 4);
+  assert.deepEqual(bl(mo, 'proc'), [['17', 13.5, 16.5]]);
+});
+test('19. "sem pressa": vai depois de todas as outras; com entrega perto (2 dias úteis), volta à ordem normal', () => {
+  const m = setup();
+  cfg(m, { tasks: [T('calma', 'a', { est_min: 120, sem_pressa: true }), T('x', 'b', { est_min: 120, order: 1, deadline: '2026-12-22' }), T('y', 'b', { est_min: 120, order: 2 })] });
+  let mo = m.tkMotor(H(14, 8), 10);
+  const ini = (id) => { const b = mo.itens[id].blocos[0]; return b.dia + String(b.ini).padStart(5, '0'); };
+  assert.ok(ini('calma') > ini('x') && ini('calma') > ini('y'), 'sem pressa por último');
+  assert.match(Object.values(mo.porDia).flatMap(v => v.blocos).find(b => b.tid === 'calma').porque, /sem pressa/);
+  cfg(m, { tasks: [T('calma', 'a', { est_min: 120, sem_pressa: true, deadline: '2026-12-16' }), T('x', 'b', { est_min: 120, order: 1, deadline: '2026-12-22' })] });
+  mo = m.tkMotor(H(14, 8), 10);
+  assert.ok(ini('calma') < ini('x'), 'entrega perto: entra antes da que vence depois');
+});

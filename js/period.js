@@ -63,7 +63,7 @@ function dayAggHTML(d) {
     const pr = db.get('tempo_projects', k);
     const c = pr ? clientOf(pr) : null;
     const col = hexOf((c && c.color) || (pr && agOfProject(pr)?.color) || 'gray');
-    return { label: pr?.name || 'Sem projeto', ms, color: col };
+    return { label: (c ? `[${c.name}] ` : '') + (pr?.name || 'Sem projeto'), ms, color: col };   // cliente antes do projeto (24/11)
   });
   projItems.forEach(it => { const w = it.ms / total * 100; if (w <= 0) return; parts += `<span class="seg-b act-b" title="${esc(it.label)} · ${fmtDur(it.ms)}" style="--tb:${it.color};left:${off}%;width:${Math.max(.3, w)}%"></span>`; off += w; });
   const pauseItems = [...pz.entries()].sort((a, b) => b[1] - a[1]).map(([k, ms]) => ({ label: 'Pausa · ' + pauseLabel(k), ms, color: pauseHatch(k), key: k }));

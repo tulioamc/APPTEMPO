@@ -634,7 +634,7 @@ function pauseChipsHTML(e) {
   if (!items.length && !actForaMs(e)) return '';
   const total = items.reduce((t, x) => t + x.ms, 0);
   const fora = actForaMs(e);
-  const foraChip = fora > 0 ? `<span class="act-chip act-chip-fora" data-tip="${esc('Tempo desta sessão que foi registrado em outro projeto (movido ou troca de projeto).\nSó aparece aqui: não conta como pausa, nem como trabalho, nem no bruto desta sessão.')}"><i></i>Outro projeto <span class="faint">${fmtDur(fora)}</span></span>` : '';
+  const foraChip = fora > 0 ? `<span class="act-chip act-chip-fora" style="--tb:#94A3B8" data-tip="${esc('Tempo desta sessão que foi registrado em outro projeto (movido ou troca de projeto).\nSó aparece aqui: não conta como pausa, nem como trabalho, nem no bruto desta sessão.')}"><i></i>Outro projeto <span class="faint">${fmtDur(fora)}</span></span>` : '';
   return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#64748B">Pausas <span class="faint">${fmtDur(total)}</span></span>${foraChip}${pauseBucketsOf(items).map(b => b.kind === 'whatsapp' ? { ...b, detail: waDistracaoTop([e]) } : b).map(pauseBucketChip).join('')}</div>`;
 }
 /* Conversas de WhatsApp (não de trabalho) que mais tomaram tempo nas sessões: para o balãozinho do chip. */

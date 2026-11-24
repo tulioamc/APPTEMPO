@@ -991,11 +991,12 @@ ACTIONS['pl-encaixar'] = (el) => {
     // Fora do próprio dia (ex.: no Mês, ou levando para outro dia), o bloco "flutua" com o mouse até onde for solto (24/11)
     const r0 = d.col0?.getBoundingClientRect(); const fora = d.modo === 'move' && (!r0 || e.clientX < r0.left || e.clientX > r0.right || !!d.el.closest('.pl-pop, [data-pl-mes]'));
     if (fora) {
-      if (!d.fly) { d.fly = d.el.cloneNode(true); d.fly.classList.add('pl-dg-fly'); d.fly.removeAttribute('data-dg'); d.fly.style.cssText = d.el.style.cssText + `;position:fixed;right:auto;bottom:auto;z-index:999;pointer-events:none;margin:0;transform:none;width:${Math.max(90, d.el.offsetWidth)}px;height:${Math.min(Math.max(22, d.el.offsetHeight), 90)}px`; document.body.appendChild(d.fly); }
+      if (!d.fly) { d.fly = d.el.cloneNode(true); d.fly.classList.add('pl-dg-fly'); d.fly.removeAttribute('data-dg'); d.fly.style.cssText = d.el.style.cssText + `;position:fixed;right:auto;bottom:auto;z-index:999;pointer-events:none;margin:0;transform:none;width:${Math.max(90, d.el.offsetWidth)}px;height:${Math.min(Math.max(22, d.el.offsetHeight), 90)}px`; // as cores do bloco vêm de regras "dentro da grade": a cópia vai num invólucro com a mesma classe
+        d.flyW = document.createElement('div'); d.flyW.className = 'pl-grade pl-fly-wrap'; d.flyW.appendChild(d.fly); document.body.appendChild(d.flyW); }
       d.fly.style.left = (e.clientX - Math.min(d.ox, d.fly.offsetWidth - 8)) + 'px'; d.fly.style.top = (e.clientY - Math.min(d.oy, 20)) + 'px';
       d.el.style.transform = ''; d.el.classList.add('pl-dg-orig');
     } else {
-      if (d.fly) { d.fly.remove(); d.fly = null; d.el.classList.remove('pl-dg-orig'); }
+      if (d.fly) { (d.flyW || d.fly).remove(); d.fly = null; d.flyW = null; d.el.classList.remove('pl-dg-orig'); }
       if (d.modo === 'move') d.el.style.transform = `translateX(${dx}px)`;
     }
     d.grupo.forEach(o => { o.style.transform = `translate(${dx}px, ${(a - d.ini) * PL_ALT}px)`; o.classList.add('arrastando'); });
@@ -1015,7 +1016,7 @@ ACTIONS['pl-encaixar'] = (el) => {
   });
   document.addEventListener('pointerup', async (e) => {
     if (!d) return; const x = d; d = null; if (tip) { tip.remove(); tip = null; }
-    if (x.fly) { x.fly.remove(); x.fly = null; } x.el.classList.remove('pl-dg-orig'); document.body.classList.remove('pl-arrastando');
+    if (x.fly) { (x.flyW || x.fly).remove(); x.fly = null; x.flyW = null; } x.el.classList.remove('pl-dg-orig'); document.body.classList.remove('pl-arrastando');
     if (typeof planoPreviaFim === 'function') planoPreviaFim();
     x.alt = e.altKey; x.meta = e.metaKey;
     if (!mexeu) return;
@@ -1112,7 +1113,7 @@ ACTIONS['pl-encaixar'] = (el) => {
       { const novosIds = new Set(novosPins.slice(r.base.length + r.empurrados.length).map(q => q.id)); const prev = (() => { try { const it = Object.values(tkMotor(new Date(), 60).itens).find(z => z.t && tid && z.t.id === tid); return it ? it.prev / 60 : 0; } catch (_) { return 0; } })();
         if (tid && prev > 0) {
           const mesmaT = novosPins.filter(q => q.tid === tid), soma = mesmaT.reduce((t0, q) => t0 + Number(q.h), 0); let sobra = soma - prev; const tira = new Set(), corta = {};
-          mesmaT.filter(q => !novosIds.has(q.id)).sort((q1, q2) => (q2.dia + String(q2.ini).padStart(5, '0')).localeCompare(q1.dia + String(q1.ini).padStart(5, '0'))).forEach(q => {
+          mesmaT.filter(q => !novosIds.has(q.id)).sort((q1, q2) => (q2.dia + (Number(q2.ini) || 0).toFixed(3).padStart(7, '0')).localeCompare(q1.dia + (Number(q1.ini) || 0).toFixed(3).padStart(7, '0'))).forEach(q => {
             if (sobra < 0.24) return; if (Number(q.h) <= sobra + 0.01) { tira.add(q.id); sobra -= Number(q.h); } else { corta[q.id] = Number(q.h) - sobra; sobra = 0; } });
           if (tira.size || Object.keys(corta).length) { novosPins = novosPins.filter(q => !tira.has(q.id)).map(q => corta[q.id] ? { ...q, h: Math.max(0.25, Math.round(corta[q.id] * 4) / 4) } : q); extra += ' · pedaço da frente juntado'; }
         } }

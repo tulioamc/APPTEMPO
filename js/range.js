@@ -157,7 +157,7 @@ function openZoomOf(ents, a, b) {
   openLayer({
     render: () => `<div class="dh"><h2>Zoom · ${hhmm(a)}–${hhmm(b)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
       <div class="act-sec" style="width:100%"><div class="act-strip" style="position:relative;height:26px;width:100%;border-radius:0;margin-top:0">${projBar}</div>${projLegend ? `<div class="row small" style="gap:8px;flex-wrap:wrap;margin:6px 0 10px">${projLegend}</div>` : ''}</div>
-      <div class="act-sec" style="width:100%"><div class="act-strip" style="position:relative;height:44px;width:100%;border-radius:0;margin-top:0">${pauses}${bars}</div></div>
+      <div class="act-sec" style="width:100%"><div class="act-strip"${ents.length === 1 ? ` data-ent="${ents[0].id}" data-t0="${a}" data-span="${span}" data-tip="Arraste para selecionar um trecho: cortar, transferir para outra tarefa, alterar o tipo ou excluir"` : ''} style="position:relative;height:44px;width:100%;border-radius:0;margin-top:0">${pauses}${bars}</div></div>
       <div class="db stack" style="gap:12px">
         <div class="day-axis"><span>${hhmm(a)}</span><span>${fmtDur(span)}</span><span>${hhmm(b)}</span></div>
         <div class="act-sec">${actChipsHTML(A, "both")}</div>
@@ -202,13 +202,23 @@ async function openRangeDelete(entryId, a, b) {
   window.actRedrawHook && window.actRedrawHook();
 }
 
+/* Cortar bloco (24/11): abre o corte de trechos só sobre o pedaço selecionado da sessão (cortar no cursor, mover alças,
+   mandar cada parte para uma tarefa). */
+function corteDoTrecho(entryId, a, b) {
+  const e = db.get('tempo_time_entries', entryId); if (!e || typeof openCorte !== 'function') return;
+  const f0 = Math.floor(a / CORTE_MIN) * CORTE_MIN; const key = typeof corteKeyOf === 'function' ? corteKeyOf(e) : null;
+  const inicial = (e.segments || []).filter(sg => sg.s).map(sg => ({ s: Math.max(a, new Date(sg.s).getTime()), e: Math.min(b, sg.e ? new Date(sg.e).getTime() : Date.now()) }))
+    .filter(x => x.e > x.s).map(x => ({ a: (x.s - f0) / CORTE_MIN, b: (x.e - f0) / CORTE_MIN, task: key })).filter(x => x.b - x.a >= 1);
+  openCorte({ from: a, to: b, origemId: e.id, titulo: `Cortar bloco · ${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())}`, inicial, tudo: true });
+}
+
 /* Menu que abre ao soltar a seleção: Zoom, Transferir, Alterar tipo ou Excluir. */
 function openRangeMenu(entryId, a, b, x, y) {
   document.getElementById('rg-menu')?.remove();
   const m = document.createElement('div');
   m.id = 'rg-menu';
   m.style.cssText = `position:fixed;left:${Math.max(8, Math.min(x, innerWidth - 240))}px;top:${Math.max(8, Math.min(y + 8, innerHeight - 220))}px;z-index:10000;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.2);padding:6px;min-width:220px;display:flex;flex-direction:column;gap:2px`;
-  const items = [['zoom', 'Zoom'], ['move', 'Transferir para outra tarefa'], ['type', 'Alterar tipo de atividade'], ['del', 'Excluir']];
+  const items = [['zoom', 'Zoom'], ['move', 'Transferir para outra tarefa'], ['cut', 'Cortar bloco (dividir este trecho)'], ['type', 'Alterar tipo de atividade'], ['del', 'Excluir']];
   m.innerHTML = `<div class="small muted" style="padding:4px 10px 6px">${fmtTime(new Date(a).toISOString())}–${fmtTime(new Date(b).toISOString())} · ${fmtDur(b - a)}</div>`
     + items.map(([k, l]) => `<button type="button" class="btn ghost" data-rg="${k}" style="justify-content:flex-start;width:100%;${k === 'del' ? 'color:#B91C1C' : ''}">${l}</button>`).join('');
   document.body.appendChild(m);
@@ -221,6 +231,7 @@ function openRangeMenu(entryId, a, b, x, y) {
     const k = btn.dataset.rg;
     if (k === 'zoom') openRangeZoom(entryId, a, b);
     else if (k === 'move') openRangeModal(entryId, a, b);
+    else if (k === 'cut') corteDoTrecho(entryId, a, b);
     else if (k === 'type') openRangeType(entryId, a, b);
     else if (k === 'del') openRangeDelete(entryId, a, b);
   });

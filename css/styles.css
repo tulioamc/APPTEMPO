@@ -1514,7 +1514,8 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 .pl-pop-l.feito span:nth-child(2) { font-weight: 600; }
 .pl-rot-cab, .pl-rot-l { grid-template-columns: minmax(140px, 240px) auto 80px 80px 150px auto 30px auto 130px 28px !important; justify-content: start; column-gap: 12px; }
 .act-chip-fora i { background: linear-gradient(to bottom, #64748B 50%, #CBD5E1 50%) !important; }
-.act-chip-fora { border-style: dashed; }
+.act-chip-fora { border-style: solid; }
+.act-chip-fora:hover { background: color-mix(in oklab, var(--tb) 34%, var(--surface)); border-color: var(--tb); }
 /* Estilo Google Agenda: cantos de poucos pixels, texto no canto de cima à esquerda */
 .pl-grade > .pl-bloco, .pl-grade > .pl-feito, .pl-grade > .pl-evento, .pl-grade > .pl-fixo { border-radius: 4px !important; padding: 2px 6px !important; font-size: .74em; line-height: 1.25; text-align: left; align-items: flex-start !important; justify-content: flex-start !important; overflow: hidden; }
 .pl-grade > .pl-feito { border: 1px solid color-mix(in oklab, var(--fc) 55%, transparent) !important; border-left: 3px solid var(--fc) !important; background: color-mix(in oklab, var(--fc) 14%, var(--surface-1, #fff)) !important; }
@@ -2136,7 +2137,7 @@ kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--li
 /* "Cor do cliente" (botão): planejado preenchido com a cor do cliente; chip invertido; texto segue a legibilidade (--ct) */
 .pl-grade > .pl-bloco.cc, .pl-grade > .pl-bloco.cc.auto { background: var(--cc) !important; color: var(--ct) !important; }
 .pl-grade > .pl-bloco.cc .pl-tx b, .pl-grade > .pl-bloco.cc .pl-tx em { color: var(--ct) !important; }
-.pl-grade > .pl-bloco.cc .pl-cli { background: var(--ct) !important; color: var(--cc) !important; border-color: transparent !important; }
+.pl-grade > .pl-bloco.cc .pl-cli { box-shadow: 0 0 0 1px color-mix(in oklab, var(--ct) 35%, transparent); }   /* chip do cliente segue a regra do cliente (cor e texto), com um contorno leve sobre o bloco */
 .seg.pl-filtros .pl-cc-btn { margin-left: 6px; text-decoration: none !important; border-left: 1px solid var(--line); }
 .seg.pl-filtros .pl-cc-btn.on { background: var(--accent); color: #fff; }
 
@@ -2167,3 +2168,9 @@ kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--li
 body.pl-arrastando, body.pl-arrastando * { user-select: none !important; -webkit-user-select: none !important; cursor: grabbing; }
 [data-dg].arrastando.pl-dg-orig { opacity: .18 !important; box-shadow: none !important; outline: 1px dashed var(--line); }
 .pl-dg-fly { z-index: 999 !important; }
+/* Alça de 6 pontinhos para reordenar tarefas (aparece ao passar o mouse na linha) */
+.tk-grip { cursor: grab; display: inline-flex; align-items: center; color: var(--fg-3); padding: 2px 4px 2px 0; opacity: 0; transition: opacity .12s; margin-left: -12px; }
+.tk:hover .tk-grip, .tk.arrastando .tk-grip { opacity: 1; }
+.tk-grip svg { width: 8px; height: 12px; fill: currentColor; }
+.tk.arrastando { opacity: .5; }
+.pl-grade.pl-fly-wrap { position: fixed !important; left: 0; top: 0; width: 0 !important; height: 0 !important; overflow: visible !important; background: none !important; border: 0 !important; pointer-events: none; z-index: 999; }
