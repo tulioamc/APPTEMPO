@@ -2074,3 +2074,4 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 /* Espaço + arrastar (como no Illustrator): mãozinha sobre o Gantt e a grade do Calendário */
 body.pl-mao [data-pl-scroll], body.pl-mao .plg-dir, body.pl-mao [data-pl-scroll] *, body.pl-mao .plg-dir * { cursor: grab !important; user-select: none; }
 body.pl-mao.pl-mao-on [data-pl-scroll], body.pl-mao.pl-mao-on .plg-dir, body.pl-mao.pl-mao-on [data-pl-scroll] *, body.pl-mao.pl-mao-on .plg-dir * { cursor: grabbing !important; }
+body.pl-mao .pl-mes-scroll, body.pl-mao .pl-mes-scroll * { cursor: grab !important; user-select: none; } body.pl-mao.pl-mao-on .pl-mes-scroll, body.pl-mao.pl-mao-on .pl-mes-scroll * { cursor: grabbing !important; }

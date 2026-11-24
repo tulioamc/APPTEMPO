@@ -48,7 +48,7 @@ if (typeof document !== 'undefined' && document.addEventListener) {
   let espaco = false, pan = null;
   const alvo = (el) => el && el.closest ? el.closest('.plg-dir, [data-pl-scroll], .pl-mes-scroll') : null;
   const digitando = (el) => el && el.closest && el.closest('input, textarea, select, [contenteditable="true"]');
-  const sobre = () => [...document.querySelectorAll('.plg-dir, [data-pl-scroll]')].find(x => x.matches(':hover'));
+  const sobre = () => [...document.querySelectorAll('.plg-dir, [data-pl-scroll], .pl-mes-scroll')].find(x => x.matches(':hover'));
   document.addEventListener('keydown', (e) => {
     if (e.code !== 'Space' || digitando(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
     if (!espaco && !sobre()) return;   // fora do Calendário, o espaço continua sendo o espaço de sempre
