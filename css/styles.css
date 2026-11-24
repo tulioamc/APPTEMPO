@@ -1989,3 +1989,42 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .hj-ck.rodando::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #75EF86; }
 .hj-agora { font-size: 12px; color: #0B3B1C; background: #75EF86; padding: 4px 12px 4px 10px; }
 .hj-agora::before { width: 8px; height: 8px; background: #0B3B1C; }
+/* Tarefas de hoje: próximos prazos e fim do dia (24/11) */
+.hj-sec { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--fg-3); padding: 10px 14px 4px; }
+.hj-prazo .hj-pz-ic { color: var(--fg-3); display: inline-flex; } .hj-prazo .hj-pz-ic svg { width: 13px; height: 13px; }
+.hj-prazo.ent .hj-pz-ic, .hj-prazo.ent .hj-n b { color: var(--accent); }
+.hj-prazo .late { color: var(--danger); }
+.btn.on { background: var(--accent-soft); color: var(--accent); }
+/* Calendário › Tarefas (Gantt) — 24/11 */
+.plg { display: grid; grid-template-columns: 260px minmax(0, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.plg-esq { border-right: 1px solid var(--line); background: var(--surface); }
+.plg-cab-esq { height: 40px; display: flex; align-items: center; padding: 0 12px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--fg-3); border-bottom: 1px solid var(--line); }
+.plg-nomes { position: relative; }
+.plg-nome { position: absolute; left: 0; right: 0; height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 28px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); font-size: 12px; min-width: 0; }
+.plg-nome.proj { padding-left: 4px; background: var(--surface-2); border-bottom-color: var(--line); }
+.plg-tg { border: 0; background: none; padding: 2px; cursor: pointer; color: var(--fg-3); display: inline-flex; } .plg-tg svg { width: 14px; height: 14px; }
+.plg-pn, .plg-tn { border: 0; background: none; padding: 0; font: inherit; color: var(--fg); cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; display: flex; align-items: center; gap: 4px; }
+.plg-pn b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.plg-tn:hover, .plg-pn:hover b { color: var(--accent); }
+.plg-nome.ok .plg-tn { color: var(--fg-3); } .plg-tn svg { width: 11px; height: 11px; color: #34A853; flex: none; }
+.plg-dir { overflow-x: auto; }
+.plg-cab { position: relative; height: 40px; border-bottom: 1px solid var(--line); }
+.plg-dia { position: absolute; top: 0; height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; color: var(--fg-3); border-left: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.plg-dia b { font-size: 13px; color: var(--fg); font-weight: 600; }
+.plg-dia.hoje b { color: #fff; background: var(--danger, #DC2626); border-radius: 999px; padding: 0 6px; }
+.plg-dia.off { background: color-mix(in srgb, var(--line) 25%, transparent); }
+.plg-area { position: relative; }
+.plg-col { position: absolute; top: 0; bottom: 0; border-left: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.plg-col.off { background: color-mix(in srgb, var(--line) 25%, transparent); }
+.plg-col.hoje { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.plg-bar { position: absolute; height: 18px; border-radius: 5px; background: var(--cc); color: var(--ct); font-size: 10px; font-weight: 600; line-height: 18px; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; z-index: 2; touch-action: none; user-select: none; }
+.plg-bar.ok { background: #75EF86; color: #0B3B1C; cursor: default; }
+.plg-bar.late { box-shadow: inset 0 0 0 2px var(--danger); }
+.plg-bar.parado { opacity: .5; background-image: repeating-linear-gradient(45deg, transparent 0 5px, rgba(255,255,255,.35) 5px 10px); }
+.plg-resumo { position: absolute; height: 6px; border-radius: 3px; background: var(--cc); opacity: .45; z-index: 1; }
+.plg-flag { position: absolute; z-index: 3; color: var(--fg-2); display: inline-flex; pointer-events: none; } .plg-flag svg { width: 11px; height: 11px; }
+.plg-ent { position: absolute; width: 0; border-left: 2px solid var(--accent); z-index: 3; }
+.plg-ent span { position: absolute; top: 2px; left: 3px; background: var(--accent); color: #fff; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 0 4px 4px 0; white-space: nowrap; text-transform: uppercase; }
+.plg-agora { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--danger, #DC2626); z-index: 4; pointer-events: none; }
+.plg-setas { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.plg-setas path { fill: none; stroke: var(--fg-3); stroke-width: 1.2; opacity: .6; }

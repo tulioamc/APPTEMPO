@@ -343,7 +343,44 @@ function hojeTarefasHTML(cur) {
       const f = feitasHoje[t.id] ||= { tid: t.id, pid: e.project_id, ini: 24, h: 0, feita: true }; f.ini = Math.min(f.ini, (a - h0) / 36e5); f.h += (b - a) / 36e5; }); });
   const itens = [...grupos.map(g => ({ t: g.ini, h: linha(g) })), ...Object.values(feitasHoje).map(g => ({ t: g.ini, h: linha(g) })), ...todos.map(e => ({ t: e.ini, h: linhaTodo(e) }))].sort((x, y) => x.t - y.t);
   const resumo = `${fmtH(feito * 36e5)} feito · ${fmtH(plan * 36e5)} planejado`;
-  return `<div class="panel"><div class="panel-h"><button class="btn sm icon ghost" data-act="hj-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="hj-toggle" style="cursor:pointer">Tarefas de hoje</h3><span class="small muted">${resumo}</span><span class="grow"></span><button class="btn sm ghost" data-act="hj-cal">Ver no Calendário</button></div>${fechado ? '' : `<div class="panel-b tight">${itens.length ? itens.map(x => x.h).join('') : '<div class="empty small">Nada planejado para o resto do dia.</div>'}</div>`}</div>`;
+  const n0 = new Date(); const fimDia = n0.getHours() * 60 + n0.getMinutes() >= 19 * 60 + 30 && !HJ_VER_LISTA;
+  const corpo = HJ_PRAZOS ? hjPrazosHTML() : fimDia ? hjFimDoDiaHTML(hoje) : (itens.length ? itens.map(x => x.h).join('') : '<div class="empty small">Nada planejado para o resto do dia.</div>');
+  const titulo = HJ_PRAZOS ? 'Próximos prazos' : fimDia ? 'Fim do dia' : 'Tarefas de hoje';
+  return `<div class="panel"><div class="panel-h"><button class="btn sm icon ghost" data-act="hj-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="hj-toggle" style="cursor:pointer">${titulo}</h3><span class="small muted">${resumo}</span><span class="grow"></span>${fimDia || HJ_VER_LISTA ? `<button class="btn sm ghost" data-act="hj-lista">${HJ_VER_LISTA ? 'Ver resumo' : 'Ver lista'}</button>` : ''}<button class="btn sm${HJ_PRAZOS ? ' on' : ' ghost'}" data-act="hj-prazos">${icon('flag')} Próximos prazos</button><button class="btn sm ghost" data-act="hj-cal">Ver no Calendário</button></div>${fechado ? '' : `<div class="panel-b tight">${corpo}</div>`}</div>`;
+}
+let HJ_PRAZOS = false, HJ_VER_LISTA = false;
+ACTIONS['hj-prazos'] = () => { HJ_PRAZOS = !HJ_PRAZOS; db.emit(); };
+ACTIONS['hj-lista'] = () => { HJ_VER_LISTA = !HJ_VER_LISTA; db.emit(); };
+/* Próximos prazos (14 dias): entregas (deadlines) dos projetos, prazos das tarefas abertas e dos projetos. */
+function hjPrazosHTML() {
+  const hoje = ymd(new Date()), lim = ymd(new Date(Date.now() + 14 * 864e5)); const out = [];
+  const ativos = db.all('tempo_projects').filter(p => !p.archived && ['todo', 'active'].includes(statusCat(p.status_id)));
+  ativos.forEach(p => {
+    (typeof projEntregas === 'function' ? projEntregas(p.id) : []).forEach(e => { if (e.dia && e.dia <= lim) out.push({ dia: e.dia, hora: e.hora || '19:00', nome: e.nome || 'Entrega', tipo: 'entrega', p }); });
+    tasksOf(p.id).filter(t => t.deadline && t.deadline <= lim && !['done', 'cancelled'].includes(statusCat(t.status_id))).forEach(t => out.push({ dia: t.deadline, hora: t.deadline_time || '', nome: t.name, tipo: 'tarefa', p, tid: t.id }));
+    if (p.deadline && p.deadline <= lim) out.push({ dia: p.deadline, hora: '', nome: p.name, tipo: 'projeto', p });
+  });
+  out.sort((a, b) => (a.dia + a.hora).localeCompare(b.dia + b.hora));
+  if (!out.length) return '<div class="empty small">Nenhum prazo nos próximos 14 dias.</div>';
+  const rel = (d) => { const n = daysBetween(hoje, d); return n < 0 ? `<b class="late">${-n}d atrasado</b>` : n === 0 ? '<b class="tk-rel hoje">Hoje</b>' : n === 1 ? '<b class="tk-rel amanha">Amanhã</b>' : `em ${n} dias`; };
+  return out.slice(0, 15).map(x => { const c = clientOf(x.p);
+    return `<div class="hj-l hj-prazo${x.tipo === 'entrega' ? ' ent' : ''}"><span class="hj-pz-ic">${icon('flag')}</span><span class="hj-h mono">${fmtDate(x.dia).slice(0, 5)}${x.hora ? '<br>' + x.hora.replace(':', 'h') : ''}</span><button class="hj-n" data-act="proj-open" data-id="${x.p.id}" data-tab="tasks"${x.tid ? ` data-tk="${x.tid}"` : ''}><b>${x.tipo === 'entrega' ? 'DEADLINE · ' : ''}${esc(x.nome)}</b>${x.tipo !== 'projeto' ? `<span class="small hj-sub">${esc(x.p.name)}</span>` : '<span class="small hj-sub">prazo do projeto</span>'}</button><span class="small">${rel(x.dia)}</span>${c ? clientTag(c) : '<span></span>'}<span></span></div>`; }).join('');
+}
+/* Fim do dia (depois das 19h30): o que foi feito, o que não rolou e "Empurrar para amanhã". */
+function hjFimDoDiaHTML(hoje) {
+  const h0 = new Date(hoje + 'T00:00:00').getTime(); const feitos = {};
+  db.all('tempo_time_entries').forEach(e => (e.segments || []).forEach(sg => { if (!sg.s) return; const a = Math.max(h0, new Date(sg.s).getTime()), b = Math.min(h0 + 864e5, sg.e ? new Date(sg.e).getTime() : Date.now()); if (b <= a) return;
+    const k = (e.project_id || '_') + '|' + (e.task_id || ''); const f = feitos[k] ||= { pid: e.project_id, tid: e.task_id, ms: 0 }; f.ms += b - a; }));
+  const lf = Object.values(feitos).sort((a, b) => b.ms - a.ms).map(f => { const p = db.get('tempo_projects', f.pid); const t = f.tid ? db.get('tempo_tasks', f.tid) : null; const ok = t && statusCat(t.status_id) === 'done';
+    return `<div class="hj-l${ok ? ' feita' : ''}"><span class="hj-ck${ok ? ' ok' : ''}">${ok ? icon('check') : ''}</span><span></span><span class="hj-n"><b>${esc(t ? t.name : p?.name || 'Sem projeto')}</b>${t && p ? `<span class="small hj-sub">${esc(p.name)}</span>` : ''}</span><span></span>${p && clientOf(p) ? clientTag(clientOf(p)) : '<span></span>'}<span class="mono small hj-dur">${fmtH(f.ms)}</span></div>`; }).join('');
+  const pr = typeof planoVsReal === 'function' ? planoVsReal(hoje) : null;
+  const nao = (pr?.blocos || []).filter(b => !b.ok); const porP = {}; nao.forEach(b => { porP[b.pid] = (porP[b.pid] || 0) + (b.fim - b.ini); });
+  const pend = db.all('tempo_tasks').filter(t => t.deadline && t.deadline <= hoje && !['done', 'cancelled'].includes(statusCat(t.status_id)) && db.get('tempo_projects', t.project_id) && ['todo', 'active'].includes(statusCat(db.get('tempo_projects', t.project_id).status_id)));
+  const ln = [...Object.entries(porP).map(([pid, h]) => { const p = db.get('tempo_projects', pid); return `<div class="hj-l"><span></span><span></span><span class="hj-n"><b>${esc(p?.name || '')}</b><span class="small hj-sub">planejado e não aconteceu</span></span><span></span>${p && clientOf(p) ? clientTag(clientOf(p)) : '<span></span>'}<span class="mono small hj-dur">${fmtH(h * 36e5)}</span></div>`; }),
+    ...pend.map(t => { const p = db.get('tempo_projects', t.project_id); return `<div class="hj-l"><span></span><span></span><button class="hj-n" data-act="proj-open" data-id="${p.id}" data-tab="tasks" data-tk="${t.id}"><b>${esc(t.name)}</b><span class="small hj-sub">${esc(p.name)} · prazo ${t.deadline === hoje ? 'hoje' : fmtDate(t.deadline)}</span></button><span></span>${clientOf(p) ? clientTag(clientOf(p)) : '<span></span>'}<span></span></div>`; })].join('');
+  return `<div class="hj-sec">Feito hoje${pr ? ` · ${pr.pct}% do plano` : ''}</div>${lf || '<div class="empty small">Nada registrado hoje.</div>'}
+    <div class="hj-sec">Não rolou</div>${ln || '<div class="empty small">Tudo o que estava planejado aconteceu.</div>'}
+    <div class="row" style="justify-content:flex-end;padding:10px 14px"><button class="btn sm primary" data-act="pl-empurrar" data-dia="${hoje}">Empurrar para amanhã</button></div>`;
 }
 let HJ_ORDEM = [];
 /* Concluir na lista de hoje: marca a tarefa como feita; se a sessão estava nela, a sessão passa para a próxima tarefa da lista. */

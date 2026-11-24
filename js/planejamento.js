@@ -134,11 +134,11 @@ function planoFeitosDoDia(dia) {
   const brutos = [];
   db.all('tempo_time_entries').forEach(e => (e.segments || []).forEach(sg => {
     if (!sg.s) return; const a = Math.max(d0, new Date(sg.s).getTime()), b = Math.min(d1, sg.e ? new Date(sg.e).getTime() : Date.now());
-    if (b > a) brutos.push({ pid: e.project_id || null, a, b });
+    if (b > a) brutos.push({ pid: e.project_id || null, tid: e.task_id || null, a, b });
   }));
   brutos.sort((x, y) => x.a - y.a);
   const out = [];
-  brutos.forEach(x => { const l = out[out.length - 1]; if (l && l.pid === x.pid && x.a - l.b < 10 * 60e3) { l.b = Math.max(l.b, x.b); l.ms += x.b - x.a; } else out.push({ ...x, ms: x.b - x.a }); });
+  brutos.forEach(x => { const l = out[out.length - 1]; if (l && l.pid === x.pid && l.tid === x.tid && x.a - l.b < 10 * 60e3) { l.b = Math.max(l.b, x.b); l.ms += x.b - x.a; } else out.push({ ...x, ms: x.b - x.a }); });
   return out.map(f => ({ ...f, ini: (f.a - d0) / 36e5, fim: (f.b - d0) / 36e5 }));
 }
 const planoCor = (pid) => { const pr = db.get('tempo_projects', pid); return pr ? hexOf(pr.color || clientOf(pr)?.color || 'gray') : '#94A3B8'; };
@@ -384,8 +384,11 @@ function planoItemHTML(x, dia, { alt, unico, auto }) {
     return `<div class="pl-naofeito" style="${pos};--fc:${c}" data-tip="${esc(`Planejado e não aconteceu: ${p?.name || ''}\n${planoHora(x.a)}–${planoHora(x.b)} (plano da manhã)`)}"><span class="pl-tx"><b>${esc(p?.name || '')}</b>${curto ? '' : '<em>não aconteceu</em>'}</span></div>`; }
   if (x.k === 'todos') { const l = x.lista;
     return `<div class="pl-evento todo grupo" style="${pos}" data-tip="${esc(`${l.length} to-dos às ${planoHora(x.a)}\n` + l.map(e => (e.feito ? '✓ ' : '• ') + e.titulo).join('\n'))}">${icon('check')}<span class="pl-tx"><b>${l.length} to-dos</b>${curto ? '' : `<em>${l.filter(e => e.feito).length} feitos</em>`}</span></div>`; }
-  if (x.k === 'feito') { const f = x.f; const pr = db.get('tempo_projects', f.pid);
-    return `<div class="pl-feito${x.agenda ? ' com-agenda' : ''}" style="${pos};--fc:${planoCor(f.pid)}" data-tip="${esc(`Registrado: ${pr?.name || 'Sem projeto'}${pr ? '\n' + (clientOf(pr)?.name || '') : ''}\n${planoHora(f.ini)}–${planoHora(f.fim)} · ${fmtH(f.ms)} trabalhado${x.agenda ? '\n' + x.agenda.map(e => `Agenda: ${e.titulo} (${planoHora(e.ini)}–${planoHora(e.fim)})`).join('\n') : ''}`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"` : ''}>${h >= 15 ? `<span class="pl-tx"><b>${esc(pr?.name || 'Sem projeto')}</b>` : '<span class="pl-tx">'}${h >= 34 ? `<em>${x.agenda ? esc(x.agenda[0].titulo) + ' · ' : unico && pr ? esc(clientOf(pr)?.name || '') + ' · ' : ''}${fmtH(f.ms)}</em>` : ''}</span>${x.agenda ? `<span class="pl-feito-ag">${icon('calendar')}</span>` : ''}</div>`; }
+  if (x.k === 'feito') { const f = x.f; const pr = db.get('tempo_projects', f.pid); const tk = f.tid ? db.get('tempo_tasks', f.tid) : null; const cl = pr && clientOf(pr);
+    // registrado no mesmo desenho do planejado (chip do cliente · tarefa / projeto · hora · duração), na cor do cliente
+    const cc = cl ? hexOf(cl.color || 'gray') : planoCor(f.pid); const ct = typeof textOn === 'function' ? textOn(cc) : '#fff';
+    const nome = tk ? tk.name : pr?.name || 'Sem projeto';
+    return `<div class="pl-feito cli${x.agenda ? ' com-agenda' : ''}" style="${pos};--fc:${cc};--cc:${cc};--ct:${ct}" data-tip="${esc(`Registrado: ${tk ? tk.name + ' · ' : ''}${pr?.name || 'Sem projeto'}${cl ? '\n' + cl.name : ''}\n${planoHora(f.ini)}–${planoHora(f.fim)} · ${fmtH(f.ms)} trabalhado${x.agenda ? '\n' + x.agenda.map(e => `Agenda: ${e.titulo} (${planoHora(e.ini)}–${planoHora(e.fim)})`).join('\n') : ''}`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"${f.tid ? ` data-tab="tasks" data-tk="${f.tid}"` : ''}` : ''}>${h >= 12 ? `<span class="pl-tx"><b>${planoCliChip(pr)}${esc(nome)}</b>${!curto ? `<em>${tk && pr ? esc(pr.name) + ' · ' : ''}${planoHora(f.ini)} · ${fmtH(f.ms)}${unico && cl ? ' · ' + esc(cl.name) : ''}${x.agenda ? ' · ' + esc(x.agenda[0].titulo) : ''}</em>` : ''}</span>` : ''}${x.agenda ? `<span class="pl-feito-ag">${icon('calendar')}</span>` : ''}</div>`; }
   const b = x.bl; const p = db.get('tempo_projects', b.pid); const c = planoCor(b.pid);
   return `<div class="pl-bloco${b.atrasado ? ' late' : ''}${b.pin ? ' pin' : ' auto'}" data-dg="plano" data-dia="${dia}" data-pid="${b.pid}" data-tid="${b.tid || ''}" data-pin="${(b.pins || (b.pin ? [b.pin] : [])).join(',')}" data-ini="${b.ini}" data-fim="${b.fim}" style="${pos};--fc:${c}" data-act="proj-open" data-id="${b.pid}"${b.tid ? ` data-tab="tasks" data-tk="${b.tid}"` : ''} data-tip="${esc(`Planejado: ${b.tarefa ? b.tarefa + ' · ' : ''}${p?.name}\n${clientOf(p)?.name || ''}\n${planoHora(b.ini)}–${planoHora(b.fim)} · ${fmtH(b.h * 36e5)}${b.atrasado ? '\nDepois do prazo' : ''}${b.pin ? '\nFixado à mão' : '\nColocado pelo app · arraste para mudar o horário ou o dia'}`)}"><span class="pl-tx"><b>${planoCliChip(p)}${esc(b.tarefa || p?.name || '')}</b>${curto ? '' : `<em>${b.tarefa ? esc(p?.name || '') + ' · ' : ''}${planoHora(b.ini)} · ${fmtH(b.h * 36e5)}${unico && p ? ' · ' + esc(clientOf(p)?.name || '') : ''}</em>`}</span>${b.pin ? `<button class="pl-unpin" data-act="pl-unpin" data-id="${b.pin}" title="Soltar: o app volta a encaixar este bloco sozinho" aria-label="Soltar bloco">×</button>` : ''}${PL_PUX}</div>`;
 }
@@ -401,7 +404,7 @@ function planoNotasHTML(dia) {
 function planoRegistro15(itens) {
   const feitos = itens.filter(x => x.k === 'feito'); if (!feitos.length) return itens;
   const Q = 0.25, slots = {};
-  feitos.forEach(x => { for (let q = Math.floor(x.a / Q) * Q; q < x.b; q += Q) { const ov = Math.min(x.b, q + Q) - Math.max(x.a, q); if (ov <= 0) continue; const k = q.toFixed(2); const m = (slots[k] ||= {}); const pid = x.f.pid || '_'; m[pid] = (m[pid] || 0) + ov; } });
+  feitos.forEach(x => { for (let q = Math.floor(x.a / Q) * Q; q < x.b; q += Q) { const ov = Math.min(x.b, q + Q) - Math.max(x.a, q); if (ov <= 0) continue; const k = q.toFixed(2); const m = (slots[k] ||= {}); const pid = (x.f.pid || '_') + '|' + (x.f.tid || ''); m[pid] = (m[pid] || 0) + ov; } });
   const blocos = [];
   Object.keys(slots).map(Number).sort((a, b) => a - b).forEach(q => {
     const m = slots[q.toFixed(2)]; const [pid, h] = Object.entries(m).sort((a, b) => b[1] - a[1])[0];
@@ -409,7 +412,7 @@ function planoRegistro15(itens) {
     const l = blocos[blocos.length - 1];
     if (l && l.pid === pid && Math.abs(l.b - q) < 1e-6) { l.b = q + Q; l.h += h; } else blocos.push({ pid, a: q, b: q + Q, h });
   });
-  const novos = blocos.map(bl => { const pid = bl.pid === '_' ? null : bl.pid; return { k: 'feito', a: bl.a, b: bl.b, f: { pid, ini: bl.a, fim: bl.b, ms: bl.h * 36e5 } }; });
+  const novos = blocos.map(bl => { const [p0, t0] = bl.pid.split('|'); const pid = p0 === '_' ? null : p0; return { k: 'feito', a: bl.a, b: bl.b, f: { pid, tid: t0 || null, ini: bl.a, fim: bl.b, ms: bl.h * 36e5 } }; });
   return [...itens.filter(x => x.k !== 'feito'), ...novos];
 }
 /* Capacidade do dia: feito (registrado), planejado e livre (horas de trabalho que sobram). */
@@ -610,6 +613,74 @@ function planoDiaHTML(dia, porDia) {
   return `<div class="pl-diaview"><div><div class="pl-colrot"><span></span><span>Registrado</span><span>Agenda · planejado, rotina, to-dos e compromissos</span></div><div class="pl-scroll" data-pl-scroll><div class="pl-semana pl-um"><div class="pl-regua-col">${lt ? `<div style="height:${lt * 20}px"></div>` : ''}${planoRegua()}</div>${planoColHTML(dia, porDia, { unico: true, linhasTopo: lt, cabecalho: false })}</div></div></div>${lado}</div>`;
 }
 
+/* ---------- Tarefas (Gantt): projetos ativos nas linhas, dias nas colunas ----------
+   Barra = do começo ao fim da tarefa pelo planejamento (cor do cliente; verde se concluída). Deadline (entrega) = linha
+   roxa no dia e hora; prazo da tarefa = bandeirinha. Dependências = setas. Arrastar a barra para os lados muda o prazo
+   da tarefa em dias (o planejamento se reorganiza). */
+const PLG_W = 76, PLG_ROW = 30, PLG_DIAS = 21;
+const planoGanttIni = () => PLANO.ganttIni || planoDiaMais(planoSegunda(new Date()), 0);
+function planoGanttX(t, ini) {   // Date|ms → px (horas de trabalho 8h–20h ocupam a largura do dia)
+  const d = new Date(t); const di = daysBetween(ini, ymd(d)); const h = d.getHours() + d.getMinutes() / 60;
+  return (di + Math.max(0, Math.min(1, (h - 8) / 12))) * PLG_W;
+}
+function planoGanttHTML() {
+  const ini = planoGanttIni(); const fim = planoDiaMais(ini, PLG_DIAS); const hoje = ymd(new Date());
+  let itens = {}; try { itens = (typeof tkMotor === 'function' ? tkMotor(new Date(), 120).itens : {}) || {}; } catch (e) {}
+  const projs = db.all('tempo_projects').filter(p => !p.archived && ['todo', 'active'].includes(statusCat(p.status_id)) && tasksOf(p.id).length);
+  const proxData = (p) => { const ds = [p.deadline, ...projEntregas(p.id).map(e => e.dia), ...tasksOf(p.id).filter(t => statusCat(t.status_id) !== 'done').map(t => t.deadline)].filter(Boolean).sort(); return ds.find(d => d >= hoje) || ds[0] || '9999'; };
+  projs.sort((a, b) => proxData(a).localeCompare(proxData(b)));
+  const fech = PLANO.ganttFech || (PLANO.ganttFech = new Set());
+  const dias = Array.from({ length: PLG_DIAS }, (_, i) => planoDiaMais(ini, i));
+  const W = PLG_DIAS * PLG_W; let y = 0; const linhas = [], barras = [], marcas = [], pos = {};
+  projs.forEach(p => {
+    const c = clientOf(p); const cc = c ? hexOf(c.color || 'gray') : planoCor(p.id); const fechado = fech.has(p.id);
+    const tks = tasksOf(p.id).filter(t => statusCat(t.status_id) !== 'cancelled'); const feitas = tks.filter(t => statusCat(t.status_id) === 'done').length;
+    linhas.push(`<div class="plg-nome proj" style="top:${y}px"><button class="plg-tg" data-act="plg-tg" data-id="${p.id}" aria-label="${fechado ? 'Abrir' : 'Recolher'}">${icon(fechado ? 'chevR' : 'chevD')}</button><button class="plg-pn" data-act="proj-open" data-id="${p.id}" data-tab="tasks">${planoCliChip(p)}<b>${esc(p.name)}</b></button><span class="faint small">${feitas}/${tks.length}</span></div>`);
+    const y0 = y; y += PLG_ROW;
+    // resumo do projeto: barra fina do primeiro começo ao último fim
+    const xs = tks.map(t => itens[t.id]).filter(x => x && x.ini && x.fim);
+    if (xs.length) { const a = Math.min(...xs.map(x => +x.ini)), b = Math.max(...xs.map(x => +x.fim)); const xa = planoGanttX(a, ini), xb = planoGanttX(b, ini);
+      if (xb > 0 && xa < W) barras.push(`<div class="plg-resumo" style="top:${y0 + 12}px;left:${Math.max(0, xa)}px;width:${Math.max(4, Math.min(W, xb) - Math.max(0, xa))}px;--cc:${cc}"></div>`); }
+    if (!fechado) tks.forEach(t => {
+      const x = itens[t.id]; const ok = statusCat(t.status_id) === 'done'; const parado = typeof statusParado === 'function' && statusParado(t.status_id);
+      linhas.push(`<div class="plg-nome${ok ? ' ok' : ''}" style="top:${y}px"><button class="plg-tn" data-act="proj-open" data-id="${p.id}" data-tab="tasks" data-tk="${t.id}">${ok ? icon('check') : ''}${esc(t.name)}</button></div>`);
+      let a = null, b = null;
+      if (x && x.ini && x.fim && !ok) { a = planoGanttX(x.ini, ini); b = planoGanttX(x.fim, ini); }
+      else if (t.deadline) { const d = new Date(`${t.deadline}T${t.deadline_time || '19:00'}:00`); b = planoGanttX(d, ini); a = b - PLG_W * 0.35; }
+      if (a != null && b > 0 && a < W) {
+        const l = Math.max(0, a), w = Math.max(10, Math.min(W, b) - l); const late = !!x?.aviso;
+        pos[t.id] = { a: l, b: l + w, y: y + PLG_ROW / 2 };
+        barras.push(`<div class="plg-bar${ok ? ' ok' : ''}${late ? ' late' : ''}${parado ? ' parado' : ''}" data-plg="${t.id}" style="top:${y + 6}px;left:${l}px;width:${w}px;--cc:${cc};--ct:${typeof textOn === 'function' ? textOn(cc) : '#fff'}" data-tip="${esc(`${t.name} · ${p.name}${x?.ini && !ok ? `\nDo planejamento: ${fmtDate(ymd(x.ini))} ${planoHora(x.ini.getHours() + x.ini.getMinutes() / 60)} → ${fmtDate(ymd(x.fim))} ${planoHora(x.fim.getHours() + x.fim.getMinutes() / 60)}` : ''}${t.deadline ? `\nPrazo: ${fmtDate(t.deadline)}${t.deadline_time ? ' ' + t.deadline_time : ''}` : ''}${late ? '\n⚠ passa do prazo' : ''}${ok ? '\nConcluída' : '\nArraste para os lados para mudar o prazo (dias)'}`)}">${late ? '⚠ ' : ''}${esc(t.name)}</div>`);
+      }
+      if (t.deadline && !ok) { const xd = planoGanttX(new Date(`${t.deadline}T${t.deadline_time || '19:00'}:00`), ini); if (xd >= 0 && xd <= W) marcas.push(`<span class="plg-flag" style="top:${y + 4}px;left:${xd - 5}px" title="Prazo da tarefa">${icon('flag')}</span>`); }
+      y += PLG_ROW;
+    });
+    // entregas (deadlines): linha roxa vertical no bloco do projeto
+    projEntregas(p.id).forEach(e => { if (!e.dia) return; const xd = planoGanttX(new Date(`${e.dia}T${e.hora || '19:00'}:00`), ini); if (xd < 0 || xd > W) return;
+      marcas.push(`<div class="plg-ent" style="top:${y0}px;height:${y - y0}px;left:${xd}px" data-tip="${esc(`Deadline: ${e.nome || 'Entrega'} · ${p.name}\n${fmtDate(e.dia)} ${e.hora || '19:00'}`)}"><span>${esc(e.nome || 'Entrega')}</span></div>`); });
+  });
+  // dependências: seta do fim da tarefa anterior ao começo da seguinte
+  const setas = []; projs.forEach(p => tasksOf(p.id).forEach(t => (Array.isArray(t.depends_on) ? t.depends_on : []).forEach(d => { const A = pos[d], B = pos[t.id]; if (!A || !B) return;
+    const mx = Math.max(A.b + 6, B.a - 8); setas.push(`<path d="M${A.b} ${A.y} H${mx} V${B.y} H${B.a - 2}" />`); })));
+  const H = Math.max(y, PLG_ROW * 3);
+  const cab = dias.map((d, i) => { const dd = new Date(d + 'T12:00:00'); const off = !planoDiaUtil(d); return `<div class="plg-dia${d === hoje ? ' hoje' : ''}${off ? ' off' : ''}" style="left:${i * PLG_W}px;width:${PLG_W}px"><span>${dd.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span><b>${dd.getDate()}</b></div>`; }).join('');
+  const fundo = dias.map((d, i) => `<div class="plg-col${d === hoje ? ' hoje' : ''}${!planoDiaUtil(d) ? ' off' : ''}" style="left:${i * PLG_W}px;width:${PLG_W}px"></div>`).join('');
+  const agora = (() => { const x = planoGanttX(Date.now(), ini); return x >= 0 && x <= W ? `<div class="plg-agora" style="left:${x}px"></div>` : ''; })();
+  if (!projs.length) return '<div class="empty small">Nenhum projeto ativo com tarefas.</div>';
+  return `<div class="plg"><div class="plg-esq"><div class="plg-cab-esq">Projeto · tarefa</div><div class="plg-nomes" style="height:${H}px">${linhas.join('')}</div></div>
+    <div class="plg-dir" data-plg-scroll><div style="width:${W}px"><div class="plg-cab">${cab}</div><div class="plg-area" style="height:${H}px">${fundo}<svg class="plg-setas" width="${W}" height="${H}">${setas.join('')}</svg>${barras.join('')}${marcas.join('')}${agora}</div></div></div></div>`;
+}
+ACTIONS['plg-tg'] = (el) => { const f = PLANO.ganttFech || (PLANO.ganttFech = new Set()); f.has(el.dataset.id) ? f.delete(el.dataset.id) : f.add(el.dataset.id); render(); };
+ACTIONS['plg-nav'] = (el) => { const d = Number(el.dataset.d); PLANO.ganttIni = d ? planoDiaMais(planoGanttIni(), d * 7) : null; render(); };
+/* Arrastar barra do Gantt: muda o prazo da tarefa em dias inteiros. */
+(function () {
+  let drag = null;
+  document.addEventListener('pointerdown', (e) => { const b = e.target.closest?.('.plg-bar:not(.ok)'); if (!b || e.button !== 0) return; drag = { el: b, x0: e.clientX, l0: parseFloat(b.style.left), moved: false }; b.setPointerCapture?.(e.pointerId); });
+  document.addEventListener('pointermove', (e) => { if (!drag) return; const dx = e.clientX - drag.x0; if (Math.abs(dx) > 4) drag.moved = true; drag.el.style.left = (drag.l0 + Math.round(dx / PLG_W) * PLG_W) + 'px'; });
+  document.addEventListener('pointerup', (e) => { if (!drag) return; const d = drag; drag = null; const n = Math.round((e.clientX - d.x0) / PLG_W); if (!d.moved || !n) { d.el.style.left = d.l0 + 'px'; return; }
+    const t = db.get('tempo_tasks', d.el.dataset.plg); if (!t) return; const base = t.deadline || ymd(new Date());
+    const novo = planoDiaMais(base, n); db.update('tempo_tasks', t.id, { deadline: novo }); toast(`Prazo de “${t.name}”: ${fmtDate(novo)}`); });
+})();
 VIEWS.plano = () => {
   PLANO.desenhando = Date.now();   // a rolagem que o redesenho provocar não é guardada
   if (!window.__plZoomT || !PL_ALT) PL_ALT = Math.max(16, Math.min(160, Number(db.setting('planoZoom', 44)) || 44));
@@ -620,12 +691,16 @@ VIEWS.plano = () => {
   planoFotoDoDia(porDia);
   const hoje = ymd(new Date()); const dia = PLANO.dia || hoje;
   const semEst = projects().filter(p => ['todo', 'active'].includes(statusCat(p.status_id)) && !(Number(p.estimated_hours) > 0));
-  const seg = `<div class="seg">${[['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']].map(([k, l]) => `<button class="${modo === k ? 'on' : ''}" data-act="pl-modo" data-m="${k}">${l}</button>`).join('')}</div>`;
+  const seg = `<div class="seg">${[['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês'], ['tarefas', 'Tarefas']].map(([k, l]) => `<button class="${modo === k ? 'on' : ''}" data-act="pl-modo" data-m="${k}">${l}</button>`).join('')}</div>`;
   let titulo, nav, corpo;
   if (modo === 'dia') {
     titulo = new Date(dia + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, c => c.toUpperCase());
     nav = `<button class="btn sm" data-act="pl-nav" data-d="-1" aria-label="Dia anterior">${icon('chevL')}</button><button class="btn sm" data-act="pl-nav" data-d="1" aria-label="Próximo dia">${icon('chevR')}</button>${dia !== hoje ? '<button class="btn sm ghost" data-act="pl-nav" data-d="0">Hoje</button>' : ''}`;
     corpo = planoDiaHTML(dia, porDia);
+  } else if (modo === 'tarefas') {
+    const gi = planoGanttIni(); titulo = `${fmtDate(gi).slice(0, 5)} – ${fmtDate(planoDiaMais(gi, PLG_DIAS - 1))}`;
+    nav = `<button class="btn sm" data-act="plg-nav" data-d="-1" aria-label="Semana anterior">${icon('chevL')}</button><button class="btn sm" data-act="plg-nav" data-d="1" aria-label="Próxima semana">${icon('chevR')}</button><button class="btn sm ghost" data-act="plg-nav" data-d="0">Hoje</button>`;
+    corpo = planoGanttHTML();
   } else if (modo === 'mes') {
     titulo = ''; nav = `<button class="btn sm ghost" data-act="pl-mes-hoje">Hoje</button>`;
     corpo = planoMesHTML(porDia);
@@ -639,7 +714,7 @@ VIEWS.plano = () => {
       <div class="panel-b">${corpo}<div class="small muted" style="margin-top:8px">${nota}</div></div></div>
     ${planoRotinaHTML()}`;
   // restaura a rolagem logo depois de desenhar (antes de o navegador mandar qualquer evento de rolagem da troca)
-  const rolar = () => (modo === 'mes' ? planoMesRolar() : planoGradeRolar(modo === 'semana'));
+  const rolar = () => (modo === 'tarefas' ? null : modo === 'mes' ? planoMesRolar() : planoGradeRolar(modo === 'semana'));
   return { title: 'Calendário', actions: '', html, after: rolar };
 };
 /* Grade de 24 h: abre perto das 5h (ou 1 h antes de agora) e guarda a rolagem; na semana, abre na semana de hoje. */
