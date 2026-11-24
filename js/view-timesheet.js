@@ -77,6 +77,7 @@ VIEWS.timesheet = () => {
         <button class="btn" data-act="ts-switch">Trocar de projeto</button>
         <button class="btn danger" data-act="ts-stop">${icon('stop')} Encerrar</button>
         ${focoBtnHTML()}
+        <button class="btn" data-act="corte-sessao" data-id="${a.id}" title="Cortar, mover e trocar a tarefa dos trechos da sessão">${icon('scissors')} Ajustar tempo</button>
         <button class="btn" data-act="ts-log-start" data-id="${a.id}">Início pelo log</button>
         <button class="btn" data-act="ts-edit" data-id="${a.id}">${icon('edit')} Abrir sessão atual</button>
       </div>
@@ -243,6 +244,7 @@ ACTIONS['ts-resume'] = async () => {
   const bloqueio = last?.why === 'mac';   // o Mac bloqueou ou dormiu durante a pausa
   const longa = an.total >= PAUSA_LONGA_MS || bloqueio;
   if (!an.pergunta && !longa) return;
+  if (typeof openCorte === 'function') return openCorte({ from: pIni, to: tRet, origemId: a.id, titulo: 'Computar o tempo pausado?' });
   const ok = await confirmBox({
     title: 'Computar o tempo pausado?',
     body: `Enquanto a sessão estava pausada (${fmtDur(an.total)}), ${fmtDur(an.other)} foram em outras atividades${an.resumo ? ` (${esc(an.resumo)})` : ''}. WhatsApp (${fmtDur(an.whats)}) e ociosidade (${fmtDur(an.idle)}) foram ignorados.${longa ? `<br><span class="small muted">${bloqueio ? 'O Mac bloqueou durante a pausa. ' : ''}Pausa longa: o padrão é não computar, a menos que você tenha trabalhado nesse tempo.</span>` : ''}`,

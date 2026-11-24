@@ -2077,3 +2077,27 @@ body.pl-mao.pl-mao-on [data-pl-scroll], body.pl-mao.pl-mao-on .plg-dir, body.pl-
 body.pl-mao .pl-mes-scroll, body.pl-mao .pl-mes-scroll * { cursor: grab !important; user-select: none; } body.pl-mao.pl-mao-on .pl-mes-scroll, body.pl-mao.pl-mao-on .pl-mes-scroll * { cursor: grabbing !important; }
 .panel.fechado > .panel-h { border-bottom: 0; }
 .timer-prox { margin: 4px 0 6px; } .timer-prox b { color: var(--fg); font-weight: 600; }
+
+/* Corte de trechos (js/corte.js) */
+.cr-band { position: relative; height: 68px; background: var(--surface-2); border-radius: 8px; overflow: hidden; touch-action: none; user-select: none; cursor: crosshair; }
+.cr-blk { position: absolute; top: 28px; bottom: 6px; border-radius: 3px; opacity: .6; }
+.cr-blk.pausa { opacity: .8; }
+.cr-seg { position: absolute; top: 0; bottom: 0; background: rgba(46,67,214,.12); border-top: 2px solid var(--accent); border-bottom: 2px solid var(--accent); cursor: grab; }
+.cr-seg.on { background: rgba(46,67,214,.24); }
+.cr-seg.off { background: rgba(138,144,159,.18); border-color: var(--fg-3); }
+.cr-seg:active { cursor: grabbing; }
+.cr-seg .n { position: absolute; top: 3px; left: 16px; font-size: 11px; color: var(--accent); white-space: nowrap; pointer-events: none; }
+.cr-h { position: absolute; top: 0; bottom: 0; width: 12px; background: var(--accent); cursor: ew-resize; display: flex; align-items: center; justify-content: center; }
+.cr-h::after { content: ""; width: 2px; height: 18px; background: #fff; border-radius: 1px; }
+.cr-ph { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--fg); pointer-events: none; }
+.cr-ax { position: relative; height: 16px; font-size: 11px; color: var(--fg-3); }
+.cr-ax span { position: absolute; transform: translateX(-50%); }
+.cr-leg { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--fg-2); }
+.cr-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.cr-tip { min-height: 18px; font-size: 12.5px; color: var(--fg-2); }
+.cr-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-top: 1px solid var(--line); border-radius: 6px; font-size: .95em; flex-wrap: wrap; }
+.cr-row.on { background: var(--accent-soft); }
+.cr-t { min-width: 112px; font-weight: 600; }
+.cr-d { min-width: 48px; }
+.cr-row select { max-width: 260px; }
+kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--surface); color: var(--fg-2); margin: 0 1px; }

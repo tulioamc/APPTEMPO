@@ -22,6 +22,8 @@ const ICONS = {
   switchplay: '<path d="M4.5 9.5A8 8 0 0 1 18.5 7"/><path d="M18.5 7l1-3.5M18.5 7l-3.5.5"/><path d="M19.5 14.5A8 8 0 0 1 5.5 17"/><path d="M5.5 17l-1 3.5M5.5 17l3.5-.5"/><path d="M10 8.5v7l5.5-3.5z" fill="currentColor" stroke="none"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  scissors: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8 7.5L20 18M8 16.5L20 6"/>',
+  wand: '<path d="M5 19L16 8M14.5 4.5v3M19.5 9.5h-3M18 3.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5L16 5.5l1.5-.5z"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   chevL: '<path d="M15 6l-6 6 6 6"/>', chevR: '<path d="M9 6l6 6-6 6"/>', chevD: '<path d="M6 9l6 6 6-6"/>', chevU: '<path d="M6 15l6-6 6 6"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
