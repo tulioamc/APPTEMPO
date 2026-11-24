@@ -1027,25 +1027,39 @@ ACTIONS['pl-encaixar'] = (el) => {
       }
       // passou do fim do expediente: continua no próximo dia útil?
       const ult = partes[partes.length - 1];
-      if (ult && ult.fim > cfg.fim + 1e-6 && ult.ini < cfg.fim && typeof choiceBox === 'function') {
-        const prox = planoProximoUtil(dia);
+      // passou do fim do expediente: até 1h o dia estica e o bloco fica onde você soltou; mais que isso, pergunta (nunca muda sozinho)
+      if (ult && ult.fim > cfg.fim + 1e-6 && ult.ini < cfg.fim) {
         const resto = ult.fim - cfg.fim;
-        const v = await choiceBox({ title: `Passa das ${planoHora(cfg.fim).replace(':00', 'h')}`, body: `Sobram ${fmtH(resto * 36e5)} depois das ${planoHora(cfg.fim)}. Continuar em ${fmtDate(prox)} a partir das ${planoHora(cfg.inicio)}, num bloco separado?`, opts: [['prox', 'Sim, no próximo dia'], ['mesmo', 'Não, fica no mesmo dia']] });
-        if (v === null) { render(); return; }   // Cancelar: o bloco volta para onde estava
-        if (v === 'prox') { ult.fim = cfg.fim; partes.push({ dia: prox, ini: cfg.inicio, fim: cfg.inicio + resto }); }
+        if (resto <= 1 + 1e-6) extra += ' · dia esticado';
+        else if (typeof choiceBox === 'function') {
+          const prox = planoProximoUtil(dia);
+          const v = await choiceBox({ title: `Passa das ${planoHora(cfg.fim).replace(':00', 'h')}`, body: `O bloco vai até ${planoHora(ult.fim)}: sobram ${fmtH(resto * 36e5)} depois das ${planoHora(cfg.fim)}.`, opts: [['mesmo', 'Manter aqui, onde soltei'], ['prox', `Dividir: o que passa continua em ${fmtDate(prox)}`]] });
+          if (v === null) { render(); return; }   // Cancelar: o bloco volta para onde estava
+          if (v === 'prox') { ult.fim = cfg.fim; partes.push({ dia: prox, ini: cfg.inicio, fim: cfg.inicio + resto }); }
+        }
       }
       // nunca deixa dois blocos fixados um em cima do outro: o arrastado fica onde você soltou e os fixados que ele cobre
       // vão para logo depois dele, em cadeia, pulando a rotina. Os que não encostam ficam onde estão. Bateu em outra atividade:
       // pergunta antes de mexer nela (ela nunca é dividida: vai inteira para depois).
       const empurra = () => planoEmpurrar(semJunta(), partes, planoOcupadosDoDia, { proximoDia: planoProximoUtil });
+      // blocos que o app nem usa (esperam outra tarefa) ficam invisíveis na tela: não valem como "batida", só saem do caminho
+      const fantasmas = (() => { try { return new Set((tkMotor(new Date(), 60).pinsSobra || []).map(q => q.pin)); } catch (_) { return new Set(); } })();
       let r = empurra();
-      if (r.empurrados.length && typeof choiceBox === 'function') {
-        const nomes = r.empurrados.map(planoNomePin).join(', ');
+      if (r.empurrados.some(q => !fantasmas.has(q.id)) && typeof choiceBox === 'function') {
+        const nomes = r.empurrados.filter(q => !fantasmas.has(q.id)).map(planoNomePin).join(', ');
         const v = await choiceBox({ title: 'Mexer nas outras atividades?', body: `O bloco bate com <b>${esc(nomes)}</b>.`, opts: [['empurrar', 'Sim: empurrar para depois deste (inteiras, sem dividir)'], ['ficar', 'Não: deixar onde estão (fica sobreposto)']] });
         if (v === null) { render(); return; }
         r = v === 'ficar' ? { base: semJunta(), empurrados: [] } : empurra();   // relê: a lista pode ter mudado com a janela aberta
       }
       novosPins = [...r.base, ...r.empurrados, ...partes.map(pt => ({ id: uid(), dia: pt.dia, pid, tid, ini: pt.ini, h: pt.fim - pt.ini }))];
+      // sobra da mesma tarefa lá na frente (pedaço dividido de antes): some, porque o bloco agora já cobre o tempo previsto
+      { const novosIds = new Set(novosPins.slice(r.base.length + r.empurrados.length).map(q => q.id)); const prev = (() => { try { const it = Object.values(tkMotor(new Date(), 60).itens).find(z => z.t && tid && z.t.id === tid); return it ? it.prev / 60 : 0; } catch (_) { return 0; } })();
+        if (tid && prev > 0) {
+          const mesmaT = novosPins.filter(q => q.tid === tid), soma = mesmaT.reduce((t0, q) => t0 + Number(q.h), 0); let sobra = soma - prev; const tira = new Set(), corta = {};
+          mesmaT.filter(q => !novosIds.has(q.id)).sort((q1, q2) => (q2.dia + String(q2.ini).padStart(5, '0')).localeCompare(q1.dia + String(q1.ini).padStart(5, '0'))).forEach(q => {
+            if (sobra < 0.24) return; if (Number(q.h) <= sobra + 0.01) { tira.add(q.id); sobra -= Number(q.h); } else { corta[q.id] = Number(q.h) - sobra; sobra = 0; } });
+          if (tira.size || Object.keys(corta).length) { novosPins = novosPins.filter(q => !tira.has(q.id)).map(q => corta[q.id] ? { ...q, h: Math.max(0.25, Math.round(corta[q.id] * 4) / 4) } : q); extra += ' · pedaço da frente juntado'; }
+        } }
       if (r.empurrados.length) extra += ` · ${r.empurrados.length} bloco${r.empurrados.length > 1 ? 's' : ''} empurrado${r.empurrados.length > 1 ? 's' : ''}`;
       if (junta.length) extra += ' · pedaços juntados';
       a = partes[0].ini; b = partes[partes.length - 1].fim;
@@ -1068,6 +1082,7 @@ ACTIONS['pl-encaixar'] = (el) => {
         db.setSetting('planoBloqueios', planoBloqueios().map(bq => bq.id === x.el.dataset.id ? { ...bq, dia, ini: a, fim: b } : bq));
       }
     }, `${x.kind === 'fixo' ? 'Só neste dia: ' : x.kind === 'plano' ? 'Fixado: ' : ''}${dia !== x.dia ? fmtDate(dia) + ' ' : ''}${planoHora(a)}${x.kind === 'prazo' ? '' : '–' + planoHora(b)}${extra}`);
+    if (x.kind === 'plano' && novosPins) planoAvisaSobra(new Set(novosPins.map(q => q.id)));
   });
   // o clique que termina um arrasto não abre nada
   document.addEventListener('click', (e) => {

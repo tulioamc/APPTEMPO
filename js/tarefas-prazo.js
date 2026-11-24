@@ -238,6 +238,14 @@ function tkMotor(agora = new Date(), dias = 120) {
   // blocos fixados: de uma tarefa (tid) só servem a ela; do projeto (sem tid) servem às tarefas dele, na ordem da fila
   const pinPool = {}; pins.slice().sort((a, b) => (a.dia + String(a.ini).padStart(5, '0')).localeCompare(b.dia + String(b.ini).padStart(5, '0'))).forEach(pn => { (pinPool[pn.tid ? 't:' + pn.tid : 'p:' + pn.pid] ||= []).push({ ...pn, cur: Number(pn.ini), b: Number(pn.ini) + Number(pn.h) }); });
   const limite = ymd(new Date(agora.getTime() + dias * 864e5));
+  // Regra do fim do dia (24/11): se o que sobra da tarefa depois do expediente é até 1h, o dia estica e ela termina nele;
+  // mais que isso, a sobra vai inteira para o próximo dia. Nunca estica por cima de rotina, compromisso ou bloco de outra tarefa.
+  const esticaFim = (d, jan, b, bq0, x, falta) => {
+    const resta = falta - (bq0 - x) * 60;
+    if (resta <= 0.5 || resta > 60.5 || b !== jan[jan.length - 1][1] || b < cfg.fim - 0.01) return bq0;
+    const depois = [...janDe(d).fixos.map(f => f[0]), ...pins.filter(pn => pn.dia === d).map(pn => Number(pn.ini))].filter(q => q >= b - 0.01);
+    return Math.min(Math.min(24, ...depois), Math.ceil((bq0 + resta / 60) * 4 - 1e-6) / 4);
+  };
   // anda `min` minutos a partir de `ini` (na sua fila, gastando a capacidade do dia, ou só calculando para terceiros)
   const andar = (ini, min, gasta, meuTid = null) => {
     // a tarefa não é dividida por bloco de OUTRA tarefa (fixado à mão): só a rotina, compromissos e o fim do dia dividem.
@@ -252,7 +260,7 @@ function tkMotor(agora = new Date(), dias = 120) {
         for (const [a, b] of jan) {
           if (falta <= 0.5) break;
           let cap = gasta === true ? capMin(d) - (usado[d] || 0) : Infinity; if (cap <= 0.5) break;
-          const x = Math.ceil(Math.max(a, h0) * 4 - 1e-6) / 4, bq = Math.floor(b * 4 + 1e-6) / 4; if (bq - x <= 0.01) continue;
+          const x = Math.ceil(Math.max(a, h0) * 4 - 1e-6) / 4, bq0 = Math.floor(b * 4 + 1e-6) / 4, bq = esticaFim(d, jan, b, bq0, x, falta); if (bq - x <= 0.01) continue;
           if ((bq - x) * 60 < Math.min(30, falta) - 0.5) continue;
           // já começou: há bloco de outra tarefa entre o último pedaço e este? então não divide — recomeça depois dele
           if (ult) { const ps = ult.d === d ? outrosPins(d).filter(([p, q]) => p < x - 1e-6 && q > ult.h + 1e-6) : [...outrosPins(ult.d).filter(([, q]) => q > ult.h + 1e-6), ...outrosPins(d).filter(([p]) => p < x - 1e-6)];
@@ -276,7 +284,7 @@ function tkMotor(agora = new Date(), dias = 120) {
       for (const [a, b] of jan) {
         if (falta <= 0.5) break;
         let cap = gasta === true ? capMin(d) - (usado[d] || 0) : Infinity; if (cap <= 0.5) break;
-        const x = Math.ceil(Math.max(a, h0) * 4 - 1e-6) / 4, bq = Math.floor(b * 4 + 1e-6) / 4; if (bq - x <= 0.01) continue;
+        const x = Math.ceil(Math.max(a, h0) * 4 - 1e-6) / 4, bq0 = Math.floor(b * 4 + 1e-6) / 4, bq = esticaFim(d, jan, b, bq0, x, falta); if (bq - x <= 0.01) continue;
         if ((bq - x) * 60 < Math.min(30, falta) - 0.5) continue;
         const take = Math.floor(Math.min(falta, (bq - x) * 60, cap) / 15 + 1e-6) * 15; if (take < 15) continue;
         blocos.push({ dia: d, ini: x, fim: x + take / 60 }); falta -= take; if (gasta) usado[d] = (usado[d] || 0) + take;

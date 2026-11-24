@@ -71,3 +71,15 @@ if (typeof document !== 'undefined' && document.addEventListener) {
   document.addEventListener('pointerup', solta, true); document.addEventListener('pointercancel', solta, true);
   document.addEventListener('click', (e) => { if (espaco || window.__plgMoved && alvo(e.target)) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
 }
+
+/* Depois de soltar um bloco: se o app não vai usá-lo porque a tarefa espera outra (dependência), avisa na hora e oferece tirar a espera. */
+function planoAvisaSobra(ids) {
+  try {
+    const m = tkMotor(new Date(), 60);
+    const sob = (m.pinsSobra || []).filter(p => ids.has(p.pin) && /^antes:/.test(p.motivo || ''));
+    if (!sob.length) return;
+    const p = sob[0], t = db.get('tempo_tasks', p.tid), espera = String(p.motivo).slice(6);
+    const dep = t && (t.depends_on || []).map(i => db.get('tempo_tasks', i)).find(d => d && d.name === espera);
+    toast(`Esse bloco não vale ainda: “${t ? t.name : 'a tarefa'}” espera “${espera}” terminar. O app só usa o horário depois disso.`, { ms: 15000, actions: dep ? [{ label: `Tirar a espera de “${espera}”`, run: () => { db.update('tempo_tasks', t.id, { depends_on: (t.depends_on || []).filter(i => i !== dep.id) }); db.emit(); render(); toast('Espera removida'); } }] : [] });
+  } catch (_) { /* aviso é só ajuda */ }
+}

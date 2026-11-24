@@ -194,7 +194,7 @@ test('aleatório: 400 cenários — o plano sempre segue as regras (sem sobrepor
     // nada em cima de nada, a não ser dois blocos que VOCÊ fixou por cima um do outro
     todos.forEach((a, i) => todos.slice(i + 1).forEach(b => { if (a.dia === b.dia && a.ini < b.fim - 1e-6 && b.ini < a.fim - 1e-6 && !(a.pin && b.pin)) ruim(`${a.id} e ${b.id} sobrepostos em ${a.dia} (${a.ini}-${a.fim} × ${b.ini}-${b.fim})`); }));
     // o que o app encaixa sozinho cai só em hora livre (fora de rotina e compromissos)
-    todos.filter(b => !b.pin).forEach(b => { const jan = m.planoJanelas(b.dia).jan; if (!jan.some(([x, y]) => b.ini >= x - 1e-6 && b.fim <= y + 1e-6)) ruim(`${b.id} fora das horas livres em ${b.dia} (${b.ini}-${b.fim})`); });
+    todos.filter(b => !b.pin).forEach(b => { const jan = m.planoJanelas(b.dia).jan; const ult = jan.length ? jan[jan.length - 1][1] : -1; if (!jan.some(([x, y]) => b.ini >= x - 1e-6 && b.fim <= y + (y === ult ? 1 : 0) + 1e-6)) ruim(`${b.id} fora das horas livres em ${b.dia} (${b.ini}-${b.fim})`); });
     // nunca antes de agora
     todos.forEach(b => { if (b.dia === '2026-11-24' && b.ini < 9 - 1e-6) ruim(`${b.id} começa antes de agora`); if (b.dia < '2026-11-24') ruim(`${b.id} no passado`); });
     // dependência respeitada
