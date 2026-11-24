@@ -278,8 +278,16 @@ function planoItensDoDia(dia, porDia) {
     const h = planoHoraDe(e.hora || '19:00'); if (h != null) it.push({ k: 'prazo', a: h, b: h + 0.001, ent: e, p });
   }));
   // só as entregas (deadlines) viram linha; a hora de entrega de cada tarefa não aparece mais na grade (pedido do Tulio, 24/11)
-  if (dia <= ymd(new Date())) { const pr = planoVsReal(dia); (pr?.blocos || []).filter(b => !b.ok && (dia < ymd(new Date()) || b.fim <= new Date().getHours() + new Date().getMinutes() / 60)).forEach(b => it.push({ k: 'naofeito', a: b.ini, b: b.fim, bl: b })); }
-  const tipoFiltro = { fantasma: 'trabalho', fixo: 'rotina', todo: 'todos', todos: 'todos', feito: 'trabalho', plano: 'trabalho', prazo: 'trabalho', naofeito: 'naofeito' };
+  // Modo "Não rolou" (botão, começa desligado): mostra o plano da manhã sobreposto — verde = rolou, amarelo = não rolou como planejado mas houve trabalho no projeto depois, vermelho = não rolou e nada foi feito depois
+  if (planoMostra('naofeito') && dia <= ymd(new Date())) { const pr = planoVsReal(dia); const agoraH = new Date().getHours() + new Date().getMinutes() / 60; const hojeS = ymd(new Date());
+    (pr?.blocos || []).forEach(b => {
+      if (!b.ok && dia === hojeS && b.fim > agoraH) return;   // ainda vai acontecer
+      let st = 'ok';
+      if (!b.ok) { const dias = [dia]; for (let d = planoDiaMais(dia, 1); d <= hojeS; d = planoDiaMais(d, 1)) dias.push(d);
+        const depois = dias.some(d => planoFeitosDoDia(d).some(f => f.pid === b.pid && (d > dia || f.ini >= b.fim - 1e-6)));
+        st = depois ? 'ajustado' : 'falhou'; }
+      it.push({ k: 'naofeito', a: b.ini, b: b.fim, bl: b, st }); }); }
+  const tipoFiltro = { fantasma: 'trabalho', fixo: 'rotina', todo: 'todos', todos: 'todos', feito: 'trabalho', plano: 'trabalho', prazo: 'trabalho' };
   return it.filter(x => x.b > x.a && (!tipoFiltro[x.k] || planoMostra(tipoFiltro[x.k])));
 }
 /* Lado a lado: itens que se sobrepõem dividem a largura (colunas por grupo de sobreposição). */
@@ -377,7 +385,7 @@ function planoItemHTML(x, dia, { alt, unico, auto }) {
     const por = /^antes:/.test(f.motivo || '') ? `espera “${String(f.motivo).slice(6)}” terminar` : ({ terceiro: 'é de outra pessoa', parada: 'está parada', fora: 'não está mais no plano' }[f.motivo] || 'o plano não usa');
     return `<div class="pl-fantasma" data-dg="plano" data-dia="${dia}" data-pid="${f.pid}" data-tid="${f.tid || ''}" data-pin="${f.pin}" data-ini="${f.ini}" data-fim="${f.fim}" style="${pos};--fc:${planoCor(f.pid)}" data-tip="${esc(`Não vale: ${tk ? tk.name + ' · ' : ''}${p?.name || ''}\nNão foi feito porque ${por}.\nO horário fica segurado, mas sem uso. Arraste para outro lugar ou solte no ×.`)}"><span class="pl-tx"><b>${esc(tk ? tk.name : p?.name || '')}</b>${curto ? '' : `<em>não vale: ${esc(por)}</em>`}</span><button class="pl-unpin" data-act="pl-unpin" data-id="${f.pin}" title="Soltar este bloco" aria-label="Soltar bloco">×</button></div>`; }
   if (x.k === 'naofeito') { const p = db.get('tempo_projects', x.bl.pid); const c = planoCor(x.bl.pid);
-    return `<div class="pl-naofeito" style="${pos};--fc:${c}" data-tip="${esc(`Planejado e não aconteceu: ${p?.name || ''}\n${planoHora(x.a)}–${planoHora(x.b)} (plano da manhã)`)}"><span class="pl-tx"><b>${esc(p?.name || '')}</b>${curto ? '' : '<em>não aconteceu</em>'}</span></div>`; }
+    return `<div class="pl-naofeito nr-${x.st || 'falhou'}" style="${pos};--fc:${c}" data-tip="${esc(`${({ ok: 'Rolou como planejado', ajustado: 'Não rolou como planejado, mas foi ajustado depois', falhou: 'Planejado e não aconteceu' })[x.st || 'falhou']}: ${p?.name || ''}\n${planoHora(x.a)}–${planoHora(x.b)} (plano da manhã)`)}"><span class="pl-tx"><b>${esc(p?.name || '')}</b>${curto ? '' : '<em>não aconteceu</em>'}</span></div>`; }
   if (x.k === 'todos') { const l = x.lista;
     return `<div class="pl-evento todo grupo" style="${pos}" data-tip="${esc(`${l.length} to-dos às ${planoHora(x.a)}\n` + l.map(e => (e.feito ? '✓ ' : '• ') + e.titulo).join('\n'))}">${icon('check')}<span class="pl-tx"><b>${l.length} to-dos</b>${curto ? '' : `<em>${l.filter(e => e.feito).length} feitos</em>`}</span></div>`; }
   if (x.k === 'feito') { const f = x.f; const pr = db.get('tempo_projects', f.pid); const tk = f.tid ? db.get('tempo_tasks', f.tid) : null; const cl = pr && clientOf(pr);
@@ -461,7 +469,7 @@ function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0
   const topo = linhasTopo ? `<div class="pl-topo" style="height:${linhasTopo * 20}px">${todoDia.map(e => e.origem === 'todo'
     ? `<button class="pl-chip todo${e.feito ? ' feito' : ''}" data-act="todo-modal" data-id="${e.id}" title="To-do do dia (sem hora)">${icon('check')}${esc(e.titulo)}</button>`
     : `<span class="pl-chip ${e.origem}" title="Dia todo">${esc(e.titulo)}</span>`).join('')}</div>` : '';
-  return `<div class="pl-dia${dia === hoje ? ' hoje' : ''}${!util ? ' off' : ''}${(v?.cap || 0) > cfg.horasDia + 0.05 ? ' esticado' : ''}${wd === 1 ? ' pl-segunda' : ''}" data-pl-col="${dia}">${cab}${topo}<div class="pl-grade" style="height:${24 * alt}px">${livres}${itens}${agora}</div></div>`;
+  return `<div class="pl-dia${planoMostra('naofeito') ? ' nr-on' : ''}${dia === hoje ? ' hoje' : ''}${!util ? ' off' : ''}${(v?.cap || 0) > cfg.horasDia + 0.05 ? ' esticado' : ''}${wd === 1 ? ' pl-segunda' : ''}" data-pl-col="${dia}">${cab}${topo}<div class="pl-grade" style="height:${24 * alt}px">${livres}${itens}${agora}</div></div>`;
 }
 const planoRegua = (alt = PL_ALT) => `<div class="pl-horas" style="height:${24 * alt}px">${Array.from({ length: 24 }, (_, h) => `<div class="pl-h" style="top:${h * alt}px">${String(h).padStart(2, '0')}h</div>`).join('')}</div>`;
 
@@ -487,13 +495,13 @@ function planoSemanaHTML(porDia) {
 }
 
 /* Filtros do calendário (Mês): esconder Alice, Rafa, trabalho, to-dos ou rotina. Guardado em planoMesFiltro { k: false }. */
-const PL_FILTROS = [['alice', 'Alice'], ['rafa', 'Rafa'], ['trabalho', 'Trabalho'], ['todos', 'To-dos'], ['rotina', 'Rotina'], ['naofeito', 'Não rolou']];
+const PL_FILTROS = [['alice', 'Alice'], ['rafa', 'Rafa'], ['trabalho', 'Trabalho'], ['todos', 'To-dos'], ['rotina', 'Rotina']];
 // 'Não rolou' (planejado que não aconteceu) começa desligado; os outros começam ligados
 const PL_FILTRO_PADRAO = { naofeito: false };
 const planoMostra = (k) => { const v = (db.setting('planoMesFiltro', {}) || {})[k]; return v === undefined ? PL_FILTRO_PADRAO[k] !== false : v !== false; };
 /* Filtros sempre à vista: um botão por tipo (ligado = aparece), no padrão dos seletores do app. */
 function planoFiltroHTML() {
-  return `<div class="seg pl-filtros" role="group" aria-label="Mostrar no calendário"><span class="pl-filtros-l">Mostrar</span>${PL_FILTROS.map(([k, l]) => `<button type="button" class="${planoMostra(k) ? 'on' : ''}" data-act="pl-filtro" data-k="${k}" aria-pressed="${planoMostra(k)}">${l}</button>`).join('')}${(() => { const cs = agendaContas(); const vis = cs.filter(c => !agendaContasOff()[c]).length; const erro = typeof AGG !== 'undefined' && (AGG.erro || (AGG.errosContas || []).length);
+  return `<div class="seg pl-filtros" role="group" aria-label="Mostrar no calendário"><span class="pl-filtros-l">Mostrar</span>${PL_FILTROS.map(([k, l]) => `<button type="button" class="${planoMostra(k) ? 'on' : ''}" data-act="pl-filtro" data-k="${k}" aria-pressed="${planoMostra(k)}">${l}</button>`).join('')}<button type="button" class="pl-nr-btn${planoMostra('naofeito') ? ' on' : ''}" data-act="pl-filtro" data-k="naofeito" aria-pressed="${planoMostra('naofeito')}" data-tip="Não rolou: esmaece o calendário e mostra o plano da manhã por cima. Verde = rolou, amarelo = não rolou mas foi ajustado, vermelho = não rolou e não foi feito.">Não rolou</button>${(() => { const cs = agendaContas(); const vis = cs.filter(c => !agendaContasOff()[c]).length; const erro = typeof AGG !== 'undefined' && (AGG.erro || (AGG.errosContas || []).length);
     return `<button type="button" class="${vis ? 'on' : ''}${erro ? ' erro' : ''}" data-act="pl-agendas" data-tip="${esc(erro ? 'Google Agenda com erro. Clique para ver.' : 'Escolher quais agendas aparecem; Google: sincronizar e contas')}">${icon('calendar')} Agendas${cs.length ? ` ${vis}/${cs.length}` : ''}${erro ? ' ⚠' : ''}</button>`; })()}</div>`;
 }
 ACTIONS['pl-filtro'] = (el) => { const f = { ...(db.setting('planoMesFiltro', {}) || {}) }; f[el.dataset.k] = !planoMostra(el.dataset.k); db.setSetting('planoMesFiltro', f); db.emit(); };

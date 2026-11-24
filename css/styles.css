@@ -2117,3 +2117,12 @@ kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--li
 .tk-hin:focus { border-bottom: 1px solid var(--accent); color: var(--fg); }
 .tk-hin::placeholder { color: var(--fg-3); opacity: .7; }
 .tk-hin.ent { font-size: inherit; width: 3.6em; color: inherit; }
+
+/* Modo "Não rolou" (botão): esmaece tudo e mostra o plano da manhã por cima */
+.pl-dia.nr-on .pl-grade > :not(.pl-naofeito):not(.pl-hora):not(.pl-agora) { opacity: .18; pointer-events: none; filter: grayscale(.6); }
+.pl-dia.nr-on .pl-grade > .pl-naofeito { z-index: 5; font-weight: 600; }
+.pl-grade > .pl-naofeito.nr-ok { background: color-mix(in oklab, #22a559 32%, transparent); border: 1.5px solid #22a559 !important; color: var(--fg); }
+.pl-grade > .pl-naofeito.nr-ajustado { background: color-mix(in oklab, #e8b100 34%, transparent); border: 1.5px solid #e8b100 !important; color: var(--fg); }
+.pl-grade > .pl-naofeito.nr-falhou { background: color-mix(in oklab, #e5484d 32%, transparent); border: 1.5px solid #e5484d !important; color: var(--fg); }
+.seg.pl-filtros .pl-nr-btn { margin-left: 6px; border-left: 1px solid var(--line); border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0; text-decoration: none !important; }
+.seg.pl-filtros .pl-nr-btn.on { background: #e5484d; color: #fff; }
