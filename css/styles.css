@@ -2147,3 +2147,6 @@ kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--li
 .strip-tip .tip-h { font-weight: 600; color: var(--accent); font-size: 1.05em; line-height: 1.3; margin-bottom: 2px; }
 .strip-tip .tip-u { font-weight: 500; }
 .strip-tip b { font-weight: 700; }
+/* Cartão do Relatório de produtividade (hover da coluna) no mesmo padrão da dica (estilo 4, tamanho de letra igual) */
+.prod-tip { background: var(--accent-soft); border: 1px solid var(--accent-line); box-shadow: 0 4px 14px rgba(20,24,60,.08); font-size: .78em; line-height: 1.4; padding: 7px 11px; color: var(--fg); }
+.prod-tip-h { color: var(--accent); font-size: 1.05em; font-weight: 600; margin-bottom: 4px; }
