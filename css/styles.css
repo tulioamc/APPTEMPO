@@ -2052,3 +2052,21 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .pl-sd-i.erro { border-color: var(--danger); }
 .pl-sd-i.info { background: var(--surface-2); }
 .pl-sd-t { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; } .pl-sd-t svg { width: 14px; height: 14px; flex: none; color: var(--warn); } .pl-sd-i.erro .pl-sd-t svg { color: var(--danger); }
+
+/* ---- Calendário: alerta de dia cheio, totais da semana, bandeja de tarefas, cartão Agora ---- */
+.pl-cap.quase .pl-cap-p { background: var(--warn); opacity: .85; } .pl-cap.estouro .pl-cap-p { background: var(--danger, #E5484D); opacity: .9; }
+.pl-cap-pct { font-style: normal; font-size: 10px; font-weight: 700; padding: 0 4px; border-radius: 6px; margin-right: 4px; background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+.pl-cap-pct.estouro { background: color-mix(in srgb, var(--danger, #E5484D) 20%, transparent); color: var(--danger, #E5484D); }
+.pl-sem-tot { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+.pl-sem-tot span:first-child { font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: 10px; } .pl-sem-tot b { color: var(--text); font-weight: 600; } .pl-sem-tot i { opacity: .5; font-style: normal; }
+.pl-sem-tot .pl-sem-av { color: var(--warn); font-weight: 600; }
+.pl-bandeja { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px; margin: 0 0 8px; border: 1px dashed var(--line-strong, var(--line)); border-radius: 10px; }
+.pl-bj { display: inline-flex; gap: 6px; align-items: center; padding: 3px 8px; border-radius: 8px; font-size: 12px; cursor: grab; background: color-mix(in srgb, var(--fc) 18%, var(--surface, #fff)); border: 1px solid color-mix(in srgb, var(--fc) 45%, transparent); user-select: none; }
+.pl-bj i { width: 8px; height: 8px; border-radius: 2px; background: var(--fc); } .pl-bj em { font-style: normal; color: var(--muted); font-size: 11px; } .pl-bj:active { cursor: grabbing; }
+.pl-sd-est { gap: 6px; align-items: center; margin-top: 6px; } .pl-sd-est .input { width: 84px; }
+.hj-prox { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin: 0 0 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2, transparent); }
+.hj-prox.agora { border-color: var(--ok); background: var(--ok-soft); }
+.hj-prox-k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 6px; background: var(--line); }
+.hj-prox.agora .hj-prox-k { background: var(--ok); color: var(--ok-on); }
+.hj-prox-n { all: unset; cursor: pointer; display: flex; flex-direction: column; flex: 1; min-width: 0; } .hj-prox-n b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plg-bar[data-plg] { cursor: pointer; }

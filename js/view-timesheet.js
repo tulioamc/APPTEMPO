@@ -344,11 +344,24 @@ function hojeTarefasHTML(cur) {
   const itens = [...grupos.map(g => ({ t: g.ini, h: linha(g) })), ...Object.values(feitasHoje).map(g => ({ t: g.ini, h: linha(g) })), ...todos.map(e => ({ t: e.ini, h: linhaTodo(e) }))].sort((x, y) => x.t - y.t);
   const resumo = `${fmtH(feito * 36e5)} feito · ${fmtH(plan * 36e5)} planejado`;
   const n0 = new Date(); const fimDia = n0.getHours() * 60 + n0.getMinutes() >= 19 * 60 + 30 && !HJ_VER_LISTA;
-  const corpo = HJ_PRAZOS ? hjPrazosHTML() : fimDia ? hjFimDoDiaHTML(hoje) : (itens.length ? itens.map(x => x.h).join('') : '<div class="empty small">Nada planejado para o resto do dia.</div>');
+  const corpo = (HJ_PRAZOS || fimDia ? '' : hjAgoraHTML(grupos, todos)) + (HJ_PRAZOS ? hjPrazosHTML() : fimDia ? hjFimDoDiaHTML(hoje) : (itens.length ? itens.map(x => x.h).join('') : '<div class="empty small">Nada planejado para o resto do dia.</div>'));
   const titulo = HJ_PRAZOS ? 'Próximos prazos' : fimDia ? 'Fim do dia' : 'Tarefas de hoje';
-  return `<div class="panel"><div class="panel-h"><button class="btn sm icon ghost" data-act="hj-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="hj-toggle" style="cursor:pointer">${titulo}</h3><span class="small muted">${resumo}</span><span class="grow"></span>${fimDia || HJ_VER_LISTA ? `<button class="btn sm ghost" data-act="hj-lista">${HJ_VER_LISTA ? 'Ver resumo' : 'Ver lista'}</button>` : ''}<button class="btn sm${HJ_PRAZOS ? ' on' : ' ghost'}" data-act="hj-prazos">${icon('flag')} Próximos prazos</button><button class="btn sm ghost" data-act="hj-cal">Ver no Calendário</button></div>${fechado ? '' : `<div class="panel-b tight">${corpo}</div>`}</div>`;
+  return `<div class="panel"><div class="panel-h"><button class="btn sm icon ghost" data-act="hj-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="hj-toggle" style="cursor:pointer">${titulo}</h3><span class="small muted">${resumo}</span>${hjSaudeChip()}<span class="grow"></span>${fimDia || HJ_VER_LISTA ? `<button class="btn sm ghost" data-act="hj-lista">${HJ_VER_LISTA ? 'Ver resumo' : 'Ver lista'}</button>` : ''}<button class="btn sm${HJ_PRAZOS ? ' on' : ' ghost'}" data-act="hj-prazos">${icon('flag')} Próximos prazos</button><button class="btn sm ghost" data-act="hj-cal">Ver no Calendário</button></div>${fechado ? '' : `<div class="panel-b tight">${corpo}</div>`}</div>`;
 }
 let HJ_PRAZOS = false, HJ_VER_LISTA = false;
+/* Chip do plano na tela inicial: só aparece quando há aviso (clique abre a janela de conserto). */
+function hjSaudeChip() { try { const s = typeof planoSaudeHTML === 'function' ? planoSaudeHTML() : ''; return s.includes('pl-saude ok') ? '' : s; } catch (e) { return ''; } }
+/* "Agora" / "Próximo": a atividade do plano que está rolando ou a mais perto (tarefas com bloco e to-dos com hora). */
+function hjAgoraHTML(grupos, todos) {
+  const n = new Date(); const h = n.getHours() + n.getMinutes() / 60;
+  const c = [...grupos.filter(g => g.fim > h).map(g => ({ ini: g.ini, fim: g.fim, nome: (g.tid && db.get('tempo_tasks', g.tid)?.name) || db.get('tempo_projects', g.pid)?.name || 'Projeto', sub: g.tid ? db.get('tempo_projects', g.pid)?.name || '' : '', pid: g.pid, tid: g.tid })),
+    ...todos.filter(e => !e.feito && e.fim > h).map(e => ({ ini: e.ini, fim: e.fim, nome: e.titulo, sub: 'To-do', todo: e.id }))].sort((a, b) => a.ini - b.ini)[0];
+  if (!c) return '';
+  const agora = c.ini <= h; const falta = Math.round((c.ini - h) * 60);
+  const quando = agora ? `até ${planoHora(c.fim).replace(':', 'h')}` : falta < 60 ? `em ${falta} min` : `às ${planoHora(c.ini).replace(':', 'h')}`;
+  const abre = c.pid ? `data-act="proj-open" data-id="${c.pid}" data-tab="tasks"${c.tid ? ` data-tk="${c.tid}"` : ''}` : `data-act="todo-modal" data-id="${c.todo}"`;
+  return `<div class="hj-prox${agora ? ' agora' : ''}"><span class="hj-prox-k">${agora ? 'Agora' : 'Próximo'}</span><button class="hj-prox-n" ${abre}><b>${esc(c.nome)}</b>${c.sub ? `<span class="small muted">${esc(c.sub)}</span>` : ''}</button><span class="small muted">${quando}</span>${c.pid ? `<button class="btn sm icon ghost" data-act="hj-play" data-pid="${c.pid}" data-tid="${c.tid || ''}" aria-label="Iniciar">${icon('play')}</button>` : ''}<button class="btn sm ghost" data-act="hj-cal">Calendário</button></div>`;
+}
 ACTIONS['hj-prazos'] = () => { HJ_PRAZOS = !HJ_PRAZOS; db.emit(); };
 ACTIONS['hj-lista'] = () => { HJ_VER_LISTA = !HJ_VER_LISTA; db.emit(); };
 /* Próximos prazos (14 dias): entregas (deadlines) dos projetos, prazos das tarefas abertas e dos projetos. */

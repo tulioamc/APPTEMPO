@@ -160,7 +160,8 @@ function planoDiagnostico(agora = new Date()) {
   });
   // 7) dicas: tarefas na fila sem tempo previsto (o plano usa uma sugestão)
   const sem = Object.values(m.itens).filter(x => x.t && x.eu && !tkPrev(x.t).manual);
-  if (sem.length) out.push({ id: 'dica:previsao', nivel: 'info', titulo: `${sem.length} tarefa${sem.length > 1 ? 's' : ''} sem tempo previsto`, texto: `O plano usa uma sugestão (ou 1h) para: ${sem.slice(0, 4).map(x => `“${x.t.name}”`).join(', ')}${sem.length > 4 ? ` e mais ${sem.length - 4}` : ''}. Escreva o previsto na lista de tarefas para o plano ficar certo.`, corrigir: null });
+  if (sem.length) out.push({ id: 'dica:previsao', nivel: 'info', titulo: `${sem.length} tarefa${sem.length > 1 ? 's' : ''} sem tempo previsto`, texto: `O plano usa uma sugestão (ou 1h) para: ${sem.slice(0, 4).map(x => `“${x.t.name}”`).join(', ')}${sem.length > 4 ? ` e mais ${sem.length - 4}` : ''}. Digite o previsto aqui para o plano ficar certo.`, corrigir: null,
+    estimar: sem.slice(0, 8).map(x => ({ id: x.t.id, nome: x.t.name, min: Math.round(tkPrev(x.t).min / 15) * 15 || 60 })) });
   return out;
 }
 
@@ -168,7 +169,7 @@ function planoDiagnostico(agora = new Date()) {
 function planoSaudeHTML() {
   let l = []; try { l = planoDiagnostico(); } catch (e) { console.error('Diagnóstico:', e); }
   const av = l.filter(x => x.nivel !== 'info');
-  if (!av.length) return `<span class="pl-saude ok" data-tip="${esc(l.length ? 'O plano está em ordem. Há dicas: clique para ver.' : 'O plano está em ordem: nada fixado sobrando, sem choque, dependências e prazos conferidos.')}"${l.length ? ' data-act="pl-saude"' : ''}>${icon('check')} Plano em ordem</span>`;
+  if (!av.length) return `<span class="pl-saude ok" data-tip="${esc(l.length ? 'O plano está em ordem. Há dicas (tarefas sem tempo previsto): clique para ver.' : 'O plano está em ordem: nada fixado sobrando, sem choque, dependências e prazos conferidos.')}"${l.length ? ' data-act="pl-saude"' : ''}>${icon('check')} Plano em ordem${l.length ? ` · ${l.length} dica${l.length > 1 ? 's' : ''}` : ''}</span>`;
   const erro = av.some(x => x.nivel === 'erro');
   return `<button class="pl-saude ${erro ? 'erro' : 'aviso'}" data-act="pl-saude" data-tip="Clique para ver o que está estranho no plano e consertar">${icon('alert')} ${av.length} aviso${av.length > 1 ? 's' : ''}</button>`;
 }
@@ -176,7 +177,8 @@ function planoSaudeLayerHTML() {
   const l = planoDiagnostico(); const av = l.filter(x => x.nivel !== 'info'), di = l.filter(x => x.nivel === 'info');
   const fix = av.filter(x => x.corrigir && !x.corrigir.proprio);
   const item = (x) => `<div class="pl-sd-i ${x.nivel}"><div class="pl-sd-t">${icon(x.nivel === 'info' ? 'clock' : 'alert')}<b>${esc(x.titulo)}</b></div><div class="small muted">${esc(x.texto)}</div>
-    <div class="row" style="gap:6px;margin-top:6px">${x.corrigir ? `<button class="btn sm primary" data-fix="${esc(x.id)}">${esc(x.corrigir.rotulo)}</button>` : ''}${x.ver ? `<button class="btn sm" data-ver="${x.ver}">Abrir o dia</button>` : ''}</div></div>`;
+    <div class="row" style="gap:6px;margin-top:6px">${x.corrigir ? `<button class="btn sm primary" data-fix="${esc(x.id)}">${esc(x.corrigir.rotulo)}</button>` : ''}${x.ver ? `<button class="btn sm" data-ver="${x.ver}">Abrir o dia</button>` : ''}</div>
+    ${(x.estimar || []).map(e => `<div class="row pl-sd-est"><span class="grow small">${esc(e.nome)}</span><input class="input" type="number" min="5" step="5" value="${e.min}" data-est-in="${e.id}" aria-label="Minutos previstos de ${esc(e.nome)}"><span class="small muted">min</span><button class="btn sm primary" data-est="${e.id}">Definir</button></div>`).join('')}</div>`;
   return `<div class="dh">${icon(av.length ? 'alert' : 'check')}<h2>${av.length ? 'O que está estranho no plano' : 'Plano em ordem'}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db stack" style="gap:10px">${av.length ? av.map(item).join('') : '<div class="small muted">Nada fixado sobrando, nenhum choque, dependências e prazos conferidos.</div>'}
     ${di.length ? `<div class="lbl" style="margin-top:4px">Dicas</div>${di.map(item).join('')}` : ''}</div>
@@ -186,7 +188,10 @@ ACTIONS['pl-saude'] = () => {
   const l = openLayer({ html: planoSaudeLayerHTML() });
   const refaz = () => { const av = planoDiagnostico().filter(x => x.nivel !== 'info'); l.box.innerHTML = planoSaudeLayerHTML(); if (!av.length && !l.box.querySelector('.pl-sd-i')) setTimeout(() => l.close(), 600); };
   l.box.addEventListener('click', (e) => {
-    const ver = e.target.closest('[data-ver]'); if (ver) { l.close(); PLANO.dia = ver.dataset.ver; PLANO.modo = 'dia'; render(); return; }
+    const ver = e.target.closest('[data-ver]'); if (ver) { l.close(); PLANO.dia = ver.dataset.ver; PLANO.modo = 'dia'; if (typeof go === 'function') go('plano'); else render(); return; }
+    const est = e.target.closest('[data-est]');
+    if (est) { const v = Math.round(Number(l.box.querySelector(`[data-est-in="${est.dataset.est}"]`)?.value)); if (!(v >= 5 && v <= 24 * 60)) { toast('Digite os minutos (de 5 a 1440).'); return; }
+      planoMudar('Tempo previsto', () => db.update('tempo_tasks', est.dataset.est, { est_min: v }, true), false); refaz(); return; }
     const tudo = e.target.closest('[data-fix-tudo]');
     if (tudo) { const fs = planoDiagnostico().filter(x => x.nivel !== 'info' && x.corrigir && !x.corrigir.proprio); planoMudar(`Plano arrumado (${fs.length} ajustes)`, () => fs.forEach(x => x.corrigir.run())); refaz(); return; }
     const b = e.target.closest('[data-fix]'); if (!b) return;

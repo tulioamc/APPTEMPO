@@ -2,7 +2,7 @@
 const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 const setup = () => {
-  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/plano-seguro.js', 'js/planejamento.js', 'js/view-rafa.js', 'js/tarefas-prazo.js'],
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/plano-seguro.js', 'js/planejamento.js', 'js/plano-extras.js', 'js/view-rafa.js', 'js/tarefas-prazo.js'],
     ['db', 'planejar', 'tkMotor', 'tkSugestao', 'tkPrev', 'tkLerMin', 'tkFila'], { statusCat: (id) => String(id || '').replace(/^s-/, '') || undefined, VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {}, toast() {}, render() {}, go() {} });
   m.db.data = m.db.empty(); m.db.loaded = true;
   const st = (cat) => ({ id: 's-' + cat, kind: 'work', category: cat, name: cat });

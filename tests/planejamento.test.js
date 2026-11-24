@@ -3,7 +3,7 @@ const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 
 const setup = () => {
-  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/plano-seguro.js', 'js/planejamento.js', 'js/view-rafa.js'], ['db', 'planejar', 'planoProjetos', 'planoJanelas', 'planoEventos', 'planoFixosDoDia', 'rafaQuemAuto', 'rafaMarcar', 'VIEWS'],
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/plano-seguro.js', 'js/planejamento.js', 'js/plano-extras.js', 'js/view-rafa.js'], ['db', 'planejar', 'planoProjetos', 'planoJanelas', 'planoEventos', 'planoFixosDoDia', 'rafaQuemAuto', 'rafaMarcar', 'VIEWS'],
     { VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {}, statusCat: (id) => String(id || '').replace(/^s-/, '') || undefined, toast() {}, render() {}, go() {} });
   m.db.data = m.db.empty(); m.db.loaded = true;
   return m;

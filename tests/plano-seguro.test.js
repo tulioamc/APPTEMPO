@@ -4,9 +4,9 @@ const test = require('node:test'), assert = require('node:assert');
 const fs = require('fs'), path = require('path');
 const { load, ROOT } = require('./helpers');
 
-const NOMES = ['db', 'tkMotor', 'planoPins', 'planoPinsSalvar', 'planoPinsLimpar', 'planoEmpurrar', 'planoDiagnostico', 'planoMudar', 'planoFixosDoDia', 'planoOcupadosDoDia', 'planoJanelas', 'planejar', 'PLANO', 'planoProximoUtil', 'tkCiclos', 'planoSaudeHTML'];
+const NOMES = ['db', 'tkMotor', 'planoPins', 'planoPinsSalvar', 'planoPinsLimpar', 'planoEmpurrar', 'planoDiagnostico', 'planoMudar', 'planoFixosDoDia', 'planoOcupadosDoDia', 'planoJanelas', 'planejar', 'PLANO', 'planoProximoUtil', 'tkCiclos', 'planoSaudeHTML', 'planoSoltarTarefa', 'planoBandejaLista', 'planoCapHTML', 'planoSemTotalHTML', 'planoCorCli', 'projEntregas', 'projEntregasSalvar', 'planoCor'];
 const setup = () => {
-  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/plano-seguro.js', 'js/planejamento.js', 'js/view-rafa.js', 'js/tarefas-prazo.js'], NOMES,
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/plano-seguro.js', 'js/planejamento.js', 'js/plano-extras.js', 'js/view-rafa.js', 'js/tarefas-prazo.js'], NOMES,
     { statusCat: (id) => String(id || '').replace(/^s-/, '') || undefined, VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {}, toast() {}, render() {}, go() {}, icon: () => '' });
   m.ctx.toast = () => {}; m.ctx.render = () => {};   // ui.js define os dois com DOM de verdade; aqui não há tela
   m.db.data = m.db.empty(); m.db.loaded = true;
@@ -240,4 +240,47 @@ test('verde único #77DB89 em concluído/positivo (claro e escuro) e nenhum verd
   assert.match(css, /--t-green-bg:#77DB89/i);
   ['75ef86', '4ade80', '22a06b', '34a853'].forEach(c => assert.ok(!css.toLowerCase().includes(c), `sobrou ${c}`));
   assert.match(fs.readFileSync(path.join(ROOT, 'js/colors.js'), 'utf8'), /COR_OK = '#77DB89'/);
+});
+
+// ---------- 7. Extras do Calendário ----------
+test('soltar uma tarefa na grade fixa o bloco, troca o antigo e empurra quem estava ali', () => {
+  const m = setup(); const dia = '2026-12-02';
+  m.db.data.tempo_projects = [proj('a'), proj('b')]; m.db.data.tempo_tasks = [tarefa('t1', 'a', { est_min: 60 }), tarefa('t2', 'b', { est_min: 60 })];
+  setPins(m, [{ id: 'velho', dia: '2027-01-05', pid: 'a', tid: 't1', ini: 9, h: 1 }, { id: 'outro', dia, pid: 'b', tid: 't2', ini: 10, h: 1 }]);
+  assert.ok(m.planoSoltarTarefa('t1', 'a', 1, dia, 10.1));
+  const pins = m.planoPins(); const novo = pins.find(p => p.tid === 't1'), outro = pins.find(p => p.id === 'outro');
+  assert.equal(pins.filter(p => p.tid === 't1').length, 1, 'o bloco fixado antigo da mesma tarefa saiu');
+  assert.equal(novo.dia, dia); assert.equal(novo.ini, 10);
+  assert.ok(outro.ini >= 11 - 1e-9, 'quem estava ali foi para depois, sem sobrepor');
+  assert.equal(m.planoSoltarTarefa('t1', 'a', 1, '2020-01-01', 10), false, 'dia que já passou não aceita');
+});
+test('bandeja lista só tarefas suas, abertas e com tempo a fazer', () => {
+  const m = setup();
+  m.db.data.tempo_projects = [proj('a')]; m.db.data.tempo_tasks = [tarefa('t1', 'a', { est_min: 90 }), tarefa('t2', 'a', { est_min: 60, status_id: 's-done' }), tarefa('t3', 'a', { est_min: 60, owner: 'Outra pessoa' })];
+  const l = m.planoBandejaLista(); assert.deepEqual(l.map(x => x.tid), ['t1']); assert.equal(l[0].h, 1.5);
+});
+test('dia quase cheio (80%) e estourado (100%+) avisam na barra do dia', () => {
+  const m = setup(); const dia = '2026-11-25'; const cap = m.planoJanelas(dia).jan.reduce((t, [a, b]) => t + (b - a), 0);
+  const com = (h) => m.planoCapHTML(dia, { [dia]: { blocos: [{ ini: 9, fim: 9 + h, pid: 'a' }] } });
+  assert.doesNotMatch(com(cap * 0.5), /pl-cap-pct/);
+  assert.match(com(cap * 0.85), /pl-cap-pct quase/);
+  assert.match(com(cap + 1), /pl-cap-pct estouro/);
+});
+test('Entrega pelo menu de criar: a entrega é salva no projeto e desfaz num passo', () => {
+  const m = setup(); m.db.data.tempo_projects = [proj('a')];
+  m.planoMudar('Criado', () => m.projEntregasSalvar('a', [...m.projEntregas('a'), { id: 'e1', dia: '2026-12-03', hora: '17:00', nome: 'Entrega final' }]));
+  assert.equal(m.projEntregas('a').length, 1); assert.ok(m.db.undo()); assert.equal(m.projEntregas('a').length, 0);
+});
+test('tarefa sem tempo previsto aparece como dica com campo para digitar', () => {
+  const m = setup(); const dia = '2026-11-25';
+  m.db.data.tempo_projects = [proj('a')]; m.db.data.tempo_tasks = [tarefa('t1', 'a', {})];
+  const d = m.planoDiagnostico(AGORA).find(x => x.id === 'dica:previsao'); assert.ok(d && d.estimar.length === 1 && d.estimar[0].id === 't1' && d.estimar[0].min >= 15);
+  m.planoMudar('Tempo previsto', () => m.db.update('tempo_tasks', 't1', { est_min: 45 }, true), false);
+  assert.ok(!m.planoDiagnostico(AGORA).some(x => x.id === 'dica:previsao'), 'depois de digitar a dica some');
+});
+test('cor do mês: a do cliente quando existe; senão a do projeto', () => {
+  const m = setup(); m.db.data.tempo_clients = [{ id: 'c1', name: 'C', color: 'blue' }];
+  m.db.data.tempo_projects = [proj('a', { client_id: 'c1', color: 'red' }), proj('b', { color: 'green' })];
+  assert.notEqual(m.planoCorCli('a'), m.planoCor('a'));
+  assert.equal(m.planoCorCli('b'), m.planoCor('b'));
 });

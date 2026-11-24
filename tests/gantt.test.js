@@ -1,7 +1,7 @@
 const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 test('Calendário › Tarefas (Gantt): barras, entrega e a tela abre', () => {
-  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/plano-seguro.js', 'js/planejamento.js', 'js/view-rafa.js', 'js/tarefas-prazo.js'],
+  const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/plano-seguro.js', 'js/planejamento.js', 'js/plano-extras.js', 'js/view-rafa.js', 'js/tarefas-prazo.js'],
     ['db', 'VIEWS', 'planoGanttHTML', 'PLANO'], { statusCat: (id) => ({ a: 'active', t: 'todo', d: 'done' })[id], VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {}, toast() {}, render() {}, go() {} });
   m.db.data = m.db.empty(); m.db.loaded = true;
   m.db.data.tempo_status_options = [{ id: 'a', kind: 'work', name: 'Em andamento', category: 'active' }, { id: 't', kind: 'work', name: 'A fazer', category: 'todo' }, { id: 'd', kind: 'work', name: 'Concluído', category: 'done' }];
