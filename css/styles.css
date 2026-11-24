@@ -2186,3 +2186,11 @@ body.pl-arrastando, body.pl-arrastando * { user-select: none !important; -webkit
 .pl-bloco.cc .pl-cc-l2, .pl-bloco.cc .pl-cc-l3 { color: var(--ct); font-size: .92em; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pl-bloco.cc .pl-cc-l2 b { font-weight: 700; }
 .pl-bloco.cc .pl-cc-l3 { opacity: .9; }
+/* Tarefa fixa de reuniões no topo da lista */
+.tk.tk-reuniao { background: color-mix(in oklab, var(--accent-soft) 55%, transparent); }
+.tk-reuniao .tk-l { display: flex; align-items: center; gap: 10px; }
+.tk-reuniao .tk-nome { flex: 1; display: flex; align-items: center; gap: 6px; }
+.tk-reu-ico { display: inline-flex; color: var(--accent); }
+.tk-reu-ico svg { width: 14px; height: 14px; }
+.tk-reu-tag { font-size: .75em; color: var(--accent); border: 1px solid var(--accent-line); border-radius: 4px; padding: 1px 6px; }
+.tk-reu-t { font-size: .85em; color: var(--fg-2); }

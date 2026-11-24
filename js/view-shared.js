@@ -108,7 +108,7 @@ ACTIONS['sk-go'] = (el) => { SK.month = el.dataset.ym; render(); };
    1º clique abre ali mesmo com as tarefas (marcar como feita no círculo); 2º clique (no título) abre a janela do projeto. */
 const PJC_ABERTOS = new Set();
 function pjcDados(p) {
-  const tks = tasksOf(p.id).filter(t => statusCat(t.status_id) !== 'cancelled');
+  const tks = tasksOf(p.id).filter(t => statusCat(t.status_id) !== 'cancelled' && t.tipo !== 'reuniao');   // reuniões: tarefa fixa, não conta no %
   const feitas = tks.filter(t => statusCat(t.status_id) === 'done').length;
   return { tks, feitas, pct: tks.length ? Math.round(feitas / tks.length * 100) : 0 };
 }

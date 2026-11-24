@@ -77,6 +77,13 @@ function pdTasks(p) {
   // ▶ e a seta das opções aparecem ao passar o mouse; a seta abre tipo, herdar, dependências, subtarefa, ajuste, excluir.
   const fila = typeof tkFila === 'function' ? tkFila(p.id) : {};
   const row = (t, isSub) => {
+    if (!isSub && t.tipo === 'reuniao') {   // tarefa fixa de reuniões: sem prazo, sem status, fora do planejamento; só soma o tempo
+      const ms = taskMs(t.id);
+      return `<div class="tk tk-reuniao"><div class="tk-l"><div class="tk-nome"><span class="tk-reu-ico" data-tip="Tarefa fixa de reuniões: todo registro de reunião deste projeto sem tarefa entra aqui sozinho. Sem prazo e fora do planejamento.">${icon('users')}</span><input class="tk-in n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome"></div>
+        <span class="tk-reu-tag" data-tip="Não tem prazo nem entra no planejamento; só vai somando o tempo das reuniões">fixa · só soma</span>
+        <span class="tk-reu-t mono" data-tip="Tempo de reuniões registrado neste projeto (líquido)">${fmtDur(ms)}</span>
+        <span class="tk-acoes">${`<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar reunião" title="Começar a registrar uma reunião deste projeto">${icon('play')}</button>`}</span></div></div>`;
+    }
     const liq = isSub ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : taskMs(t.id);
     const bruto = db.where('tempo_time_entries', e => (isSub ? e.task_id === t.id : (e.task_id === t.id || subtasksOf(t.id).some(x => x.id === e.task_id)))).reduce((s, e) => s + entryBrutoMs(e), 0);
     const est = estimadoDaTarefa(t); const aberto = TK_ABERTAS.has(t.id);
@@ -115,7 +122,7 @@ function pdTasks(p) {
   const semCanc = !!db.setting('tkEsconderCancelados', false);
   const nCanc = tks.filter(t => statusCat(t.status_id) === 'cancelled').length;
   const seq = projSequencia(p.id).filter(x => !(semCanc && x.tipo === 'tarefa' && statusCat(x.t.status_id) === 'cancelled'));
-  return `${typeof tkResolverBarraHTML === 'function' ? tkResolverBarraHTML(p.id) : ''}<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px">${nCanc ? `<label class="check small" style="margin-right:auto" data-tip="Esconde as tarefas canceladas desta lista (vale para todos os projetos)"><input type="checkbox" data-x-chk="esc-canc" ${semCanc ? 'checked' : ''}> Esconder canceladas (${nCanc})</label>` : ''}<button class="btn sm" data-act="pd-cal" data-id="${p.id}">${icon('cal')} Ver no Calendário</button><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
+  return `${typeof tkResolverBarraHTML === 'function' ? tkResolverBarraHTML(p.id) : ''}<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px">${nCanc ? `<label class="check small" style="margin-right:auto" data-tip="Esconde as tarefas canceladas desta lista (vale para todos os projetos)"><input type="checkbox" data-x-chk="esc-canc" ${semCanc ? 'checked' : ''}> Esconder canceladas (${nCanc})</label>` : ''}${!tks.some(t => t.tipo === 'reuniao') ? `<button class="btn sm ghost" data-x="tk-reuniao" data-id="${p.id}" data-tip="Cria a tarefa fixa “Reuniões”: sem prazo, fora do planejamento, só soma o tempo das reuniões. Reuniões sem tarefa deste projeto entram nela sozinhas">${icon('plus')} Tarefa de reuniões</button>` : ''}<button class="btn sm" data-act="pd-cal" data-id="${p.id}">${icon('cal')} Ver no Calendário</button><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
   <div class="panel tk-lista"><div class="panel-b tight">${tks.length ? seq.map(x => x.tipo === 'entrega' ? entHTML(x.e) : row(x.t) + subtasksOf(x.t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}
   <form class="tk-nova" data-form="add-task"><button type="submit" class="tk-nova-i" aria-label="Adicionar" title="Adicionar">${icon('plus')}</button><input class="tk-in grow" name="name" placeholder="Nova tarefa (Enter para adicionar)" aria-label="Nova tarefa"></form>
   <form class="tk-nova" data-form="add-ent"><button type="submit" class="tk-nova-i" aria-label="Adicionar" title="Adicionar">${icon('plus')}</button><input class="tk-in grow" name="name" placeholder="Deadline (Enter para adicionar)" aria-label="Nova entrega (deadline)"></form></div></div>`;
@@ -229,6 +236,7 @@ function bindProjectDrawer(ly, id, st) {
     if (x === 'tk-alerta') { e.preventDefault(); return tkAlerta(db.get('tempo_tasks', bid), b.dataset.k); }
     if (x === 'ent-del') { if (!await confirmBox({ title: 'Apagar esta entrega?', body: 'As tarefas continuam; só o deadline some.', ok: 'Apagar', danger: true })) return; projEntregasSalvar(id, projEntregas(id).filter(z => z.id !== bid)); db.emit(); return; }
     if (x === 'tk-abrir') { TK_ABERTAS.has(bid) ? TK_ABERTAS.delete(bid) : TK_ABERTAS.add(bid); ly.refresh(); return; }
+    if (x === 'tk-reuniao') { reuniaoTarefa(id, true); reunioesVincular(); db.emit(); toast('Tarefa “Reuniões” criada'); return; }
     if (x === 'tk-sempressa') { const t = db.get('tempo_tasks', bid); if (t) { db.update('tempo_tasks', t.id, { sem_pressa: !t.sem_pressa }, true); db.emit(); toast(t.sem_pressa ? 'Sem pressa desligado' : 'Sem pressa: vai depois de todas as outras'); } return; }
     if (x === 'add-sub') { const t = db.get('tempo_tasks', bid); db.insert('tempo_tasks', { project_id: id, parent_id: t.id, name: 'Nova subtarefa', status_id: t.status_id, status_inherited: true, deadline: null, notes: '', order: subtasksOf(t.id).length }); setTimeout(() => { const ins = $$('[data-pd="tname"]', ly.box); const last = ins.find(i => db.get('tempo_tasks', i.dataset.id)?.name === 'Nova subtarefa'); last?.select(); }, 30); }
     if (x === 'del-task') {

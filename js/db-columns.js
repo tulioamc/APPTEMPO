@@ -122,6 +122,8 @@ window.DB_COLUMNS = {
   "deadline",
   "deadline_time",
   "est_min",
+  "sem_pressa",
+  "tipo",
   "notes",
   "order",
   "created_at",

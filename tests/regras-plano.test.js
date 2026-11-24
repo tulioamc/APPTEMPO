@@ -4,7 +4,7 @@ const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 const setup = () => {
   const m = load(['js/store.js', 'js/colors.js', 'js/domain.js', 'js/ui.js', 'js/notices.js', 'js/plano-seguro.js', 'js/planejamento.js', 'js/plano-extras.js', 'js/view-rafa.js', 'js/tarefas-prazo.js'],
-    ['db', 'tkMotor'], { statusCat: (id) => String(id || '').replace(/^s-/, '') || undefined, VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {}, toast() {}, render() {}, go() {} });
+    ['db', 'tkMotor', 'reunioesVincular'], { statusCat: (id) => String(id || '').replace(/^s-/, '') || undefined, VIEWS: {}, ACTIONS: {}, CHANGES: {}, S: {}, toast() {}, render() {}, go() {} });
   m.db.data = m.db.empty(); m.db.loaded = true;
   const st = (cat) => ({ id: 's-' + cat, kind: 'work', category: cat, name: cat });
   m.db.data.tempo_status_options = [st('todo'), st('active'), st('done')];
@@ -168,4 +168,15 @@ test('19. "sem pressa": vai depois de todas as outras; com entrega perto (2 dias
   cfg(m, { tasks: [T('calma', 'a', { est_min: 120, sem_pressa: true, deadline: '2026-12-16' }), T('x', 'b', { est_min: 120, order: 1, deadline: '2026-12-22' })] });
   mo = m.tkMotor(H(14, 8), 10);
   assert.ok(ini('calma') < ini('x'), 'entrega perto: entra antes da que vence depois');
+});
+test('20. reunião sem tarefa entra na tarefa fixa "Reuniões" do projeto (criada sozinha), que fica fora do planejamento', () => {
+  const m = setup();
+  m.db.data.tempo_work_types = [{ id: 'wr', name: 'Reunião' }, { id: 'wd', name: 'Direção de arte' }];
+  cfg(m, { tasks: [T('x', 'a', { est_min: 60 })], entries: [{ id: 'e1', project_id: 'a', task_id: null, work_type_id: 'wr', segments: [seg(14, 9, 10)] }, { id: 'e2', project_id: 'a', task_id: null, work_type_id: 'wd', segments: [seg(14, 10, 11)] }] });
+  const n = m.reunioesVincular(); assert.equal(n, 1);
+  const t = m.db.data.tempo_tasks.find(z => z.tipo === 'reuniao'); assert.ok(t); assert.equal(t.project_id, 'a');
+  assert.equal(m.db.data.tempo_time_entries.find(e => e.id === 'e1').task_id, t.id);
+  assert.equal(m.db.data.tempo_time_entries.find(e => e.id === 'e2').task_id, null, 'só reunião');
+  m.db.ver++; const mo = m.tkMotor(H(14, 8), 10); assert.equal(mo.itens[t.id], undefined, 'fora do planejamento');
+  assert.equal(m.reunioesVincular(), 0, 'não cria outra');
 });

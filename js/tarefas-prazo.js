@@ -226,7 +226,7 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
   const itens = [];
   ativos.forEach(p => {
     const entDe = typeof projEntregaDasTarefas === 'function' ? projEntregaDasTarefas(p.id) : {};
-    const todas = db.where('tempo_tasks', t => t.project_id === p.id && !t.parent_id && !['done', 'cancelled'].includes(statusCat(t.status_id)));
+    const todas = db.where('tempo_tasks', t => t.project_id === p.id && !t.parent_id && t.tipo !== 'reuniao' && !['done', 'cancelled'].includes(statusCat(t.status_id)));   // a tarefa fixa de reuniões fica fora do plano
     const abertas = todas.filter(t => !statusParado(t.status_id));   // esperando cliente/aprovação: fora da fila
     if (todas.length && !abertas.length) return;
     if (abertas.length) abertas.forEach(t => {

@@ -79,7 +79,9 @@ create table if not exists tempo_tasks (
   project_id uuid not null references tempo_projects(id) on delete cascade,
   parent_id uuid references tempo_tasks(id) on delete cascade,      -- preenchido = subtarefa
   deadline_time text,
-  est_min integer,                                                  -- tempo previsto da tarefa, em minutos                                               -- hora do prazo (HH:MM), opcional
+  est_min integer,
+  sem_pressa boolean not null default false,                         -- vai depois de todas as outras no planejamento
+  tipo text,                                                         -- 'reuniao' = tarefa fixa do projeto que só soma reuniões (sem prazo, fora do planejamento)                                                  -- tempo previsto da tarefa, em minutos                                               -- hora do prazo (HH:MM), opcional
   depends_on jsonb not null default '[]'::jsonb,                    -- ids das tarefas que precisam terminar antes
   owner text,                                                        -- responsável: null/'Eu' = eu (com apontamento); outro nome = terceiro (sem apontamento)
   pos jsonb,                                                         -- posição do nó no editor de fluxo {x,y}

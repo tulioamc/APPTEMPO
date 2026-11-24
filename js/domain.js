@@ -79,6 +79,28 @@ const agencies = () => db.all('tempo_agencies').filter(a => !a.archived).sort(ag
 const clients = (agencyId) => db.all('tempo_clients').filter(c => !c.archived && (agencyId === undefined || (agencyId === '__none' ? !c.agency_id : c.agency_id === agencyId))).sort((a, b) => a.name.localeCompare(b.name));
 const projects = () => db.all('tempo_projects').filter(p => !p.archived);
 const tasksOf = (projectId) => db.where('tempo_tasks', t => t.project_id === projectId && !t.parent_id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+/* Tarefa fixa de reuniões (24/11): uma por projeto, tipo 'reuniao', sem prazo e fora do planejamento — só vai somando
+   o tempo das reuniões do projeto. Registro de tipo de trabalho "Reunião" sem tarefa entra nela sozinho (cria se faltar). */
+const ehReuniaoTk = (t) => !!t && t.tipo === 'reuniao';
+const ehReuniaoWt = (wtId) => /reuni/i.test(db.get('tempo_work_types', wtId)?.name || '');
+function reuniaoTarefa(pid, criar = false) {
+  let t = db.where('tempo_tasks', x => x.project_id === pid && !x.parent_id && x.tipo === 'reuniao')[0];
+  if (!t && criar) {
+    const st = statuses('work').find(s => s.category === 'active') || statuses('work')[0];
+    const wt = db.all('tempo_work_types').find(w => /reuni/i.test(w.name || ''));
+    t = db.insert('tempo_tasks', { project_id: pid, parent_id: null, name: 'Reuniões', tipo: 'reuniao', status_id: st?.id || null, status_inherited: false, work_type_id: wt?.id || null, deadline: null, notes: 'Tarefa fixa: soma o tempo das reuniões do projeto (sem prazo, fora do planejamento).', order: -1, depends_on: [], owner: null }, true);
+  }
+  return t || null;
+}
+function reunioesVincular() {
+  let n = 0;
+  db.where('tempo_time_entries', e => e.project_id && !e.task_id && ehReuniaoWt(e.work_type_id)).forEach(e => {
+    const t = reuniaoTarefa(e.project_id, true); if (!t) return;
+    db.update('tempo_time_entries', e.id, { task_id: t.id }, true); n++;
+  });
+  if (n) db.emit();
+  return n;
+}
 const subtasksOf = (taskId) => db.where('tempo_tasks', t => t.parent_id === taskId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 const clientOf = (p) => db.get('tempo_clients', p?.client_id);
 const agencyOf = (p) => { const c = clientOf(p); return c ? db.get('tempo_agencies', c.agency_id) : null; };

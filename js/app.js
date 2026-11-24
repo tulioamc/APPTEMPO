@@ -586,8 +586,9 @@ async function boot() {
   db.subscribe(applyAppearance);
   // quando uma despesa, projeto ou orçamento muda, reavalia os avisos (com pequena folga para agrupar mudanças)
   let scanT = null;
-  db.subscribe(() => { clearTimeout(scanT); scanT = setTimeout(scanAlerts, 1500); });
+  db.subscribe(() => { clearTimeout(scanT); scanT = setTimeout(() => { scanAlerts(); try { reunioesVincular(); } catch (e) { /* ok */ } }, 1500); });
   scanAlerts();
+  try { reunioesVincular(); } catch (e) { /* reuniões sem tarefa entram na tarefa fixa do projeto */ }
   if (db.setting('idleDetect', false)) startIdleDetection(false);
   render();
   checkAppVersion();
