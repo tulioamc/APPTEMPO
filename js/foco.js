@@ -10,15 +10,17 @@ const FOCO_APPS_EXTRA = ['Claude'], FOCO_SITES_EXTRA = ['claude.ai'];
 const focoLista = (a, b) => [...new Set([...(a || []), ...(b || [])].map(x => String(x).trim()).filter(Boolean))];
 const FOCO_TIPOS_AVISAM = ['Cliente', 'Misto (mais cliente)', 'Agência'];
 
+/* Tudo o que o foco pode esconder: apps e sites de distração (os mesmos que pausam a sessão) mais o Claude. */
+const focoItens = () => ({ apps: focoLista(db.setting('pauseApps', DEFAULT_PAUSE_APPS), db.setting('focoApps', FOCO_APPS_EXTRA)), sites: focoLista(db.setting('pauseSites', DEFAULT_PAUSE_SITES), db.setting('focoSites', FOCO_SITES_EXTRA)) });
 function focoAtual() {
   const f = db.setting('foco', null);
   return f && f.ate && new Date(f.ate).getTime() > Date.now() ? f : null;
 }
-function focoLigar(min) {
+function focoLigar(min, sel) {   // sel = { apps, sites } marcados na janela; sem ele, tudo da lista
   min = Math.max(5, Math.min(480, Math.round(Number(min) || FOCO_PADRAO)));
   if (focoAtual()) focoDesligar('trocou');
   const agora = Date.now();
-  db.setSetting('foco', { inicio: new Date(agora).toISOString(), ate: new Date(agora + min * 6e4).toISOString(), minutos: min, aberturas: [], avisados: {} });
+  db.setSetting('foco', { inicio: new Date(agora).toISOString(), ate: new Date(agora + min * 6e4).toISOString(), minutos: min, aberturas: [], avisados: {}, ...(sel ? { apps: sel.apps || [], sites: sel.sites || [] } : {}) });
   focoSyncMac(true);
   toast(`${icon('target', 'ico')} Foco ligado até ${fmtTime(new Date(agora + min * 6e4).toISOString())}`);
   render();
@@ -43,8 +45,7 @@ function focoSyncMac(forcar) {
   if (!isMacApp()) return;
   const f = focoAtual();
   const msg = { type: 'foco', ate: f ? f.ate : null,
-    apps: focoLista(db.setting('pauseApps', DEFAULT_PAUSE_APPS), db.setting('focoApps', FOCO_APPS_EXTRA)),
-    sites: focoLista(db.setting('pauseSites', DEFAULT_PAUSE_SITES), db.setting('focoSites', FOCO_SITES_EXTRA)) };
+    apps: (f && f.apps) || focoItens().apps, sites: (f && f.sites) || focoItens().sites };   // só o que você marcou ao ligar
   const s = JSON.stringify(msg);
   if (!forcar && s === _focoEnviado) return;
   _focoEnviado = s;
@@ -107,14 +108,19 @@ ACTIONS['foco-abrir'] = async () => {
     return;
   }
   const l = openLayer({ html: `<div class="dh">${icon('target')}<h2>Modo foco</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
-    <div class="db stack"><div class="small muted">Por quanto tempo? WhatsApp, Claude e distrações ficam escondidos; mensagem de cliente ainda avisa.</div>
+    <div class="db stack"><div class="small muted">Marque o que fica escondido durante o foco; mensagem de cliente ainda avisa.</div>
+      ${(() => { const it = focoItens(); const off = db.setting('focoDesmarcados', { apps: [], sites: [] }) || {}; const grupo = (tit, k, lista) => lista.length ? `<div class="field"><span class="lbl">${tit}</span><div class="row" style="gap:4px 14px;flex-wrap:wrap">${lista.map(x => `<label class="row small" style="gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-foco-${k}="${esc(x)}"${(off[k] || []).includes(x) ? '' : ' checked'}> ${esc(x)}</label>`).join('')}</div></div>` : ''; return grupo('Apps', 'apps', it.apps) + grupo('Sites', 'sites', it.sites); })()}
+      <div class="small muted">Por quanto tempo?</div>
       <div class="row" style="gap:6px;flex-wrap:wrap">${FOCO_OPCOES.map(m => `<button class="btn ${m === FOCO_PADRAO ? 'primary' : ''}" data-x="min" data-min="${m}">${m} min</button>`).join('')}</div>
       <div class="row" style="gap:6px;align-items:center"><label for="foco-outro" class="small">Outro</label><input id="foco-outro" class="input sm" type="number" min="5" max="480" step="5" placeholder="minutos" style="width:110px"><button class="btn" data-x="outro">Ativar</button></div></div>` });
   l.box.addEventListener('click', (e) => {
     const b = e.target.closest('[data-x]'); if (!b) return;
     const min = b.dataset.x === 'outro' ? Number(l.box.querySelector('#foco-outro').value) : Number(b.dataset.min);
     if (!(min >= 5)) { toast('Digite os minutos (5 ou mais).'); return; }
-    l.close(); focoLigar(min);
+    const marcados = (k) => [...l.box.querySelectorAll(`[data-foco-${k}]`)].filter(c => c.checked).map(c => c.getAttribute(`data-foco-${k}`));
+    const todos = focoItens(); const sel = { apps: marcados('apps'), sites: marcados('sites') };
+    db.setSetting('focoDesmarcados', { apps: todos.apps.filter(x => !sel.apps.includes(x)), sites: todos.sites.filter(x => !sel.sites.includes(x)) });   // lembra o que você desmarcou para a próxima vez
+    l.close(); focoLigar(min, sel);
   });
   l.box.querySelector('#foco-outro').addEventListener('keydown', (e) => { if (e.key === 'Enter') l.box.querySelector('[data-x="outro"]').click(); });
 };

@@ -17,7 +17,7 @@ test('ligar e encerrar: estado, aviso ao Mac e registro do foco', () => {
   t.focoLigar(90);
   const f = t.focoAtual();
   assert.ok(f); assert.equal(f.minutos, 90);
-  assert.equal(t.msgs.at(-1).type, 'foco'); assert.ok(t.msgs.at(-1).ate); assert.deepEqual([...t.msgs.at(-1).apps], ['WhatsApp']);
+  assert.equal(t.msgs.at(-1).type, 'foco'); assert.ok(t.msgs.at(-1).ate); assert.deepEqual([...t.msgs.at(-1).apps], ['WhatsApp', 'Claude']);
   t.focoAbriu('WhatsApp');
   assert.equal(t.focoAtual().aberturas.length, 1);
   assert.match(t.focoBtnHTML(), /Foco · \d+ min/);
@@ -47,4 +47,10 @@ test('mensagem de cliente avisa uma vez; amigo e mensagem já respondida não av
 test('sem foco ligado não avisa', () => {
   const t = setup();
   assert.equal(t.focoAvisarClientes({ conversas: [{ jid: 'c1', name: 'Brenda', lastIn: Date.now() / 1000 }] }), 0);
+});
+
+test('janela do foco: só vai para o Mac o que foi marcado', () => {
+  const t = setup(); t.focoLigar(30, { apps: ['Claude'], sites: [] });
+  const m = t.msgs.at(-1); assert.deepEqual([...m.apps], ['Claude']); assert.deepEqual([...m.sites], []);
+  assert.deepEqual([...t.focoAtual().apps], ['Claude']);
 });
