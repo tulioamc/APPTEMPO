@@ -2007,7 +2007,7 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .plg-pn b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 .plg-tn:hover, .plg-pn:hover b { color: var(--accent); }
 .plg-nome.ok .plg-tn { color: var(--fg-3); } .plg-tn svg { width: 11px; height: 11px; color: #34A853; flex: none; }
-.plg-dir { overflow-x: auto; }
+.plg-dir { overflow: hidden; overscroll-behavior: contain; }
 .plg-cab { position: relative; height: 40px; border-bottom: 1px solid var(--line); }
 .plg-dia { position: absolute; top: 0; height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; color: var(--fg-3); border-left: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
 .plg-dia b { font-size: 13px; color: var(--fg); font-weight: 600; }

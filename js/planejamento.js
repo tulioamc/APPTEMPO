@@ -617,13 +617,16 @@ function planoDiaHTML(dia, porDia) {
    Barra = do começo ao fim da tarefa pelo planejamento (cor do cliente; verde se concluída). Deadline (entrega) = linha
    roxa no dia e hora; prazo da tarefa = bandeirinha. Dependências = setas. Arrastar a barra para os lados muda o prazo
    da tarefa em dias (o planejamento se reorganiza). */
-const PLG_W = 76, PLG_ROW = 30, PLG_DIAS = 21;
+let PLG_W = 76; const PLG_ROW = 30;
+let PLG_DIAS = 21;   // quantos dias cabem na largura (refeito a cada desenho, conforme o zoom)
 const planoGanttIni = () => PLANO.ganttIni || planoDiaMais(planoSegunda(new Date()), 0);
 function planoGanttX(t, ini) {   // Date|ms → px (horas de trabalho 8h–20h ocupam a largura do dia)
   const d = new Date(t); const di = daysBetween(ini, ymd(d)); const h = d.getHours() + d.getMinutes() / 60;
   return (di + Math.max(0, Math.min(1, (h - 8) / 12))) * PLG_W;
 }
 function planoGanttHTML() {
+  if (!window.__plgZoomT) PLG_W = Math.max(28, Math.min(220, Number(db.setting('planoGanttZoom', 76)) || 76));
+  PLG_DIAS = Math.max(7, Math.min(90, Math.ceil((((typeof window !== 'undefined' && window.innerWidth) || 1400) - 340) / PLG_W)));
   const ini = planoGanttIni(); const fim = planoDiaMais(ini, PLG_DIAS); const hoje = ymd(new Date());
   let itens = {}; try { itens = (typeof tkMotor === 'function' ? tkMotor(new Date(), 120).itens : {}) || {}; } catch (e) {}
   const projs = db.all('tempo_projects').filter(p => !p.archived && ['todo', 'active'].includes(statusCat(p.status_id)) && tasksOf(p.id).length);
@@ -698,9 +701,8 @@ VIEWS.plano = () => {
     nav = `<button class="btn sm" data-act="pl-nav" data-d="-1" aria-label="Dia anterior">${icon('chevL')}</button><button class="btn sm" data-act="pl-nav" data-d="1" aria-label="Próximo dia">${icon('chevR')}</button>${dia !== hoje ? '<button class="btn sm ghost" data-act="pl-nav" data-d="0">Hoje</button>' : ''}`;
     corpo = planoDiaHTML(dia, porDia);
   } else if (modo === 'tarefas') {
-    const gi = planoGanttIni(); titulo = `${fmtDate(gi).slice(0, 5)} – ${fmtDate(planoDiaMais(gi, PLG_DIAS - 1))}`;
+    corpo = planoGanttHTML(); const gi = planoGanttIni(); titulo = `${fmtDate(gi).slice(0, 5)} – ${fmtDate(planoDiaMais(gi, PLG_DIAS - 1))}`;
     nav = `<button class="btn sm" data-act="plg-nav" data-d="-1" aria-label="Semana anterior">${icon('chevL')}</button><button class="btn sm" data-act="plg-nav" data-d="1" aria-label="Próxima semana">${icon('chevR')}</button><button class="btn sm ghost" data-act="plg-nav" data-d="0">Hoje</button>`;
-    corpo = planoGanttHTML();
   } else if (modo === 'mes') {
     titulo = ''; nav = `<button class="btn sm ghost" data-act="pl-mes-hoje">Hoje</button>`;
     corpo = planoMesHTML(porDia);
@@ -1142,3 +1144,30 @@ if (typeof document !== 'undefined' && document.addEventListener) document.addEv
   PL_ALT = novo; render();
   clearTimeout(window.__plZoomT); window.__plZoomT = setTimeout(() => db.setSetting('planoZoom', PL_ALT), 500);   // grava só quando para
 }, { passive: false });
+
+/* Calendário › Tarefas: rolagem do mouse/trackpad anda nos dias; pinça (ou Ctrl/Alt + rolagem) dá zoom nos dias. */
+if (typeof document !== 'undefined' && document.addEventListener) {
+  let acc = 0;
+  const zoom = (fator, clientX) => {
+    const area = document.querySelector('.plg-area'); if (!area) return;
+    const x = clientX - area.getBoundingClientRect().left; const dia = x / PLG_W;           // dia sob o cursor
+    const novo = Math.max(28, Math.min(220, Math.round(PLG_W * fator))); if (novo === PLG_W) return;
+    // mantém o dia sob o cursor no lugar: ajusta o começo em dias inteiros
+    const desl = Math.round(dia - x / novo); if (desl) PLANO.ganttIni = planoDiaMais(planoGanttIni(), desl);
+    PLG_W = novo; render();
+    clearTimeout(window.__plgZoomT); window.__plgZoomT = setTimeout(() => { db.setSetting('planoGanttZoom', PLG_W); window.__plgZoomT = null; }, 500);
+  };
+  document.addEventListener('wheel', (e) => {
+    const g = e.target.closest && e.target.closest('.plg-dir'); if (!g) return;
+    e.preventDefault();
+    if (e.ctrlKey || e.altKey) { zoom(e.ctrlKey ? Math.exp(-e.deltaY * 0.012) : (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX); return; }
+    acc += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    const passo = Math.max(24, PLG_W * 0.6); const n = Math.trunc(acc / passo); if (!n) return;
+    acc -= n * passo; PLANO.ganttIni = planoDiaMais(planoGanttIni(), n); render();
+  }, { passive: false });
+  // Safari/app do Mac: pinça chega como gesto
+  let g0 = null;
+  document.addEventListener('gesturestart', (e) => { if (!(e.target.closest && e.target.closest('.plg-dir'))) return; e.preventDefault(); g0 = PLG_W; });
+  document.addEventListener('gesturechange', (e) => { if (g0 == null) return; e.preventDefault(); zoom((g0 * e.scale) / PLG_W, e.clientX || 0); });
+  document.addEventListener('gestureend', () => { g0 = null; });
+}
