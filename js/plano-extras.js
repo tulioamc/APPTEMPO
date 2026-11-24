@@ -42,3 +42,32 @@ if (typeof document !== 'undefined' && document.addEventListener) {
     const t = db.get('tempo_tasks', b.dataset.plg); if (t) ACTIONS['proj-open']({ dataset: { id: t.project_id, tab: 'tasks', tk: t.id } });
   });
 }
+
+/* Espaço + arrastar (como no Illustrator): com o mouse sobre o Gantt ou a grade do Calendário, segurar a barra de espaço vira a mãozinha. */
+if (typeof document !== 'undefined' && document.addEventListener) {
+  let espaco = false, pan = null;
+  const alvo = (el) => el && el.closest ? el.closest('.plg-dir, [data-pl-scroll], .pl-mes-scroll') : null;
+  const digitando = (el) => el && el.closest && el.closest('input, textarea, select, [contenteditable="true"]');
+  const sobre = () => [...document.querySelectorAll('.plg-dir, [data-pl-scroll]')].find(x => x.matches(':hover'));
+  document.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space' || digitando(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!espaco && !sobre()) return;   // fora do Calendário, o espaço continua sendo o espaço de sempre
+    e.preventDefault(); if (e.repeat) return; espaco = true; document.body.classList.add('pl-mao');
+  });
+  document.addEventListener('keyup', (e) => { if (e.code !== 'Space') return; espaco = false; document.body.classList.remove('pl-mao', 'pl-mao-on'); });
+  window.addEventListener('blur', () => { espaco = false; pan = null; document.body.classList.remove('pl-mao', 'pl-mao-on'); });
+  document.addEventListener('pointerdown', (e) => {
+    if (!espaco || e.button !== 0) return; const c = alvo(e.target); if (!c) return;
+    e.preventDefault(); e.stopImmediatePropagation();   // nada por baixo (bloco, barra, clique) reage enquanto a mão está ativa
+    pan = { c, x: e.clientX, y: e.clientY, sl: c.scrollLeft, st: c.scrollTop, wy: window.scrollY, gantt: c.classList.contains('plg-dir') };
+    document.body.classList.add('pl-mao-on'); try { c.setPointerCapture(e.pointerId); } catch (x) { /* ok */ }
+  }, true);
+  document.addEventListener('pointermove', (e) => {
+    if (!pan) return; e.preventDefault();
+    pan.c.scrollLeft = pan.sl - (e.clientX - pan.x);
+    if (pan.gantt) window.scrollTo(window.scrollX, pan.wy - (e.clientY - pan.y)); else pan.c.scrollTop = pan.st - (e.clientY - pan.y);
+  }, true);
+  const solta = (e) => { if (!pan) return; pan = null; document.body.classList.remove('pl-mao-on'); window.__plgMoved = true; setTimeout(() => { window.__plgMoved = false; }, 150); e.stopImmediatePropagation(); };
+  document.addEventListener('pointerup', solta, true); document.addEventListener('pointercancel', solta, true);
+  document.addEventListener('click', (e) => { if (espaco || window.__plgMoved && alvo(e.target)) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+}

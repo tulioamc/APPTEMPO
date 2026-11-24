@@ -2010,7 +2010,7 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .plg-pn b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 .plg-tn:hover, .plg-pn:hover b { color: var(--accent); }
 .plg-nome.ok .plg-tn { color: var(--fg-3); } .plg-tn svg { width: 11px; height: 11px; color: var(--ok); flex: none; }
-.plg-dir { overflow: hidden; overscroll-behavior: contain; }
+.plg-dir { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; }
 .plg-cab { position: relative; height: 40px; border-bottom: 1px solid var(--line); }
 .plg-dia { position: absolute; top: 0; height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; color: var(--fg-3); border-left: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
 .plg-dia b { font-size: 13px; color: var(--fg); font-weight: 600; }
@@ -2070,3 +2070,7 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 .hj-prox.agora .hj-prox-k { background: var(--ok); color: var(--ok-on); }
 .hj-prox-n { all: unset; cursor: pointer; display: flex; flex-direction: column; flex: 1; min-width: 0; } .hj-prox-n b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plg-bar[data-plg] { cursor: pointer; }
+
+/* Espaço + arrastar (como no Illustrator): mãozinha sobre o Gantt e a grade do Calendário */
+body.pl-mao [data-pl-scroll], body.pl-mao .plg-dir, body.pl-mao [data-pl-scroll] *, body.pl-mao .plg-dir * { cursor: grab !important; user-select: none; }
+body.pl-mao.pl-mao-on [data-pl-scroll], body.pl-mao.pl-mao-on .plg-dir, body.pl-mao.pl-mao-on [data-pl-scroll] *, body.pl-mao.pl-mao-on .plg-dir * { cursor: grabbing !important; }

@@ -628,15 +628,15 @@ function planoDiaHTML(dia, porDia) {
    roxa no dia e hora; prazo da tarefa = bandeirinha. Dependências = setas. Arrastar a barra para os lados muda o prazo
    da tarefa em dias (o planejamento se reorganiza). */
 let PLG_W = 76; const PLG_ROW = 30; const PLG_MAX = 720;   // zoom máximo: ~60 px por hora, dá para ler tarefa de 30 min
-let PLG_DIAS = 21;   // quantos dias cabem na largura (refeito a cada desenho, conforme o zoom)
-const planoGanttIni = () => PLANO.ganttIni || (PLG_W >= 300 ? ymd(new Date()) : planoSegunda(new Date()));   // zoom grande abre em hoje (a semana toda não cabe)
+const PLG_DIAS = 240, PLG_ATRAS = 60;   // o Gantt é uma faixa de 60 dias para trás e 180 para a frente; quem anda nela é a rolagem de verdade (trackpad, barra, espaço + arrastar)
+const planoGanttIni = () => planoDiaMais(ymd(new Date()), -PLG_ATRAS);
+const planoGanttX0 = () => (PLG_W >= 300 ? PLG_ATRAS - 1 : daysBetween(planoGanttIni(), planoSegunda(new Date()))) * PLG_W;   // onde abre: hoje (zoom grande) ou a segunda desta semana
 function planoGanttX(t, ini) {   // Date|ms → px (horas de trabalho 8h–20h ocupam a largura do dia)
   const d = new Date(t); const di = daysBetween(ini, ymd(d)); const h = d.getHours() + d.getMinutes() / 60;
   return (di + Math.max(0, Math.min(1, (h - 8) / 12))) * PLG_W;
 }
 function planoGanttHTML() {
   if (!window.__plgZoomT) PLG_W = Math.max(28, Math.min(PLG_MAX, Number(db.setting('planoGanttZoom', 76)) || 76));
-  PLG_DIAS = Math.max(2, Math.min(90, Math.ceil((((typeof window !== 'undefined' && window.innerWidth) || 1400) - 340) / PLG_W)));
   const ini = planoGanttIni(); const fim = planoDiaMais(ini, PLG_DIAS); const hoje = ymd(new Date());
   let itens = {}; try { itens = (typeof tkMotor === 'function' ? tkMotor(new Date(), 120).itens : {}) || {}; } catch (e) {}
   const projs = db.all('tempo_projects').filter(p => !p.archived && ['todo', 'active'].includes(statusCat(p.status_id)) && tasksOf(p.id).length);
@@ -687,8 +687,11 @@ function planoGanttHTML() {
   return `<div class="plg"><div class="plg-esq"><div class="plg-cab-esq">Projeto · tarefa</div><div class="plg-nomes" style="height:${H}px">${linhas.join('')}</div></div>
     <div class="plg-dir" data-plg-scroll><div style="width:${W}px"><div class="plg-cab">${cab}</div><div class="plg-area" style="height:${H}px">${fundo}<svg class="plg-setas" width="${W}" height="${H}">${setas.join('')}</svg>${barras.join('')}${marcas.join('')}${agora}</div></div></div></div>`;
 }
+function planoGanttRolar() { const sc = document.querySelector('.plg-dir'); if (sc) sc.scrollLeft = PLANO.ganttX ?? (PLANO.ganttX = planoGanttX0()); }
 ACTIONS['plg-tg'] = (el) => { const f = PLANO.ganttFech || (PLANO.ganttFech = new Set()); f.has(el.dataset.id) ? f.delete(el.dataset.id) : f.add(el.dataset.id); render(); };
-ACTIONS['plg-nav'] = (el) => { const d = Number(el.dataset.d); PLANO.ganttIni = d ? planoDiaMais(planoGanttIni(), d * 7) : null; render(); };
+ACTIONS['plg-nav'] = (el) => { const d = Number(el.dataset.d); const sc = document.querySelector('.plg-dir'); if (!sc) return;
+  if (d) sc.scrollBy({ left: d * 7 * PLG_W, behavior: 'smooth' }); else sc.scrollTo({ left: Math.max(0, (PLG_ATRAS - 1) * PLG_W), behavior: 'smooth' }); };
+const planoGanttTitulo = (x) => { const d = planoDiaMais(planoGanttIni(), Math.max(0, Math.floor((x ?? PLANO.ganttX ?? planoGanttX0()) / PLG_W))); return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/^./, c => c.toUpperCase()); };
 /* Arrastar barra do Gantt: muda o prazo da tarefa em dias inteiros. */
 (function () {
   let drag = null;
@@ -715,7 +718,7 @@ VIEWS.plano = () => {
     nav = `<button class="btn sm" data-act="pl-nav" data-d="-1" aria-label="Dia anterior">${icon('chevL')}</button><button class="btn sm" data-act="pl-nav" data-d="1" aria-label="Próximo dia">${icon('chevR')}</button>${dia !== hoje ? '<button class="btn sm ghost" data-act="pl-nav" data-d="0">Hoje</button>' : ''}`;
     corpo = planoDiaHTML(dia, porDia);
   } else if (modo === 'tarefas') {
-    corpo = planoGanttHTML(); const gi = planoGanttIni(); titulo = `${fmtDate(gi).slice(0, 5)} – ${fmtDate(planoDiaMais(gi, PLG_DIAS - 1))}`;
+    corpo = planoGanttHTML(); titulo = planoGanttTitulo();
     nav = `<button class="btn sm" data-act="plg-nav" data-d="-1" aria-label="Semana anterior">${icon('chevL')}</button><button class="btn sm" data-act="plg-nav" data-d="1" aria-label="Próxima semana">${icon('chevR')}</button><button class="btn sm ghost" data-act="plg-nav" data-d="0">Hoje</button>`;
   } else if (modo === 'mes') {
     titulo = ''; nav = `<button class="btn sm ghost" data-act="pl-mes-hoje">Hoje</button>`;
@@ -726,11 +729,11 @@ VIEWS.plano = () => {
   }
   const nota = `Planejado = suas tarefas abertas de todos os projetos, uma por vez, pela entrega mais perto e pelas dependências, com o tempo previsto de cada uma (até ${cfg.horasDia} h por dia útil). Cheio = planejado (mais claro = colocado pelo app; fixado à mão fica forte) · chip com bolinha = registrado · cinza = rotina · tracejado = compromisso (bloqueio ou Google Agenda). Arraste ou puxe as bordas do que não é registro; a janelinha mostra o horário novo.${semEst.length ? ` ${semEst.length} projeto(s) ativo(s) sem horas estimadas não entram.` : ''}`;
   const html = `${PLANO.erroMotor ? `<div class="banner danger small row" style="margin:0 0 8px">${icon('alert')} Não consegui recalcular o plano agora; estou mostrando o último que funcionou. <span class="grow"></span><button class="btn sm" data-act="pl-saude">Ver</button></div>` : ''}${estouro.length ? `<div class="panel" style="border-color:var(--warn)"><div class="panel-b small"><b>Não cabe no prazo:</b> ${estouro.map(x => `${esc(x.p.name)} (faltam ${fmtH(x.horas * 36e5)} até ${fmtDate(x.p.deadline)})`).join(' · ')}. Estique algum dia (+) ou mude o prazo.</div></div>` : ''}
-    <div class="panel"><div class="panel-h">${seg}${nav}${titulo ? `<h3>${esc(titulo)}</h3>` : ''}<span class="grow"></span>${planoBandejaBtn(modo)}${planoSaudeHTML()}${planoDesfazerHTML()}${planoFiltroHTML()}<button class="btn sm" data-act="pl-bloq">${icon('plus')} Bloqueio</button></div>
+    <div class="panel"><div class="panel-h">${seg}${nav}${titulo ? `<h3${modo === 'tarefas' ? ' data-plg-titulo' : ''}>${esc(titulo)}</h3>` : ''}<span class="grow"></span>${planoBandejaBtn(modo)}${planoSaudeHTML()}${planoDesfazerHTML()}${planoFiltroHTML()}<button class="btn sm" data-act="pl-bloq">${icon('plus')} Bloqueio</button></div>
       <div class="panel-b">${modo === 'dia' || modo === 'semana' ? planoBandejaHTML() : ''}${corpo}<div class="small muted" style="margin-top:8px">${nota}</div></div></div>
     ${planoRotinaHTML()}`;
   // restaura a rolagem logo depois de desenhar (antes de o navegador mandar qualquer evento de rolagem da troca)
-  const rolar = () => (modo === 'tarefas' ? null : modo === 'mes' ? planoMesRolar() : planoGradeRolar(modo === 'semana'));
+  const rolar = () => (modo === 'tarefas' ? planoGanttRolar() : modo === 'mes' ? planoMesRolar() : planoGradeRolar(modo === 'semana'));
   return { title: 'Calendário', actions: '', html, after: rolar };
 };
 /* Grade de 24 h: abre perto das 5h (ou 1 h antes de agora) e guarda a rolagem; na semana, abre na semana de hoje. */
@@ -1178,22 +1181,19 @@ if (typeof document !== 'undefined' && document.addEventListener) document.addEv
 if (typeof document !== 'undefined' && document.addEventListener) {
   let acc = 0;
   const zoom = (fator, clientX) => {
-    const area = document.querySelector('.plg-area'); if (!area) return;
-    const x = clientX - area.getBoundingClientRect().left; const dia = x / PLG_W;           // dia sob o cursor
+    const sc = document.querySelector('.plg-dir'); if (!sc) return;
+    const x = clientX - sc.getBoundingClientRect().left; const dia = (sc.scrollLeft + x) / PLG_W;           // dia (fracionado) sob o cursor
     const novo = Math.max(28, Math.min(PLG_MAX, Math.round(PLG_W * fator))); if (novo === PLG_W) return;
-    // mantém o dia sob o cursor no lugar: ajusta o começo em dias inteiros
-    const desl = Math.round(dia - x / novo); PLANO.ganttIni = planoDiaMais(planoGanttIni(), desl);   // fixa o começo antes de mudar o zoom (o padrão depende dele)
-    PLG_W = novo; render();
+    PLG_W = novo; PLANO.ganttX = Math.max(0, dia * novo - x); render();
     clearTimeout(window.__plgZoomT); window.__plgZoomT = setTimeout(() => { db.setSetting('planoGanttZoom', PLG_W); window.__plgZoomT = null; }, 500);
   };
+  // rolagem normal é do navegador (trackpad, roda, barra); só Ctrl/Alt + roda (e a pinça) dão zoom
   document.addEventListener('wheel', (e) => {
-    const g = e.target.closest && e.target.closest('.plg-dir'); if (!g) return;
-    e.preventDefault();
-    if (e.ctrlKey || e.altKey) { zoom(e.ctrlKey ? Math.exp(-e.deltaY * 0.012) : (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX); return; }
-    acc += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    const passo = Math.max(24, PLG_W * 0.6); const n = Math.trunc(acc / passo); if (!n) return;
-    acc -= n * passo; PLANO.ganttIni = planoDiaMais(planoGanttIni(), n); render();
+    const g = e.target.closest && e.target.closest('.plg-dir'); if (!g || !(e.ctrlKey || e.altKey)) return;
+    e.preventDefault(); zoom(e.ctrlKey ? Math.exp(-e.deltaY * 0.012) : (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX);
   }, { passive: false });
+  document.addEventListener('scroll', (e) => { const t = e.target; if (!t || !t.classList || !t.classList.contains('plg-dir')) return;
+    PLANO.ganttX = t.scrollLeft; const h = document.querySelector('[data-plg-titulo]'); if (h) { const tx = planoGanttTitulo(t.scrollLeft); if (h.textContent !== tx) h.textContent = tx; } }, true);
   // Safari/app do Mac: pinça chega como gesto
   let g0 = null;
   document.addEventListener('gesturestart', (e) => { if (!(e.target.closest && e.target.closest('.plg-dir'))) return; e.preventDefault(); g0 = PLG_W; });
