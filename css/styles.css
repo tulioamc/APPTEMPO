@@ -2194,3 +2194,14 @@ body.pl-arrastando, body.pl-arrastando * { user-select: none !important; -webkit
 .tk-reu-ico svg { width: 14px; height: 14px; }
 .tk-reu-tag { font-size: .75em; color: var(--accent); border: 1px solid var(--accent-line); border-radius: 4px; padding: 1px 6px; }
 .tk-reu-t { font-size: .85em; color: var(--fg-2); }
+/* Lista de tarefas: alça de 6 pontinhos na mesma linha do nome */
+.tk-nome-l { display: flex; align-items: center; min-width: 0; }
+.tk-nome-l .tk-grip { margin-left: -14px; padding-right: 3px; }
+.tk-nome-l .n { flex: 1; min-width: 0; }
+/* Blocos com "Cor do cliente": projeto em 2 linhas equilibradas (mesmo peso, sem uma linha grande e outra pequena);
+   some quando o bloco é estreito (não aperta o título); × só ao passar o mouse */
+.pl-grade > .pl-bloco.cc { container-type: inline-size; }
+.pl-bloco.cc .pl-cc-proj { text-wrap: balance; max-width: 40%; }
+@container (max-width: 210px) { .pl-bloco.cc .pl-cc-proj { display: none; } }
+.pl-bloco .pl-unpin { opacity: 0; transition: opacity .12s; }
+.pl-bloco:hover .pl-unpin, .pl-fantasma .pl-unpin { opacity: 1; }

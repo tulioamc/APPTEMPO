@@ -59,8 +59,13 @@ function openCombo(anchor, { kind, value, onPick, allowEmpty = false, emptyLabel
 }
 
 /* Botão que abre o dropdown. target = o que fazer ao escolher. */
+/* Nome curto do status (lista de tarefas fechada): "Em andam.", "Aguard. cliente"; o seletor aberto mostra o nome inteiro. */
+const STATUS_CURTO = { 'Em andamento': 'Em andam.', 'Aguardando cliente': 'Aguard. cliente', 'Aguardando aprovação': 'Aguard. aprov.' };
+const statusCurto = (n) => STATUS_CURTO[n] || (String(n).length > 12 ? String(n).split(' ').map(w => w.length > 7 ? w.slice(0, 5) + '.' : w).join(' ') : n);
 function comboBtn(kind, value, target, id, opts = {}) {
-  const it = comboItems(kind).find(x => x.id === value);
+  let it = comboItems(kind).find(x => x.id === value);
+  if (it && opts.curto) { const nm = db.get('tempo_status_options', value)?.name; const c = nm ? statusCurto(nm) : null;
+    if (nm && c !== nm) it = { ...it, html: it.html.replace(esc(nm), `<span data-tip="${esc(nm)}">${esc(c)}</span>`) }; }
   return `<button type="button" class="combo-btn ${opts.cls || ''}" data-act="combo" data-kind="${kind}" data-target="${target}" data-id="${id}" data-value="${value || ''}" aria-haspopup="listbox">${it ? it.html : '<span class="faint">—</span>'}<span class="chev">${icon('chevD')}</span></button>`;
 }
 const COMBO_TARGETS = {
