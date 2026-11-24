@@ -190,8 +190,10 @@ const tkPrevMin = (t) => tkPrev(t).min;
    ===================================================================== */
 let _tkMotor = { k: null };
 const tkUltimoBom = () => _tkMotor.v || null;   // último plano calculado sem erro
-function tkMotor(agora = new Date(), dias = 120) {
-  const k = tkCacheKey() + '|' + dias; if (_tkMotor.k === k) return _tkMotor.v;
+function tkMotor(agora = new Date(), dias = 120, opts = null) {
+  // opts.pins: conta de "e se" (prévia ao arrastar) com outra lista de fixados — não usa nem guarda o cache
+  const previa = !!(opts && opts.pins);
+  const k = tkCacheKey() + '|' + dias; if (!previa && _tkMotor.k === k) return _tkMotor.v;
   const cfg = planoCfg(); const hoje = ymd(agora);
   // Combinado (24/11): o plano de HOJE não anda com o relógio nem é empurrado pelo que foi registrado. Ele é montado a partir
   // do começo do dia, com o que faltava de cada tarefa ao começar o dia; o registrado de hoje corre em paralelo.
@@ -236,7 +238,7 @@ function tkMotor(agora = new Date(), dias = 120) {
   // Bloco fixado maior que o que a tarefa precisa (24/11): o bloco encolhe ao tamanho da tarefa e o horário que sobra
   // fica livre — o trabalho solto que vem depois sobe e encosta nele (sem bloco "o plano não usa"). Só nesta conta: o salvo não muda.
   const pins = (() => {
-    const l = planoPins().filter(pn => pn.dia >= hoje).map(pn => ({ ...pn }));
+    const l = (previa ? opts.pins : planoPins()).filter(pn => pn.dia >= hoje).map(pn => ({ ...pn }));
     const porTid = {}; l.filter(pn => pn.tid).forEach(pn => (porTid[pn.tid] ||= []).push(pn));
     Object.entries(porTid).forEach(([tid, ps]) => {
       const it = itens.find(z => z.t && z.t.id === tid && z.eu); if (!it) return;
@@ -433,5 +435,5 @@ function tkMotor(agora = new Date(), dias = 120) {
     if (porDia[pn.dia]) (porDia[pn.dia].fantasmas ||= []).push({ pin: pn.id, pid: pn.pid, tid: pn.tid || null, ini, fim: pn.b, motivo });
   }));
   const v = { itens: res, porDia, estouro, pinsSobra, ciclos, fator: H.fator, nFator: H.nFator };
-  _tkMotor = { k, v }; return v;
+  if (!previa) _tkMotor = { k, v }; return v;
 }

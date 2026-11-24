@@ -119,3 +119,11 @@ test('14. dois blocos fixados da mesma tarefa em dias diferentes: os dois ficam;
   const l = bl(m.tkMotor(H(14, 8), 10), 'x');
   assert.deepEqual(l[0], ['14', 15, 16]); assert.deepEqual(l[1], ['16', 9, 10]); assert.deepEqual(l.slice(2), [['16', 10, 12], ['16', 14, 15]]);
 });
+test('15. conta de "e se" (prévia ao arrastar) não mexe no plano de verdade nem no cache', () => {
+  const m = setup();
+  cfg(m, { tasks: [T('x', 'a', { est_min: 120 }), T('y', 'a', { est_min: 120, order: 1 })] });
+  const real = bl(m.tkMotor(H(14, 8), 10), 'y');
+  const pv = m.tkMotor(H(14, 8), 10, { pins: [{ id: '__pv', dia: '2026-12-14', pid: 'a', tid: 'x', ini: 15, h: 2 }] });
+  assert.deepEqual(bl(pv, 'y'), [['14', 9, 11]], 'na prévia, y ocupa o lugar que x deixou');
+  assert.deepEqual(bl(m.tkMotor(H(14, 8), 10), 'y'), real, 'o plano de verdade continua igual');
+});

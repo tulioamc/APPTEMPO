@@ -83,3 +83,65 @@ function planoAvisaSobra(ids) {
     toast(`Esse bloco não vale ainda: “${t ? t.name : 'a tarefa'}” espera “${espera}” terminar. O app só usa o horário depois disso.`, { ms: 15000, actions: dep ? [{ label: `Tirar a espera de “${espera}”`, run: () => { db.update('tempo_tasks', t.id, { depends_on: (t.depends_on || []).filter(i => i !== dep.id) }); db.emit(); render(); toast('Espera removida'); } }] : [] });
   } catch (_) { /* aviso é só ajuda */ }
 }
+
+/* Prévia ao arrastar (24/11): enquanto você segura um bloco planejado, os outros blocos da MESMA semana (ou do dia, no Dia)
+   deslizam para onde vão ficar se você soltar ali. Os mais perto do bloco andam primeiro; cada um seguinte espera 1/24 s.
+   É só "e se": usa a mesma conta do soltar (empurra os fixados que batem, refaz o plano), sem gravar nada.
+   Outras semanas não animam (seria movimento demais). Soltar ou cancelar redesenha tudo como fica de verdade. */
+let _pv = null;
+function planoSemanaDe(dia) { const d = new Date(dia + 'T12:00:00'); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); const a = ymd(d); d.setDate(d.getDate() + 6); return [a, ymd(d)]; }
+function planoPrevia(d, e, a, b) {
+  if (typeof document === 'undefined' || !d || !d.el) return;
+  d.el.style.pointerEvents = 'none';
+  const col = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-pl-col]');
+  const dia = d.modo === 'move' && col ? col.dataset.plCol : d.dia;
+  const chave = `${dia}|${a}|${b}`; if (_pv && _pv.chave === chave) return;
+  _pv = { ...(_pv || {}), chave, d };
+  clearTimeout(_pv.t); _pv.t = setTimeout(() => planoPreviaCalc(d, dia, a, b, chave), 70);
+}
+function planoPreviaCalc(d, dia, a, b, chave) {
+  if (!_pv || _pv.chave !== chave) return;
+  let porDia;
+  try {
+    const meus = (d.el.dataset.pin || '').split(',').filter(Boolean);
+    const outros = planoPins().filter(p => !meus.includes(p.id));
+    const r = planoEmpurrar(outros, [{ dia, ini: a, fim: b }], planoOcupadosDoDia, { proximoDia: planoProximoUtil });
+    const pins = [...r.base, ...r.empurrados, { id: '__pv', dia, pid: d.el.dataset.pid, tid: d.el.dataset.tid || null, ini: a, h: b - a }];
+    porDia = tkMotor(new Date(), 60, { pins }).porDia;
+  } catch (_) { return; }   // prévia é só ajuda: se a conta falhar, não mexe em nada
+  const [s0, s1] = planoSemanaDe(d.dia);
+  const els = [...document.querySelectorAll('.pl-bloco[data-dia]')].filter(el => el !== d.el && el.dataset.dia >= s0 && el.dataset.dia <= s1 && !el.closest('.pl-dg-fly'));
+  // pares velho → novo: mesma tarefa (ou projeto) no mesmo dia, na ordem do horário
+  const chaveDe = (pid, tid) => tid ? 't:' + tid : 'p:' + pid;
+  const grupos = {};
+  els.forEach(el => { const k = el.dataset.dia + '|' + chaveDe(el.dataset.pid, el.dataset.tid); (grupos[k] ||= { velhos: [], novos: [] }).velhos.push(el); });
+  Object.entries(porDia || {}).forEach(([dd, v]) => (v.blocos || []).forEach(bl => { if (bl.pins && bl.pins.includes('__pv')) return; const k = dd + '|' + chaveDe(bl.pid, bl.tid); if (grupos[k]) grupos[k].novos.push(bl); }));
+  const alvo = new Map();
+  Object.values(grupos).forEach(g => { g.velhos.sort((x, y) => Number(x.dataset.ini) - Number(y.dataset.ini)); g.novos.sort((x, y) => x.ini - y.ini);
+    g.velhos.forEach((el, i) => alvo.set(el, g.novos[i] || null)); });
+  // ordem: mais perto do bloco arrastado primeiro (mesmo dia pelo horário; outros dias depois, pela distância em dias)
+  const dist = (el) => { const dd = Math.abs((new Date(el.dataset.dia + 'T12:00:00') - new Date(dia + 'T12:00:00')) / 864e5); return dd * 100 + Math.abs(Number(el.dataset.ini) - a); };
+  const mexe = [...alvo.entries()].filter(([el, nv]) => {
+    const ini = Number(el.dataset.ini), fim = Number(el.dataset.fim);
+    const top = nv ? nv.ini : ini, fimN = nv ? nv.fim : fim; const some = !nv;
+    const ja = el._pv || { top: ini, fim, some: false };
+    return Math.abs(ja.top - top) > 1e-6 || Math.abs(ja.fim - fimN) > 1e-6 || ja.some !== some;
+  }).sort((x, y) => dist(x[0]) - dist(y[0]));
+  mexe.forEach(([el, nv], i) => {
+    const ini = Number(el.dataset.ini), fim = Number(el.dataset.fim);
+    const top = nv ? nv.ini : ini, fimN = nv ? nv.fim : fim;
+    el._pv = { top, fim: fimN, some: !nv };
+    el.classList.add('pl-pv');
+    el.style.transitionDelay = Math.round(i * 1000 / 24) + 'ms';
+    el.style.transform = `translateY(${(top - ini) * PL_ALT}px)`;
+    el.style.height = Math.max(10, (fimN - top) * PL_ALT - 2) + 'px';
+    el.classList.toggle('pl-pv-some', !nv);
+  });
+  _pv.els = [...new Set([...(_pv.els || []), ...mexe.map(x => x[0])])];
+}
+function planoPreviaFim() {
+  if (!_pv) return; clearTimeout(_pv.t);
+  (_pv.els || []).forEach(el => { el.classList.remove('pl-pv', 'pl-pv-some'); el.style.transitionDelay = ''; el.style.transform = ''; el.style.height = ''; delete el._pv; });
+  if (_pv.d && _pv.d.el) _pv.d.el.style.pointerEvents = '';
+  _pv = null;
+}

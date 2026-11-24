@@ -2153,3 +2153,7 @@ kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--li
 /* Bloco flutuando ao ser levado para outro dia (24/11) */
 .pl-dg-fly { opacity: .92; box-shadow: 0 8px 24px rgba(20,24,60,.22); border-radius: 4px; cursor: grabbing; }
 .pl-dg-orig { opacity: .35; }
+/* Prévia ao arrastar: os outros blocos deslizam para onde vão ficar (suave; os mais perto primeiro) */
+.pl-bloco.pl-pv { transition: transform .32s cubic-bezier(.22,.8,.25,1), height .32s cubic-bezier(.22,.8,.25,1), opacity .25s ease; will-change: transform; }
+.pl-bloco.pl-pv-some { opacity: .25; }
+@media (prefers-reduced-motion: reduce) { .pl-bloco.pl-pv { transition: none; } }

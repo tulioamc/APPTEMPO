@@ -985,10 +985,12 @@ ACTIONS['pl-encaixar'] = (el) => {
     tip.textContent = d.kind === 'prazo' ? `Entrega: ${hh(a)}` : d.modo === 'top' ? `Novo início: ${hh(a)}` : d.modo === 'bot' ? `Novo fim: ${hh(b)}` : `Novo horário: ${hh(a)}–${hh(b)}`;
     tip.dataset.sub = `${fmtH((b - a) * 36e5)}${d.modo === 'move' ? (['plano', 'bloq', 'todo'].includes(d.kind) ? ' · para o lado: outro dia ou outra faixa' : ' · para o lado: outra faixa') : ''}`;
     tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 12) + 'px';
+    if (d.kind === 'plano' && !d.grupo.length && typeof planoPrevia === 'function') planoPrevia(d, e, a, b);
   });
   document.addEventListener('pointerup', async (e) => {
     if (!d) return; const x = d; d = null; if (tip) { tip.remove(); tip = null; }
     if (x.fly) { x.fly.remove(); x.fly = null; } x.el.classList.remove('pl-dg-orig');
+    if (typeof planoPreviaFim === 'function') planoPreviaFim();
     if (!mexeu) return;
     x.el.style.pointerEvents = 'none';
     let [a, b] = calc(x, e.clientY - x.y0);
