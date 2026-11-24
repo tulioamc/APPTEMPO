@@ -2079,7 +2079,7 @@ body.pl-mao .pl-mes-scroll, body.pl-mao .pl-mes-scroll * { cursor: grab !importa
 .timer-prox { margin: 4px 0 6px; } .timer-prox b { color: var(--fg); font-weight: 600; }
 
 /* Corte de trechos (js/corte.js) */
-.cr-band { position: relative; height: 68px; background: var(--surface-2); border-radius: 8px; overflow: hidden; touch-action: none; user-select: none; cursor: crosshair; }
+.cr-band { position: relative; height: 68px; background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--surface-3) 6px 12px); border-radius: 8px; overflow: hidden; touch-action: none; user-select: none; cursor: crosshair; }
 .cr-blk { position: absolute; top: 28px; bottom: 6px; border-radius: 3px; opacity: .6; }
 .cr-blk.pausa { opacity: .8; }
 .cr-seg { position: absolute; top: 0; bottom: 0; background: rgba(46,67,214,.12); border-top: 2px solid var(--accent); border-bottom: 2px solid var(--accent); cursor: grab; }
@@ -2101,3 +2101,8 @@ body.pl-mao .pl-mes-scroll, body.pl-mao .pl-mes-scroll * { cursor: grab !importa
 .cr-d { min-width: 48px; }
 .cr-row select { max-width: 260px; }
 kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--surface); color: var(--fg-2); margin: 0 1px; }
+
+.cr-prev { display: flex; gap: 6px; flex-wrap: wrap; }
+.cr-chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.entry .ent-cut { opacity: .0; transition: opacity .12s; }
+.entry:hover .ent-cut { opacity: 1; }

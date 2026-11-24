@@ -1,7 +1,7 @@
 const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 function setup() {
-  const m = load(['js/store.js', 'js/domain.js', 'js/corte.js'], ['db', 'corteLivre', 'corteImantar', 'corteCortar', 'corteVao', 'corteSalvar', 'corteKeyOf'],
+  const m = load(['js/store.js', 'js/domain.js', 'js/corte.js'], ['db', 'corteLivre', 'corteImantar', 'corteCortar', 'corteVao', 'corteSalvar', 'corteKeyOf', 'corteTirarOciosos'],
     { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '', tkProjectsSorted: () => [], tkProjectLabel: () => '', openLayer() {}, topLayer() {}, fmtDur: String, actPoolBetween: () => [], clientOf: () => null });
   m.db.data = m.db.empty(); m.db.loaded = true; return m;
 }
@@ -42,4 +42,22 @@ test('salvar: recusa horário que já está em outra sessão', () => {
   m.db.insert('tempo_time_entries', { project_id: proj.id, state: 'done', segments: [{ s: new Date(t0 + 5 * 60e3).toISOString(), e: new Date(t0 + 15 * 60e3).toISOString() }] });
   const r = m.corteSalvar({ origemId: null, from: t0, to: t0 + 30 * 60e3, W: 30, segs: [{ id: 1, a: 10, b: 20, task: 'p:' + proj.id }] });
   assert.strictEqual(r.ok, false);
+});
+
+test('tirar ociosos: separa o trecho onde não há trabalho por mais que o limite', () => {
+  const m = setup();
+  const r = m.corteTirarOciosos([{ id: 1, a: 0, b: 40, task: 't:x' }], [[2, 10], [12, 14], [30, 38]], 5, 2);
+  const l = Array.from(r.segs).map(s => [s.a, s.b, s.id]);
+  assert.deepStrictEqual(l, [[2, 14, 1], [30, 38, 2]]);
+});
+test('desfazer depois de computar devolve a sessão e apaga o que foi criado', () => {
+  const m = setup(); const t0 = Date.parse('2026-11-24T18:00:00Z');
+  const proj = m.db.insert('tempo_projects', { name: 'P' }), outro = m.db.insert('tempo_projects', { name: 'Q' });
+  const e = m.db.insert('tempo_time_entries', { project_id: proj.id, state: 'running', segments: [{ s: new Date(t0 - 3600e3).toISOString(), e: new Date(t0).toISOString() }, { s: new Date(t0 + 30 * 60e3).toISOString(), e: null }] });
+  const antes = JSON.stringify(m.db.get('tempo_time_entries', e.id).segments);
+  const r = m.corteSalvar({ origemId: e.id, from: t0, to: t0 + 30 * 60e3, W: 30, segs: [{ id: 1, a: 5, b: 15, task: 'p:' + outro.id }, { id: 2, a: 15, b: 25, task: 'p:' + proj.id }] });
+  assert.ok(r.ok); assert.strictEqual(m.db.all('tempo_time_entries').length, 2);
+  r.desfazer();
+  assert.strictEqual(m.db.all('tempo_time_entries').length, 1);
+  assert.strictEqual(JSON.stringify(m.db.get('tempo_time_entries', e.id).segments), antes);
 });

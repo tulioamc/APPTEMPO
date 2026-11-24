@@ -32,6 +32,17 @@ function corteVao(segs, W) {
   for (let i = 0; i <= l.length; i++) { const to = i < l.length ? l[i].a : W; if (to - from >= 1 && (!best || to - from > best[1] - best[0])) best = [from, to]; from = i < l.length ? l[i].b : W; }
   return best;
 }
+/* Tira os trechos de ociosidade/pausa: mantém só o que está perto de atividade de trabalho (vãos menores que idle minutos não cortam). */
+function corteTirarOciosos(segs, trabalho, idle, novoId) {
+  const t = trabalho.map(([a, b]) => [a, b]).sort((x, y) => x[0] - y[0]); const m = [];
+  t.forEach(([a, b]) => { const u = m[m.length - 1]; if (u && a - u[1] < idle) u[1] = Math.max(u[1], b); else m.push([a, b]); });
+  const out = []; let id = novoId;
+  segs.forEach(s => {
+    const pcs = m.map(([a, b]) => [Math.max(s.a, Math.round(a)), Math.min(s.b, Math.round(b))]).filter(([a, b]) => b - a >= 1);
+    pcs.forEach((p, i) => out.push(i === 0 ? { ...s, a: p[0], b: p[1] } : { ...s, id: id++, a: p[0], b: p[1] }));
+  });
+  return { segs: out, prox: id };
+}
 const corteCor = (app) => { const k = (typeof shortProgram === 'function' ? shortProgram(app) : app) || app || ''; let h = 0; for (const c of k) h = (h * 31 + c.charCodeAt(0)) >>> 0; return CORTE_CORES[h % CORTE_CORES.length]; };
 const corteHora = (ms) => { const d = new Date(ms); return d.getHours() + 'h' + String(d.getMinutes()).padStart(2, '0'); };
 
@@ -71,6 +82,7 @@ const corteAlvo = (key) => {
   if (key.startsWith('t:')) { const t = db.get('tempo_tasks', key.slice(2)); return t ? { project_id: t.project_id, task_id: t.id } : null; }
   return { project_id: key.slice(2), task_id: null };
 };
+const corteRotulo = (key) => { if (key.startsWith('t:')) { const t = db.get('tempo_tasks', key.slice(2)); const p = t && db.get('tempo_projects', t.project_id); return (p ? p.name + ' › ' : '') + (t ? t.name : '?'); } const p = db.get('tempo_projects', key.slice(2)); return p ? p.name : '?'; };
 const corteKeyOf = (e) => e.task_id ? 't:' + e.task_id : e.project_id ? 'p:' + e.project_id : '';
 
 /* Grava: tira cada trecho da sessão de origem e coloca na tarefa escolhida. Devolve { ok, erro }. */
@@ -81,6 +93,7 @@ function corteSalvar({ origemId, from, to, segs, W, tudo }) {
   const ov = overlapOf(lista.map(s => ({ s: iso(s.S), e: iso(s.E) })), origemId);
   if (ov) return { ok: false, erro: `Esse horário já está em outra sessão (${corteHora(ov.a)} a ${corteHora(ov.b)}). Ajuste para não sobrepor.` };
   const origem = origemId ? db.get('tempo_time_entries', origemId) : null;
+  const antes = origem ? JSON.parse(JSON.stringify(origem.segments || [])) : null, criados = [];
   if (origem) {
     if (tudo) carveOutSegments(origemId, from, to);
     else lista.forEach(s => carveOutSegments(origemId, s.S, s.E));
@@ -97,11 +110,12 @@ function corteSalvar({ origemId, from, to, segs, W, tudo }) {
       db.update('tempo_time_entries', atual.id, { segments: segsNovos });
     } else {
       const p = db.get('tempo_projects', alvo.project_id), c = p ? clientOf(p) : null;
-      db.insert('tempo_time_entries', { agency_id: c?.agency_id || null, client_id: c?.id || null, project_id: alvo.project_id, task_id: alvo.task_id, work_type_id: lastWorkType(alvo.project_id), revision_id: null, notes: 'Tempo pausado', state: 'done', segments: novos, edits: [] });
+      criados.push(db.insert('tempo_time_entries', { agency_id: c?.agency_id || null, client_id: c?.id || null, project_id: alvo.project_id, task_id: alvo.task_id, work_type_id: lastWorkType(alvo.project_id), revision_id: null, notes: 'Tempo pausado', state: 'done', segments: novos, edits: [] }).id);
     }
   });
   db.emit();
-  return { ok: true, n, ms: ms_total };
+  const desfazer = () => { criados.forEach(i => db.remove('tempo_time_entries', i, true)); if (antes && origemId && db.get('tempo_time_entries', origemId)) db.update('tempo_time_entries', origemId, { segments: antes }); db.emit(); };
+  return { ok: true, n, ms: ms_total, desfazer };
 }
 
 /* Tela ------------------------------------------------------------------- */
@@ -124,8 +138,9 @@ function openCorte({ from, to, origemId = null, titulo = 'Tempo não computado',
   const sug = (s) => corteSugerir(mapa, recs.filter(r => new Date(r.to) > from + s.a * CORTE_MIN && new Date(r.from) < from + s.b * CORTE_MIN));
   segs.forEach(s => { const g = sug(s); if (g && !(origem && s.task === padrao && inicial)) s.task = g.key; });
 
-  const passo = [1, 2, 5, 10, 15, 30, 60].find(p => W / p <= 9) || 60;
-  const pct = (m) => (m / W * 100) + '%';
+  let v0 = 0, v1 = W;
+  const passoDe = (sp) => [1, 2, 5, 10, 15, 30, 60, 120].find(p => sp / p <= 9) || 120;
+  const pct = (m) => ((m - v0) / (v1 - v0) * 100) + '%';
   const hm = (m) => corteHora(from + m * CORTE_MIN);
   const ly = openLayer({
     wide: true,
@@ -138,10 +153,14 @@ function openCorte({ from, to, origemId = null, titulo = 'Tempo não computado',
         <button class="btn" data-x="cr-cut" title="Atalho: C">${icon('scissors')} Cortar no cursor <kbd>C</kbd></button>
         <button class="btn" data-x="cr-add" title="Atalho: N">${icon('plus')} Novo trecho <kbd>N</kbd></button>
         <button class="btn" data-x="cr-auto" title="Atalho: S">${icon('wand')} Sugerir <kbd>S</kbd></button>
+        <button class="btn" data-x="cr-idle" title="Atalho: I">${icon('clock')} Tirar ociosos <kbd>I</kbd></button>
         <button class="btn" data-x="cr-undo" title="Atalho: ⌘Z">${icon('undo')} Desfazer <kbd>⌘Z</kbd></button>
+        <span class="grow"></span>
+        <button class="btn icon" data-x="cr-zm" aria-label="Menos zoom" title="Menos zoom (−)">−</button><button class="btn icon" data-x="cr-zp" aria-label="Mais zoom" title="Mais zoom (+)">+</button><button class="btn" data-x="cr-zt" title="Mostrar tudo (0)">Tudo <kbd>0</kbd></button>
       </div>
-      <div class="small muted">Arraste em área vazia para criar · alças mudam o tamanho · arrastar o meio move · <kbd>←</kbd><kbd>→</kbd> movem 1 min (<kbd>Shift</kbd> muda o fim) · <kbd>Delete</kbd> apaga o trecho</div>
+      <div class="small muted">Arraste em área vazia para criar · alças mudam o tamanho · arrastar o meio move · <kbd>←</kbd><kbd>→</kbd> movem 1 min (<kbd>Shift</kbd> muda o fim) · <kbd>Delete</kbd> apaga o trecho · <kbd>+</kbd><kbd>−</kbd> zoom · <kbd>Ctrl</kbd>+roda também dá zoom, a roda sozinha anda para o lado</div>
       <div id="cr-list"></div>
+      <div class="cr-prev" id="cr-prev"></div>
     </div>
     <div class="df"><span class="small muted grow" id="cr-tot"></span><button class="btn" data-x="cr-no">Não computar</button><button class="btn primary" data-x="cr-ok">Computar trechos</button></div>`,
     onMount: (l) => {
@@ -158,7 +177,7 @@ function openCorte({ from, to, origemId = null, titulo = 'Tempo não computado',
         segs.forEach(s => { h += `<div class="cr-seg${s.id === sel ? ' on' : ''}${s.task ? '' : ' off'}" data-k="m" data-id="${s.id}" style="left:${pct(s.a)};width:${pct(s.b - s.a)}"><span class="n">${s.b - s.a} min</span><div class="cr-h" data-k="a" data-id="${s.id}" style="left:0"></div><div class="cr-h" data-k="b" data-id="${s.id}" style="right:0"></div></div>`; });
         h += `<div class="cr-ph" style="left:${pct(cur)}"></div>`;
         band.innerHTML = h;
-        let x = ''; for (let i = 0; i <= W; i += passo) x += `<span style="left:${pct(i)}">${hm(i)}</span>`; $('#cr-ax').innerHTML = x;
+        const ps = passoDe(v1 - v0); let x = ''; for (let i = Math.ceil(v0 / ps) * ps; i <= v1 + 1e-9; i += ps) x += `<span style="left:${pct(i)}">${hm(i)}</span>`; $('#cr-ax').innerHTML = x;
         const apps = [...new Map(blocos.filter(b => !b.pausa).map(b => [(typeof shortProgram === 'function' ? shortProgram(b.app) : b.app) || b.app, corteCor(b.app)])).entries()];
         $('#cr-leg').innerHTML = apps.map(([n, c]) => `<span><i class="cr-dot" style="background:${c}"></i>${esc(n)}</span>`).join('') + `<span><i class="cr-dot" style="background:var(--border-strong)"></i>Pausa, ocioso ou sem registro</span>`;
         let tot = 0, l = '';
@@ -167,10 +186,14 @@ function openCorte({ from, to, origemId = null, titulo = 'Tempo não computado',
           l += `<div class="cr-row${s.id === sel ? ' on' : ''}" data-row="${s.id}"><b class="cr-t">${hm(s.a)} a ${hm(s.b)}</b><span class="muted cr-d">${s.b - s.a} min</span><select class="input" data-sid="${s.id}" aria-label="Tarefa do trecho">${corteTarefaOpcoes(s.task)}</select>${g && g.key === s.task ? `<span class="small muted" title="Mesmo arquivo usado antes nessa tarefa">sugerida · ${esc(String(g.arquivo).split('/').pop())}</span>` : ''}<span class="grow"></span><button class="btn icon ghost" data-del="${s.id}" aria-label="Apagar trecho" title="Apagar (Delete)">${icon('trash')}</button></div>`;
         });
         $('#cr-list').innerHTML = l || `<div class="small muted">Nenhum trecho. Arraste na faixa para criar um.</div>`;
+        const por = {}; segs.forEach(s => { if (s.task) por[s.task] = (por[s.task] || 0) + s.b - s.a; });
+        $('#cr-prev').innerHTML = Object.entries(por).map(([k, n]) => `<span class="cr-chip">${esc(corteRotulo(k))} · ${n} min</span>`).join('');
         $('#cr-tot').textContent = `Vai computar ${fmtDur(tot * CORTE_MIN)} em ${segs.filter(s => s.task).length} trecho(s). O resto continua como pausa.`;
       }
-      const toM = (e) => { const r = band.getBoundingClientRect(); return Math.max(0, Math.min(W, (e.clientX - r.left) / r.width * W)); };
-      const tol = () => 7 / band.getBoundingClientRect().width * W;
+      const toM = (e) => { const r = band.getBoundingClientRect(); return Math.max(0, Math.min(W, v0 + (e.clientX - r.left) / r.width * (v1 - v0))); };
+      const tol = () => 7 / band.getBoundingClientRect().width * (v1 - v0);
+      const zoom = (f, centro) => { const c = centro ?? (v0 + v1) / 2; let sp = Math.max(4, Math.min(W, (v1 - v0) * f)); let a = c - (c - v0) / (v1 - v0) * sp; a = Math.max(0, Math.min(W - sp, a)); v0 = a; v1 = a + sp; draw(); };
+      const pan = (d) => { const sp = v1 - v0, a = Math.max(0, Math.min(W - sp, v0 + d)); v0 = a; v1 = a + sp; draw(); };
       const ima = (x, e, extra = []) => { if (e.altKey) { snapTxt = ''; return Math.round(x); } const p = corteImantar(Math.round(x), [...pontos, ...extra], tol()); snapTxt = p !== Math.round(x) ? 'Ímã ligado · segure Option para soltar' : 'Segure Option para soltar o ímã'; return p; };
       band.addEventListener('pointerdown', (e) => {
         const el = e.target.closest('[data-k]'); const m = toM(e);
@@ -201,11 +224,13 @@ function openCorte({ from, to, origemId = null, titulo = 'Tempo não computado',
         if (drag && drag.tipo === 'novo' && !drag.s) hist.pop();
         drag = null; draw();
       };
+      band.addEventListener('wheel', (e) => { e.preventDefault(); if (e.ctrlKey || e.metaKey) zoom(e.deltaY > 0 ? 1.25 : .8, toM(e)); else pan((Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) / band.getBoundingClientRect().width * (v1 - v0)); }, { passive: false });
       band.addEventListener('pointerup', solta); band.addEventListener('pointercancel', solta);
       const cortar = () => { salva(); if (!corteCortar(segs, Math.round(cur), id++)) { hist.pop(); msg('Posicione o cursor dentro de um trecho para cortar (clique na faixa).'); return; } sel = segs.find(s => s.a === Math.round(cur)).id; msg('Cortado em dois trechos independentes.'); draw(); };
       const novo = () => { const v = corteVao(segs, W); if (!v) return msg('Sem espaço livre na faixa.'); salva(); const s = { id: id++, a: v[0], b: Math.min(v[1], v[0] + Math.min(10, v[1] - v[0])), task: padrao }; segs.push(s); sel = s.id; draw(); };
       const apagar = (i) => { salva(); const k = segs.findIndex(s => String(s.id) === String(i)); if (k >= 0) segs.splice(k, 1); if (sel == i) sel = segs[0]?.id ?? null; draw(); };
       const desfazer = () => { const h = hist.pop(); if (!h) return msg('Nada para desfazer.'); const o = JSON.parse(h); segs.length = 0; o.segs.forEach(s => segs.push(s)); sel = o.sel; draw(); };
+      const ociosos = () => { salva(); const trab = blocos.filter(b => !b.pausa && !/loginwindow/i.test(b.app)).map(b => [b.a, b.b]); const r = corteTirarOciosos(segs, trab, Number(db.setting('idleMinutes', 5)) || 5, id); const antes = segs.reduce((t, s) => t + s.b - s.a, 0); segs.length = 0; r.segs.forEach(s => segs.push(s)); id = r.prox; const dep = segs.reduce((t, s) => t + s.b - s.a, 0); if (!segs.length) sel = null; else if (!segs.some(s => s.id === sel)) sel = segs[0].id; msg(antes === dep ? 'Nada ocioso para tirar.' : `Tirei ${antes - dep} min de ociosidade e pausa.`); draw(); };
       const auto = () => { salva(); segs.length = 0; const t = blocos.filter(b => !b.pausa && !/loginwindow/i.test(b.app)).sort((x, y) => x.a - y.a)[0]; if (t) { const s = { id: id++, a: Math.max(0, Math.round(t.a)), b: W, task: padrao }; if (s.b > s.a) { const g = sug(s); if (g) s.task = g.key; segs.push(s); sel = s.id; } } msg(t ? `Sugestão: do primeiro app de trabalho (${hm(Math.max(0, Math.round(t.a)))}) até o fim.` : 'Não achei atividade de trabalho nesse intervalo.'); draw(); };
       box.addEventListener('click', (e) => {
         const b = e.target.closest('[data-x]'), del = e.target.closest('[data-del]');
@@ -213,11 +238,12 @@ function openCorte({ from, to, origemId = null, titulo = 'Tempo não computado',
         if (b) {
           const x = b.dataset.x;
           if (x === 'cr-x' || x === 'cr-no') return l.close();
+          if (x === 'cr-zp') return zoom(.5); if (x === 'cr-zm') return zoom(2); if (x === 'cr-zt') { v0 = 0; v1 = W; return draw(); } if (x === 'cr-idle') return ociosos();
           if (x === 'cr-cut') return cortar(); if (x === 'cr-add') return novo(); if (x === 'cr-auto') return auto(); if (x === 'cr-undo') return desfazer();
           if (x === 'cr-ok') {
             if (!segs.some(s => s.task)) return toast('Escolha uma tarefa em pelo menos um trecho, ou use "Não computar".');
             const r = corteSalvar({ origemId, from, to, segs, W, tudo }); if (!r.ok) return toast(r.erro, { ms: 8000 });
-            l.close(); toast(`Computado ${fmtDur(r.ms)} em ${r.n} trecho(s)`); render(); return;
+            l.close(); toast(`Computado ${fmtDur(r.ms)} em ${r.n} trecho(s)`, { ms: 12000, actions: [{ label: 'Desfazer', run: () => { r.desfazer(); toast('Computação desfeita'); render(); } }] }); render(); return;
           }
         }
         const row = e.target.closest('[data-row]'); if (row && e.target.tagName !== 'SELECT') { sel = +row.dataset.row; draw(); }
@@ -232,6 +258,10 @@ function openCorte({ from, to, origemId = null, titulo = 'Tempo não computado',
         if (k === 'c') { e.preventDefault(); cortar(); }
         else if (k === 'n') { e.preventDefault(); novo(); }
         else if (k === 's') { e.preventDefault(); auto(); }
+        else if (k === 'i') { e.preventDefault(); ociosos(); }
+        else if (k === '+' || k === '=') { e.preventDefault(); zoom(.5, cur); }
+        else if (k === '-') { e.preventDefault(); zoom(2, cur); }
+        else if (k === '0') { e.preventDefault(); v0 = 0; v1 = W; draw(); }
         else if ((k === 'delete' || k === 'backspace') && s) { e.preventDefault(); apagar(s.id); }
         else if ((k === 'arrowleft' || k === 'arrowright') && s) {
           e.preventDefault(); const d = k === 'arrowleft' ? -1 : 1, [lo, hi] = corteLivre(segs, (s.a + s.b) / 2, W, s); salva();
