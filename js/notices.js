@@ -316,6 +316,12 @@ function scanAlerts() {
     const late = d < 0;
     addNotice({ kind: 'prazo', key: `prazo:${p.id}:${p.deadline}:${late ? 'late' : 'soon'}`, title: late ? `Prazo vencido: ${p.name}` : `Prazo em ${d === 0 ? 'hoje' : d + ' dia(s)'}: ${p.name}`, body: `Entrega em ${fmtDate(p.deadline)}.`, entity: 'project', entity_id: p.id, project_id: p.id, data: { deadline: p.deadline } }, true);
   });
+  /* recebido 100% (pagamentos ≥ orçamento) mas o status de pagamento continua em aberto (ex.: Pago Parcial) */
+  db.all('tempo_projects').filter(p => !p.archived && Number(p.budget) > 0 && statusCat(p.status_id) !== 'cancelled').forEach(p => {
+    const o = db.get('tempo_status_options', p.payment_status_id); if (!o || o.category === 'closed') return;
+    const pago = paidOf(p); if (pago < Number(p.budget)) return;
+    addNotice({ kind: 'cobranca', key: `pago100:${p.id}:${o.id}`, title: `Recebido 100%, mas está "${o.name}": ${p.name}`, body: `Recebido ${fmtMoney(pago)} de ${fmtMoney(Number(p.budget))}. Mude o pagamento para Pago${remainingOf(p) > 0 ? ` (o "a receber" ainda mostra ${fmtMoney(remainingOf(p))})` : ''}.`, entity: 'project', entity_id: p.id, project_id: p.id, data: {} }, true);
+  });
   db.all('tempo_projects').filter(p => !p.archived && remainingOf(p) > 0).forEach(p => {
     const pay = statusName(p.payment_status_id);
     if (pay === 'Atrasado' || (pay === 'Não Pago' && p.deadline && daysBetween(p.deadline, today) > 0)) addNotice({ kind: 'cobranca', key: `cob:${p.id}:${today.slice(0, 7)}`, title: `Cobrança: ${p.name}`, body: `Restam ${fmtMoney(remainingOf(p))} a receber.`, entity: 'project', entity_id: p.id, project_id: p.id, data: {} }, true);

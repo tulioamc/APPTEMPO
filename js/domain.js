@@ -42,7 +42,7 @@ const DEFAULT_STATUS = {
   reimb_pay: [['a Pagar','red','open'],['Pago','green','closed']],
   reimb_refund: [['a Pagar','yellow','open'],['Feito!','blue','closed'],['Negado','red','open'],['Parcial (Errado)','purple','open']],
   // contato do WhatsApp: 'trabalho' conta como trabalho na sessão; 'pausa' vira pausa (distração)
-  wa_tipo: [['Cliente','green','trabalho'],['Agência','blue','trabalho'],['Colega','purple','trabalho'],['Fornecedor','brown','trabalho'],['Administrativo','gray','trabalho'],['Misto (mais cliente)','yellow','trabalho'],['Misto (mais amigo)','orange','pausa'],['Amigo','red','pausa']],
+  wa_tipo: [['Cliente','green','trabalho'],['Agência','blue','trabalho'],['Colega','purple','trabalho'],['Fornecedor','brown','trabalho'],['Administrativo','gray','trabalho'],['Misto (mais cliente)','yellow','trabalho'],['Misto (mais amigo)','orange','pausa'],['Amigo','red','pausa'],['Serviços','teal','servico']],
   reimb_req: [['a Fazer','red','open'],['Feito','green','closed'],['Falta Nota','gray','open'],['Refeito (Negado da primeira vez)','purple','open'],['Refeito - Pagaram Menos na primeira','blue','open']]
 };
 const DEFAULT_REMINDERS = [
@@ -175,9 +175,10 @@ const paymentsOf = (pid) => db.where('tempo_payments', p => p.project_id === pid
 const paidOf = (p) => paymentsOf(p.id).reduce((s, x) => s + (Number(x.amount) || 0), 0);
 function remainingOf(p) {
   if (statusCat(p.status_id) === 'cancelled') return 0; // trabalho cancelado nunca será pago
+  // pago/fechado vale antes do "restante" antigo (importado do Notion), que senão continuava como a receber
+  if (db.get('tempo_status_options', p.payment_status_id)?.category === 'closed') return 0;
   if (p.remaining_override !== null && p.remaining_override !== undefined && p.remaining_override !== '') return Number(p.remaining_override);
   if (p.budget === null || p.budget === undefined || p.budget === '') return null;
-  if (db.get('tempo_status_options', p.payment_status_id)?.category === 'closed') return 0;
   return Math.max(0, Number(p.budget) - paidOf(p));
 }
 function effectiveRate(p) {
@@ -498,6 +499,23 @@ function stopEntry(e, at, cut) {
   if (last && !last.e) last.e = end;
   const edits = corte ? [...(e.edits || []), { at: nowISO(), reason: `Encerrada às ${fmtTime(corte)}, começo da parada (o tempo parado até o clique em encerrar não conta)`, before: e.segments }] : (e.edits || []);
   db.update('tempo_time_entries', e.id, { state: 'done', segments: segs, edits });
+}
+/* Tela bloqueada por mais de 1 h encerra a sessão sozinha, no começo do bloqueio (pedido do Tulio, 23/11):
+   o que vem depois sai da sessão (fica no registro do dia). Ex.: duas pausas de 4h54 e 9h41 tinham virado 14h35 de ócio. */
+const LOCK_END_MS = 60 * 60e3;
+function lockAutoEnd(e) {
+  if (!e || e.state === 'done') return null;
+  const segs = e.segments || [];
+  for (let i = 0; i < segs.length - 1; i++) {
+    const a = segs[i], b = segs[i + 1];
+    if (!a.e || !b.s || !/bloquead|loginwindow/i.test(String(a.why || ''))) continue;
+    if (new Date(b.s) - new Date(a.e) < LOCK_END_MS) continue;
+    const cut = a.e;
+    const novos = cutSegmentsAt(clone(segs), cut); const ult = novos[novos.length - 1]; if (ult) delete ult.why;
+    db.update('tempo_time_entries', e.id, { state: 'done', segments: novos, edits: [...(e.edits || []), { at: nowISO(), reason: `Encerrada sozinha às ${fmtTime(cut)}: tela bloqueada por ${fmtDur(new Date(b.s) - new Date(a.e))} (mais de 1 h)`, before: e.segments }] });
+    return cut;
+  }
+  return null;
 }
 /* Encerrar pelo botão: quando a parada tem 5 min ou mais de uso de programa no meio, pergunta. */
 async function stopEntryAsk(e) {

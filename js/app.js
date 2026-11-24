@@ -228,14 +228,23 @@ function suggestPause(fromMs, toMs, source, app) {
   // inatividade vira pausa sozinha (sem aprovação): o aviso fica só para registro
   const auto = db.all('tempo_notices').find(x => x.key === `pause:${a.id}:${from}`);
   // espiada curta (menos de 1 min) entra calada; só pausa maior mostra o aviso
-  if (auto) { applyPause(a, auto, 'insert'); db.emit(); if (toMs - fromMs >= 60000) toast(`${icon('alert', 'ico')} Pausa aplicada: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`); return; }
+  if (auto) { applyPause(a, auto, 'insert'); if (lockCheck()) return; db.emit(); if (toMs - fromMs >= 60000) toast(`${icon('alert', 'ico')} Pausa aplicada: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`); return; }
   toast(`${icon('alert', 'ico')} Pausa sugerida: ${fmtDur(toMs - fromMs)} parado, voltou às ${fmtTime(to)}`, { actions: [{ label: 'Revisar', run: () => go('timesheet') }] });
   notifyNative('Pausa sugerida', `${fmtDur(toMs - fromMs)} parado (${fmtTime(from)}–${fmtTime(to)})`);
 }
+/* Tela bloqueada > 1 h: encerra a sessão ativa no começo do bloqueio (avisa). */
+function lockCheck() {
+  if (!isMacApp()) return null;
+  const a = activeEntry(); if (!a) return null;
+  const cut = lockAutoEnd(db.get('tempo_time_entries', a.id) || a); if (!cut) return null;
+  db.emit(); toast(`${icon('alert', 'ico')} Sessão encerrada às ${fmtTime(cut)}: a tela ficou bloqueada por mais de 1 h.`, { ms: 8000 });
+  notifyNative('Sessão encerrada', `Tela bloqueada por mais de 1 h; encerrada às ${fmtTime(cut)}.`);
+  return cut;
+}
 /* Atualiza os dados a cada minuto e ao voltar para a janela, para o Mac enxergar a sessão iniciada em outro lugar. */
 setInterval(() => db.refresh(), 60000);
-setInterval(() => { try { pzReverTudo(); } catch (e) { console.warn('pausas', e); } }, 60000);
-setTimeout(() => { try { pzReverTudo(); } catch (e) { console.warn('pausas', e); } }, 15000);
+setInterval(() => { try { pzReverTudo(); lockCheck(); } catch (e) { console.warn('pausas', e); } }, 60000);
+setTimeout(() => { try { pzReverTudo(); lockCheck(); } catch (e) { console.warn('pausas', e); } }, 15000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') db.refresh(); });
 /* Ponte do app de Mac. O app guarda os eventos numa fila e só tira da fila quando esta função roda. */
 window.TempoBridge = {
@@ -327,7 +336,7 @@ async function suggestActivity(seg) {
   // o log do dia recebe tudo, com ou sem sessão ativa
   const logged = logAppend(seg);
   // revisão das pausas pelo registro (pega o que um evento de ociosidade/sono deixou passar)
-  setTimeout(() => { try { pzReverTudo(); } catch (e) { console.warn('pausas', e); } }, 1500);
+  setTimeout(() => { try { pzReverTudo(); lockCheck(); } catch (e) { console.warn('pausas', e); } }, 1500);
   trackUnsaved(seg, toMs - fromMs);
   const a = activeEntry();
   const pauseApps = (db.setting('pauseApps', DEFAULT_PAUSE_APPS) || []).map(x => String(x).trim().toLowerCase()).filter(Boolean);
@@ -351,7 +360,7 @@ async function suggestActivity(seg) {
       if (a.state === 'running') recordActivity(a, { ...seg, rid: logged?.rid || null });
       return;
     }
-    suggestPause(fromMs, toMs, 'app', siteHit ? siteHit.replace(/^./, c => c.toUpperCase()) : seg.app);
+    suggestPause(fromMs, toMs, 'app', siteHit ? siteHit.replace(/^./, c => c.toUpperCase()) : (contato && waEhServico(contato) ? WA_SERVICOS : seg.app));
   }
 }
 /* Arquivo sem salvar há muito tempo (programas de criação). "Nunca salvo" (Untitled, Sem título, sem caminho):

@@ -82,7 +82,7 @@ const WACOLS = {
 VIEWS.contacts = () => {
   const q = (S.contacts.q || '').toLowerCase().trim();
   const lista = waTodos().filter(c => !q || String(c.name || '').toLowerCase().includes(q)).sort(waOrdem);
-  const novos = lista.filter(c => !c.tipo_id), trab = lista.filter(c => c.tipo_id && waEhTrabalho(c)), outros = lista.filter(c => c.tipo_id && !waEhTrabalho(c));
+  const novos = lista.filter(c => !c.tipo_id), trab = lista.filter(c => c.tipo_id && waEhTrabalho(c)), serv = lista.filter(c => c.tipo_id && waEhServico(c)), outros = lista.filter(c => c.tipo_id && !waEhTrabalho(c) && !waEhServico(c));
   const semVinculo = trab.filter(c => waLigaAgencia(c) ? !c.agency_id : !c.client_id).length;
   const comSug = [...novos, ...trab.filter(c => !c.client_id && !c.agency_id && !c.project_id)].filter(c => waSugestao(c));
   const bloco = (id, titulo, rows, extra, vazio, ocultas = []) => `<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>${titulo} <span class="muted">(${rows.length})</span></h3><span class="grow"></span>${extra || ''}${rows.length ? colsBtn(id) : ''}</div>
@@ -95,6 +95,7 @@ VIEWS.contacts = () => {
     ${bloco('wa-trab', 'Trabalho', trab,
       semVinculo ? `<span class="small muted" data-tip="Ligue cada contato a um cliente ou agência para o tempo somar lá">${semVinculo} sem cliente ou agência</span>` : '',
       'Cliente, agência, colega, fornecedor e administrativo aparecem aqui. O tempo de WhatsApp com eles conta como trabalho.', ['msgs'])}
+    ${bloco('wa-serv', 'Serviços', serv, '', 'Quem te atende: plano de saúde, seguro, terapias, condomínio, contabilidade, lojas. Não é trabalho nem amigo; o tempo com eles é pausa, fora do alerta de amigos.', ['vinc', 'resp', 'esperando', 'sug'])}
     ${bloco('wa-outros', 'Outros', outros,
       `<label class="small row gap-s" data-tip="Passou disso num dia, aparece um aviso (conta quem não é de trabalho)">Alerta de amigos: <input type="number" min="5" step="5" class="input" style="width:70px" value="${waAmigosLimiteMin()}" data-input="wa-amigos-min"> min por dia · hoje ${fmtDur(waAmigosHojeMs())}</label>`,
       'Amigos e contatos mistos mais amigo. O tempo com eles é pausa.', ['vinc', 'resp', 'esperando', 'sug'])}`;

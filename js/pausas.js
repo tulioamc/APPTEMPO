@@ -117,7 +117,11 @@ function pzRegistros(a, b) {
     const x = new Date(r.from).getTime(), y = new Date(r.to).getTime();
     const app = String(r.app || '').trim();
     if (/^loginwindow$/i.test(app)) return { a: x, b: y, work: false, why: 'Tela bloqueada' };
-    if (pausaRec(r) && !actWaTrabalho(r)) return { a: x, b: y, work: false, why: BROWSER_RE.test(app) ? (r.doc || 'app') : shortProgram(app) };
+    if (pausaRec(r) && !actWaTrabalho(r)) {
+      // WhatsApp com Serviços (plano, seguro, terapias…): pausa, mas conta como ócio, não distração
+      if (/whatsapp/i.test(app) && typeof waEhServico === 'function' && waEhServico(waContato(r.doc))) return { a: x, b: y, work: false, why: WA_SERVICOS };
+      return { a: x, b: y, work: false, why: BROWSER_RE.test(app) ? (r.doc || 'app') : shortProgram(app) };
+    }
     return { a: x, b: y, work: true };
   });
 }

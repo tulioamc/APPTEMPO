@@ -3,7 +3,8 @@
    - Produtivo (verde claro): trabalho no computador.
    - Distração (vermelho claro): WhatsApp, Telegram e Instagram.
    - Ocioso (amarelo): todas as demais pausas (sem motivo, página parada, intervalo manual, computador fechado ou dormindo).
-    . */
+   Ocioso = fora do computador (almoço, trânsito, buscar o Rafa): NÃO é "não produtivo". Não produtivo é só distração.
+   Por isso o % produtivo é produtivo ÷ (produtivo + distração); o ócio aparece à parte, sem entrar na conta. */
 const PROD = { period: '30d' };
 const PROD_GAP = 60e3; /* blocos de foco: pausas de até 1 min não quebram o foco; acima disso, a pausa corta o bloco */
 const PROD_DOW = [1, 2, 3, 4, 5, 6, 0]; /* segunda primeiro */
@@ -51,6 +52,7 @@ function prodCollect() {
 /* Classe de cada pausa: distração (apps de conversa/redes) ou ocioso (o resto). */
 function prodPauseCls(why) {
   const w = String(why || '').trim().toLowerCase();
+  if (/servi[cç]os/.test(w)) return "ocio";   // WhatsApp com Serviços (plano, seguro, terapias…): não é distração
   const k = pauseKind(why);
   if (k === 'whatsapp' || k === 'telegram' || k === 'instagram') return "dist";
   return "ocio";
@@ -77,7 +79,7 @@ function prodStats(C) {
   });
   const tot = prodZero();
   hours.forEach(h => PROD_KEYS.forEach(k => { tot[k] += h[k]; }));
-  const base = tot.prod + tot.dist + tot.ocio; /* */
+  const base = tot.prod + tot.dist; /* ócio fica fora: é tempo fora do computador, não é não produtivo */
   const blocks = prodMerge(C.union, PROD_GAP);
   const longest = blocks.reduce((m, [s, e]) => Math.max(m, e - s), 0);
   const dayKey = (t) => new Date(t).toDateString();
@@ -114,9 +116,9 @@ function prodShort(ms) {
   const h = Math.floor(m / 60), r = m % 60;
   return h + 'h' + (r ? String(r).padStart(2, '0') : '');
 }
-/* Rótulo da coluna: produtivo em tempo e % do tempo no computador (produtivo + distração + ocioso). */
+/* Rótulo da coluna: produtivo em tempo e % produtivo (produtivo ÷ produtivo + distração; ócio fora). */
 function prodVal(prod, dist, ocio) {
-  const b = prod + dist + ocio;
+  const b = prod + dist;
   return `${prodShort(prod)}<br>${Math.round(b > 0 ? prod / b * 100 : 0)}%`;
 }
 function prodColsHTML(items) {
@@ -127,7 +129,8 @@ function prodColsHTML(items) {
     const by = Object.fromEntries(i.parts.map(p => [p.cls, p.ms]));
     const tot = PROD_KEYS.reduce((s, k) => s + (by[k] || 0), 0);
     const segs = ORDER.filter(k => (by[k] || 0) > 0).map(k => `<span class="prod-seg ${PROD_CLS[k]}" data-hk="${k}" style="height:${((by[k] || 0) / max * 100).toFixed(2)}%"></span>`).join('');
-    const rows = PROD_KEYS.map(k => `<div class="prod-tip-row"><i style="background:${PROD_COLOR[k]}"></i>${PROD_NAME[k]}<b class="mono">${usePctTxt(tot > 0 ? (by[k] || 0) / tot * 100 : 0)}</b><span class="mono muted">${fmtDur(by[k] || 0)}</span></div>`).join('');
+    const bp = (by.prod || 0) + (by.dist || 0); /* % só sobre produtivo + distração; ócio (fora do computador) sem % */
+    const rows = PROD_KEYS.map(k => `<div class="prod-tip-row"><i style="background:${PROD_COLOR[k]}"></i>${PROD_NAME[k]}<b class="mono">${k === 'ocio' ? 'fora' : usePctTxt(bp > 0 ? (by[k] || 0) / bp * 100 : 0)}</b><span class="mono muted">${fmtDur(by[k] || 0)}</span></div>`).join('');
     return `<div class="prod-col">${i.val ? `<span class="prod-val">${i.val}</span>` : ''}<div class="prod-stack">${segs}</div><span class="prod-lbl">${esc(i.label)}</span><div class="prod-tip"><div class="prod-tip-h">${esc(i.head || i.label || '')}</div>${rows}</div></div>`;
   }).join('')}</div>`;
 }
@@ -200,12 +203,12 @@ function prodJanelaHora(C) {
 }
 const PROD_METAS_FIXAS = {
   semana: [
-    { id: 'prod', nome: '70% produtivo', hint: 'produtivo ÷ (produtivo + distração + ocioso)', alvo: 70, pct: true, sobe: true, valor: (S) => S.pctProd },
+    { id: 'prod', nome: '70% produtivo', hint: 'produtivo ÷ (produtivo + distração); ócio fora', alvo: 70, pct: true, sobe: true, valor: (S) => S.pctProd },
     { id: 'horas', nome: '30 h líquidas na semana', hint: 'tempo produtivo somado', alvo: 30 * 36e5, sobe: true, valor: (S) => S.tot.prod },
     { id: 'dist', nome: 'Distração até 5 h', hint: 'WhatsApp, Telegram e Instagram (limite)', alvo: 5 * 36e5, sobe: false, valor: (S) => S.tot.dist },
   ],
   mes: [
-    { id: 'prod', nome: '70% produtivo', hint: 'produtivo ÷ (produtivo + distração + ocioso)', alvo: 70, pct: true, sobe: true, valor: (S) => S.pctProd },
+    { id: 'prod', nome: '70% produtivo', hint: 'produtivo ÷ (produtivo + distração); ócio fora', alvo: 70, pct: true, sobe: true, valor: (S) => S.pctProd },
     { id: 'horas', nome: '120 h líquidas no mês', hint: 'tempo produtivo somado', alvo: 120 * 36e5, sobe: true, valor: (S) => S.tot.prod },
     { id: 'dist', nome: 'Distração até 20 h', hint: 'WhatsApp, Telegram e Instagram (limite)', alvo: 20 * 36e5, sobe: false, valor: (S) => S.tot.dist },
     { id: 'projeto', nome: '1 projeto novo no portfólio', hint: 'projetos criados no mês', alvo: 1, sobe: true, inicio: '2026-11', valor: () => db.all('tempo_projects').filter(p => !p.archived && new Date(p.created_at).getTime() >= prodPeriodRange('mes').a).length },
@@ -215,7 +218,7 @@ const PROD_METAS_FIXAS = {
 const PROD_DESAFIOS = [
   { id: 'janela', nome: '1 h de trabalho com no máximo 5 pausas', hint: 'pausas de até 1 min dentro de um bloco, contadas até completar 1 h', alvo: 5, cont: true, sobe: false, valor: (S, C) => prodJanelaHora(C) },
   { id: 'bloco2', nome: 'Bloco de foco de 2 h', hint: 'maior bloco de foco do período', alvo: 2 * 36e5, sobe: true, valor: (S) => S.longest },
-  { id: 'pausa10', nome: 'Pausa de até 10% do tempo', hint: 'pausas ÷ tempo no computador (distração + ocioso)', alvo: 10, pct: true, sobe: false, valor: (S) => (S.base > 0 ? (S.tot.dist + S.tot.ocio) / S.base * 100 : 0) },
+  { id: 'pausa10', nome: 'Pausa de até 10% do tempo', hint: 'distração ÷ (produtivo + distração); ócio (fora do computador) não conta', alvo: 10, pct: true, sobe: false, valor: (S) => (S.base > 0 ? S.tot.dist / S.base * 100 : 0) },
   { id: 'dia6', nome: 'Um dia com 6 h produtivas', hint: 'melhor dia do período', alvo: 6 * 36e5, sobe: true, valor: (S) => Math.max(0, ...S.dayTable.map(d => d.prod)) },
   { id: 'semdist', nome: 'Um dia com no máximo 15 min de distração', hint: 'menor distração num dia com trabalho', alvo: 15 * 6e4, sobe: false, valor: (S) => { const ds = S.dayTable.filter(d => d.prod > 0); return ds.length ? Math.min(...ds.map(d => d.dist)) : null; } },
 ];
@@ -333,7 +336,7 @@ VIEWS.productivity = () => {
     };
   });
   const weeks = prodWeeks(C);
-  const weekPct = (r) => { const b = r.prod + r.dist + r.ocio; return b > 0 ? r.prod / b * 100 : 0; };
+  const weekPct = (r) => { const b = r.prod + r.dist; return b > 0 ? r.prod / b * 100 : 0; };
   const weekItems = weeks.map(([k, r]) => {
     const d = new Date(k);
     return {
@@ -350,7 +353,7 @@ VIEWS.productivity = () => {
     ? '<div class="muted small">Sem registro de trabalho no período escolhido.</div>'
     : `<div class="kpi-row">
         <div class="kpi" data-tip="${esc(`Produtivo ${fmtDur(S.tot.prod)}\nSó trabalho: as pausas ficam fora.\nMédia por dia com registro: ${fmtDur(S.tot.prod / Math.max(1, S.dayTable.length))}\nDistração ${fmtDur(S.tot.dist)} · ocioso ${fmtDur(S.tot.ocio)}`)}"><span class="k">Produtivo</span><span class="v mono">${fmtDur(S.tot.prod)}</span><span class="s">só trabalho, sem pausas e sem contar duplicado</span></div>
-        <div class="kpi" data-tip="${esc(`${usePctTxt(S.pctProd)} produtivo\nBase ${fmtDur(S.base)}: produtivo ${fmtDur(S.tot.prod)} + distração ${fmtDur(S.tot.dist)} + ocioso ${fmtDur(S.tot.ocio)}`)}"><span class="k">% produtivo</span><span class="v mono">${usePctTxt(S.pctProd)}</span><span class="s">produtivo ÷ (produtivo + distração + ocioso)</span></div>
+        <div class="kpi" data-tip="${esc(`${usePctTxt(S.pctProd)} produtivo\nBase ${fmtDur(S.base)}: produtivo ${fmtDur(S.tot.prod)} + distração ${fmtDur(S.tot.dist)}\nOcioso ${fmtDur(S.tot.ocio)} fica fora: é tempo fora do computador (almoço, trânsito, buscar o Rafa)`)}"><span class="k">% produtivo</span><span class="v mono">${usePctTxt(S.pctProd)}</span><span class="s">produtivo ÷ (produtivo + distração) · ócio fora</span></div>
         <div class="kpi" data-tip="${esc(`Maior bloco ${fmtDur(S.longest)}\nTrabalho contínuo; uma pausa de mais de 1 min encerra o bloco.\nMédia do maior bloco por dia: ${fmtDur(S.longestPerDay)}`)}"><span class="k">Maior bloco de foco</span><span class="v mono">${fmtDur(S.longest)}</span><span class="s">pausas de até 1 min não quebram</span></div>
         <div class="kpi" data-tip="${esc(`${S.blocks.length} blocos em ${S.days.length} dia(s)\nBloco = trabalho contínuo sem pausa de mais de 1 min.`)}"><span class="k">Blocos por dia</span><span class="v mono">${S.blocksPerDay.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</span><span class="s">${S.blocks.length} bloco(s) em ${S.days.length} dia(s)</span></div>
       </div>
@@ -428,7 +431,7 @@ function prodComparacoesHTML() {
   const linha = (rot, ref, dica) => `<div class="cmp-row" data-tip="${esc(dica)}"><span>${rot}</span><span class="mono">${H(ref?.prod ?? ref)}</span>${delta(cardCur, ref?.prod ?? ref)}</div>`;
   let cardCur = null;
   const card = (titulo, cur, linhas) => { cardCur = cur?.prod ?? null;
-    return `<div class="cmp-card"><div class="cmp-head"><span class="small muted">${titulo}</span><b>${H(cur?.prod)}</b><span class="small" data-tip="Do tempo com sessão aberta, quanto foi trabalho no computador. O resto foi pausa, ócio ou distração.">${cur ? Math.round(cur.pct) + '% produtivo' : ''}</span></div>${linhas.map(l => linha(...l)).join('')}</div>`; };
+    return `<div class="cmp-card"><div class="cmp-head"><span class="small muted">${titulo}</span><b>${H(cur?.prod)}</b><span class="small" data-tip="Do tempo com sessão aberta, quanto foi trabalho no computador. Do tempo no computador, quanto foi trabalho: o resto foi distração. Ócio (fora do computador) não entra.">${cur ? Math.round(cur.pct) + '% produtivo' : ''}</span></div>${linhas.map(l => linha(...l)).join('')}</div>`; };
   const semCard = card('Esta semana, até agora', semana, [
     ['Semana passada, até o mesmo ponto', semPonto, 'Mesmo dia da semana e mesma hora: comparação justa com uma semana que ainda não acabou'],
     ['Semana passada inteira', semInteira, 'De segunda a domingo'],
@@ -448,7 +451,7 @@ function prodComparacoesHTML() {
     frases.push(c ? `Esta semana você trabalhou <b>${fmtDur(semana.prod)}</b>, ${c} no mesmo ponto da semana passada (${fmtDur(semPonto.prod)}).` : `Esta semana você trabalhou <b>${fmtDur(semana.prod)}</b>. Ainda não há semana passada para comparar.`);
     if (semPonto && semPonto.base > 0) {
       const d = semana.pct - semPonto.pct;
-      frases.push(`Do tempo com sessão aberta, <b>${Math.round(semana.pct)}%</b> foi trabalho de verdade (semana passada: ${Math.round(semPonto.pct)}%). ${d <= -5 ? 'Teve mais pausa e distração que na semana passada.' : d >= 5 ? 'Teve menos pausa e distração que na semana passada.' : 'Parecido com a semana passada.'}`);
+      frases.push(`Do tempo no computador, <b>${Math.round(semana.pct)}%</b> foi trabalho de verdade (semana passada: ${Math.round(semPonto.pct)}%). ${d <= -5 ? 'Teve mais distração que na semana passada.' : d >= 5 ? 'Teve menos distração que na semana passada.' : 'Parecido com a semana passada.'}`);
     }
   }
   if (mes) { const c = comp(mes.prod, mesPonto?.prod); frases.push(c ? `No mês, <b>${fmtDur(mes.prod)}</b> até agora: ${c} no mesmo dia do mês passado.` : `No mês, <b>${fmtDur(mes.prod)}</b> até agora.`); }
@@ -499,18 +502,20 @@ function prodOfEntries(entries, at = Date.now()) {
     const a = new Date(g.s).getTime(), b = new Date(g.e).getTime(); const fora = prodForaDoTrabalho(a, b);
     r[prodPauseCls(g.why)] += (b - a) - fora; r.fora += fora;
   });
-  r.base = r.prod + r.dist + r.ocio;
+  r.base = r.prod + r.dist; /* ócio (fora do computador) não entra na base */
   return r;
 }
 function prodMiniHTML(entries) {
-  const r = prodOfEntries(entries); if (!r.base) return '';
+  const r = prodOfEntries(entries); if (!r.base && !r.ocio) return '';
+  // barra = produtivo × distração (não produtivo); ócio é fora do computador e aparece à parte, sem %
   const pct = (k) => r.base ? r[k] / r.base * 100 : 0;
-  const DESC = { prod: 'Trabalho no computador, sem pausas.', dist: 'Pausas em WhatsApp, Telegram e Instagram.', ocio: 'Demais pausas: parado, tela bloqueada, Mac dormindo ou pausa manual.' };
-  const tip = (k) => `${PROD_NAME[k]} ${fmtDur(r[k])} · ${usePctTxt(pct(k))}\n${DESC[k]}\nBase: ${fmtDur(r.base)} (produtivo + distração + ócio)`;
-  const bar = PROD_KEYS.filter(k => r[k] > 0).map(k => `<span class="pm-seg" data-hk="${k}" data-tip="${esc(tip(k))}" style="width:${pct(k).toFixed(2)}%;background:${PROD_COLOR[k]}"></span>`).join('');
-  const txt = PROD_KEYS.map(k => `<span class="pm-lbl" data-hk="${k}" data-tip="${esc(tip(k))}"><i style="background:${PROD_COLOR[k]}"></i>${PROD_NAME[k]} <b class="mono">${fmtDur(r[k])}</b> <span class="mono muted">${Math.round(pct(k))}%</span></span>`).join('');
+  const DESC = { prod: 'Trabalho no computador, sem pausas.', dist: 'Não produtivo: pausas em WhatsApp (amigos), Telegram e Instagram.', ocio: 'Fora do computador: parado, tela bloqueada, Mac dormindo ou pausa manual (almoço, trânsito…), e WhatsApp com Serviços. Não conta como não produtivo.' };
+  const tip = (k) => k === 'ocio' ? `${PROD_NAME[k]} ${fmtDur(r[k])}\n${DESC[k]}` : `${PROD_NAME[k]} ${fmtDur(r[k])} · ${usePctTxt(pct(k))}\n${DESC[k]}\nBase: ${fmtDur(r.base)} (produtivo + distração; ócio fora)`;
+  const bar = ['prod', 'dist'].filter(k => r[k] > 0).map(k => `<span class="pm-seg" data-hk="${k}" data-tip="${esc(tip(k))}" style="width:${pct(k).toFixed(2)}%;background:${PROD_COLOR[k]}"></span>`).join('');
+  const txt = ['prod', 'dist'].map(k => `<span class="pm-lbl" data-hk="${k}" data-tip="${esc(tip(k))}"><i style="background:${PROD_COLOR[k]}"></i>${PROD_NAME[k]} <b class="mono">${fmtDur(r[k])}</b> <span class="mono muted">${Math.round(pct(k))}%</span></span>`).join('')
+    + (r.ocio > 0 ? `<span class="pm-lbl" data-tip="${esc(tip('ocio'))}"><i style="background:${PROD_COLOR.ocio}"></i>${PROD_NAME.ocio} <b class="mono">${fmtDur(r.ocio)}</b> <span class="muted small">fora do computador</span></span>` : '');
   const fora = r.fora > 60e3 ? `<span class="pm-lbl" data-tip="${esc('Pausas que caíram em rotina ou compromisso do Calendário (buscar o Rafa, almoço, reunião…). Não contam como distração nem ócio.')}"><i style="background:transparent;border:1px dashed var(--line-strong)"></i>Rotina/compromisso <b class="mono">${fmtDur(r.fora)}</b></span>` : '';
-  return `<div class="pm-wrap" data-hkroot="1"><div class="pm-bar">${bar}</div><div class="pm-txt">${txt}${fora}</div></div>`;
+  return `<div class="pm-wrap" data-hkroot="1">${bar ? `<div class="pm-bar">${bar}</div>` : ''}<div class="pm-txt">${txt}${fora}</div></div>`;
 }
 
 /* WhatsApp no período escolhido (registro do Mac: conversa aberta em primeiro plano).

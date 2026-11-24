@@ -35,6 +35,12 @@ function waEhTrabalho(c) {
   const o = c && c.tipo_id ? db.get('tempo_status_options', c.tipo_id) : null;
   return !!o && o.category === 'trabalho';
 }
+const WA_SERVICOS = 'WhatsApp Serviços';   /* motivo da pausa com Serviços: entra como ócio, não distração */
+/* Serviços: quem te atende (plano de saúde, seguro, terapias, condomínio…). Não é trabalho nem amigo. */
+function waEhServico(c) {
+  const o = c && c.tipo_id ? db.get('tempo_status_options', c.tipo_id) : null;
+  return !!o && o.category === 'servico';
+}
 const waTipoNome = (c) => { const o = c && c.tipo_id ? db.get('tempo_status_options', c.tipo_id) : null; return o ? o.name : 'Amigo'; };
 
 /* ---------- Sugestão de tipo pelo nome ----------
@@ -133,7 +139,7 @@ function waMinutosUteis(deMs, ateMs) {
 }
 /* Tempo de hoje no WhatsApp com quem não é de trabalho (registro de atividade). */
 function waAmigosHojeMs(dia = ymd(new Date())) {
-  return (db.setting('actlog:' + dia, null) || []).filter(r => /whatsapp/i.test(String(r.app || '')) && !waEhTrabalho(waContato(r.doc)))
+  return (db.setting('actlog:' + dia, null) || []).filter(r => /whatsapp/i.test(String(r.app || '')) && !waEhTrabalho(waContato(r.doc)) && !waEhServico(waContato(r.doc)))
     .reduce((t, r) => t + Math.max(0, new Date(r.to) - new Date(r.from)), 0);
 }
 const waAmigosLimiteMin = () => Number(db.setting('waAmigosMin', 30)) || 30;

@@ -451,6 +451,7 @@ const pauseGapOf = (c) => { for (const k of ['idle', 'whatsapp', 'telegram', 'in
 const pauseKind = (why) => {
   const w = String(why || '').trim().toLowerCase();
   if (!w) return 'other';
+  if (/servi[cç]os/.test(w)) return 'idle';   // WhatsApp com Serviços: pausa neutra, não distração
   if (w.includes('telegram')) return 'telegram';
   if (w.includes('instagram')) return 'instagram';
   if (w === 'app' || w.includes('whatsapp') || isAppPause(why)) return 'whatsapp';
