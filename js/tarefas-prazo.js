@@ -246,6 +246,24 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
       ps.sort((a, b) => (b.dia + String(b.ini).padStart(5, '0')).localeCompare(a.dia + String(a.ini).padStart(5, '0')));   // apara do último para o primeiro
       ps.forEach(pn => { if (sobra < 15) return; const corta = Math.min(Number(pn.h) * 60 - 15, Math.floor(sobra / 15) * 15); if (corta <= 0) return; pn.h = Number(pn.h) - corta / 60; sobra -= corta; });
     });
+    // Pedaços fixados da MESMA tarefa no mesmo dia, com horário livre entre eles (ex.: o almoço encolheu): o de trás sobe e
+    // encosta no da frente (24/11). Nunca pula por cima de bloco fixado de outra tarefa. Só nesta conta: o salvo não muda.
+    const grupos = {}; l.filter(pn => pn.tid).forEach(pn => (grupos[pn.tid + '|' + pn.dia] ||= []).push(pn));
+    Object.values(grupos).filter(g => g.length > 1).forEach(g => {
+      g.sort((a, b) => Number(a.ini) - Number(b.ini)); const dia = g[0].dia, tid = g[0].tid;
+      const outros = l.filter(pn => pn.dia === dia && pn.tid !== tid).map(pn => [Number(pn.ini), Number(pn.ini) + Number(pn.h)]);
+      for (let i = 1; i < g.length; i++) {
+        const pe = Number(g[i - 1].ini) + Number(g[i - 1].h), cur = g[i], ci = Number(cur.ini); if (ci <= pe + 0.01) continue;
+        if (outros.some(([a, b]) => a < ci - 1e-6 && b > pe + 1e-6)) continue;   // outra tarefa no meio: não mexe
+        let livres = planoJanelas(dia, cfg).jan.map(([a, b]) => [Math.max(a, pe), Math.min(b, ci)]).filter(([a, b]) => b - a > 0.24);
+        if (!livres.length) continue;
+        let falta = Number(cur.h); const novos = [];
+        livres.forEach(([a, b]) => { if (falta < 0.24) return; const t = Math.min(falta, Math.floor((b - a) * 4 + 1e-6) / 4); if (t < 0.24) return; novos.push({ ...cur, id: novos.length ? cur.id + '~' + novos.length : cur.id, ini: a, h: t }); falta -= t; });
+        if (!novos.length) continue;
+        if (falta > 0.24) novos.push({ ...cur, id: cur.id + '~r', ini: ci, h: falta });
+        l.splice(l.indexOf(cur), 1, ...novos); g.splice(i, 1, ...novos); i += novos.length - 1;
+      }
+    });
     return l;
   })();
   const janCache = {};

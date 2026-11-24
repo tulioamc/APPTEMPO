@@ -137,3 +137,14 @@ test('16. cada bloco diz por que está ali (espera, fila, fixado, continuação)
   assert.match(de('z')[0], /Você fixou/); assert.equal(de('z').length, 1, 'o pedaço que continua cola no fixado e vira um bloco só');
   assert.ok(de('w')[0] && de('y')[0]);
 });
+test('17. almoço encolheu: o pedaço fixado de trás da mesma tarefa sobe e ocupa o tempo livre (sem pular outra tarefa)', () => {
+  const m = setup();
+  cfg(m, { tasks: [T('x', 'a', { est_min: 240 })], pins: [{ id: 'p1', dia: '2026-12-17', pid: 'a', tid: 'x', ini: 8.75, h: 2.75 }, { id: 'p2', dia: '2026-12-17', pid: 'a', tid: 'x', ini: 13.5, h: 0.25 }],
+    extra: [{ id: 'rd', key: 'planoRotinaDia', value: { '2026-12-17': { almoco: { ini: 12.5, fim: 13.5 } } } }] });
+  const l = bl(m.tkMotor(H(14, 8), 10), 'x');
+  assert.ok(l.every(b => b[2] <= 12.5 + 1e-6 || b[1] >= 13.5 - 1e-6), 'nada no almoço');
+  assert.equal(horas(l.filter(b => b[1] >= 11.5 - 1e-6 && b[2] <= 12.5 + 1e-6)), 1, 'o horário livre 11h30–12h30 foi ocupado: ' + JSON.stringify(l));
+  cfg(m, { tasks: [T('x', 'a', { est_min: 240 }), T('y', 'b', { est_min: 30 })], pins: [{ id: 'p1', dia: '2026-12-17', pid: 'a', tid: 'x', ini: 8.75, h: 2.75 }, { id: 'p2', dia: '2026-12-17', pid: 'a', tid: 'x', ini: 13.5, h: 0.25 }, { id: 'py', dia: '2026-12-17', pid: 'b', tid: 'y', ini: 11.5, h: 0.5 }],
+    extra: [{ id: 'rd', key: 'planoRotinaDia', value: { '2026-12-17': { almoco: { ini: 12.5, fim: 13.5 } } } }] });
+  assert.ok(bl(m.tkMotor(H(14, 8), 10), 'x').some(b => b[1] === 13.5), 'com outra tarefa fixada no meio, não pula por cima dela');
+});

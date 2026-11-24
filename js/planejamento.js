@@ -971,6 +971,7 @@ ACTIONS['pl-encaixar'] = (el) => {
     if (e.button !== 0 || !e.target.closest) return;
     if (e.target.closest('.pl-unpin, .pl-fx-bt')) return;
     const el = e.target.closest('[data-dg]'); if (!el) return;
+    if (!e.target.closest('input, textarea, select, button')) e.preventDefault();   // não começa seleção de texto ao segurar o bloco
     // Shift + clique: seleciona/desseleciona (para arrastar vários juntos)
     if (e.shiftKey && el.dataset.sk) { const k = el.dataset.sk; PLANO.sel.has(k) ? PLANO.sel.delete(k) : PLANO.sel.add(k); el.classList.toggle('pl-sel', PLANO.sel.has(k)); selClick = true; return; }
     const modo = e.target.closest('.dg-t') ? 'top' : e.target.closest('.dg-b') ? 'bot' : 'move';
@@ -984,13 +985,13 @@ ACTIONS['pl-encaixar'] = (el) => {
     if (!d) return; const dy = e.clientY - d.y0, dx = e.clientX - d.x0; d.alt = e.altKey; d.meta = e.metaKey;
     if (d.modo === 'move' && mexeu) { d.el.style.pointerEvents = 'none'; const c = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-pl-col]'); d.colAlvo = c || d.col0; }
     if (!mexeu && Math.hypot(dx, dy) < 4) return;
-    if (!mexeu) { mexeu = true; d.el.classList.add('arrastando'); tip = document.createElement('div'); tip.className = 'pl-dg-tip'; document.body.appendChild(tip); }
+    if (!mexeu) { mexeu = true; d.el.classList.add('arrastando'); document.body.classList.add('pl-arrastando'); try { window.getSelection()?.removeAllRanges(); } catch (_) { /* ok */ } tip = document.createElement('div'); tip.className = 'pl-dg-tip'; document.body.appendChild(tip); }
     const [a, b] = calc(d, dy);
     d.el.style.top = (a * PL_ALT) + 'px'; d.el.style.height = Math.max(10, (b - a) * PL_ALT - 2) + 'px';
     // Fora do próprio dia (ex.: no Mês, ou levando para outro dia), o bloco "flutua" com o mouse até onde for solto (24/11)
     const r0 = d.col0?.getBoundingClientRect(); const fora = d.modo === 'move' && (!r0 || e.clientX < r0.left || e.clientX > r0.right || !!d.el.closest('.pl-pop, [data-pl-mes]'));
     if (fora) {
-      if (!d.fly) { d.fly = d.el.cloneNode(true); d.fly.classList.add('pl-dg-fly'); d.fly.removeAttribute('data-dg'); d.fly.style.cssText = `position:fixed;z-index:999;pointer-events:none;margin:0;transform:none;width:${Math.max(90, d.el.offsetWidth)}px;height:${Math.min(Math.max(22, d.el.offsetHeight), 90)}px`; document.body.appendChild(d.fly); }
+      if (!d.fly) { d.fly = d.el.cloneNode(true); d.fly.classList.add('pl-dg-fly'); d.fly.removeAttribute('data-dg'); d.fly.style.cssText = d.el.style.cssText + `;position:fixed;right:auto;bottom:auto;z-index:999;pointer-events:none;margin:0;transform:none;width:${Math.max(90, d.el.offsetWidth)}px;height:${Math.min(Math.max(22, d.el.offsetHeight), 90)}px`; document.body.appendChild(d.fly); }
       d.fly.style.left = (e.clientX - Math.min(d.ox, d.fly.offsetWidth - 8)) + 'px'; d.fly.style.top = (e.clientY - Math.min(d.oy, 20)) + 'px';
       d.el.style.transform = ''; d.el.classList.add('pl-dg-orig');
     } else {
@@ -1014,7 +1015,7 @@ ACTIONS['pl-encaixar'] = (el) => {
   });
   document.addEventListener('pointerup', async (e) => {
     if (!d) return; const x = d; d = null; if (tip) { tip.remove(); tip = null; }
-    if (x.fly) { x.fly.remove(); x.fly = null; } x.el.classList.remove('pl-dg-orig');
+    if (x.fly) { x.fly.remove(); x.fly = null; } x.el.classList.remove('pl-dg-orig'); document.body.classList.remove('pl-arrastando');
     if (typeof planoPreviaFim === 'function') planoPreviaFim();
     x.alt = e.altKey; x.meta = e.metaKey;
     if (!mexeu) return;
