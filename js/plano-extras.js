@@ -203,3 +203,18 @@ if (typeof document !== 'undefined' && document.addEventListener) {
     planoMoverBloco(el, dia, ini, dia !== el.dataset.dia ? `Bloco movido para ${fmtDate(dia)}` : `Bloco movido para ${planoHora(ini)}`);
   });
 }
+
+/* Foco ao passar o mouse (24/11): num trabalho planejado, os outros blocos esmaecem; os da mesma tarefa ficam normais
+   (planejados, fixados que esperam e o registrado dela). Desliga enquanto arrasta. */
+if (typeof document !== 'undefined' && document.addEventListener) {
+  let foco = null;
+  const limpa = () => { if (!foco) return; foco = null; document.body.classList.remove('pl-foco-on'); document.querySelectorAll('.pl-mesma').forEach(o => o.classList.remove('pl-mesma')); };
+  document.addEventListener('mouseover', (e) => {
+    if (document.body.classList.contains('pl-arrastando')) return limpa();
+    const b = e.target.closest?.('.pl-grade > .pl-bloco[data-dg="plano"]'); if (!b) return limpa();
+    const k = b.dataset.tid ? 't:' + b.dataset.tid : 'p:' + b.dataset.pid; if (foco === k) return;
+    limpa(); foco = k; document.body.classList.add('pl-foco-on');
+    document.querySelectorAll('.pl-grade > [data-tid], .pl-grade > [data-pid]').forEach(o => { const ok = b.dataset.tid ? o.dataset.tid === b.dataset.tid : (o.dataset.pid === b.dataset.pid && !o.dataset.tid); if (ok) o.classList.add('pl-mesma'); });
+  });
+  document.addEventListener('pointerdown', limpa, true);
+}

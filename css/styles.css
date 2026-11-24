@@ -1475,7 +1475,8 @@ tr.tot td:first-child { border-top-left-radius: 0; }
 [data-dg] { touch-action: none; user-select: none; }
 [data-dg] .dg-t, [data-dg] .dg-b { position: absolute; left: 0; right: 0; height: 6px; cursor: ns-resize; z-index: 2; }
 [data-dg] .dg-t { top: 0; } [data-dg] .dg-b { bottom: 0; }
-[data-dg]:hover .dg-t, [data-dg]:hover .dg-b { background: rgba(0,0,0,.12); }
+/* sem listras em cima/embaixo ao passar o mouse (pedido do Tulio): só o cursor de puxar e um tracinho discreto no próprio puxador */
+.pl-grade > [data-dg]:hover { outline: 1.5px solid var(--accent); outline-offset: 0; }   /* ao passar o mouse: só um contorno fino azul (cor do app) */
 [data-dg].arrastando { z-index: 8 !important; box-shadow: 0 6px 18px rgba(0,0,0,.2); opacity: .95; }
 .pl-dg-tip { position: fixed; z-index: 1000; background: #111827; color: #fff; font: 600 12px/1.2 var(--font-mono, monospace); padding: 5px 8px; border-radius: 6px; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
 .pl-td-res { display: none; }
@@ -2205,3 +2206,6 @@ body.pl-arrastando, body.pl-arrastando * { user-select: none !important; -webkit
 @container (max-width: 210px) { .pl-bloco.cc .pl-cc-proj { display: none; } }
 .pl-bloco .pl-unpin { opacity: 0; transition: opacity .12s; }
 .pl-bloco:hover .pl-unpin, .pl-fantasma .pl-unpin { opacity: 1; }
+/* Passar o mouse num trabalho planejado: o resto esmaece; ficam normais só os blocos da mesma tarefa */
+body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade > .pl-feito:not(.pl-mesma), body.pl-foco-on .pl-grade > .pl-evento, body.pl-foco-on .pl-grade > .pl-fixo, body.pl-foco-on .pl-grade > .pl-fantasma:not(.pl-mesma) { opacity: .28; transition: opacity .15s; }
+.pl-grade > .pl-bloco, .pl-grade > .pl-feito, .pl-grade > .pl-evento, .pl-grade > .pl-fixo { transition: opacity .15s; }
