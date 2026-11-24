@@ -28,8 +28,8 @@ function aggItens(agora = new Date()) {
     const dia = n.data.due.slice(0, 10); if (dia < lim0 || dia > lim1) return;
     if (typeof todoSemHora === 'function' && todoSemHora(n.data)) { const d2 = new Date(dia + 'T12:00:00'); d2.setDate(d2.getDate() + 1); itens.push({ key: 'todo:' + n.id, titulo: n.title, diaTodo: true, dia, ini: dia + 'T00:00:00-03:00', fim: ymd(d2) + 'T00:00:00-03:00', livre: true }); return; }
     const ini = aggHM(n.data.due.slice(11, 16));
-    let fim = n.data.end ? aggHM(n.data.end) : ini + (Number(n.data.est) > 0 ? Number(n.data.est) : 15) / 60;
-    if (!(fim > ini)) fim = ini + 0.25;
+    let fim = n.data.end ? aggHM(n.data.end) : ini + (Number(n.data.est) > 0 ? Number(n.data.est) : 30) / 60;
+    fim = Math.max(fim, ini + 0.5);   // no mínimo 30 min, como no Calendário
     itens.push({ key: 'todo:' + n.id, titulo: n.title, ini: aggISO(dia, ini), fim: aggISO(dia, Math.min(24, fim)), descricao: n.body || '' });
   });
   // planejado: blocos seguidos do mesmo projeto viram um evento; chave por dia, projeto e ordem no dia

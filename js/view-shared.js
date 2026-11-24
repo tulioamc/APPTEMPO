@@ -102,3 +102,41 @@ ACTIONS['sk-del'] = (el) => {
   d.months[ym] = m; skSave(d); render();
 };
 ACTIONS['sk-go'] = (el) => { SK.month = el.dataset.ym; render(); };
+
+/* ---------- Card de projeto (Projetos ativos e cliente/agência) ----------
+   Fechado: nome, barra de tarefas concluídas (%), status, prazo e cliente.
+   1º clique abre ali mesmo com as tarefas (marcar como feita no círculo); 2º clique (no título) abre a janela do projeto. */
+const PJC_ABERTOS = new Set();
+function pjcDados(p) {
+  const tks = tasksOf(p.id).filter(t => statusCat(t.status_id) !== 'cancelled');
+  const feitas = tks.filter(t => statusCat(t.status_id) === 'done').length;
+  return { tks, feitas, pct: tks.length ? Math.round(feitas / tks.length * 100) : 0 };
+}
+function pjcPrazoHTML(p) {
+  if (!p.deadline) return '';
+  const d = daysBetween(ymd(new Date()), p.deadline);
+  const txt = d === 0 ? 'Hoje' : d === 1 ? 'Amanhã' : d < 0 ? `${-d}d atrasado` : fmtDate(p.deadline).slice(0, 5);
+  return `<span class="pjc-meta${d < 0 ? ' late' : d <= 1 ? ' perto' : ''}">${icon('flag')}${txt}</span>`;
+}
+function pjcHTML(p, { extra = '' } = {}) {
+  const { tks, feitas, pct } = pjcDados(p); const c = clientOf(p); const aberto = PJC_ABERTOS.has(p.id);
+  const st = db.get('tempo_status_options', p.status_id);
+  const barra = `<span class="pjc-bar"><i style="width:${pct}%"></i></span><span class="pjc-pct mono">${tks.length ? pct + '%' : '—'}</span>`;
+  if (!aberto) return `<div class="pjc" data-act="pjc" data-id="${p.id}" title="Clique para ver as tarefas">
+    <div class="pjc-l1"><span class="pjc-nome">${esc(p.name)}</span>${barra}</div>
+    <div class="pjc-l2">${st ? `<span class="pjc-meta">${icon('clock')}${esc(st.name)}</span>` : ''}${pjcPrazoHTML(p)}<span class="grow"></span>${c ? clientTag(c) : ''}</div>${extra}</div>`;
+  const lista = tks.map(t => { const ok = statusCat(t.status_id) === 'done';
+    return `<div class="pjc-tk${ok ? ' ok' : ''}"><button class="pjc-ck" data-act="pjc-tk" data-id="${t.id}" aria-label="${ok ? 'Reabrir' : 'Concluir'}">${ok ? icon('check') : ''}</button><span>${esc(t.name)}</span>${t.deadline ? `<span class="faint small mono">${fmtDate(t.deadline).slice(0, 5)}</span>` : ''}</div>`; }).join('');
+  return `<div class="pjc aberto">
+    <div class="pjc-cab"><button class="pjc-nome grande" data-act="pjc-abrir" data-id="${p.id}" title="Abrir o projeto">${esc(p.name)}</button><button class="btn sm" data-act="ap-resumo" data-id="${p.id}">Resumo</button><button class="btn sm icon ghost" data-act="pjc" data-id="${p.id}" aria-label="Recolher">${icon('chevU')}</button></div>
+    <div class="pjc-l1"><span class="pjc-meta">${feitas} de ${tks.length}</span>${barra}</div>
+    <div class="pjc-tks">${lista || '<div class="small muted">Sem tarefas.</div>'}</div>
+    <div class="pjc-props"><span class="pjc-meta">${icon('clock')}Status</span>${comboBtn('work', p.status_id, 'proj-status', p.id)}${p.deadline ? `<span class="pjc-meta">${icon('flag')}Prazo</span><span class="small">${fmtDate(p.deadline)} ${pjcPrazoHTML(p)}</span>` : ''}${c ? `<span class="pjc-meta">Cliente</span><span>${clientTag(c)}</span>` : ''}</div>${extra}</div>`;
+}
+ACTIONS['pjc'] = (el) => { const id = el.dataset.id; PJC_ABERTOS.has(id) ? PJC_ABERTOS.delete(id) : PJC_ABERTOS.add(id); db.emit(); };
+ACTIONS['pjc-abrir'] = (el) => openProject(el.dataset.id, 'tasks');
+ACTIONS['pjc-tk'] = (el) => {
+  const t = db.get('tempo_tasks', el.dataset.id); if (!t) return;
+  const ok = statusCat(t.status_id) === 'done';
+  const alvo = statuses('work').find(s => s.category === (ok ? 'todo' : 'done')); if (alvo) setTaskStatus(t, alvo.id); db.emit();
+};

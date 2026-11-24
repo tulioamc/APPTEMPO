@@ -47,8 +47,9 @@ function waVinculoCell(c) {
   if (!waEhTrabalho(c)) return '<span class="faint">—</span>';
   const p = c.project_id && db.get('tempo_projects', c.project_id);
   if (p) { const cl = db.get('tempo_clients', p.client_id); return `<span data-tip="Grupo ligado ao projeto">${cl ? clientTag(cl) + ' ' : ''}${esc(p.name)}</span>`; }
-  if (waLigaAgencia(c)) { const a = c.agency_id && db.get('tempo_agencies', c.agency_id); return a ? agencyTag(a) : '<span class="faint">Escolher agência</span>'; }
-  const cl = c.client_id && db.get('tempo_clients', c.client_id); return cl ? clientTag(cl) : '<span class="faint">Escolher cliente</span>';
+  // vale o que estiver ligado (agência ou cliente), qualquer que seja o tipo; o tipo só sugere o padrão
+  const a = c.agency_id && db.get('tempo_agencies', c.agency_id); if (a) return agencyTag(a);
+  const cl = c.client_id && db.get('tempo_clients', c.client_id); return cl ? clientTag(cl) : `<span class="faint">Escolher ${waLigaAgencia(c) ? 'agência' : 'cliente'}</span>`;
 }
 
 const WACOLS = {
@@ -56,9 +57,9 @@ const WACOLS = {
   tipo: { label: 'Tipo', ico: 'spin', w: 190, sort: c => waTipoNome(c), cell: c => { const o = c.tipo_id ? db.get('tempo_status_options', c.tipo_id) : null; return o ? tag(o.name, o.color, { pill: true }) : '<span class="faint">Sem tipo (conta como Amigo)</span>'; },
     edit: { type: 'combo', kind: 'wa_tipo', allowEmpty: true, emptyLabel: 'Sem tipo', get: c => c.tipo_id, set: (c, v) => db.update('tempo_wa_contacts', c.id, { tipo_id: v || null }) } },
   vinc: { label: 'Cliente / agência', ico: 'users', w: 220, sort: c => (db.get('tempo_clients', c.client_id)?.name || db.get('tempo_agencies', c.agency_id)?.name || '~'), cell: waVinculoCell,
-    edit: { type: 'combo', when: c => waEhTrabalho(c), kind: c => waLigaAgencia(c) ? 'agency' : 'client', allowEmpty: true, emptyLabel: 'Nenhum',
-      get: c => waLigaAgencia(c) ? c.agency_id : c.client_id,
-      set: (c, v) => db.update('tempo_wa_contacts', c.id, waLigaAgencia(c) ? { agency_id: v || null, client_id: null, project_id: null } : { client_id: v || null, agency_id: null, project_id: null }) } },
+    edit: { type: 'combo', when: c => waEhTrabalho(c), kind: 'party', allowEmpty: true, emptyLabel: 'Nenhum',
+      get: c => c.agency_id ? 'a:' + c.agency_id : c.client_id ? 'c:' + c.client_id : null,
+      set: (c, v) => db.update('tempo_wa_contacts', c.id, { agency_id: v && v.startsWith('a:') ? v.slice(2) : null, client_id: v && v.startsWith('c:') ? v.slice(2) : null, project_id: null }) } },
   sug: { label: 'Sugestão', ico: 'spin', w: 260, sort: c => waSugestao(c)?.label || '~', cell: c => {
     if (c.tipo_id && (c.client_id || c.agency_id || c.project_id)) return '';   // já ligado: nada a sugerir
     const s = waSugestao(c); if (!s) return '';
@@ -83,7 +84,7 @@ VIEWS.contacts = () => {
   const q = (S.contacts.q || '').toLowerCase().trim();
   const lista = waTodos().filter(c => !q || String(c.name || '').toLowerCase().includes(q)).sort(waOrdem);
   const novos = lista.filter(c => !c.tipo_id), trab = lista.filter(c => c.tipo_id && waEhTrabalho(c)), serv = lista.filter(c => c.tipo_id && waEhServico(c)), outros = lista.filter(c => c.tipo_id && !waEhTrabalho(c) && !waEhServico(c));
-  const semVinculo = trab.filter(c => waLigaAgencia(c) ? !c.agency_id : !c.client_id).length;
+  const semVinculo = trab.filter(c => !c.agency_id && !c.client_id && !c.project_id).length;
   const comSug = [...novos, ...trab.filter(c => !c.client_id && !c.agency_id && !c.project_id)].filter(c => waSugestao(c));
   const bloco = (id, titulo, rows, extra, vazio, ocultas = []) => `<div class="panel" style="margin-bottom:14px"><div class="panel-h"><h3>${titulo} <span class="muted">(${rows.length})</span></h3><span class="grow"></span>${extra || ''}${rows.length ? colsBtn(id) : ''}</div>
     <div class="panel-b tight">${rows.length ? gridTable({ id, cols: WACOLS, rows, defHidden: ocultas, rowById: (rid) => db.get('tempo_wa_contacts', rid) }) : `<div class="empty small">${vazio}</div>`}</div></div>`;

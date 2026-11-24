@@ -1,3 +1,5 @@
+/* Hora em passos de 15 min num <select> (o campo de hora escondido não abre no app do Mac). */
+const horaOpcoesHTML = (v) => `<option value="">—</option>` + Array.from({ length: 96 }, (_, i) => { const h = String(Math.floor(i / 4)).padStart(2, '0') + ':' + String(i % 4 * 15).padStart(2, '0'); return `<option value="${h}"${h === v ? ' selected' : ''}>${h.replace(':', 'h')}</option>`; }).join('') + (v && !/:(00|15|30|45)$/.test(v) ? `<option value="${v}" selected>${v.replace(':', 'h')}</option>` : '');
 /* =====================================================================
    DETALHE DO PROJETO (gaveta lateral)
    ===================================================================== */
@@ -74,7 +76,7 @@ function pdTasks(p) {
       <div class="tk-st">${comboBtn('work', t.status_id, 'task-status', t.id)}</div>
       ${tkTempoHTML(t, liq, fila)}
       <label class="tk-data"><span class="tk-dv">${t.deadline ? fmtDate(t.deadline) : '<span class="faint">sem prazo</span>'}</span>${rel ? `<span class="tk-rel ${rel.c}">${rel.txt}</span>` : ''}<input type="date" value="${t.deadline || ''}" data-pd="tdl" data-id="${t.id}" aria-label="Prazo"></label>
-      <label class="tk-hora"${!t.deadline_time && fila[t.id]?.fim && fila[t.id].resto > 0 ? ` data-tip="${esc(`Sem hora de entrega. Pelo planejamento fica pronta ${fmtDate(ymd(fila[t.id].fim))} às ${planoHora(fila[t.id].fim.getHours() + fila[t.id].fim.getMinutes() / 60)}.\nClique para definir a hora da entrega.`)}"` : ''}>${t.deadline_time ? `<span class="tk-dv">${t.deadline_time.replace(':', 'h')}</span>` : fila[t.id]?.fim && fila[t.id].resto > 0 ? `<span class="tk-dv prev">≈${planoHora(fila[t.id].fim.getHours() + fila[t.id].fim.getMinutes() / 60).replace(':', 'h')}</span>` : '<span class="tk-dv faint">--h--</span>'}<input type="time" value="${t.deadline_time || ''}" data-pd="thora" data-id="${t.id}" aria-label="Hora do prazo"></label>
+      <label class="tk-hora"${!t.deadline_time && fila[t.id]?.fim && fila[t.id].resto > 0 ? ` data-tip="${esc(`Sem hora de entrega. Pelo planejamento fica pronta ${fmtDate(ymd(fila[t.id].fim))} às ${planoHora(fila[t.id].fim.getHours() + fila[t.id].fim.getMinutes() / 60)}.\nClique para definir a hora da entrega.`)}"` : ''}>${t.deadline_time ? `<span class="tk-dv">${t.deadline_time.replace(':', 'h')}</span>` : fila[t.id]?.fim && fila[t.id].resto > 0 ? `<span class="tk-dv prev">≈${planoHora(fila[t.id].fim.getHours() + fila[t.id].fim.getMinutes() / 60).replace(':', 'h')}</span>` : '<span class="tk-dv faint">--h--</span>'}<select data-pd="thora" data-id="${t.id}" aria-label="Hora do prazo">${horaOpcoesHTML(t.deadline_time || '')}</select></label>
       <span class="tk-acoes">${souEu(t.owner) ? `<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` : ''}<button class="btn sm icon ghost" data-x="tk-abrir" data-id="${t.id}" aria-label="${aberto ? 'Fechar' : 'Mais opções'}" aria-expanded="${aberto}">${icon(aberto ? 'chevU' : 'chevD')}</button></span>
     </div>
     ${aberto ? `<div class="tk-mais-p">
@@ -93,7 +95,7 @@ function pdTasks(p) {
     <span class="tk-ent-linha"></span>
     <span class="tk-ent-b"><span class="tk-ent-dl">DEADLINE</span>
     <label class="tk-ent-v"><span>${e.dia ? fmtDate(e.dia) : 'data'}</span><input type="date" value="${e.dia || ''}" data-ent-f="dia" aria-label="Data da entrega"></label>
-    <label class="tk-ent-v"><span>${(e.hora || '19:00').replace(':', 'h')}</span><input type="time" step="900" value="${e.hora || '19:00'}" data-ent-f="hora" aria-label="Hora da entrega"></label>
+    <label class="tk-ent-v"><span>${(e.hora || '19:00').replace(':', 'h')}</span><select data-ent-f="hora" aria-label="Hora da entrega">${horaOpcoesHTML(e.hora || '19:00')}</select></label>
     <button type="button" class="tk-ent-x" data-x="ent-del" data-id="${e.id}" aria-label="Apagar entrega" title="Apagar entrega">×</button></span></div>`;
   const seq = projSequencia(p.id);
   return `${typeof tkResolverBarraHTML === 'function' ? tkResolverBarraHTML(p.id) : ''}<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px"><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
@@ -267,7 +269,7 @@ function bindProjectDrawer(ly, id, st) {
     db.update('tempo_tasks', tt.id, { depends_on: (Array.isArray(tt?.depends_on) ? tt.depends_on : []).filter(d => d !== b.dataset.dep) }, true); render();
   });
   // data e hora do prazo da tarefa: o campo fica escondido atrás do texto; o clique abre o seletor do sistema
-  ly.box.addEventListener('click', (e) => { const inp = e.target.closest('.tk-data input, .tk-hora input, .tk-ent-v input'); if (inp) { try { inp.showPicker(); } catch (err) {} } });
+  ly.box.addEventListener('click', (e) => { const inp = e.target.closest('.tk-data input, .tk-ent-v input[type="date"]'); if (inp) { try { inp.showPicker(); } catch (err) {} } });
   // entregas (deadlines): editar nome/data/hora, apagar, arrastar pelo ⠿ entre as tarefas
   ly.box.addEventListener('change', (e) => {
     const el = e.target.closest('[data-ent-f]'); if (!el) return; const eid = el.closest('[data-ent]')?.dataset.ent;

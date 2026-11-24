@@ -3,6 +3,7 @@
    prazo mais perto primeiro, até 8 h por dia útil (o dia pode ser esticado). Horários fixos: trabalho das 9h às 19h,
    almoço 12h–14h; às segundas, buscar o Rafa 11h30–14h. Feriados, férias e bloqueios avulsos ficam fora.
    Não grava nada sozinho: o plano é refeito a cada abertura, a partir do que já foi trabalhado. */
+const TODO_MIN_H = 0.5;   /* to-do ocupa no mínimo 30 min no Calendário */
 const PLANO_PADRAO = { inicio: 9, fim: 19, horasDia: 8, folga: 0.25 };
 // horários fixos por dia da semana (0 = domingo): [início, fim, nome] em horas decimais
 /* Rotina fixa (editável em Planejamento › Rotina fixa). Cada bloco: { id, grupo, nome, ini, fim (horas decimais),
@@ -114,13 +115,13 @@ function planoEventos(dia, paraPlano = false) {
     const a = new Date(ev.ini).getTime(), b = new Date(ev.fim).getTime(); if (!(b > d0 && a < d1)) return;
     out.push({ id: ev.id, ini: Math.max(0, (a - d0) / 36e5), fim: Math.min(24, (b - d0) / 36e5), titulo: ev.titulo || 'Evento', origem: 'google', agenda: ev.agenda || '', diaTodo: !!ev.diaTodo, ocupa: !ev.livre });
   });
-  // to-dos com data: com hora = compromisso no horário (fim marcado, estimativa ou 15 min); só com data = no topo do dia
+  // to-dos com data: com hora = compromisso no horário (fim marcado ou estimativa; no mínimo 30 min no gráfico); só com data = no topo do dia
   db.all('tempo_notices').filter(n => n.kind === 'todo' && n.data?.due && n.data.due.slice(0, 10) === dia).forEach(n => {
     const feito = n.status === 'done';
     if (typeof todoSemHora === 'function' && todoSemHora(n.data)) { out.push({ id: n.id, ini: 0, fim: 0, titulo: n.title, origem: 'todo', diaTodo: true, feito }); return; }
     const [hh, mm] = n.data.due.slice(11, 16).split(':').map(Number); const ini = hh + mm / 60;
-    let fim = n.data.end ? (([a, b]) => a + b / 60)(n.data.end.split(':').map(Number)) : ini + (Number(n.data.est) > 0 ? Number(n.data.est) : 15) / 60;
-    if (!(fim > ini)) fim = ini + 0.25;
+    let fim = n.data.end ? (([a, b]) => a + b / 60)(n.data.end.split(':').map(Number)) : ini + (Number(n.data.est) > 0 ? Number(n.data.est) : 30) / 60;
+    fim = Math.max(fim, ini + TODO_MIN_H);   // lembrete só com a hora também ocupa 30 min
     out.push({ id: n.id, ini, fim: Math.min(24, fim), titulo: n.title, origem: 'todo', feito, ocupa: !feito });
   });
   return out.sort((x, y) => x.ini - y.ini);
@@ -411,6 +412,34 @@ function planoRegistro15(itens) {
   const novos = blocos.map(bl => { const pid = bl.pid === '_' ? null : bl.pid; return { k: 'feito', a: bl.a, b: bl.b, f: { pid, ini: bl.a, fim: bl.b, ms: bl.h * 36e5 } }; });
   return [...itens.filter(x => x.k !== 'feito'), ...novos];
 }
+/* Capacidade do dia: feito (registrado), planejado e livre (horas de trabalho que sobram). */
+function planoCapacidade(dia, porDia) {
+  if (!planoDiaUtil(dia)) return null;
+  const hoje = ymd(new Date()); if (dia < hoje) return null;
+  const jan = planoJanelas(dia).jan; const cap = jan.reduce((t, [a, b]) => t + (b - a), 0); if (!(cap > 0)) return null;
+  const feito = dia === hoje ? planoFeitosDoDia(dia).reduce((t, f) => t + (f.fim - f.ini), 0) : 0;
+  const plan = (porDia[dia]?.blocos || []).reduce((t, b) => t + (b.fim - b.ini), 0);
+  const tot = Math.max(cap, feito + plan);
+  return { feito, plan, livre: Math.max(0, cap - feito - plan), tot };
+}
+function planoCapHTML(dia, porDia) {
+  const c = planoCapacidade(dia, porDia); if (!c) return '';
+  const pc = (x) => (x / c.tot * 100).toFixed(1);
+  const tip = `Feito ${fmtH(c.feito * 36e5)} · planejado ${fmtH(c.plan * 36e5)} · livre ${fmtH(c.livre * 36e5)}`;
+  return `<span class="pl-cap" data-tip="${esc(tip)}"><span class="pl-cap-f" style="width:${pc(c.feito)}%"></span><span class="pl-cap-p" style="width:${pc(c.plan)}%"></span></span>`;
+}
+/* Horas livres de 1 h ou mais dentro do horário de trabalho (de agora em diante): viram "livre 1h" na grade. */
+function planoLivres(dia, porDia) {
+  const hoje = ymd(new Date()); if (dia < hoje || !planoDiaUtil(dia)) return [];
+  const agora = dia === hoje ? (() => { const n = new Date(); return Math.ceil((n.getHours() + n.getMinutes() / 60) * 4) / 4; })() : 0;
+  const ocup = [...(porDia[dia]?.blocos || []).map(b => [b.ini, b.fim]), ...(dia === hoje ? planoFeitosDoDia(dia).map(f => [f.ini, f.fim]) : []),
+    ...planoEventos(dia).filter(e => !e.diaTodo).map(e => [e.ini, e.fim])].sort((x, y) => x[0] - y[0]);
+  const out = [];
+  planoJanelas(dia).jan.forEach(([a0, b]) => { let a = Math.max(a0, agora);
+    ocup.forEach(([p, q]) => { if (q <= a || p >= b) return; if (p - a >= 1) out.push([a, p]); a = Math.max(a, q); });
+    if (b - a >= 1) out.push([a, b]); });
+  return out;
+}
 function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0, cabecalho = true, semana = '' } = {}) {
   const cfg = planoCfg(); const v = porDia[dia]; const util = planoDiaUtil(dia); const hoje = ymd(new Date());
   const itens = planoFaixas(planoJuntaAgenda(planoRegistro15(planoItensDoDia(dia, porDia))), unico, dia).map(x => {
@@ -421,17 +450,18 @@ function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0
     if (sk && PLANO.sel.has(sk)) h = h.replace('class="', 'class="pl-sel ');
     return h.replace(/^<div /, `<div data-fk="${esc(x._fk || '')}" data-lane="${x._lane ?? ''}" data-sk="${esc(sk)}" `);
   }).join('');
-  const agora = dia === hoje ? (() => { const n = new Date(); const h = n.getHours() + n.getMinutes() / 60; return `<div class="pl-agora" style="top:${h * alt}px"></div>`; })() : '';
+  const agora = dia === hoje ? (() => { const n = new Date(); const h = n.getHours() + n.getMinutes() / 60; return `<div class="pl-agora" style="top:${h * alt}px"><span class="pl-agora-h">${planoHora(h).replace(':', 'h')}</span></div>`; })() : '';
+  const livres = planoMostra('trabalho') ? planoLivres(dia, porDia).map(([a, b]) => `<button type="button" class="pl-livre" data-act="pl-livre" data-dia="${dia}" data-a="${a}" data-b="${b}" style="top:${a * alt + 2}px;height:${(b - a) * alt - 4}px" data-tip="Horário livre ${planoHora(a)}–${planoHora(b)}. Clique para encaixar um bloco de projeto, to-do ou bloqueio.">${icon('plus')} livre ${fmtH((b - a) * 36e5)}</button>`).join('') : '';
   const h = v?.horas || 0, est = planoEsticados()[dia], fer = planoFer(dia);
   const wd = new Date(dia + 'T12:00:00').getDay();
   const sexta = wd === 5 ? `<button class="btn sm ghost pl-rafa${planoSextaRafa(dia) ? ' on' : ''}" data-act="pl-sexta" data-dia="${dia}" title="Sexta com o Rafa (T) ou com a Amanda (A)? Clique para trocar só esta sexta (muda também no Dias de Rafa).">Rafa ${planoSextaRafa(dia) ? '✓' : '–'}</button>` : '';
   const cab = !cabecalho ? '' : `<div class="pl-cab">${semana ? `<span class="pl-sem-rot">${esc(semana)}</span>` : ''}<span class="pl-cab-l1"><button class="pl-cab-dia" data-act="pl-ir-dia" data-dia="${dia}" title="Ver o dia">${new Date(dia + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</button>${planoChipsHTML(dia)}</span>
-      <span class="pl-cab-l2">${dia >= hoje && planoPins().some(pn => pn.dia === dia) ? `<button class="pl-reorg" data-act="pl-reorg" data-dia="${dia}" data-tip="Reorganizar: solta os blocos que você fixou neste dia e o app encaixa tudo de novo, sem sobrepor">↺</button>` : ''}${(() => { const pr = dia <= hoje ? planoVsReal(dia) : null; return pr ? `<span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}" data-tip="${esc(`Plano × real: ${fmtH(pr.reg * 36e5)} registrados das ${fmtH(pr.plan * 36e5)} planejadas de manhã (mesmo projeto)`)}">${pr.pct}%</span>` : ''; })()}<span class="small ${h > cfg.horasDia + 0.05 ? 'late' : 'muted'}">${util ? (h > 0.01 ? `${fmtH(h * 36e5)} plano${est ? ` de ${est} h` : ''}` : '') : (fer ? '[FERIADO] ' + esc(fer.nome) : '')}</span>${sexta}</span>${planoNotasHTML(dia)}</div>`;
+      <span class="pl-cab-l2">${dia >= hoje && planoPins().some(pn => pn.dia === dia) ? `<button class="pl-reorg" data-act="pl-reorg" data-dia="${dia}" data-tip="Reorganizar: solta os blocos que você fixou neste dia e o app encaixa tudo de novo, sem sobrepor">↺</button>` : ''}${(() => { const pr = dia <= hoje ? planoVsReal(dia) : null; return pr ? `<span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}" data-tip="${esc(`Plano × real: ${fmtH(pr.reg * 36e5)} registrados das ${fmtH(pr.plan * 36e5)} planejadas de manhã (mesmo projeto)`)}">${pr.pct}%</span>` : ''; })()}<span class="small ${h > cfg.horasDia + 0.05 ? 'late' : 'muted'}">${util ? (h > 0.01 ? `${fmtH(h * 36e5)} plano${est ? ` de ${est} h` : ''}` : '') : (fer ? '[FERIADO] ' + esc(fer.nome) : '')}</span>${sexta}</span>${planoCapHTML(dia, porDia)}${planoNotasHTML(dia)}</div>`;
   const todoDia = planoEventos(dia).filter(e => e.diaTodo && (planoMostra('todos') || e.origem !== 'todo'));
   const topo = linhasTopo ? `<div class="pl-topo" style="height:${linhasTopo * 20}px">${todoDia.map(e => e.origem === 'todo'
     ? `<button class="pl-chip todo${e.feito ? ' feito' : ''}" data-act="todo-modal" data-id="${e.id}" title="To-do do dia (sem hora)">${icon('check')}${esc(e.titulo)}</button>`
     : `<span class="pl-chip ${e.origem}" title="Dia todo">${esc(e.titulo)}</span>`).join('')}</div>` : '';
-  return `<div class="pl-dia${dia === hoje ? ' hoje' : ''}${!util ? ' off' : ''}${(v?.cap || 0) > cfg.horasDia + 0.05 ? ' esticado' : ''}${wd === 1 ? ' pl-segunda' : ''}" data-pl-col="${dia}">${cab}${topo}<div class="pl-grade" style="height:${24 * alt}px">${itens}${agora}</div></div>`;
+  return `<div class="pl-dia${dia === hoje ? ' hoje' : ''}${!util ? ' off' : ''}${(v?.cap || 0) > cfg.horasDia + 0.05 ? ' esticado' : ''}${wd === 1 ? ' pl-segunda' : ''}" data-pl-col="${dia}">${cab}${topo}<div class="pl-grade" style="height:${24 * alt}px">${livres}${itens}${agora}</div></div>`;
 }
 const planoRegua = (alt = PL_ALT) => `<div class="pl-horas" style="height:${24 * alt}px">${Array.from({ length: 24 }, (_, h) => `<div class="pl-h" style="top:${h * alt}px">${String(h).padStart(2, '0')}h</div>`).join('')}</div>`;
 
@@ -567,13 +597,14 @@ function planoDiaHTML(dia, porDia) {
     ${fer ? `<div class="pl-mc-tag fer">[FERIADO] ${esc(fer.nome)}</div>` : ''}
     ${planoNotasHTML(dia)}
     ${(() => { const r = typeof rafaDiaDe === 'function' ? rafaDiaDe(dia) : null; return r?.who ? `<div class="small">Rafa: ${planoRafaLetraHTML(dia)} ${esc(RF_NOME?.[r.who] || '')}${r.auto ? ' <span class="faint">(marcado pelo app)</span>' : ''}${r.horario ? ' · ' + esc(r.horario) : ''}</div>` : ''; })()}
-    ${(() => { const pr = planoVsReal(dia); return pr ? `<div class="pl-pvr-box"><b>${fmtH(pr.reg * 36e5)} de ${fmtH(pr.plan * 36e5)} planejadas</b> <span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}">${pr.pct}%</span><div class="small muted">Comparado com o plano do começo do dia; o que não aconteceu aparece tracejado.</div></div>` : ''; })()}
+    ${(() => { const c = planoCapacidade(dia, porDia); return c ? `<div class="pl-pvr-box"><div class="row between small"><b>${c.livre > 0.01 ? `Cabe mais ${fmtH(c.livre * 36e5)}` : 'Dia cheio'}</b><span class="muted">${fmtH((c.feito + c.plan + c.livre) * 36e5)} de trabalho</span></div><span class="pl-cap grande">${planoCapHTML(dia, porDia).replace(/^<span class="pl-cap"[^>]*>|<\/span>$/g, '')}</span><div class="row small" style="gap:12px"><span><i class="pl-cap-dot f"></i>feito ${fmtH(c.feito * 36e5)}</span><span><i class="pl-cap-dot p"></i>planejado ${fmtH(c.plan * 36e5)}</span><span><i class="pl-cap-dot l"></i>livre ${fmtH(c.livre * 36e5)}</span></div></div>` : ''; })()}
+    ${(() => { const pr = planoVsReal(dia); return pr ? `<div class="pl-pvr-box"><b>${fmtH(pr.reg * 36e5)} de ${fmtH(pr.plan * 36e5)} planejadas</b> <span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}">${pr.pct}%</span><div class="small muted">Comparado com o plano do começo do dia; o que não aconteceu aparece tracejado.</div>${dia === ymd(new Date()) ? `<button class="btn sm" style="margin-top:6px" data-act="pl-empurrar" data-dia="${dia}" data-tip="Leva para o próximo dia útil os blocos que você fixou daqui para a frente e os to-dos abertos de hoje com hora">Empurrar para amanhã</button>` : ''}</div>` : ''; })()}
     ${planoDiaUtil(dia) ? (() => { const cfg = planoCfg(); const est = planoEsticados()[dia]; const hd = est ?? cfg.horasDia; return `<div class="row between small"><span>Horas de trabalho neste dia <span class="faint" data-tip="Quanto o app pode planejar de trabalho neste dia. O padrão é ${cfg.horasDia} h; estique quando precisar virar a noite, ou encurte num dia mais leve.">(padrão ${cfg.horasDia} h)</span></span><span class="row" style="gap:4px"><button class="btn sm" data-act="pl-dia" data-dia="${dia}" data-d="-1" aria-label="Menos 1 hora">−</button><b class="mono">${hd} h</b><button class="btn sm" data-act="pl-dia" data-dia="${dia}" data-d="1" aria-label="Mais 1 hora">+</button></span></div>`; })() : ''}
     <div><div class="lbl">Projetos do dia</div>${linhas ? `<div class="bars">${linhas}</div>` : '<div class="small muted">Nada registrado nem planejado.</div>'}</div>
     ${prz.length ? `<div><div class="lbl">Prazos</div>${prz.map(p => `<div class="small">${icon('flag')} ${esc(p.name)}</div>`).join('')}</div>` : ''}
     <div><div class="lbl">Compromissos</div>${ev.length ? ev.map(e => `<div class="small row between"><span>${e.diaTodo ? 'Dia todo' : planoHora(e.ini) + '–' + planoHora(e.fim)} · ${esc(e.titulo)} <span class="faint">${e.origem === 'google' ? 'Google' : e.origem === 'todo' ? 'to-do' : 'bloqueio'}</span></span>${e.origem === 'bloqueio' ? `<button class="btn sm ghost" data-act="pl-bloq-del" data-id="${e.id}" aria-label="Remover bloqueio">${icon('x')}</button>` : ''}</div>`).join('') : '<div class="small muted">Nenhum.</div>'}
       <button class="btn sm" style="margin-top:6px" data-act="pl-bloq" data-dia="${dia}">${icon('plus')} Bloqueio</button></div>
-    ${sd.length ? `<div><div class="lbl">To-do sem data <span class="faint">(${sd.length})</span></div>${sd.slice(0, 12).map(n => `<div class="small row between pl-sd"><span data-act="todo-modal" data-id="${n.id}" style="cursor:pointer">${esc(n.title)}</span><button class="btn sm ghost" data-act="pl-encaixar" data-id="${n.id}" data-dia="${dia}" title="Põe no primeiro horário livre deste dia (15 min, ou a estimativa)">Encaixar</button></div>`).join('')}${sd.length > 12 ? `<div class="small muted">+${sd.length - 12}</div>` : ''}</div>` : ''}
+    ${sd.length ? `<div><div class="lbl">To-do sem data <span class="faint">(${sd.length})</span></div>${sd.slice(0, 12).map(n => `<div class="small row between pl-sd"><span data-act="todo-modal" data-id="${n.id}" style="cursor:pointer">${esc(n.title)}</span><button class="btn sm ghost" data-act="pl-encaixar" data-id="${n.id}" data-dia="${dia}" title="Põe no primeiro horário livre deste dia (30 min, ou a estimativa)">Encaixar</button></div>`).join('')}${sd.length > 12 ? `<div class="small muted">+${sd.length - 12}</div>` : ''}</div>` : ''}
   </div>`;
   const lt = planoEventos(dia).filter(e => e.diaTodo).length;
   return `<div class="pl-diaview"><div><div class="pl-colrot"><span></span><span>Registrado</span><span>Agenda · planejado, rotina, to-dos e compromissos</span></div><div class="pl-scroll" data-pl-scroll><div class="pl-semana pl-um"><div class="pl-regua-col">${lt ? `<div style="height:${lt * 20}px"></div>` : ''}${planoRegua()}</div>${planoColHTML(dia, porDia, { unico: true, linhasTopo: lt, cabecalho: false })}</div></div></div>${lado}</div>`;
@@ -710,6 +741,20 @@ ACTIONS['pl-reorg'] = async (el) => {
   if (!await confirmBox({ title: 'Reorganizar o dia?', body: `Solta ${n} bloco${n > 1 ? 's' : ''} fixado${n > 1 ? 's' : ''} em ${fmtDate(dia)}. O app encaixa as tarefas de novo nas horas livres, pela entrega e pelas dependências.`, ok: 'Reorganizar' })) return;
   db.setSetting('planoPins', planoPins().filter(p => p.dia !== dia)); db.emit(); render(); toast('Dia reorganizado');
 };
+ACTIONS['pl-livre'] = (el) => planoCriarMenu(el.dataset.dia, Number(el.dataset.a), Math.min(Number(el.dataset.b), Number(el.dataset.a) + 1));
+/* Empurrar para amanhã: blocos fixados de hoje (de agora em diante) e to-dos abertos de hoje com hora vão para o próximo dia útil, no mesmo horário. */
+ACTIONS['pl-empurrar'] = async (el) => {
+  const dia = el.dataset.dia; let prox = planoDiaMais(dia, 1); for (let i = 0; i < 14 && !planoDiaUtil(prox); i++) prox = planoDiaMais(prox, 1);
+  const n0 = new Date(); const agora = n0.getHours() + n0.getMinutes() / 60;
+  const pins = planoPins().filter(p => p.dia === dia && (p.ini + (Number(p.h) || 0)) > agora);
+  const todos = db.all('tempo_notices').filter(n => n.kind === 'todo' && n.status !== 'done' && n.data?.due && n.data.due.slice(0, 10) === dia && !todoSemHora(n.data));
+  if (!pins.length && !todos.length) return toast('Nada fixado nem to-do com hora para empurrar. O planejado já se reorganiza sozinho.');
+  if (!await confirmBox({ title: 'Empurrar para amanhã?', body: `${pins.length ? `${pins.length} bloco(s) fixado(s)` : ''}${pins.length && todos.length ? ' e ' : ''}${todos.length ? `${todos.length} to-do(s)` : ''} vão para ${fmtDate(prox)}, no mesmo horário. O resto do planejado se reorganiza sozinho.`, ok: 'Empurrar' })) return;
+  const ids = new Set(pins.map(p => p.id));
+  db.setSetting('planoPins', planoPins().map(p => ids.has(p.id) ? { ...p, dia: prox } : p));
+  todos.forEach(n => db.update('tempo_notices', n.id, { data: { ...n.data, due: prox + n.data.due.slice(10) } }, true));
+  db.emit(); render(); toast(`Levado para ${fmtDate(prox)}`);
+};
 ACTIONS['pl-unpin'] = (el) => { const ids = (el.closest('[data-pin]')?.dataset.pin || el.dataset.id || '').split(',').filter(Boolean); db.setSetting('planoPins', planoPins().filter(p => !ids.includes(p.id))); render(); };
 /* Sexta: troca só esta sexta entre T e A no Dias de Rafa (fica como marcada à mão). */
 ACTIONS['pl-sexta'] = (el) => {
@@ -760,10 +805,10 @@ ACTIONS['pl-rot-novo'] = () => { planoRotinaSalvar([...planoRotina(), { id: uid(
 ACTIONS['pl-fixo-off'] = (el) => { const m = { ...planoRotinaDia() }; m[el.dataset.dia] = { ...(m[el.dataset.dia] || {}), [el.dataset.g]: { off: true } }; db.setSetting('planoRotinaDia', m); render(); toast('Tirado só deste dia'); };
 ACTIONS['pl-fixo-reset'] = (el) => { const m = { ...planoRotinaDia() }; const d = { ...(m[el.dataset.dia] || {}) }; delete d[el.dataset.g]; m[el.dataset.dia] = d; db.setSetting('planoRotinaDia', m); render(); };
 
-/* To-do sem data → primeiro horário livre do dia (a partir de agora, se for hoje), com 15 min ou a estimativa. */
+/* To-do sem data → primeiro horário livre do dia (a partir de agora, se for hoje), com 30 min ou a estimativa. */
 ACTIONS['pl-encaixar'] = (el) => {
   const n = db.get('tempo_notices', el.dataset.id); if (!n) return; const dia = el.dataset.dia;
-  const dur = (Number(n.data?.est) > 0 ? Number(n.data.est) : 15) / 60;
+  const dur = Math.max(TODO_MIN_H, (Number(n.data?.est) > 0 ? Number(n.data.est) : 30) / 60);
   const agora = dia === ymd(new Date()) ? (() => { const x = new Date(); return Math.ceil((x.getHours() + x.getMinutes() / 60) * 4) / 4; })() : 0;
   const ocupado = (planejar(planoProjetos(), new Date(), 120).porDia[dia]?.blocos || []).map(b => [b.ini, b.fim]);
   let achou = null;

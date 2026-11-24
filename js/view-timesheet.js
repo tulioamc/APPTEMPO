@@ -101,6 +101,7 @@ VIEWS.timesheet = () => {
   </div>
   ${dayReviewHTML(day, entries)}
   ${metaMesStripHTML()}
+  ${hojeTarefasHTML(a)}
   ${activeProjectsHTML(a)}
   <div class="panel">
     <div class="panel-h">
@@ -315,6 +316,33 @@ function metaMesStripHTML() {
     <button class="btn sm icon ghost" data-act="meta-olho" aria-label="Mostrar ou esconder valores" title="Mostrar ou esconder valores">${icon(aberto ? 'eye' : 'eyeOff')}</button></div></div>`;
 }
 ACTIONS['meta-olho'] = () => { db.setSetting('metaOlho', !db.setting('metaOlho', false)); render(); };
+/* Tarefas do dia: o que o planejamento pôs hoje (de agora em diante), na ordem, e os to-dos com hora de hoje. */
+function hojeTarefasHTML(cur) {
+  if (typeof planejar !== 'function' || typeof planoProjetos !== 'function') return '';
+  const hoje = ymd(new Date()); let porDia = {};
+  try { porDia = planejar(planoProjetos(), new Date(), 3).porDia || {}; } catch (e) { return ''; }
+  const grupos = []; (porDia[hoje]?.blocos || []).slice().sort((x, y) => x.ini - y.ini).forEach(b => {
+    const k = b.tid || 'p:' + b.pid; const g = grupos.find(x => x.k === k);
+    if (g) { g.h += b.fim - b.ini; g.fim = Math.max(g.fim, b.fim); } else grupos.push({ k, tid: b.tid, pid: b.pid, ini: b.ini, fim: b.fim, h: b.fim - b.ini, atrasado: b.atrasado });
+  });
+  const todos = typeof planoEventos === 'function' ? planoEventos(hoje).filter(e => e.origem === 'todo' && !e.diaTodo) : [];
+  const fechado = !!db.setting('hjFechado', false);
+  const feito = typeof planoFeitosDoDia === 'function' ? planoFeitosDoDia(hoje).reduce((t, f) => t + (f.fim - f.ini), 0) : 0;
+  const plan = grupos.reduce((t, g) => t + g.h, 0);
+  const linha = (g) => { const p = db.get('tempo_projects', g.pid); const t = g.tid ? db.get('tempo_tasks', g.tid) : null; const c = p && clientOf(p);
+    const rodando = cur && cur.project_id === g.pid && (!g.tid || cur.task_id === g.tid);
+    return `<div class="hj-l${rodando ? ' on' : ''}"><span class="hj-h mono">${planoHora(g.ini).replace(':', 'h')}</span><button class="hj-n" data-act="proj-open" data-id="${g.pid}" data-tab="tasks"${g.tid ? ` data-tk="${g.tid}"` : ''}><b>${esc(t ? t.name : p?.name || 'Projeto')}</b>${t && p ? `<span class="faint small">${esc(p.name)}</span>` : ''}</button>${c ? clientTag(c) : '<span></span>'}<span class="mono small muted">${fmtH(g.h * 36e5)}</span>${rodando ? '<span class="pm-badge">● agora</span>' : `<button class="btn sm icon ghost" data-act="hj-play" data-pid="${g.pid}" data-tid="${g.tid || ''}" aria-label="Iniciar">${icon('play')}</button>`}</div>`; };
+  const linhaTodo = (e) => `<div class="hj-l"><span class="hj-h mono">${planoHora(e.ini).replace(':', 'h')}</span><button class="hj-n" data-act="todo-modal" data-id="${e.id}"><b${e.feito ? ' style="text-decoration:line-through;opacity:.6"' : ''}>${esc(e.titulo)}</b><span class="faint small">to-do</span></button><span></span><span></span><span></span></div>`;
+  const itens = [...grupos.map(g => ({ t: g.ini, h: linha(g) })), ...todos.map(e => ({ t: e.ini, h: linhaTodo(e) }))].sort((x, y) => x.t - y.t);
+  const resumo = `${fmtH(feito * 36e5)} feito · ${fmtH(plan * 36e5)} planejado`;
+  return `<div class="panel"><div class="panel-h"><button class="btn sm icon ghost" data-act="hj-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="hj-toggle" style="cursor:pointer">Tarefas de hoje</h3><span class="small muted">${resumo}</span><span class="grow"></span><button class="btn sm ghost" data-act="hj-cal">Ver no Calendário</button></div>${fechado ? '' : `<div class="panel-b tight">${itens.length ? itens.map(x => x.h).join('') : '<div class="empty small">Nada planejado para o resto do dia.</div>'}</div>`}</div>`;
+}
+ACTIONS['hj-toggle'] = () => db.setSetting('hjFechado', !db.setting('hjFechado', false));
+ACTIONS['hj-cal'] = () => { if (typeof PLANO !== 'undefined') { PLANO.modo = 'dia'; PLANO.dia = null; } go('plano'); };
+ACTIONS['hj-play'] = (el) => {
+  const pr = db.get('tempo_projects', el.dataset.pid); if (!pr) return; const c = clientOf(pr); const t = el.dataset.tid ? db.get('tempo_tasks', el.dataset.tid) : null;
+  openStartModal({ agency_id: c?.agency_id || '__none', client_id: pr.client_id, project_id: pr.id, task_id: t ? (t.parent_id || t.id) : '', sub_id: t && t.parent_id ? t.id : '' });
+};
 function activeProjectsHTML(cur) {
   const fixados = db.setting('apFixados', []) || [];
   const base = db.where('tempo_projects', p => !p.archived && statusCat(p.status_id) === 'active').map(p => ({ p, st: apStats(p), fixo: fixados.includes(p.id) }));
@@ -330,15 +358,8 @@ function activeProjectsHTML(cur) {
     const est = Number(p.estimated_hours) > 0 ? Number(p.estimated_hours) * 3600e3 : 0;
     const estPct = est ? st.total / est * 100 : 0;
     const ultima = st.last ? `${fmtDate(ymd(new Date(st.last)))} às ${fmtTime(new Date(st.last).toISOString())}` : 'nunca';
-    return `<div class="ap-card ${fixo ? 'ap-fixo' : ''}">
-      <div class="ap-top">
-        <div class="row between" style="align-items:flex-start;gap:6px"><b class="ap-name">${esc(p.name)}</b><button class="btn sm ap-pin" data-act="ap-pin" data-id="${esc(p.id)}" title="${fixo ? 'Desafixar' : 'Fixar no topo'}">${fixo ? 'Desafixar' : 'Fixar'}</button></div>
-        <div>${c ? clientTag(c) : '<span class="faint small">Sem cliente</span>'}</div>
-        <span class="small muted mono"><span data-tip="${esc(`Hoje: ${fmtDur(st.hoje)}\nTrabalho líquido registrado hoje neste projeto.`)}">hoje ${fmtDur(st.hoje)}</span> · <span data-tip="${esc(`Semana: ${fmtDur(st.semana)}\nDesde segunda-feira.\nTotal no projeto: ${fmtDur(st.total)}\nÚltima sessão: ${ultima}`)}">semana ${fmtDur(st.semana)}</span></span>
-        ${est ? `<div class="ap-bar" data-tip="${esc(`${fmtDur(st.total)} de ${Number(p.estimated_hours)} h estimadas · ${usePctTxt(estPct)}\n${st.total > est ? 'Passou ' + fmtDur(st.total - est) + ' do estimado.' : 'Faltam ' + fmtDur(est - st.total) + ' para o estimado.'}`)}"><i style="width:${Math.min(100, estPct).toFixed(1)}%${st.total > est ? ';background:#EF4444' : ''}"></i></div><span class="small muted mono">${fmtDur(st.total)} de ${Number(p.estimated_hours)} h</span>` : ''}
-      </div>
-      <div class="ap-actions">${acao}<button class="btn sm" data-act="ap-resumo" data-id="${esc(p.id)}">Resumo</button><button class="btn sm" data-act="ap-card" data-id="${esc(p.id)}">Card</button></div>
-    </div>`;
+    const pin = `<button class="btn sm ghost ap-pin" data-act="ap-pin" data-id="${esc(p.id)}" title="${fixo ? 'Desafixar' : 'Fixar no topo'}">${fixo ? 'Desafixar' : 'Fixar'}</button>`;
+    return `<div class="ap-cardw${fixo ? ' ap-fixo' : ''}">${pjcHTML(p, { extra: `<div class="pjc-acoes"><span class="small muted mono" data-tip="${esc(`Hoje ${fmtDur(st.hoje)} · semana ${fmtDur(st.semana)}\nTotal ${fmtDur(st.total)}${est ? ` de ${Number(p.estimated_hours)} h estimadas` : ''}\nÚltima sessão: ${ultima}`)}">hoje ${fmtDur(st.hoje)}</span><span class="grow"></span>${pin}${acao}</div>` })}</div>`;
   }).join('');
   return `<div class="panel"><div class="panel-h"><button class="btn sm icon ghost" data-act="ap-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="ap-toggle" style="cursor:pointer">Projetos ativos</h3><span class="small muted">${base.length}</span></div>${fechado ? '' : `<div class="panel-b"><div class="ap-grid">${cards}</div></div>`}</div>`;
 }

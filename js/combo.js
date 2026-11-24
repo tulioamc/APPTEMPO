@@ -8,6 +8,8 @@ function comboItems(kind) {
   if (kind.startsWith('reimb_')) return statuses(kind).map(s => ({ id: s.id, name: s.name, color: s.color, html: tag(s.name, s.color, { pill: true }) }));
   if (kind === 'wt') return workTypes().map(w => ({ id: w.id, name: w.name, color: w.color, html: tag(w.name, w.color) }));
   if (kind === 'agency') return agencies().map(a => ({ id: a.id, name: a.name, color: a.color, html: tag(a.name, a.color, { upper: true }) }));
+  /* agência ou cliente numa lista só (contatos do WhatsApp): id 'a:…' ou 'c:…' */
+  if (kind === 'party') return [...agencies().map(a => ({ id: 'a:' + a.id, name: a.name + ' agência', html: `${tag(a.name, a.color, { upper: true })} <span class="faint small">agência</span>` })), ...clients().map(c => ({ id: 'c:' + c.id, name: c.name + ' ' + (db.get('tempo_agencies', c.agency_id)?.name || '') + ' cliente', html: `${clientTag(c)} <span class="faint small">cliente</span>` }))];
   if (kind === 'client') return clients().map(c => ({ id: c.id, name: c.name + ' ' + (db.get('tempo_agencies', c.agency_id)?.name || ''), html: clientTag(c) }));
   return [];
 }
