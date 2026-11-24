@@ -330,13 +330,38 @@ function hojeTarefasHTML(cur) {
   const feito = typeof planoFeitosDoDia === 'function' ? planoFeitosDoDia(hoje).reduce((t, f) => t + (f.fim - f.ini), 0) : 0;
   const plan = grupos.reduce((t, g) => t + g.h, 0);
   const linha = (g) => { const p = db.get('tempo_projects', g.pid); const t = g.tid ? db.get('tempo_tasks', g.tid) : null; const c = p && clientOf(p);
-    const rodando = cur && cur.project_id === g.pid && (!g.tid || cur.task_id === g.tid);
-    return `<div class="hj-l${rodando ? ' on' : ''}"><span class="hj-h mono">${planoHora(g.ini).replace(':', 'h')}</span><button class="hj-n" data-act="proj-open" data-id="${g.pid}" data-tab="tasks"${g.tid ? ` data-tk="${g.tid}"` : ''}><b>${esc(t ? t.name : p?.name || 'Projeto')}</b>${t && p ? `<span class="faint small">${esc(p.name)}</span>` : ''}</button>${c ? clientTag(c) : '<span></span>'}<span class="mono small muted">${fmtH(g.h * 36e5)}</span>${rodando ? '<span class="pm-badge">● agora</span>' : `<button class="btn sm icon ghost" data-act="hj-play" data-pid="${g.pid}" data-tid="${g.tid || ''}" aria-label="Iniciar">${icon('play')}</button>`}</div>`; };
-  const linhaTodo = (e) => `<div class="hj-l"><span class="hj-h mono">${planoHora(e.ini).replace(':', 'h')}</span><button class="hj-n" data-act="todo-modal" data-id="${e.id}"><b${e.feito ? ' style="text-decoration:line-through;opacity:.6"' : ''}>${esc(e.titulo)}</b><span class="faint small">to-do</span></button><span></span><span></span><span></span></div>`;
-  const itens = [...grupos.map(g => ({ t: g.ini, h: linha(g) })), ...todos.map(e => ({ t: e.ini, h: linhaTodo(e) }))].sort((x, y) => x.t - y.t);
+    const feita = !!g.feita; const rodando = !feita && cur && cur.state === 'running' && cur.project_id === g.pid && (!g.tid || cur.task_id === g.tid);
+    const ck = !g.tid ? '<span></span>' : feita ? `<button class="hj-ck ok" data-act="hj-reabrir" data-tid="${g.tid}" aria-label="Reabrir tarefa">${icon('check')}</button>`
+      : `<button class="hj-ck${rodando ? ' rodando' : ''}" data-act="hj-feita" data-tid="${g.tid}" aria-label="Concluir tarefa" title="Concluir${rodando ? ' e passar para a próxima tarefa' : ''}"></button>`;
+    const acao = feita ? '<span></span>' : rodando ? '<span class="hj-agora">Em andamento</span>' : `<button class="btn sm icon ghost" data-act="hj-play" data-pid="${g.pid}" data-tid="${g.tid || ''}" aria-label="Iniciar">${icon('play')}</button>`;
+    return `<div class="hj-l${feita ? ' feita' : ''}">${ck}<span class="hj-h mono">${planoHora(g.ini).replace(':', 'h')}</span><button class="hj-n" data-act="proj-open" data-id="${g.pid}" data-tab="tasks"${g.tid ? ` data-tk="${g.tid}"` : ''}><b>${esc(t ? t.name : p?.name || 'Projeto')}</b>${t && p ? `<span class="small hj-sub">${esc(p.name)}</span>` : ''}</button>${acao}${c ? clientTag(c) : '<span></span>'}<span class="mono small hj-dur">${g.h ? fmtH(g.h * 36e5) : ''}</span></div>`; };
+  const linhaTodo = (e) => `<div class="hj-l${e.feito ? ' feita' : ''}"><button class="hj-ck${e.feito ? ' ok' : ''}" data-act="todo-toggle" data-id="${e.id}" aria-label="${e.feito ? 'Reabrir' : 'Concluir'} to-do">${e.feito ? icon('check') : ''}</button><span class="hj-h mono">${planoHora(e.ini).replace(':', 'h')}</span><button class="hj-n" data-act="todo-modal" data-id="${e.id}"><b>${esc(e.titulo)}</b><span class="small hj-sub">to-do</span></button><span></span><span></span><span></span></div>`;
+  // tarefas concluídas hoje (com tempo registrado hoje) também aparecem, em verde, na hora em que começou o trabalho nelas
+  const h0 = new Date(hoje + 'T00:00:00').getTime(); const ja = new Set(grupos.map(g => g.tid));
+  const feitasHoje = {}; db.all('tempo_time_entries').forEach(e => { if (!e.task_id || ja.has(e.task_id)) return; const t = db.get('tempo_tasks', e.task_id); if (!t || statusCat(t.status_id) !== 'done') return;
+    (e.segments || []).forEach(sg => { const a = Math.max(h0, new Date(sg.s).getTime()), b = Math.min(h0 + 864e5, sg.e ? new Date(sg.e).getTime() : Date.now()); if (b <= a) return;
+      const f = feitasHoje[t.id] ||= { tid: t.id, pid: e.project_id, ini: 24, h: 0, feita: true }; f.ini = Math.min(f.ini, (a - h0) / 36e5); f.h += (b - a) / 36e5; }); });
+  const itens = [...grupos.map(g => ({ t: g.ini, h: linha(g) })), ...Object.values(feitasHoje).map(g => ({ t: g.ini, h: linha(g) })), ...todos.map(e => ({ t: e.ini, h: linhaTodo(e) }))].sort((x, y) => x.t - y.t);
   const resumo = `${fmtH(feito * 36e5)} feito · ${fmtH(plan * 36e5)} planejado`;
   return `<div class="panel"><div class="panel-h"><button class="btn sm icon ghost" data-act="hj-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="hj-toggle" style="cursor:pointer">Tarefas de hoje</h3><span class="small muted">${resumo}</span><span class="grow"></span><button class="btn sm ghost" data-act="hj-cal">Ver no Calendário</button></div>${fechado ? '' : `<div class="panel-b tight">${itens.length ? itens.map(x => x.h).join('') : '<div class="empty small">Nada planejado para o resto do dia.</div>'}</div>`}</div>`;
 }
+let HJ_ORDEM = [];
+/* Concluir na lista de hoje: marca a tarefa como feita; se a sessão estava nela, a sessão passa para a próxima tarefa da lista. */
+ACTIONS['hj-feita'] = (el) => {
+  const t = db.get('tempo_tasks', el.dataset.tid); if (!t) return;
+  const done = statuses('work').find(s => s.category === 'done'); if (!done) return;
+  const cur = activeEntry(); const nela = cur && cur.state === 'running' && (cur.task_id === t.id || (cur.project_id === t.project_id && !cur.task_id));
+  const i = HJ_ORDEM.findIndex(x => x.tid === t.id); const prox = HJ_ORDEM.slice(i + 1).find(x => x.tid !== t.id);
+  setTaskStatus(t, done.id);
+  if (!nela) { toast(`“${t.name}” concluída`); return; }
+  if (!prox) { toast(`“${t.name}” concluída. Não há próxima tarefa planejada hoje; a sessão continua.`); return; }
+  const nt = db.get('tempo_tasks', prox.tid); const pr = db.get('tempo_projects', prox.pid); if (!nt || !pr) return;
+  const c = clientOf(pr);
+  stopEntry(db.get('tempo_time_entries', cur.id), nowISO(), null);
+  startEntry({ agency_id: c?.agency_id || null, client_id: c?.id || null, project_id: pr.id, task_id: nt.parent_id || nt.id, work_type_id: nt.work_type_id || pr.work_type_id || null, revision_id: null, notes: '' });
+  db.emit(); toast(`“${t.name}” concluída · agora em “${nt.name}”`);
+};
+ACTIONS['hj-reabrir'] = (el) => { const t = db.get('tempo_tasks', el.dataset.tid); const st = statuses('work').find(x => x.category === 'todo'); if (t && st) setTaskStatus(t, st.id); };
 ACTIONS['hj-toggle'] = () => db.setSetting('hjFechado', !db.setting('hjFechado', false));
 ACTIONS['hj-cal'] = () => { if (typeof PLANO !== 'undefined') { PLANO.modo = 'dia'; PLANO.dia = null; } go('plano'); };
 ACTIONS['hj-play'] = (el) => {
@@ -352,13 +377,13 @@ function activeProjectsHTML(cur) {
   const cards = base.map(({ p, st, fixo }) => {
     const c = clientOf(p);
     let acao;
-    if (cur && cur.project_id === p.id) acao = '<span class="pm-badge">● Em andamento</span>';
-    else if (cur) acao = `<button class="btn sm" data-act="ts-switch-proj" data-id="${esc(p.id)}">${icon('play')} Trocar para este</button>`;
+    if (cur && cur.project_id === p.id) acao = '<span class="hj-agora">agora</span>';
+    else if (cur) acao = `<button class="btn sm" data-act="ts-switch-proj" data-id="${esc(p.id)}" title="Trocar a sessão para este projeto">${icon('play')} Trocar</button>`;
     else acao = `<button class="btn sm primary" data-act="ts-start-proj" data-id="${esc(p.id)}">${icon('play')} Iniciar</button>`;
     const est = Number(p.estimated_hours) > 0 ? Number(p.estimated_hours) * 3600e3 : 0;
     const estPct = est ? st.total / est * 100 : 0;
     const ultima = st.last ? `${fmtDate(ymd(new Date(st.last)))} às ${fmtTime(new Date(st.last).toISOString())}` : 'nunca';
-    const pin = `<button class="btn sm ghost ap-pin" data-act="ap-pin" data-id="${esc(p.id)}" title="${fixo ? 'Desafixar' : 'Fixar no topo'}">${fixo ? 'Desafixar' : 'Fixar'}</button>`;
+    const pin = `<button class="btn sm icon ghost ap-pin${fixo ? ' on' : ''}" data-act="ap-pin" data-id="${esc(p.id)}" title="${fixo ? 'Desafixar' : 'Fixar no topo'}" aria-label="${fixo ? 'Desafixar' : 'Fixar no topo'}">${icon('pin')}</button>`;
     return `<div class="ap-cardw${fixo ? ' ap-fixo' : ''}">${pjcHTML(p, { extra: `<div class="pjc-acoes"><span class="small muted mono" data-tip="${esc(`Hoje ${fmtDur(st.hoje)} · semana ${fmtDur(st.semana)}\nTotal ${fmtDur(st.total)}${est ? ` de ${Number(p.estimated_hours)} h estimadas` : ''}\nÚltima sessão: ${ultima}`)}">hoje ${fmtDur(st.hoje)}</span><span class="grow"></span>${pin}${acao}</div>` })}</div>`;
   }).join('');
   return `<div class="panel"><div class="panel-h"><button class="btn sm icon ghost" data-act="ap-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="ap-toggle" style="cursor:pointer">Projetos ativos</h3><span class="small muted">${base.length}</span></div>${fechado ? '' : `<div class="panel-b"><div class="ap-grid">${cards}</div></div>`}</div>`;

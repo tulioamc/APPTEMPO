@@ -216,7 +216,7 @@ function setTaskStatus(t, statusId) {
   const from = t.status_id;
   db.update('tempo_tasks', t.id, { status_id: statusId, status_inherited: false }, true);
   logEvent('task', t.id, 'status', `${t.parent_id ? 'Subtarefa' : 'Tarefa'} “${t.name}”: ${statusName(from)} → ${statusName(statusId)}`, from, statusId, { project_id: t.project_id });
-  if (statusCat(statusId) === 'active') reopenProjectIfDone(t.project_id);
+  if (statusCat(statusId) === 'active') { reopenProjectIfDone(t.project_id); iniciarProjetoSeAFazer(t.project_id); }
   if (statusCat(statusId) === 'done') startDependentTasks(t);
   db.emit();
 }
@@ -282,6 +282,14 @@ function startDependentTasks(done) {
   });
 }
 /* Projeto concluído com tarefa ativa não pode continuar concluído: volta para "em andamento". */
+/* Projeto "A fazer" que começou (tarefa em andamento ou tempo registrado) passa sozinho para "Em andamento". */
+function iniciarProjetoSeAFazer(pid) {
+  const pr = db.get('tempo_projects', pid); if (!pr || statusCat(pr.status_id) !== 'todo') return;
+  const ativos = db.where('tempo_status_options', s => s.kind === 'work' && s.category === 'active');
+  const act = ativos.find(s => /andamento/i.test(s.name)) || ativos.sort((a, b) => (a.order ?? 99) - (b.order ?? 99))[0]; if (!act) return;
+  db.update('tempo_projects', pid, { status_id: act.id, started_at: pr.started_at || nowISO() }, true);
+  logEvent('project', pid, 'status', `Status: ${statusName(pr.status_id)} → ${act.name} (começou)`, pr.status_id, act.id);
+}
 function reopenProjectIfDone(pid) {
   const pr = db.get('tempo_projects', pid); if (!pr || statusCat(pr.status_id) !== 'done') return;
   const act = db.where('tempo_status_options', s => s.kind === 'work' && s.category === 'active').sort((a, b) => (a.order ?? 99) - (b.order ?? 99))[0];
@@ -437,6 +445,7 @@ function startEntry(sel, startMs = null) {
   const now = Date.now();
   const ini = startMs != null && startMs < now ? Math.min(freeStartFrom(startMs), now) : now;
   const e = db.insert('tempo_time_entries', { ...sel, work_type_id, state: 'running', segments: [{ s: new Date(ini).toISOString(), e: null }], edits: [] });
+  if (sel.project_id) iniciarProjetoSeAFazer(sel.project_id);
   db.setSetting('lastSeen', Date.now());
   if (ini < now - 60e3) { const n = applyRetroPauses(e, ini, now); if (n) setTimeout(() => toast(`${n} pausa(s) desse período entraram pelo log (WhatsApp, parado…).`, { ms: 5000 }), 300); }
   return e;

@@ -1960,3 +1960,32 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 @keyframes pjcPerto { 0% { transform: scale(.97); box-shadow: 0 0 0 rgba(15, 20, 40, 0); } 60% { transform: scale(1.03); } 100% { transform: scale(1.01); } }
 @keyframes pjcDesce { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .pjc.aberto, .pjc.aberto .pjc-tks, .pjc.aberto .pjc-props, .pjc.aberto .pjc-acoes { animation: none; } }
+/* V2.06.110: check verde, barra verde clara, "agora", checkbox nas Tarefas de hoje, pin */
+.pjc-bar i { background: #6FD18A; }
+.pjc-tk.ok .pjc-ck { background: #4CC66E; border-color: #4CC66E; color: #fff; }
+.pjc-tk.ok > span:first-of-type { color: var(--fg-3); }
+.pjc-acoes { flex-wrap: nowrap; }
+.pjc-acoes .btn { white-space: nowrap; }
+.ap-pin.on { color: var(--accent); }
+.ap-pin svg { width: 15px; height: 15px; }
+.hj-l { grid-template-columns: 18px 44px minmax(0, 1fr) auto 52px auto; }
+.hj-ck { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: none; padding: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+.hj-ck:hover { border-color: #4CC66E; background: color-mix(in srgb, #4CC66E 15%, transparent); }
+.hj-ck.ok { background: #4CC66E; border-color: #4CC66E; }
+.hj-ck svg { width: 10px; height: 10px; }
+.hj-agora { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 11px; font-weight: 600; color: #1D7A4A; background: #E2F4EA; border-radius: 999px; padding: 2px 9px 2px 7px; }
+.hj-agora::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #4CC66E; }
+/* Tarefas de hoje no desenho do Tulio (24/11): feita = linha verde; em andamento = círculo com ponto verde + chip "Em andamento" */
+.hj-l { grid-template-columns: 18px 44px minmax(0, 1fr) auto auto 52px; }
+.hj-sub { color: var(--fg-3); }
+.hj-dur { color: var(--fg-2); text-align: right; }
+.hj-l.on { background: none; }
+.hj-l.feita { background: #7ADB8C; border-bottom-color: transparent; }
+.hj-l.feita .hj-h, .hj-l.feita .hj-sub, .hj-l.feita .hj-dur { color: color-mix(in srgb, #0B3B1C 65%, transparent); }
+.hj-l.feita .hj-n b { color: #0B3B1C; }
+.hj-ck.ok { background: #fff; border-color: #fff; color: #4CC66E; }
+.hj-ck.ok svg { stroke-width: 3; }
+.hj-ck.rodando { border-color: var(--line-strong); position: relative; }
+.hj-ck.rodando::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #4CC66E; }
+.hj-agora { font-size: 12px; color: #0B3B1C; background: #7ADB8C; padding: 4px 12px 4px 10px; }
+.hj-agora::before { width: 8px; height: 8px; background: #0B3B1C; }

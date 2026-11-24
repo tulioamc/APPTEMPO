@@ -98,7 +98,7 @@ function pdTasks(p) {
     <label class="tk-ent-v"><span>${(e.hora || '19:00').replace(':', 'h')}</span><select data-ent-f="hora" aria-label="Hora da entrega">${horaOpcoesHTML(e.hora || '19:00')}</select></label>
     <button type="button" class="tk-ent-x" data-x="ent-del" data-id="${e.id}" aria-label="Apagar entrega" title="Apagar entrega">×</button></span></div>`;
   const seq = projSequencia(p.id);
-  return `${typeof tkResolverBarraHTML === 'function' ? tkResolverBarraHTML(p.id) : ''}<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px"><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
+  return `${typeof tkResolverBarraHTML === 'function' ? tkResolverBarraHTML(p.id) : ''}<div class="row" style="justify-content:flex-end;margin:0 0 8px;gap:8px"><button class="btn sm" data-act="pd-cal" data-id="${p.id}">${icon('cal')} Ver no Calendário</button><button class="btn sm" data-x="open-flow" data-id="${p.id}">Ver fluxo em nós</button></div>
   <div class="panel tk-lista"><div class="panel-b tight">${tks.length ? seq.map(x => x.tipo === 'entrega' ? entHTML(x.e) : row(x.t) + subtasksOf(x.t.id).map(s => row(s, true)).join('')).join('') : `<div class="empty small">Nenhuma tarefa. <button class="btn sm" data-x="video-flow" data-id="${p.id}">Criar fluxo de vídeo pré-montado</button></div>`}
   <form class="tk-nova" data-form="add-task"><button type="submit" class="tk-nova-i" aria-label="Adicionar" title="Adicionar">${icon('plus')}</button><input class="tk-in grow" name="name" placeholder="Nova tarefa (Enter para adicionar)" aria-label="Nova tarefa"></form>
   <form class="tk-nova" data-form="add-ent"><button type="submit" class="tk-nova-i" aria-label="Adicionar" title="Adicionar">${icon('plus')}</button><input class="tk-in grow" name="name" placeholder="Deadline (Enter para adicionar)" aria-label="Nova entrega (deadline)"></form></div></div>`;
@@ -391,3 +391,11 @@ function margemAoVivoHTML(p, rate) {
   const pct = Math.max(4, Math.min(100, rate / orc * 100));
   return `<span data-tip="${esc(`Hora orçada na proposta: ${fmtMoney(orc)}\nHora real até agora: ${fmtMoney(rate)} (orçamento ÷ horas trabalhadas)`)}">orçada ${fmtMoney0(orc)} · <b style="${dif < 0 ? 'color:var(--warn)' : ''}">${dif > 0 ? '+' : ''}${dif}%</b></span><span class="pm-bar" style="display:block;margin-top:4px"><span style="width:${pct.toFixed(0)}%;${dif < -20 ? 'background:var(--danger)' : ''}"></span></span>`;
 }
+
+/* Tarefas do projeto → Calendário na semana da próxima tarefa planejada (ou de hoje). */
+ACTIONS['pd-cal'] = (el) => {
+  const pid = el.dataset.id; let dia = null;
+  try { const pd = planejar(planoProjetos(), new Date(), 60).porDia || {}; dia = Object.keys(pd).sort().find(d => (pd[d].blocos || []).some(b => b.pid === pid)) || null; } catch (e) {}
+  while (layers.length) topLayer().close();
+  PLANO.modo = 'semana'; PLANO.semIni = planoSegunda(dia || new Date()); go('plano');
+};
