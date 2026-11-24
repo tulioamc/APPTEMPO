@@ -2075,3 +2075,5 @@ input[type=checkbox]:disabled { opacity: .5; cursor: default; }
 body.pl-mao [data-pl-scroll], body.pl-mao .plg-dir, body.pl-mao [data-pl-scroll] *, body.pl-mao .plg-dir * { cursor: grab !important; user-select: none; }
 body.pl-mao.pl-mao-on [data-pl-scroll], body.pl-mao.pl-mao-on .plg-dir, body.pl-mao.pl-mao-on [data-pl-scroll] *, body.pl-mao.pl-mao-on .plg-dir * { cursor: grabbing !important; }
 body.pl-mao .pl-mes-scroll, body.pl-mao .pl-mes-scroll * { cursor: grab !important; user-select: none; } body.pl-mao.pl-mao-on .pl-mes-scroll, body.pl-mao.pl-mao-on .pl-mes-scroll * { cursor: grabbing !important; }
+.panel.fechado > .panel-h { border-bottom: 0; }
+.timer-prox { margin: 4px 0 6px; } .timer-prox b { color: var(--fg); font-weight: 600; }

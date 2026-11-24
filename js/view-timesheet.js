@@ -70,7 +70,7 @@ VIEWS.timesheet = () => {
     timer = `<div class="timer-card ${a.state === 'running' ? 'running' : ''}">
       <div class="row between"><span class="timer-state"><span class="dot ${a.state === 'running' ? 'live' : 'paused'}"></span>${a.state === 'running' ? 'Registrando' : 'Pausado'} · desde ${fmtTime(entryStart(a))}</span>${wtTag(a.work_type_id)}</div>
       <div class="timer-digits" data-tick="${a.id}" data-fmt="big">${bigClock(entryMs(a))}</div>
-      <div class="timer-path">${pathHTML(selPath(sel))}</div>
+      <div class="timer-path">${pathHTML(selPath(sel))}</div>${hjProximaLinha(a)}
       <div class="field"><label for="ts-notes">Notas da sessão</label><textarea id="ts-notes" class="input" data-on="ts-notes" placeholder="Interrupções, espera pelo cliente, próximo passo…" style="min-height:56px">${esc(a.notes)}</textarea></div>
       <div class="timer-actions">
         ${a.state === 'running' ? `<button class="btn" data-act="ts-pause">${icon('pause')} Pausar</button>` : `<button class="btn primary" data-act="ts-resume">${icon('play')} Retomar</button>`}
@@ -99,7 +99,6 @@ VIEWS.timesheet = () => {
     ${timer}
     ${reportPanelHTML(day)}
   </div>
-  ${dayReviewHTML(day, entries)}
   ${metaMesStripHTML()}
   ${hojeTarefasHTML(a)}
   ${activeProjectsHTML(a)}
@@ -344,23 +343,23 @@ function hojeTarefasHTML(cur) {
   const itens = [...grupos.map(g => ({ t: g.ini, h: linha(g) })), ...Object.values(feitasHoje).map(g => ({ t: g.ini, h: linha(g) })), ...todos.map(e => ({ t: e.ini, h: linhaTodo(e) }))].sort((x, y) => x.t - y.t);
   const resumo = `${fmtH(feito * 36e5)} feito · ${fmtH(plan * 36e5)} planejado`;
   const n0 = new Date(); const fimDia = n0.getHours() * 60 + n0.getMinutes() >= 19 * 60 + 30 && !HJ_VER_LISTA;
-  const corpo = (HJ_PRAZOS || fimDia ? '' : hjAgoraHTML(grupos, todos)) + (HJ_PRAZOS ? hjPrazosHTML() : fimDia ? hjFimDoDiaHTML(hoje) : (itens.length ? itens.map(x => x.h).join('') : '<div class="empty small">Nada planejado para o resto do dia.</div>'));
+  const corpo = (HJ_PRAZOS ? hjPrazosHTML() : fimDia ? hjFimDoDiaHTML(hoje) : (itens.length ? itens.map(x => x.h).join('') : '<div class="empty small">Nada planejado para o resto do dia.</div>'));
   const titulo = HJ_PRAZOS ? 'Próximos prazos' : fimDia ? 'Fim do dia' : 'Tarefas de hoje';
-  return `<div class="panel"><div class="panel-h"><button class="btn sm icon ghost" data-act="hj-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="hj-toggle" style="cursor:pointer">${titulo}</h3><span class="small muted">${resumo}</span>${hjSaudeChip()}<span class="grow"></span>${fimDia || HJ_VER_LISTA ? `<button class="btn sm ghost" data-act="hj-lista">${HJ_VER_LISTA ? 'Ver resumo' : 'Ver lista'}</button>` : ''}<button class="btn sm${HJ_PRAZOS ? ' on' : ' ghost'}" data-act="hj-prazos">${icon('flag')} Próximos prazos</button><button class="btn sm ghost" data-act="hj-cal">Ver no Calendário</button></div>${fechado ? '' : `<div class="panel-b tight">${corpo}</div>`}</div>`;
+  return `<div class="panel${fechado ? ' fechado' : ''}"><div class="panel-h"><button class="btn sm icon ghost" data-act="hj-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="hj-toggle" style="cursor:pointer">${titulo}</h3><span class="small muted">${resumo}</span>${hjSaudeChip()}<span class="grow"></span>${fimDia || HJ_VER_LISTA ? `<button class="btn sm ghost" data-act="hj-lista">${HJ_VER_LISTA ? 'Ver resumo' : 'Ver lista'}</button>` : ''}<button class="btn sm${HJ_PRAZOS ? ' on' : ' ghost'}" data-act="hj-prazos">${icon('flag')} Próximos prazos</button><button class="btn sm ghost" data-act="hj-cal">Ver no Calendário</button></div>${fechado ? '' : `<div class="panel-b tight">${corpo}</div>`}</div>`;
 }
 let HJ_PRAZOS = false, HJ_VER_LISTA = false;
 /* Chip do plano na tela inicial: só aparece quando há aviso (clique abre a janela de conserto). */
 function hjSaudeChip() { try { const s = typeof planoSaudeHTML === 'function' ? planoSaudeHTML() : ''; return s.includes('pl-saude ok') ? '' : s; } catch (e) { return ''; } }
-/* "Agora" / "Próximo": a atividade do plano que está rolando ou a mais perto (tarefas com bloco e to-dos com hora). */
-function hjAgoraHTML(grupos, todos) {
-  const n = new Date(); const h = n.getHours() + n.getMinutes() / 60;
-  const c = [...grupos.filter(g => g.fim > h).map(g => ({ ini: g.ini, fim: g.fim, nome: (g.tid && db.get('tempo_tasks', g.tid)?.name) || db.get('tempo_projects', g.pid)?.name || 'Projeto', sub: g.tid ? db.get('tempo_projects', g.pid)?.name || '' : '', pid: g.pid, tid: g.tid })),
-    ...todos.filter(e => !e.feito && e.fim > h).map(e => ({ ini: e.ini, fim: e.fim, nome: e.titulo, sub: 'To-do', todo: e.id }))].sort((a, b) => a.ini - b.ini)[0];
-  if (!c) return '';
-  const agora = c.ini <= h; const falta = Math.round((c.ini - h) * 60);
-  const quando = agora ? `até ${planoHora(c.fim).replace(':', 'h')}` : falta < 60 ? `em ${falta} min` : `às ${planoHora(c.ini).replace(':', 'h')}`;
-  const abre = c.pid ? `data-act="proj-open" data-id="${c.pid}" data-tab="tasks"${c.tid ? ` data-tk="${c.tid}"` : ''}` : `data-act="todo-modal" data-id="${c.todo}"`;
-  return `<div class="hj-prox${agora ? ' agora' : ''}"><span class="hj-prox-k">${agora ? 'Agora' : 'Próximo'}</span><button class="hj-prox-n" ${abre}><b>${esc(c.nome)}</b>${c.sub ? `<span class="small muted">${esc(c.sub)}</span>` : ''}</button><span class="small muted">${quando}</span>${c.pid ? `<button class="btn sm icon ghost" data-act="hj-play" data-pid="${c.pid}" data-tid="${c.tid || ''}" aria-label="Iniciar">${icon('play')}</button>` : ''}<button class="btn sm ghost" data-act="hj-cal">Calendário</button></div>`;
+/* Linha no box de registro: o que o plano tem agora ou logo depois (fora o que já está rodando). */
+function hjProximaLinha(a) {
+  try {
+    if (typeof planejar !== 'function' || typeof planoProjetos !== 'function') return '';
+    const n = new Date(); const h = n.getHours() + n.getMinutes() / 60; const hoje = ymd(n);
+    const bl = (planejar(planoProjetos(), n, 3).porDia[hoje]?.blocos || []).filter(b => b.fim > h && !(a && a.project_id === b.pid && (!b.tid || a.task_id === b.tid))).sort((x, y) => x.ini - y.ini)[0];
+    if (!bl) return '';
+    const t = bl.tid && db.get('tempo_tasks', bl.tid); const p = db.get('tempo_projects', bl.pid); const hm = (x) => planoHora(x).replace(':', 'h');
+    return `<div class="timer-prox small muted">${bl.ini <= h ? 'No plano agora' : 'Depois no plano'}: <b>${esc(t ? t.name : p?.name || 'Projeto')}</b> ${bl.ini <= h ? 'até ' + hm(bl.fim) : 'às ' + hm(bl.ini)}</div>`;
+  } catch (e) { return ''; }
 }
 ACTIONS['hj-prazos'] = () => { HJ_PRAZOS = !HJ_PRAZOS; db.emit(); };
 ACTIONS['hj-lista'] = () => { HJ_VER_LISTA = !HJ_VER_LISTA; db.emit(); };
@@ -436,7 +435,7 @@ function activeProjectsHTML(cur) {
     const pin = `<button class="btn sm icon ghost ap-pin${fixo ? ' on' : ''}" data-act="ap-pin" data-id="${esc(p.id)}" title="${fixo ? 'Desafixar' : 'Fixar no topo'}" aria-label="${fixo ? 'Desafixar' : 'Fixar no topo'}">${icon('pin')}</button>`;
     return `<div class="ap-cardw${fixo ? ' ap-fixo' : ''}">${pjcHTML(p, { extra: `<div class="pjc-acoes"><span class="small muted mono" data-tip="${esc(`Hoje ${fmtDur(st.hoje)} · semana ${fmtDur(st.semana)}\nTotal ${fmtDur(st.total)}${est ? ` de ${Number(p.estimated_hours)} h estimadas` : ''}\nÚltima sessão: ${ultima}`)}">hoje ${fmtDur(st.hoje)}</span><span class="grow"></span>${pin}${acao}</div>` })}</div>`;
   }).join('');
-  return `<div class="panel"><div class="panel-h"><button class="btn sm icon ghost" data-act="ap-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="ap-toggle" style="cursor:pointer">Projetos ativos</h3><span class="small muted">${base.length}</span></div>${fechado ? '' : `<div class="panel-b"><div class="ap-grid">${cards}</div></div>`}</div>`;
+  return `<div class="panel${fechado ? ' fechado' : ''}"><div class="panel-h"><button class="btn sm icon ghost" data-act="ap-toggle" aria-expanded="${!fechado}" title="${fechado ? 'Mostrar' : 'Esconder'}">${icon(fechado ? 'chevR' : 'chevD')}</button><h3 data-act="ap-toggle" style="cursor:pointer">Projetos ativos</h3><span class="small muted">${base.length}</span></div>${fechado ? '' : `<div class="panel-b"><div class="ap-grid">${cards}</div></div>`}</div>`;
 }
 ACTIONS['ap-toggle'] = () => db.setSetting('apFechado', !db.setting('apFechado', false));
 ACTIONS['ap-resumo'] = (el) => openProject(el.dataset.id, 'overview');
