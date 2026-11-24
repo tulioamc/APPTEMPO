@@ -2174,3 +2174,15 @@ body.pl-arrastando, body.pl-arrastando * { user-select: none !important; -webkit
 .tk-grip svg { width: 8px; height: 12px; fill: currentColor; }
 .tk.arrastando { opacity: .5; }
 .pl-grade.pl-fly-wrap { position: fixed !important; left: 0; top: 0; width: 0 !important; height: 0 !important; overflow: visible !important; background: none !important; border: 0 !important; pointer-events: none; z-index: 999; }
+/* "Cor do cliente" (24/11, desenho do Tulio): texto na cor de texto do cliente; chip invertido (fundo = cor do texto,
+   letra = cor do cliente); projeto em caixa alta à direita; × num quadradinho claro; linhas de começo/duração e espera */
+.pl-grade > .pl-bloco.cc { display: flex !important; flex-direction: column; gap: 2px; padding: 5px 7px !important; border-radius: 8px !important; }
+.pl-bloco.cc .pl-cc-top { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.pl-bloco.cc .pl-cc-top .pl-tx { flex: 1; min-width: 0; }
+.pl-bloco.cc .pl-cc-top .pl-tx b { display: flex; align-items: center; gap: 5px; font-size: 1.12em; font-weight: 700; color: var(--ct) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-bloco.cc .pl-cc-chip { background: var(--ct); color: var(--cc); border-radius: 4px; padding: 0 5px; font-size: .82em; font-weight: 700; flex: none; line-height: 1.45; }
+.pl-bloco.cc .pl-cc-proj { flex: 0 1 auto; max-width: 45%; text-align: right; text-transform: uppercase; font-size: .72em; font-weight: 700; line-height: 1.15; color: var(--ct); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pl-bloco.cc .pl-cc-x { position: static !important; flex: none; width: 18px; height: 18px; border-radius: 4px; background: var(--ct) !important; color: var(--cc) !important; border: 0; font-size: 13px; line-height: 18px; padding: 0; opacity: .95; }
+.pl-bloco.cc .pl-cc-l2, .pl-bloco.cc .pl-cc-l3 { color: var(--ct); font-size: .92em; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-bloco.cc .pl-cc-l2 b { font-weight: 700; }
+.pl-bloco.cc .pl-cc-l3 { opacity: .9; }
