@@ -145,3 +145,54 @@ function planoPreviaFim() {
   if (_pv.d && _pv.d.el) _pv.d.el.style.pointerEvents = '';
   _pv = null;
 }
+
+/* Fixar / soltar e mover pelo menu do clique direito e pelo teclado (24/11). */
+function planoBlocoDados(el) { return { dia: el.dataset.dia, pid: el.dataset.pid, tid: el.dataset.tid || null, ini: Number(el.dataset.ini), fim: Number(el.dataset.fim), pins: (el.dataset.pin || '').split(',').filter(Boolean) }; }
+function planoFixarBloco(el) {
+  const b = planoBlocoDados(el); if (b.pins.length) return toast('Este bloco já está fixado');
+  planoMudar('Bloco fixado aqui', () => planoPinsSalvar([...planoPins(), { id: uid(), dia: b.dia, pid: b.pid, tid: b.tid, ini: b.ini, h: b.fim - b.ini }]));
+}
+/* Mover um bloco: muda dia e/ou hora (fica fixado); os fixados que ele cobre vão para depois, inteiros. */
+function planoMoverBloco(el, novoDia, novoIni, rotulo) {
+  const b = planoBlocoDados(el); const h = b.fim - b.ini; const ini = Math.max(0, Math.min(24 - h, novoIni));
+  planoMudar(rotulo, () => {
+    const outros = planoPins().filter(p => !b.pins.includes(p.id));
+    const r = planoEmpurrar(outros, [{ dia: novoDia, ini, fim: ini + h }], planoOcupadosDoDia, { proximoDia: planoProximoUtil });
+    planoPinsSalvar([...r.base, ...r.empurrados, { id: uid(), dia: novoDia, pid: b.pid, tid: b.tid, ini, h }]);
+  });
+}
+const planoMoverAmanha = (el) => planoMoverBloco(el, planoProximoUtil(el.dataset.dia), Number(el.dataset.ini), 'Bloco movido para o próximo dia útil');
+/* Fixar o dia: todos os blocos planejados do dia viram fixados como estão. Soltar o dia: tira todos os fixados dele. */
+function planoFixarDia(dia) {
+  let m; try { m = tkMotor(new Date(), 60); } catch (_) { return; }
+  const soltos = (m.porDia[dia]?.blocos || []).filter(b => !b.pin);
+  if (!soltos.length) return toast('Nada solto para fixar neste dia');
+  planoMudar(`Dia fixado (${soltos.length} bloco${soltos.length > 1 ? 's' : ''})`, () => planoPinsSalvar([...planoPins(), ...soltos.map(b => ({ id: uid(), dia, pid: b.pid, tid: b.tid || null, ini: b.ini, h: b.fim - b.ini }))]));
+}
+function planoSoltarDia(dia) {
+  const n = planoPins().filter(p => p.dia === dia).length; if (!n) return toast('Nenhum bloco fixado neste dia');
+  planoMudar(`Dia solto (${n} bloco${n > 1 ? 's' : ''})`, () => planoPinsSalvar(planoPins().filter(p => p.dia !== dia)), 'Dia solto: o app encaixa de novo');
+}
+ACTIONS['pl-fixar-dia'] = (el) => { const dia = el.dataset.dia; planoPins().some(p => p.dia === dia) && el.dataset.modo === 'soltar' ? planoSoltarDia(dia) : planoFixarDia(dia); };
+
+/* Teclado: com UM bloco planejado selecionado (Shift + clique), ↑/↓ movem 15 min e Shift + ←/→ trocam de dia útil.
+   Esc solta a seleção (já existia). O clique simples continua abrindo o projeto. */
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('keydown', (e) => {
+    if (typeof PLANO === 'undefined' || PLANO.sel.size !== 1 || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    const k = [...PLANO.sel][0]; if (!k.startsWith('p:')) return;
+    const el = [...document.querySelectorAll('.pl-bloco[data-sk]')].find(o => o.dataset.sk === k); if (!el) return;
+    let dia = el.dataset.dia, ini = Number(el.dataset.ini); const h = Number(el.dataset.fim) - ini;
+    if (e.key === 'ArrowUp' && !e.shiftKey) ini -= 0.25;
+    else if (e.key === 'ArrowDown' && !e.shiftKey) ini += 0.25;
+    else if (e.key === 'ArrowRight' && e.shiftKey) dia = planoProximoUtil(dia);
+    else if (e.key === 'ArrowLeft' && e.shiftKey) { let d = planoDiaMais(dia, -1); for (let i = 0; i < 14 && !planoDiaUtil(d); i++) d = planoDiaMais(d, -1); dia = d; }
+    else return;
+    e.preventDefault();
+    if (dia < ymd(new Date())) return toast('Não dá para mover para um dia que já passou');
+    ini = Math.max(0, Math.min(24 - h, ini));
+    PLANO.sel.clear(); PLANO.sel.add(`p:${dia}:${el.dataset.tid || el.dataset.pid}:${ini.toFixed(2)}`);   // a seleção acompanha o bloco
+    planoMoverBloco(el, dia, ini, dia !== el.dataset.dia ? `Bloco movido para ${fmtDate(dia)}` : `Bloco movido para ${planoHora(ini)}`);
+  });
+}

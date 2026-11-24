@@ -388,7 +388,7 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
       if (!ach) continue;
       const ini = Math.ceil(ach[0] * 4 - 1e-6) / 4;
       if (dd === hoje && ini < nowH - 1e-6) continue;
-      r.blocos = [{ dia: dd, ini, fim: ini + min / 60 }]; r.fim = diaDe(dd, ini + min / 60); r.ini = diaDe(dd, ini); r.antes = null;
+      r.blocos = [{ dia: dd, ini, fim: ini + min / 60 }]; r.fim = diaDe(dd, ini + min / 60); r.ini = diaDe(dd, ini); r.antes = null; r.buraco = true;
       if (r.aviso && (!x.entrega || r.fim <= x.entrega)) delete r.aviso;
       break;
     }
@@ -402,7 +402,15 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
   Object.values(res).forEach(x => x.blocos.forEach(b => {
     const v = porDia[b.dia] ||= { blocos: [], fixos: [], horas: 0, cap: capMin(b.dia) / 60 };
     const atr = !!(x.entrega && diaDe(b.dia, b.fim) > x.entrega);
-    v.blocos.push({ pid: x.pid, tid: x.t?.id || null, tarefa: x.t ? x.t.name : null, ini: b.ini, fim: b.fim, h: b.fim - b.ini, atrasado: atr, pins: b.pin ? [b.pin] : [], espera: x.antes ? (x.antes.name || null) : null });
+    // por que está aqui (dica do bloco): a regra que o colocou neste horário
+    const ent = x.entrega ? `entrega ${x.entrega.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })} ${String(x.entrega.getHours()).padStart(2, '0')}h${String(x.entrega.getMinutes()).padStart(2, '0').replace(/^00$/, '')}` : 'sem entrega marcada';
+    const porque = b.pin ? 'Você fixou este bloco aqui'
+      : x.buraco ? `Encaixado num horário livre mais cedo (cabe inteiro) · ${ent}`
+      : x.antes && x.deps.includes(x.antes.id) ? `Espera “${x.antes.name}” terminar · ${ent}`
+      : x.antes ? `Fila: vem depois de “${x.antes.name}” (a entrega mais perto vai primeiro) · ${ent}`
+      : x.blocos.some(z => z.pin) ? `Continua o bloco que você fixou · ${ent}`
+      : `Primeiro da fila · ${ent}`;
+    v.blocos.push({ pid: x.pid, tid: x.t?.id || null, tarefa: x.t ? x.t.name : null, ini: b.ini, fim: b.fim, h: b.fim - b.ini, atrasado: atr, pins: b.pin ? [b.pin] : [], espera: x.antes ? (x.antes.name || null) : null, porque });
     v.horas += b.fim - b.ini;
   }));
   // pedaços colados da mesma tarefa (mesmo projeto e mesmo nome) viram um bloco só, fixado ou não

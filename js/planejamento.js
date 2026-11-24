@@ -400,7 +400,11 @@ function planoItemHTML(x, dia, { alt, unico, auto }) {
     const nome = tk ? tk.name : pr?.name || 'Sem projeto';
     return `<div class="pl-feito cli${x.agenda ? ' com-agenda' : ''}" style="${pos};--fc:${cc};--cc:${cc};--ct:${ct}" data-tip="${esc(`Registrado: ${tk ? tk.name + ' · ' : ''}${pr?.name || 'Sem projeto'}${cl ? '\n' + cl.name : ''}\n${planoHora(f.ini)}–${planoHora(f.fim)} · ${fmtH(f.ms)} trabalhado${x.agenda ? '\n' + x.agenda.map(e => `Agenda: ${e.titulo} (${planoHora(e.ini)}–${planoHora(e.fim)})`).join('\n') : ''}`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"${f.tid ? ` data-tab="tasks" data-tk="${f.tid}"` : ''}` : ''}>${h >= 12 ? `<span class="pl-tx"><b>${planoCliChip(pr)}${esc(nome)}</b>${!curto ? `<em>${tk && pr ? esc(pr.name) + ' · ' : ''}${planoHora(f.ini)} · ${fmtH(f.ms)}${unico && cl ? ' · ' + esc(cl.name) : ''}${x.agenda ? ' · ' + esc(x.agenda[0].titulo) : ''}</em>` : ''}</span>` : ''}${x.agenda ? `<span class="pl-feito-ag">${icon('calendar')}</span>` : ''}</div>`; }
   const b = x.bl; const p = db.get('tempo_projects', b.pid); const c = planoCor(b.pid);
-  return `<div class="pl-bloco${b.atrasado ? ' late' : ''}${b.pin ? ' pin' : ' auto'}${planoMostra('corcli') ? ' cc' : ''}" data-dg="plano" data-dia="${dia}" data-pid="${b.pid}" data-tid="${b.tid || ''}" data-pin="${(b.pins || (b.pin ? [b.pin] : [])).join(',')}" data-ini="${b.ini}" data-fim="${b.fim}" style="${pos};--fc:${c}${planoMostra('corcli') ? `;--cc:${planoCorCli(b.pid)};--ct:${typeof textOn === 'function' ? textOn(planoCorCli(b.pid)) : '#fff'}` : ''}" data-act="proj-open" data-id="${b.pid}"${b.tid ? ` data-tab="tasks" data-tk="${b.tid}"` : ''} data-tip="${esc(`Planejado: ${b.tarefa ? b.tarefa + ' · ' : ''}${p?.name}\n${clientOf(p)?.name || ''}\n${planoHora(b.ini)}–${planoHora(b.fim)} · ${fmtH(b.h * 36e5)}${b.atrasado ? '\nDepois do prazo' : ''}${b.espera ? `\nComeça depois de “${b.espera}” (uma espera a outra, ou a fila)` : ''}${b.pin ? '\nFixado à mão' : '\nColocado pelo app · arraste para mudar o horário ou o dia'}`)}"><span class="pl-tx"><b>${planoCliChip(p)}${esc(b.tarefa || p?.name || '')}</b>${curto ? '' : `<em>${b.tarefa ? esc(p?.name || '') + ' · ' : ''}${planoHora(b.ini)} · ${fmtH(b.h * 36e5)}${unico && p ? ' · ' + esc(clientOf(p)?.name || '') : ''}${b.espera ? ' · depois de ' + esc(b.espera) : ''}</em>`}</span>${b.pin ? `<button class="pl-unpin" data-act="pl-unpin" data-id="${b.pin}" title="Soltar: o app volta a encaixar este bloco sozinho" aria-label="Soltar bloco">×</button>` : ''}${PL_PUX}</div>`;
+  return `<div class="pl-bloco${b.atrasado ? ' late' : ''}${b.pin ? ' pin' : ' auto'}${planoMostra('corcli') ? ' cc' : ''}" data-dg="plano" data-dia="${dia}" data-pid="${b.pid}" data-tid="${b.tid || ''}" data-pin="${(b.pins || (b.pin ? [b.pin] : [])).join(',')}" data-ini="${b.ini}" data-fim="${b.fim}" style="${pos};--fc:${c}${planoMostra('corcli') ? `;--cc:${planoCorCli(b.pid)};--ct:${typeof textOn === 'function' ? textOn(planoCorCli(b.pid)) : '#fff'}` : ''}" data-act="proj-open" data-id="${b.pid}"${b.tid ? ` data-tab="tasks" data-tk="${b.tid}"` : ''} data-tip="${esc(`Planejado: ${b.tarefa ? b.tarefa + ' · ' : ''}${p?.name}\n${clientOf(p)?.name || ''}\n${planoHora(b.ini)}–${planoHora(b.fim)} · ${fmtH(b.h * 36e5)}${b.atrasado ? '\nDepois do prazo' : ''}${b.espera ? `\nComeça depois de “${b.espera}” (uma espera a outra, ou a fila)` : ''}${(() => { const l = []; if (b.porque) l.push('Por que aqui: ' + b.porque);
+      const mal = planoFixosDoDia(dia).filter(f => f[3] && f[3].pin === false && f[0] < b.fim - 1e-6 && f[1] > b.ini + 1e-6).map(f => f[2]);
+      if (mal.length) l.push(`Passou por cima de: ${mal.join(', ')} (maleável), para caber na entrega`);
+      if (b.fim > planoCfg().fim + 1e-6 && b.ini < planoCfg().fim) l.push('Dia esticado: faltava até 1 h para terminar a tarefa');
+      return l.length ? '\n' + l.join('\n') : ''; })()}${b.pin ? '\nFixado à mão · clique direito para mais opções' : '\nColocado pelo app · arraste para mudar o horário ou o dia · clique direito para mais opções'}`)}"><span class="pl-tx"><b>${planoCliChip(p)}${esc(b.tarefa || p?.name || '')}</b>${curto ? '' : `<em>${b.tarefa ? esc(p?.name || '') + ' · ' : ''}${planoHora(b.ini)} · ${fmtH(b.h * 36e5)}${unico && p ? ' · ' + esc(clientOf(p)?.name || '') : ''}${b.espera ? ' · depois de ' + esc(b.espera) : ''}</em>`}</span>${b.pin ? `<button class="pl-unpin" data-act="pl-unpin" data-id="${b.pin}" title="Soltar: o app volta a encaixar este bloco sozinho" aria-label="Soltar bloco">×</button>` : ''}${PL_PUX}</div>`;
 }
 /* Coluna de um dia: cabeçalho, linha "dia todo" (to-do só com data, evento de dia inteiro) e a grade de 24 h. */
 /* Chips do dia (Alice e Rafa) e notas do dia, iguais no Mês, na Semana e no Dia; respeitam os filtros. */
@@ -470,7 +474,9 @@ function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0
   const wd = new Date(dia + 'T12:00:00').getDay();
   const sexta = wd === 5 ? `<button class="btn sm ghost pl-rafa${planoSextaRafa(dia) ? ' on' : ''}" data-act="pl-sexta" data-dia="${dia}" title="Sexta com o Rafa (T) ou com a Amanda (A)? Clique para trocar só esta sexta (muda também no Dias de Rafa).">Rafa ${planoSextaRafa(dia) ? '✓' : '–'}</button>` : '';
   const cab = !cabecalho ? '' : `<div class="pl-cab">${semana ? `<span class="pl-sem-rot">${esc(semana)}</span>` : ''}<span class="pl-cab-l1"><button class="pl-cab-dia" data-act="pl-ir-dia" data-dia="${dia}" title="Ver o dia">${new Date(dia + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</button>${planoChipsHTML(dia)}</span>
-      <span class="pl-cab-l2">${dia >= hoje && planoPins().some(pn => pn.dia === dia) ? `<button class="pl-reorg" data-act="pl-reorg" data-dia="${dia}" data-tip="Reorganizar: solta os blocos que você fixou neste dia e o app encaixa tudo de novo, sem sobrepor">↺</button>` : ''}${(() => { const pr = dia <= hoje ? planoVsReal(dia) : null; return pr ? `<span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}" data-tip="${esc(`Plano × real: ${fmtH(pr.reg * 36e5)} registrados das ${fmtH(pr.plan * 36e5)} planejadas de manhã (mesmo projeto)`)}">${pr.pct}%</span>` : ''; })()}<span class="small ${h > cfg.horasDia + 0.05 ? 'late' : 'muted'}">${util ? (h > 0.01 ? `${fmtH(h * 36e5)} plano${est ? ` de ${est} h` : ''}` : '') : (fer ? '[FERIADO] ' + esc(fer.nome) : '')}</span>${sexta}</span>${planoCapHTML(dia, porDia)}${planoNotasHTML(dia)}</div>`;
+      <span class="pl-cab-l2">${dia >= hoje && util ? (() => { const soltos = (porDia[dia]?.blocos || []).filter(b => !b.pin).length, fix = planoPins().filter(pn => pn.dia === dia).length; if (!soltos && !fix) return '';
+        return soltos ? `<button class="pl-fixdia" data-act="pl-fixar-dia" data-dia="${dia}" data-modo="fixar" data-tip="Fixar o dia: os ${soltos} bloco${soltos > 1 ? 's' : ''} que o app colocou ficam fixados onde estão">${icon('pin')}</button>`
+          : `<button class="pl-fixdia on" data-act="pl-fixar-dia" data-dia="${dia}" data-modo="soltar" data-tip="Dia fixado. Clique para soltar todos os ${fix} bloco${fix > 1 ? 's' : ''} e deixar o app encaixar de novo">${icon('pin')}</button>`; })() : ''}${dia >= hoje && planoPins().some(pn => pn.dia === dia) ? `<button class="pl-reorg" data-act="pl-reorg" data-dia="${dia}" data-tip="Reorganizar: solta os blocos que você fixou neste dia e o app encaixa tudo de novo, sem sobrepor">↺</button>` : ''}${(() => { const pr = dia <= hoje ? planoVsReal(dia) : null; return pr ? `<span class="pl-pvr ${pr.pct >= 80 ? 'ok' : pr.pct >= 50 ? 'meio' : 'baixo'}" data-tip="${esc(`Plano × real: ${fmtH(pr.reg * 36e5)} registrados das ${fmtH(pr.plan * 36e5)} planejadas de manhã (mesmo projeto)`)}">${pr.pct}%</span>` : ''; })()}<span class="small ${h > cfg.horasDia + 0.05 ? 'late' : 'muted'}">${util ? (h > 0.01 ? `${fmtH(h * 36e5)} plano${est ? ` de ${est} h` : ''}` : '') : (fer ? '[FERIADO] ' + esc(fer.nome) : '')}</span>${sexta}</span>${planoCapHTML(dia, porDia)}${planoNotasHTML(dia)}</div>`;
   const todoDia = planoEventos(dia).filter(e => e.diaTodo && (planoMostra('todos') || e.origem !== 'todo'));
   const topo = linhasTopo ? `<div class="pl-topo" style="height:${linhasTopo * 20}px">${todoDia.map(e => e.origem === 'todo'
     ? `<button class="pl-chip todo${e.feito ? ' feito' : ''}" data-act="todo-modal" data-id="${e.id}" title="To-do do dia (sem hora)">${icon('check')}${esc(e.titulo)}</button>`
@@ -944,11 +950,21 @@ ACTIONS['pl-encaixar'] = (el) => {
   if (typeof document === 'undefined' || !document.addEventListener) return;
   let d = null, mexeu = false, tip = null, selClick = false;
   const q = (h) => Math.round(h * 4) / 4;
+  // Ímã (24/11): o bloco gruda na borda do vizinho e na rotina quando chega perto (até 20 min), sem sobrar 15 min soltos.
+  // Option (Alt) segurado solta o ímã. Registrado não conta (corre em paralelo).
+  const IMA = 1 / 3;
+  const bordas = (x) => { const col = x.colAlvo || x.col0; if (!col) return [];
+    return [...col.querySelectorAll('[data-ini][data-fim]')].filter(o => o !== x.el && !x.grupo.includes(o) && !o.closest('.pl-dg-fly') && !o.classList.contains('pl-feito') && !o.classList.contains('pl-pv-some'))
+      .flatMap(o => [Number(o.dataset.ini), Number(o.dataset.fim)]).filter(Number.isFinite); };
+  const gruda = (h, l) => { let m = null; l.forEach(v => { if (Math.abs(v - h) <= IMA + 1e-6 && (m === null || Math.abs(v - h) < Math.abs(m - h))) m = v; }); return m; };
   const calc = (x, dy) => {
-    const dh = dy / PL_ALT; let a = x.ini, b = x.fim;
-    if (x.modo === 'top') a = Math.min(b - 0.25, Math.max(0, q(a + dh)));
-    else if (x.modo === 'bot') b = Math.max(a + 0.25, Math.min(24, q(b + dh)));
-    else { const dur = b - a; a = Math.max(0, Math.min(24 - dur, q(a + dh))); b = a + dur; }
+    const dh = dy / PL_ALT; let a = x.ini, b = x.fim; x.grudou = false;
+    const ima = !x.alt && ['plano', 'bloq', 'todo', 'fixo'].includes(x.kind) ? bordas(x) : [];
+    if (x.modo === 'top') { const r = x.ini + dh; const g = gruda(r, ima); a = Math.min(b - 0.25, Math.max(0, g ?? q(r))); x.grudou = g !== null; }
+    else if (x.modo === 'bot') { const r = x.fim + dh; const g = gruda(r, ima); b = Math.max(a + 0.25, Math.min(24, g ?? q(r))); x.grudou = g !== null; }
+    else { const dur = b - a; const r = x.ini + dh; const ga = gruda(r, ima), gb = gruda(r + dur, ima);
+      const g = ga !== null && (gb === null || Math.abs(ga - r) <= Math.abs(gb - dur - r)) ? ga : gb !== null ? gb - dur : null;
+      a = Math.max(0, Math.min(24 - dur, g ?? q(r))); b = a + dur; x.grudou = g !== null; }
     return [a, b];
   };
   document.addEventListener('pointerdown', (e) => {
@@ -965,7 +981,8 @@ ACTIONS['pl-encaixar'] = (el) => {
     mexeu = false;
   }, true);
   document.addEventListener('pointermove', (e) => {
-    if (!d) return; const dy = e.clientY - d.y0, dx = e.clientX - d.x0;
+    if (!d) return; const dy = e.clientY - d.y0, dx = e.clientX - d.x0; d.alt = e.altKey; d.meta = e.metaKey;
+    if (d.modo === 'move' && mexeu) { d.el.style.pointerEvents = 'none'; const c = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-pl-col]'); d.colAlvo = c || d.col0; }
     if (!mexeu && Math.hypot(dx, dy) < 4) return;
     if (!mexeu) { mexeu = true; d.el.classList.add('arrastando'); tip = document.createElement('div'); tip.className = 'pl-dg-tip'; document.body.appendChild(tip); }
     const [a, b] = calc(d, dy);
@@ -983,7 +1000,15 @@ ACTIONS['pl-encaixar'] = (el) => {
     d.grupo.forEach(o => { o.style.transform = `translate(${dx}px, ${(a - d.ini) * PL_ALT}px)`; o.classList.add('arrastando'); });
     const hh = (h) => planoHora(h).replace(':', 'h').replace(/h00$/, 'h');
     tip.textContent = d.kind === 'prazo' ? `Entrega: ${hh(a)}` : d.modo === 'top' ? `Novo início: ${hh(a)}` : d.modo === 'bot' ? `Novo fim: ${hh(b)}` : `Novo horário: ${hh(a)}–${hh(b)}`;
-    tip.dataset.sub = `${fmtH((b - a) * 36e5)}${d.modo === 'move' ? (['plano', 'bloq', 'todo'].includes(d.kind) ? ' · para o lado: outro dia ou outra faixa' : ' · para o lado: outra faixa') : ''}`;
+    const linhas = [`${fmtH((b - a) * 36e5)}${d.modo === 'move' ? (['plano', 'bloq', 'todo'].includes(d.kind) ? ' · para o lado: outro dia ou outra faixa' : ' · para o lado: outra faixa') : ''}`];
+    // puxando a borda de um bloco de tarefa: ⌘ muda também a previsão da tarefa
+    if (d.kind === 'plano' && d.modo !== 'move' && d.el.dataset.tid) {
+      const t = db.get('tempo_tasks', d.el.dataset.tid); const pv = t && typeof tkPrevMin === 'function' ? tkPrevMin(t) : null;
+      if (d.meta && pv) { const nv = Math.max(15, Math.round((pv + ((b - a) - (d.fim - d.ini)) * 60) / 15) * 15); linhas.push(`Previsão da tarefa: ${fmtH(pv * 60e3)} → ${fmtH(nv * 60e3)}`); }
+      else linhas.push('Segure ⌘ para mudar também a previsão da tarefa');
+    }
+    if (['plano', 'bloq', 'todo', 'fixo'].includes(d.kind)) linhas.push(d.alt ? 'Ímã solto (Option)' : d.grudou ? 'Grudou na borda · segure Option para soltar o ímã' : 'Segure Option para soltar o ímã');
+    tip.dataset.sub = linhas.join('\n');
     tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 12) + 'px';
     if (d.kind === 'plano' && !d.grupo.length && typeof planoPrevia === 'function') planoPrevia(d, e, a, b);
   });
@@ -991,6 +1016,7 @@ ACTIONS['pl-encaixar'] = (el) => {
     if (!d) return; const x = d; d = null; if (tip) { tip.remove(); tip = null; }
     if (x.fly) { x.fly.remove(); x.fly = null; } x.el.classList.remove('pl-dg-orig');
     if (typeof planoPreviaFim === 'function') planoPreviaFim();
+    x.alt = e.altKey; x.meta = e.metaKey;
     if (!mexeu) return;
     x.el.style.pointerEvents = 'none';
     let [a, b] = calc(x, e.clientY - x.y0);
@@ -1094,9 +1120,13 @@ ACTIONS['pl-encaixar'] = (el) => {
       a = partes[0].ini; b = partes[partes.length - 1].fim;
     }
     if (x.kind === 'prazo') b = a;
+    if (x.kind === 'plano' && x.meta && x.modo !== 'move' && x.el.dataset.tid) extra += ' · previsão da tarefa atualizada';
     const ROT = { plano: 'Bloco fixado', fixo: 'Rotina mudada só neste dia', todo: 'To-do movido', prazo: 'Entrega movida', bloq: 'Bloqueio movido' };
     planoMudar(ROT[x.kind] || 'Item movido', () => {
-      if (x.kind === 'plano') planoPinsSalvar(novosPins);
+      if (x.kind === 'plano') { planoPinsSalvar(novosPins);
+        // ⌘ ao puxar a borda: a previsão da tarefa acompanha a mudança do bloco
+        if (x.meta && x.modo !== 'move' && x.el.dataset.tid) { const t = db.get('tempo_tasks', x.el.dataset.tid); const pv = t && typeof tkPrevMin === 'function' ? tkPrevMin(t) : null;
+          if (t && pv) db.update('tempo_tasks', t.id, { est_min: Math.max(15, Math.round((pv + ((b - a) - (x.fim - x.ini)) * 60) / 15) * 15) }, true); } }
       else if (x.kind === 'fixo') {
         const m = { ...planoRotinaDia() }; m[x.dia] = { ...(m[x.dia] || {}), [x.el.dataset.g]: { ini: a, fim: b } }; db.setSetting('planoRotinaDia', m);
       } else if (x.kind === 'todo') {

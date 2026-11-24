@@ -2157,3 +2157,9 @@ kbd { font: inherit; font-size: 11px; padding: 0 5px; border: 1px solid var(--li
 .pl-bloco.pl-pv { transition: transform .32s cubic-bezier(.22,.8,.25,1), height .32s cubic-bezier(.22,.8,.25,1), opacity .25s ease; will-change: transform; }
 .pl-bloco.pl-pv-some { opacity: .25; }
 @media (prefers-reduced-motion: reduce) { .pl-bloco.pl-pv { transition: none; } }
+/* Janelinha do arrastar no padrão da dica (estilo 4) e com várias linhas de ajuda (⌘ previsão, Option ímã) */
+.pl-dg-tip { background: var(--accent-soft) !important; color: var(--accent) !important; border: 1px solid var(--accent-line); box-shadow: 0 4px 14px rgba(20,24,60,.10) !important; font-family: var(--font, inherit) !important; font-size: 12px !important; font-weight: 600; }
+.pl-dg-tip::after { white-space: pre-line; color: var(--fg); opacity: .75 !important; }
+.pl-fixdia { border: 1px solid var(--line); background: var(--surface-1, #fff); border-radius: 4px; width: 20px; height: 18px; padding: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--fg-3); }
+.pl-fixdia svg { width: 11px; height: 11px; }
+.pl-fixdia.on { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); }

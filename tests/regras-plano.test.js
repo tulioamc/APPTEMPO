@@ -127,3 +127,13 @@ test('15. conta de "e se" (prévia ao arrastar) não mexe no plano de verdade ne
   assert.deepEqual(bl(pv, 'y'), [['14', 9, 11]], 'na prévia, y ocupa o lugar que x deixou');
   assert.deepEqual(bl(m.tkMotor(H(14, 8), 10), 'y'), real, 'o plano de verdade continua igual');
 });
+test('16. cada bloco diz por que está ali (espera, fila, fixado, continuação)', () => {
+  const m = setup();
+  cfg(m, { tasks: [T('w', 'a', { est_min: 60, deadline: '2026-12-18' }), T('x', 'a', { est_min: 60, order: 1, depends_on: ['w'], deadline: '2026-12-18' }), T('y', 'b', { est_min: 60, order: 2, deadline: '2026-12-18' }), T('z', 'b', { est_min: 180, order: 3, deadline: '2026-12-18' })],
+    pins: [{ id: 'pz', dia: '2026-12-15', pid: 'b', tid: 'z', ini: 9, h: 1 }] });
+  const mo = m.tkMotor(H(14, 8), 10); const todos = Object.values(mo.porDia).flatMap(v => v.blocos);
+  const de = (tid) => todos.filter(b => b.tid === tid).map(b => b.porque);
+  assert.match(de('x')[0], /Espera “w” terminar/);
+  assert.match(de('z')[0], /Você fixou/); assert.equal(de('z').length, 1, 'o pedaço que continua cola no fixado e vira um bloco só');
+  assert.ok(de('w')[0] && de('y')[0]);
+});

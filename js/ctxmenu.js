@@ -14,6 +14,8 @@ function ctxTarget(e) {
     const s = selOf(tbl.dataset.table);
     return { kind, id, ids: s.has(id) && s.size > 1 ? [...s] : [id] };
   }
+  const pb = e.target.closest?.('.pl-bloco[data-dg="plano"]');   // bloco planejado do Calendário
+  if (pb) return { kind: 'plbloco', id: pb.dataset.pid, ids: [pb.dataset.pid], el: pb };
   const el = e.target.closest?.('[data-act][data-id]'); if (!el) return null;
   if (el.dataset.act === 'party-open') return { kind: el.dataset.kind, id: el.dataset.id, ids: [el.dataset.id] };
   const kind = CTX_ACT_KIND[el.dataset.act]; if (!kind) return null;
@@ -71,6 +73,18 @@ function ctxItems(t) {
       db.emit(); toast('Tarefa excluída');
     }, { danger: true });
     if (one) add('Copiar nome', () => navigator.clipboard?.writeText(one.name).then(() => toast('Nome copiado')));
+  }
+
+  if (t.kind === 'plbloco') {
+    const el = t.el; const tid = el.dataset.tid || null; const tk = tid ? db.get('tempo_tasks', tid) : null; const fixado = !!el.dataset.pin;
+    if (fixado) add('Soltar (o app volta a encaixar)', () => ACTIONS['pl-unpin'](el)); else add('Fixar aqui', () => planoFixarBloco(el));
+    add('Mover para o próximo dia útil', () => planoMoverAmanha(el));
+    if (tk) add('Iniciar cronômetro nesta tarefa', () => ACTIONS['tk-track']({ dataset: { id: tk.id } }));
+    else add('Iniciar cronômetro neste projeto', () => { const p = db.get('tempo_projects', el.dataset.pid); const c = p && clientOf(p); if (p) openStartModal({ agency_id: c?.agency_id || '__none', client_id: p.client_id, project_id: p.id }); });
+    if (tk && ctxDone() && statusCat(tk.status_id) !== 'done') add('Marcar a tarefa como feita', () => { setTaskStatus(tk, ctxDone().id); db.emit(); toast('Tarefa concluída'); });
+    add(tk ? 'Abrir a tarefa' : 'Abrir o projeto', () => ACTIONS['proj-open']({ dataset: { id: el.dataset.pid, tab: 'tasks', tk: tid || '' } }));
+    add('Fixar o dia inteiro como está', () => planoFixarDia(el.dataset.dia));
+    if (planoPins().some(p => p.dia === el.dataset.dia)) add('Soltar todos os fixados deste dia', () => planoSoltarDia(el.dataset.dia));
   }
 
   if (t.kind === 'project') {
