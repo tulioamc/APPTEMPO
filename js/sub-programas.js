@@ -123,9 +123,22 @@ function etapasDeHoje(mae) {
   if (!mae) return [];
   const subs = subtasksOf(mae.id); if (!subs.length) return [];
   const h0 = new Date(); h0.setHours(0, 0, 0, 0);
-  return db.all('tempo_time_entries').filter(e => subs.some(s => s.id === e.task_id) && entryStart(e) && new Date(entryEnd(e) || Date.now()) >= h0)
-    .map(e => ({ e, sub: subs.find(s => s.id === e.task_id), a: entryStart(e), b: entryEnd(e), ms: entryMs(e) }))
-    .sort((x, y) => new Date(x.a) - new Date(y.a));
+  const out = db.all('tempo_time_entries').filter(e => subs.some(s => s.id === e.task_id) && entryStart(e) && new Date(entryEnd(e) || Date.now()) >= h0)
+    .map(e => ({ e, sub: subs.find(s => s.id === e.task_id), a: entryStart(e), b: entryEnd(e), ms: entryMs(e) }));
+  /* marcações dentro das sessões da tarefa (o tempo continua na sessão) */
+  if (typeof sbDivs === 'function') {
+    const mapa = db.setting('sbDiv', {}) || {};
+    Object.keys(mapa).forEach(id => {
+      const e = db.get('tempo_time_entries', id); if (!e || (typeof etapaMae === 'function' && (etapaMae(e) || {}).id !== mae.id)) return;
+      const w = sbWork(e);
+      (mapa[id] || []).forEach(d => {
+        const sub = subs.find(s => s.id === d.sub); if (!sub || d.b < h0.getTime()) return;
+        const ms = sbLen(sbInter(w, [d])); if (ms < 1000) return;
+        out.push({ e, sub, a: new Date(d.a).toISOString(), b: new Date(d.b).toISOString(), ms });
+      });
+    });
+  }
+  return out.sort((x, y) => new Date(x.a) - new Date(y.a));
 }
 function etapasHTML(a) {
   const mae = etapaMae(a); if (!mae) return '';
@@ -137,7 +150,7 @@ function etapasHTML(a) {
   return `<div class="et-box"><div class="et-h"><span class="lbl">Etapas de ${esc(mae.name)}</span>${topo}</div>${lista || '<div class="small muted">Nenhuma etapa marcada hoje. Ao terminar uma parte do trabalho, aperte "Terminei uma etapa".</div>'}</div>`;
 }
 /* "Terminei uma etapa": diz qual etapa terminou (nova ou já existente), qual é a próxima e, se quiser, a hora em que terminou.
-   O tempo desde a última marca até o fim vai para a etapa que terminou; o cronômetro segue na tarefa. A próxima fica como "etapa atual". */
+   O tempo desde a última marca até o fim fica marcado como a etapa que terminou (continua na sessão); o cronômetro segue. A próxima fica como "etapa atual". */
 ACTIONS['etapa-fim'] = (el) => {
   const a = (el && el.dataset && el.dataset.id && db.get('tempo_time_entries', el.dataset.id)) || activeEntry(); if (!a) return;
   const mae = etapaMae(a);
@@ -147,7 +160,7 @@ ACTIONS['etapa-fim'] = (el) => {
   const atual = typeof sbEtapaAtual === 'function' ? sbEtapaAtual(a.id) : null;
   const chips = (alvo, sem) => subs.filter(s => s.id !== sem).slice(0, 8).map(s => `<button type="button" class="sp-chip et-fill" data-et-fill="${alvo}" data-n="${esc(s.name)}" title="Usar ${esc(s.name)}">${esc(s.name)}</button>`).join('');
   const ly = openLayer({ html: `<div class="dh"><h2>Terminei uma etapa</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
-    <div class="db stack" style="gap:12px"><div class="small muted">${esc(mae.name)} · etapa atual desde ${fmtTime(ini)} (${fmtDur(Date.now() - new Date(ini).getTime())}). Esse tempo vai para a etapa que você terminou; o cronômetro continua.</div>
+    <div class="db stack" style="gap:12px"><div class="small muted">${esc(mae.name)} · etapa atual desde ${fmtTime(ini)} (${fmtDur(Date.now() - new Date(ini).getTime())}). Esse tempo fica marcado como a etapa que você terminou (continua na sessão); o cronômetro segue.</div>
       <div class="field"><label for="et-nome">Qual etapa terminei?</label><input id="et-nome" class="input" list="et-subs" placeholder="Ex.: Animar Cena 01" value="${esc(atual?.name || '')}" autofocus autocomplete="off"><datalist id="et-subs">${subs.map(s => `<option value="${esc(s.name)}">`).join('')}</datalist>${subs.length ? `<div class="sp-chips" style="margin-top:6px">${chips('#et-nome')}</div>` : ''}</div>
       <div class="field"><label for="et-prox">E qual é a próxima? <span class="faint">(opcional)</span></label><input id="et-prox" class="input" list="et-subs" placeholder="Ex.: Animar Cena 02" autocomplete="off">${subs.length ? `<div class="sp-chips" style="margin-top:6px">${chips('#et-prox', atual?.id)}</div>` : ''}</div>
       <div class="field"><label for="et-fim">Terminei às <span class="faint">(vazio = agora)</span></label><input id="et-fim" class="input sm" style="width:96px" placeholder="hh:mm" inputmode="numeric" autocomplete="off"></div></div>
@@ -176,6 +189,7 @@ ACTIONS['etapa-fim'] = (el) => {
       const m = { ...(db.setting('etapaMarca', {}) || {}) }; if (marcaAntes) m[a.id] = marcaAntes; else delete m[a.id]; db.setSetting('etapaMarca', m);
       sbGuardaEtapaAtual(a.id, atualAntes); db.emit(); window.actRedrawHook && window.actRedrawHook(); toast('Etapa desfeita');
     };
+    sbLembraDesfazer(a.id, `Etapa “${sub.name}” marcada: ${fmtDur(fimMs - iniMs)}.`, () => { if (r) r.desfazer(); const m = { ...(db.setting('etapaMarca', {}) || {}) }; if (marcaAntes) m[a.id] = marcaAntes; else delete m[a.id]; db.setSetting('etapaMarca', m); sbGuardaEtapaAtual(a.id, atualAntes); db.emit(); });
     toast(`Etapa “${esc(sub.name)}”: ${fmtDur(fimMs - iniMs)}${p ? ` · agora: ${esc(p.name)}` : ''}`, { ms: 9000, actions: [{ label: 'Desfazer', run: desfazer }] });
     window.actRedrawHook && window.actRedrawHook();
   };

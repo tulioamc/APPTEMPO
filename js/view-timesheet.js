@@ -793,7 +793,7 @@ function openEntryModal(id, startIso = null, endIso = null) {
       </div>
       ${e ? `<div class="act-sec"><div class="lbl">Produtividade</div>${prodMiniHTML([e])}</div>` : ''}
       ${e ? actSectionHTML(e) : ''}
-      ${e && typeof sbSecaoHTML === 'function' ? sbSecaoHTML(e) : ''}
+      ${e && typeof sbSecaoHTML === 'function' ? (typeof sbReintegra === 'function' && sbReintegra(e), sbSecaoHTML(db.get('tempo_time_entries', e.id) || e)) : ''}
       <div class="field"><label for="em-notes">Notas</label><textarea id="em-notes" class="input" name="notes">${esc(userNotes)}</textarea></div>
       <div class="grid2" style="align-items:start">
         <div class="stack" style="gap:8px">

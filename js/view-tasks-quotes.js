@@ -44,7 +44,7 @@ function tkFoldBtn(t) {
   const isFolded = (db.setting('tkFold', []) || []).includes(t.id);
   return `<button class="btn sm icon ghost" data-act="tk-fold" data-id="${t.id}" style="margin-right:4px;flex:none" aria-label="${isFolded ? 'Expandir' : 'Recolher'} subtarefas" title="${isFolded ? 'Expandir' : 'Recolher'} subtarefas">${icon(isFolded ? 'chevR' : 'chevD')}</button>${isFolded ? `<span class="faint small" style="margin-right:6px">${n}</span>` : ''}`;
 }
-const tMs = (t) => t.parent_id ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : taskMs(t.id);
+const tMs = (t) => t.parent_id ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) + (typeof sbSubMs === 'function' ? sbSubMs(t.id) : 0) : taskMs(t.id);
 const TCOLS = {
   name: { label: 'Tarefa', ico: 'text', w: 300, sort: t => t.name, cls: t => 'name' + (t.parent_id ? ' sub' : ''), cell: t => `<span class="cell-name">${tkFoldBtn(t)}<span class="ct">${t.parent_id ? '<span class="faint">↳ </span>' : ''}${esc(t.name)} ${t.status_inherited !== false ? '<span class="inh" title="Acompanha o status do projeto">H</span>' : ''}</span>${openBtn('tk-open', t.id, `data-p="${t.project_id}"`)}</span>`, edit: { type: 'text', required: true, get: t => t.name, set: (t, v) => db.update('tempo_tasks', t.id, { name: v }) } },
   project: { label: 'Cliente › Projeto', ico: 'folder', w: 280, sort: t => { const p = db.get('tempo_projects', t.project_id); return `${clientOf(p)?.name || '~'} ${p?.name || ''}`; }, cell: t => { const p = db.get('tempo_projects', t.project_id); return `<span class="row" style="gap:6px;flex-wrap:nowrap">${clientTag(clientOf(p))}<span class="muted">${esc(p.name)}</span></span>`; } },

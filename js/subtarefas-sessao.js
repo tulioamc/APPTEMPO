@@ -1,32 +1,64 @@
 /* Subtarefas dentro da sessão (25/11).
-   Seção "Subtarefas" no formulário da sessão (antes das Notas). Três jeitos de dizer em que subtarefa o tempo foi:
+   Seção "Subtarefas" no formulário da sessão (antes das Notas). Subtarefa DIVIDE o tempo da sessão, não tira dele: a sessão continua
+   inteira (programas, pausas, totais da tarefa) e cada trecho ganha uma marcação de subtarefa. Três jeitos de marcar:
    1) bandeirinha "Terminei uma etapa" (qual terminei e qual é a próxima; a próxima fica como "etapa atual");
    2) arrastar um trecho na barra "Por subtarefa" e escolher a subtarefa;
    3) escolher um programa e a subtarefa ("Photoshop › Preparar telas"), com ou sem trecho marcado.
-   O tempo sempre sai de onde estava e entra na sessão da subtarefa (um horário, uma sessão); dá para pintar de novo por cima
-   e devolver para "Sem subtarefa". Cada ação devolve um "Desfazer" próprio (funciona também com a sessão rodando).
-   Guardado em tempo_settings: 'etapaAtual' = { sessãoId: subtarefaId } e 'sbJanela' = { sessãoId: [início, fim] } (o começo e o
-   fim da sessão como eram antes de levar trechos para as subtarefas, para a barra continuar mostrando a sessão inteira). */
+   Marcar de novo por cima troca; "Sem subtarefa" tira a marcação. Cada ação devolve um "Desfazer" próprio.
+   Guardado em tempo_settings: 'sbDiv' = { sessãoId: [{ a, b, sub }] } (ms; o tempo da subtarefa é a parte trabalhada da sessão
+   dentro de a–b) e 'etapaAtual' = { sessãoId: subtarefaId }. */
 const SB_T = (x) => new Date(x).getTime();
 const SB_SEM = '#C3C9D6';
 const SB_FORA = '#94A3B8';
 let SB = null;   // { key, ranges: [{a,b}], drag, dragging, start, moveu, app, dest, novo, criando, lembrar }
-const sbReset = () => { SB = null; };
+const sbReset = () => { SB = null; SB_ULT = null; };
+/* Última marcação da sessão aberta, com o jeito de desfazer: fica visível na seção até fechar o formulário. */
+let SB_ULT = null;   // { key, txt, run }
+function sbLembraDesfazer(key, txt, run) { SB_ULT = { key, txt, run }; }
 function sbEstado(key) {
   if (!SB || SB.key !== key) SB = { key, ranges: [], drag: null, dragging: false, start: 0, moveu: false, app: '', dest: '', novo: '', criando: false, lembrar: false };
   return SB;
 }
 
-/* Sessões que dividem o tempo da tarefa mãe: a sessão, as das subtarefas e as da própria tarefa, no mesmo projeto. */
-function sbGrupo(e, mae) {
-  const ids = new Set([mae.id, ...subtasksOf(mae.id).map(s => s.id)]);
-  return db.all('tempo_time_entries').filter(x => x.id === e.id || (x.project_id === e.project_id && ids.has(x.task_id)));
+/* Trechos trabalhados da sessão (ms). */
+const sbWork = (e, now = Date.now()) => (e.segments || []).filter(s => s.s).map(s => ({ a: SB_T(s.s), b: s.e ? SB_T(s.e) : now })).filter(x => x.b > x.a);
+const sbInter = (A, B) => { const out = []; A.forEach(x => B.forEach(y => { const a = Math.max(x.a, y.a), b = Math.min(x.b, y.b); if (b > a) out.push({ a, b }); })); return out; };
+const sbLen = (l) => actMergeIntervals(l).reduce((t, x) => t + x.b - x.a, 0);
+const sbDivs = (id) => ((db.setting('sbDiv', {}) || {})[id] || []).map(d => ({ a: d.a, b: d.b, sub: d.sub }));
+function sbGuardaDivs(id, l) {
+  const m = { ...(db.setting('sbDiv', {}) || {}) };
+  if (l.length) m[id] = l; else delete m[id];
+  db.setSetting('sbDiv', m);
 }
-/* Pedaços de cada sessão do grupo que caem nos cortes e ainda não estão na tarefa de destino. */
-function sbPecas(grupo, cuts, destTaskId, now = Date.now()) {
-  return grupo.filter(x => x.task_id !== destTaskId).map(x => ({ x, pcs: actIntersect(x.segments || [], cuts, now) })).filter(o => o.pcs.length);
+/* Tempo trabalhado de uma subtarefa marcado dentro de sessões (soma em todas as sessões). */
+function sbSubMs(subId, now = Date.now()) {
+  const m = db.setting('sbDiv', {}) || {}; let t = 0;
+  Object.keys(m).forEach(id => {
+    const ds = (m[id] || []).filter(d => d.sub === subId); if (!ds.length) return;
+    const e = db.get('tempo_time_entries', id); if (e) t += sbLen(sbInter(sbWork(e, now), ds));
+  });
+  return t;
 }
-const sbMs = (pcs) => pcs.reduce((t, p) => t + (SB_T(p.e) - SB_T(p.s)), 0);
+/* Tira os cortes das marcações e, se o destino é uma subtarefa, marca os cortes nela. Junta marcações vizinhas iguais. */
+function sbAplica(divs, cuts, destSub) {
+  let l = divs.flatMap(d => {
+    let pcs = [d];
+    cuts.forEach(c => { pcs = pcs.flatMap(p => (c.b <= p.a || c.a >= p.b) ? [p] : [...(c.a > p.a ? [{ ...p, b: c.a }] : []), ...(c.b < p.b ? [{ ...p, a: c.b }] : [])]); });
+    return pcs;
+  });
+  if (destSub) cuts.forEach(c => l.push({ a: c.a, b: c.b, sub: destSub }));
+  l = l.filter(d => d.b > d.a).sort((p, q) => p.a - q.a);
+  const out = [];
+  l.forEach(d => { const u = out[out.length - 1]; if (u && u.sub === d.sub && d.a - u.b <= 1000) u.b = Math.max(u.b, d.b); else out.push({ ...d }); });
+  return out;
+}
+/* Quanto tempo trabalhado mudaria de marcação se os cortes fossem para o destino. */
+function sbMudaria(e, cuts, destSub, now = Date.now()) {
+  const pcs = sbInter(sbWork(e, now), actMergeIntervals(cuts));
+  const divs = sbDivs(e.id);
+  if (destSub) return sbLen(pcs) - sbLen(sbInter(pcs, divs.filter(d => d.sub === destSub)));
+  return sbLen(sbInter(pcs, divs));
+}
 /* Intervalos em ordem, juntando os que se encostam (até 1 s). O motivo/destino que vale é o do último de cada bloco. */
 function sbNormaliza(segs) {
   const l = segs.filter(s => s.s).slice().sort((p, q) => (p.e === null ? 1 : 0) - (q.e === null ? 1 : 0) || SB_T(p.s) - SB_T(q.s));
@@ -48,77 +80,72 @@ function sbSubDe(mae, nome) {
     || db.insert('tempo_tasks', { project_id: mae.project_id, parent_id: mae.id, name: nome, status_id: mae.status_id, status_inherited: true, deadline: null, notes: 'Criada na sessão', order: subs.length, work_type_id: null, owner: mae.owner || null }, true);
 }
 
-/* O motor: leva o tempo dos cortes (ms) para a tarefa de destino, saindo de onde estava. Devolve { ms, desfazer } ou null. */
+/* O motor: marca os cortes (ms) com a subtarefa de destino (mae.id = "Sem subtarefa", tira a marcação). O tempo NÃO sai da sessão.
+   Devolve { ms, desfazer } ou null se nada muda. */
 function sbPintar(e, cuts, destTaskId, rotulo) {
   const mae = etapaMae(e); if (!mae || !destTaskId) return null;
   const now = Date.now();
   cuts = actMergeIntervals((cuts || []).map(c => ({ a: c.a, b: Math.min(c.b, now) })).filter(c => c.b - c.a >= 1000));
   if (!cuts.length) return null;
-  const c0 = cuts[0].a, c1 = cuts[cuts.length - 1].b;
-  const grupo = sbGrupo(e, mae).filter(x => x.id === e.id || (x.segments || []).some(s => s.s && SB_T(s.s) < c1 && (s.e ? SB_T(s.e) : now) > c0));
-  const pecas = sbPecas(grupo, cuts, destTaskId, now);
-  if (!pecas.length) return null;
-  const antes = new Map(grupo.map(x => [x.id, JSON.parse(JSON.stringify(x))]));
-  const criados = []; const todos = [];
-  sbGuardaJanela(e);
-  pecas.forEach(({ x, pcs }) => {
-    todos.push(...pcs);
-    const rest = actSubtract(x.segments || [], cuts, e.project_id);
-    const edits = auditEdit(x, x.segments, rotulo);
-    if (!rest.length && x.state !== 'running') db.remove('tempo_time_entries', x.id, true);
-    else db.update('tempo_time_entries', x.id, { segments: rest.length ? rest : [{ s: nowISO(), e: null }], edits }, true);
-  });
-  todos.sort((p, q) => SB_T(p.s) - SB_T(q.s));
-  const eAtual = db.get('tempo_time_entries', e.id);
-  if (e.task_id === destTaskId && eAtual) {
-    db.update('tempo_time_entries', e.id, { segments: sbNormaliza([...(eAtual.segments || []), ...todos]), edits: auditEdit(eAtual, eAtual.segments, rotulo) }, true);
-  } else {
-    const pcs = sbNormaliza(todos);
-    pcs.forEach((p, i) => { if (i < pcs.length - 1 && SB_T(pcs[i + 1].s) > SB_T(p.e)) { p.why = 'moved'; p.movedFrom = e.project_id; } });
-    const proj = db.get('tempo_projects', e.project_id); const c = proj ? clientOf(proj) : null;
-    const ini = pcs[0].s, fim = pcs[pcs.length - 1].e;
-    criados.push(db.insert('tempo_time_entries', {
-      project_id: e.project_id, client_id: c?.id || e.client_id || null, agency_id: c?.agency_id || e.agency_id || null, task_id: destTaskId,
-      work_type_id: e.work_type_id || lastWorkType(e.project_id), revision_id: null,
-      notes: `Movido de outra sessão (${fmtTime(ini)}–${fmtTime(fim)})`, state: 'done', segments: pcs,
-      edits: [{ at: nowISO(), reason: rotulo, before: antes.get(e.id)?.segments || [] }],
-    }, true).id);
-  }
-  if (typeof repairMovedGaps === 'function') repairMovedGaps(3);
+  const dest = destTaskId === mae.id ? null : destTaskId;
+  const ms = sbMudaria(e, cuts, dest, now);
+  if (!ms) return null;
+  const antes = sbDivs(e.id);
+  sbGuardaDivs(e.id, sbAplica(antes, cuts, dest));
   db.emit();
-  const desfazer = () => {
-    criados.forEach(id => db.remove('tempo_time_entries', id, true));
-    antes.forEach((row, id) => { const cur = db.get('tempo_time_entries', id); if (cur) db.update('tempo_time_entries', id, { segments: row.segments, edits: row.edits }, true); else db.insert('tempo_time_entries', row, true); });
-    db.emit();
-  };
-  return { ms: sbMs(todos), desfazer };
+  return { ms, desfazer: () => { sbGuardaDivs(e.id, antes); db.emit(); } };
+}
+/* Sessões antigas em que um trecho foi LEVADO para uma subtarefa (versão anterior): junta de volta na sessão e deixa só a marcação. */
+function sbReintegra(e) {
+  const mae = etapaMae(e); if (!mae || e.state === undefined) return 0;
+  const subIds = new Set(subtasksOf(mae.id).map(s => s.id));
+  const cand = db.all('tempo_time_entries').filter(x => x.id !== e.id && x.state === 'done' && x.project_id === e.project_id && subIds.has(x.task_id) && /^Movido de outra sessão/.test(x.notes || '') && (x.segments || []).length);
+  if (!cand.length) return 0;
+  const now = Date.now(); let n = 0, mexeu = true;
+  const feitos = new Set();
+  while (mexeu) {
+    mexeu = false;
+    const w = sbWork(db.get('tempo_time_entries', e.id), now); if (!w.length) break;
+    const ini = Math.min(...w.map(x => x.a)), fim = Math.max(...w.map(x => x.b));
+    const gaps = []; const sg = (db.get('tempo_time_entries', e.id).segments || []);
+    for (let i = 0; i < sg.length - 1; i++) if (isForaWhy(sg[i].why) && sg[i].e && sg[i + 1].s && sg[i].movedTo === e.project_id) gaps.push({ a: SB_T(sg[i].e), b: SB_T(sg[i + 1].s) });
+    cand.filter(x => !feitos.has(x.id)).forEach(x => {
+      const xs = sbWork(x, now); if (!xs.length) return;
+      const xa = Math.min(...xs.map(z => z.a)), xb = Math.max(...xs.map(z => z.b));
+      const naLacuna = gaps.some(g => sbLen(sbInter(xs, [g])) >= 0.5 * sbLen(xs));
+      const encosta = Math.abs(xb - ini) <= 2000 || Math.abs(xa - fim) <= 2000;
+      if (!naLacuna && !encosta) return;
+      const cur = db.get('tempo_time_entries', e.id);
+      db.update('tempo_time_entries', e.id, { segments: sbNormaliza([...(cur.segments || []), ...x.segments.map(z => ({ s: z.s, e: z.e }))]), edits: auditEdit(cur, cur.segments, `Trecho de “${db.get('tempo_tasks', x.task_id)?.name || 'subtarefa'}” voltou para a sessão (a subtarefa agora só marca o trecho)`) }, true);
+      sbGuardaDivs(e.id, sbAplica(sbDivs(e.id), xs.map(z => ({ a: z.a, b: z.b })), x.task_id));
+      db.remove('tempo_time_entries', x.id, true);
+      feitos.add(x.id); n++; mexeu = true;
+    });
+  }
+  if (n) db.emit();
+  return n;
 }
 
-/* ---------- janela da sessão (começo e fim de antes de levar trechos) ---------- */
-function sbGuardaJanela(e) {
-  const now = Date.now();
-  const iv = (e.segments || []).filter(s => s.s).map(s => [SB_T(s.s), s.e ? SB_T(s.e) : now]);
-  if (!iv.length) return;
-  const m = { ...(db.setting('sbJanela', {}) || {}) }; const v = m[e.id];
-  const a = Math.min(...iv.map(x => x[0]), v ? v[0] : Infinity), b = Math.max(...iv.map(x => x[1]), v ? v[1] : 0);
-  if (!v || v[0] !== a || v[1] !== b) { m[e.id] = [a, b]; db.setSetting('sbJanela', m); }
-}
+/* ---------- janela da sessão e pedaços da barra ---------- */
 function sbJanela(e) {
-  const now = Date.now();
-  const iv = (e.segments || []).filter(s => s.s).map(s => [SB_T(s.s), s.e ? SB_T(s.e) : now]);
-  const v = (db.setting('sbJanela', {}) || {})[e.id];
-  if (!iv.length && !v) return null;
-  const a = Math.min(...iv.map(x => x[0]), v ? v[0] : Infinity);
-  const aberto = (e.segments || []).some(s => s.s && !s.e);
-  const b = Math.max(...iv.map(x => x[1]), v && !aberto ? v[1] : 0);
+  const w = sbWork(e); if (!w.length) return null;
+  const a = Math.min(...w.map(x => x.a)), b = Math.max(...w.map(x => x.b));
   return b > a ? { a, b, span: b - a } : null;
 }
-/* Pedaços coloridos da barra: cada trecho de sessão do grupo dentro da janela, pela subtarefa ('sem' = a própria tarefa). */
+/* Pedaços coloridos da barra: cada trecho trabalhado da sessão dividido pelas marcações ('sem' = sem subtarefa). */
 function sbFatias(e, mae, J) {
-  const now = Date.now(); const subIds = new Set(subtasksOf(mae.id).map(s => s.id)); const out = [];
-  sbGrupo(e, mae).forEach(x => {
-    const key = subIds.has(x.task_id) ? x.task_id : 'sem';
-    (x.segments || []).forEach(s => { if (!s.s) return; const a = Math.max(SB_T(s.s), J.a), b = Math.min(s.e ? SB_T(s.e) : now, J.b); if (b > a) out.push({ a, b, key, id: x.id }); });
+  const subIds = new Set(subtasksOf(mae.id).map(s => s.id));
+  const base = subIds.has(e.task_id) ? e.task_id : 'sem';
+  const divs = sbDivs(e.id).filter(d => subIds.has(d.sub)).sort((p, q) => p.a - q.a); const out = [];
+  sbWork(e).forEach(w => {
+    let pos = w.a;
+    divs.filter(d => d.b > w.a && d.a < w.b).forEach(d => {
+      const a = Math.max(d.a, w.a), b = Math.min(d.b, w.b);
+      if (a > pos) out.push({ a: pos, b: a, key: base, id: e.id });
+      if (b > Math.max(a, pos - 0)) out.push({ a: Math.max(a, pos), b, key: d.sub, id: e.id });
+      pos = Math.max(pos, b);
+    });
+    if (w.b > pos) out.push({ a: pos, b: w.b, key: base, id: e.id });
   });
   return out.sort((p, q) => p.a - q.a);
 }
@@ -141,10 +168,9 @@ const sbCor = (mae, key) => {
 const sbNome = (mae, key) => key === 'sem' ? 'Sem subtarefa' : (db.get('tempo_tasks', key)?.name || 'Subtarefa');
 const sbHM = (ms) => fmtTime(new Date(ms).toISOString());
 
-/* Programas usados na sessão inteira (inclusive o que já foi para subtarefas): { groups, records } de actAnalyzeList. */
+/* Programas usados na sessão: { groups, records } de actAnalyzeList. */
 function sbApps(e, mae, J) {
-  const lista = sbGrupo(e, mae).filter(x => (x.segments || []).some(s => s.s && SB_T(s.s) < J.b && (s.e ? SB_T(s.e) : Date.now()) > J.a)).flatMap(x => actList(x.id));
-  const A = actAnalyzeList(lista, 'program');
+  const A = actAnalyzeList(actList(e.id), 'program');
   return { groups: A.groups.filter(g => g.id !== 'outros'), records: A.records };
 }
 function sbAppsDe(a, b) {
@@ -180,12 +206,10 @@ function sbPrevia(e, mae, S, A) {
   const dest = sbDestinoId(e, mae, S);
   if (!dest) return { ok: false, txt: S.dest === '__novo' ? 'Dê um nome para a nova subtarefa.' : 'Escolha a subtarefa.' };
   const nome = S.dest === 'sem' ? 'Sem subtarefa' : S.dest === '__novo' ? (S.novo || '').trim() : sbNome(mae, S.dest);
-  const alvo = dest === '__criar' ? '__criar' : dest;
-  const pecas = sbPecas(sbGrupo(e, mae), cuts, alvo, Date.now());
-  const ms = pecas.reduce((t, o) => t + sbMs(o.pcs), 0);
-  if (!ms) return { ok: false, txt: `Nada para mover: esse tempo já está em ${nome}.` };
+  const ms = sbMudaria(e, cuts, dest === mae.id ? null : dest);
+  if (!ms) return { ok: false, txt: `Nada para marcar: esse tempo já está em ${nome}.` };
   const onde = S.ranges.length ? ` (${S.ranges.length === 1 ? sbHM(S.ranges[0].a) + '–' + sbHM(S.ranges[0].b) : S.ranges.length + ' trechos'})` : '';
-  return { ok: true, ms, txt: `Vai mover ${fmtDur(ms)}${app ? ' de ' + app.label : ''}${onde} para ${nome}.` };
+  return { ok: true, ms, txt: `Vai marcar ${fmtDur(ms)}${app ? ' de ' + app.label : ''}${onde} como ${nome === 'Sem subtarefa' ? 'sem subtarefa' : nome}. O tempo continua na sessão.` };
 }
 
 /* ---------- a seção ---------- */
@@ -200,7 +224,7 @@ function sbSecaoHTML(e) {
   const aberta = e.state !== 'done';
   const atualId = (db.setting('etapaAtual', {}) || {})[e.id];
   const atual = atualId ? subs.find(s => s.id === atualId) : null;
-  const btns = `${aberta ? `<button type="button" class="btn sm" data-x="sb-etapa" title="Marca o fim de uma etapa: diz qual terminou e qual é a próxima. O tempo desde a última marca vai para a etapa que terminou.">${icon('flag')} Terminei uma etapa</button>` : ''}<button type="button" class="btn sm" data-x="sb-nova" title="Cria uma subtarefa nova de ${esc(mae.name)} sem mexer no tempo">${icon('plus')} Subtarefa</button>`;
+  const btns = `${aberta ? `<button type="button" class="btn sm" data-x="sb-etapa" title="Marca o fim de uma etapa: diz qual terminou e qual é a próxima. O tempo desde a última marca fica marcado como a etapa que terminou. Continua na sessão.">${icon('flag')} Terminei uma etapa</button>` : ''}<button type="button" class="btn sm" data-x="sb-nova" title="Cria uma subtarefa nova de ${esc(mae.name)} sem mexer no tempo">${icon('plus')} Subtarefa</button>`;
   const criar = S.criando ? `<div class="sb-criar"><input type="text" class="input sm" data-sb="nome" placeholder="Nome da subtarefa" autocomplete="off" aria-label="Nome da nova subtarefa"><button type="button" class="btn sm primary" data-x="sb-criar" title="Criar a subtarefa (Enter)">Criar</button><button type="button" class="btn sm ghost" data-x="sb-nova" title="Cancelar">Cancelar</button></div>` : '';
   const agora = atual && aberta ? `<div class="sb-atual"><span class="small muted">Etapa atual</span><b>${esc(atual.name)}</b><span class="small muted">desde ${fmtTime(etapaInicio(e))}</span></div>` : '';
   if (!J) return `<div class="act-sec sb-sec">${cab(btns)}${criar}${agora}<div class="small muted">A sessão ainda não tem tempo registrado.</div></div>`;
@@ -218,7 +242,7 @@ function sbSecaoHTML(e) {
   S.ranges.concat(S.drag ? [S.drag] : []).forEach(r => { const x = pct(r.a), y = pct(r.b); if (y > x) barras += `<span class="res-sel-range" style="left:${x}%;width:${Math.max(.3, y - x)}%"></span>`; });
   const faixa = `<div class="act-strip sb-strip" data-mode="sub" data-ent="${esc(e.id)}" data-t0="${J.a}" data-span="${J.span}" style="position:relative" aria-label="Arraste para marcar um trecho">${barras}</div>`;
 
-  const chip = (key, nome, ms) => `<button type="button" class="act-chip sb-chip${S.dest === key ? ' is-pick' : ''}" data-g="${esc(key)}" data-x="sb-dest" data-k="${esc(key)}" style="--tb:${sbCor(mae, key)}" title="Clique para escolher ${esc(nome)} como destino do trecho"><i></i>${esc(nome)} <span class="faint">${ms ? fmtDur(ms) : '—'}</span></button>`;
+  const chip = (key, nome, ms) => `<button type="button" class="act-chip sb-chip${S.dest === key ? ' is-pick' : ''}" data-g="${esc(key)}" data-x="sb-dest" data-k="${esc(key)}" style="--tb:${sbCor(mae, key)}" title="Clique para escolher ${esc(nome)} para o trecho"><i></i>${esc(nome)} <span class="faint">${ms ? fmtDur(ms) : '—'}</span></button>`;
   const chips = `<div class="act-chips">${chip('sem', 'Sem subtarefa', msPor.sem || 0)}${subs.map(s => chip(s.id, s.name, msPor[s.id] || 0)).join('')}</div>`;
 
   const A = sbApps(e, mae, J);
@@ -233,13 +257,14 @@ function sbSecaoHTML(e) {
     ? `<label class="sb-lembrar" title="Nas próximas sessões, o tempo em ${esc(appSel.label)} aparece como sugestão para esta subtarefa (só entra se você aceitar)"><input type="checkbox" data-sb="lembrar"${S.lembrar ? ' checked' : ''}> Lembrar: ${esc(appSel.label)} costuma ser ${esc(sbNome(mae, S.dest))}</label>` : '';
   const form = `<div class="sb-assign">${rangeChips}
     <div class="sb-row">
-      <label class="sb-f"><span class="small muted">Programa</span><select class="input sm" data-sb="app" aria-label="Só o tempo deste programa" title="Escolha um programa para levar só o tempo dele (dentro do trecho marcado, se houver)"><option value="">Todos os programas</option>${opApp}</select></label>
+      <label class="sb-f"><span class="small muted">Programa</span><select class="input sm" data-sb="app" aria-label="Só o tempo deste programa" title="Escolha um programa para marcar só o tempo dele (dentro do trecho selecionado, se houver)"><option value="">Todos os programas</option>${opApp}</select></label>
       <span class="sb-seta" aria-hidden="true">›</span>
       <label class="sb-f"><span class="small muted">Subtarefa</span><select class="input sm" data-sb="dest" aria-label="Subtarefa de destino" title="Para onde vai o tempo">${opDest}</select></label>
       ${S.dest === '__novo' ? `<label class="sb-f"><span class="small muted">Nome</span><input type="text" class="input sm" data-sb="novo" value="${esc(S.novo)}" placeholder="Ex.: Animar Cena 01" autocomplete="off" aria-label="Nome da nova subtarefa"></label>` : ''}
-      <button type="button" class="btn sm primary sb-mover" data-x="sb-mover" ${prev.ok ? '' : 'disabled'} title="Leva o tempo para a subtarefa escolhida. Dá para desfazer logo depois.">Mover</button>
+      <button type="button" class="btn sm primary sb-mover" data-x="sb-mover" ${prev.ok ? '' : 'disabled'} title="Marca o trecho com a subtarefa escolhida. O tempo continua na sessão. Dá para desfazer logo abaixo.">Marcar</button>
     </div>${lembrar}<div class="small sb-previa ${prev.ok ? '' : 'muted'}">${esc(prev.txt)}</div></div>`;
-  return `<div class="act-sec sb-sec">${cab(btns)}${criar}${agora}${faixa}${chips}${form}</div>`;
+  const ult = SB_ULT && SB_ULT.key === e.id ? `<div class="sb-ultimo"><span class="small">${esc(SB_ULT.txt)}</span><button type="button" class="btn sm" data-x="sb-desfaz" title="Volta a marcação como estava antes dessa última ação. O tempo da sessão não muda.">Desfazer</button></div>` : '';
+  return `<div class="act-sec sb-sec">${cab(btns)}${criar}${agora}${faixa}${chips}${form}${ult}</div>`;
 }
 
 /* Redesenha só a seção (arrastar, escolher): o resto do formulário não se mexe. */
@@ -311,6 +336,7 @@ function sbClick(ev, ctx) {
   if (x === 'sb-nova') { S.criando = !S.criando; sbRefresh(); const i = document.querySelector('.sb-sec [data-sb="nome"]'); if (i) i.focus(); return true; }
   if (x === 'sb-criar') { sbCriar(e); return true; }
   if (x === 'sb-mover') { sbMover(ctx); return true; }
+  if (x === 'sb-desfaz') { const u = SB_ULT; SB_ULT = null; if (u && u.key === e.id) u.run(); ctx.refresh(); toast('Marcação desfeita'); return true; }
   return false;
 }
 function sbCriar(e) {
@@ -352,12 +378,14 @@ function sbMover(ctx) {
   const app = S.app ? A.groups.find(g => g.id === S.app) : null;
   const nome = dest === mae.id ? 'Sem subtarefa' : db.get('tempo_tasks', dest)?.name;
   const cuts = sbCortes(S, A);
-  const r = sbPintar(e, cuts, dest, `${app ? app.label + ' › ' : ''}${nome}: ${fmtDur(p.ms)} levados para a subtarefa`);
-  if (!r) { toast('Nada para mover'); return; }
+  const r = sbPintar(e, cuts, dest, '');
+  if (!r) { toast('Nada para marcar'); return; }
   if (S.lembrar && app && dest !== mae.id) { const m = { ...(db.setting('subProgs', {}) || {}) }; const l = m[dest] || []; if (!l.includes(app.label)) { m[dest] = [...l, app.label]; db.setSetting('subProgs', m); } }
   S.ranges = []; S.app = ''; S.novo = ''; S.dest = dest === mae.id ? 'sem' : dest; S.lembrar = false;
+  const txt = `${fmtDur(r.ms)}${app ? ' de ' + app.label : ''} marcados como ${dest === mae.id ? 'sem subtarefa' : nome}.`;
+  sbLembraDesfazer(e.id, txt, r.desfazer);
   ctx.refresh();
-  toast(`${fmtDur(r.ms)} foram para ${nome}`, { ms: 9000, actions: [{ label: 'Desfazer', run: () => { r.desfazer(); ctx.refresh(); toast('Desfeito'); } }] });
+  toast(txt + ' O tempo continua na sessão.', { ms: 9000, actions: [{ label: 'Desfazer', run: () => { r.desfazer(); SB_ULT = null; ctx.refresh(); toast('Desfeito'); } }] });
 }
 
 /* ---------- etapa atual e fim da sessão ---------- */
@@ -375,6 +403,6 @@ function etapaFechaAoEncerrar(entryId) {
   sbGuardaEtapaAtual(entryId, null);
   if (fim - ini < 60e3) return null;
   const r = sbPintar(e, [{ a: ini, b: fim }], sub.id, `Etapa “${sub.name}” fechada ao encerrar a sessão`);
-  if (r) toast(`Etapa “${esc(sub.name)}”: ${fmtDur(r.ms)}`, { ms: 9000, actions: [{ label: 'Desfazer', run: () => { r.desfazer(); toast('Desfeito'); } }] });
+  if (r) toast(`Etapa “${esc(sub.name)}”: ${fmtDur(r.ms)} marcados`, { ms: 9000, actions: [{ label: 'Desfazer', run: () => { r.desfazer(); toast('Desfeito'); } }] });
   return r;
 }

@@ -88,7 +88,7 @@ function pdTasks(p) {
         <span class="tk-hora"></span>
         <span class="tk-acoes"><button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar reunião" title="Começar a registrar uma reunião deste projeto">${icon('play')}</button></span></div></div>`;
     }
-    const liq = isSub ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : taskMs(t.id);
+    const liq = isSub ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) + (typeof sbSubMs === 'function' ? sbSubMs(t.id) : 0) : taskMs(t.id);
     const bruto = db.where('tempo_time_entries', e => (isSub ? e.task_id === t.id : (e.task_id === t.id || subtasksOf(t.id).some(x => x.id === e.task_id)))).reduce((s, e) => s + entryBrutoMs(e), 0);
     const est = estimadoDaTarefa(t); const aberto = TK_ABERTAS.has(t.id);
     const deps = (Array.isArray(t.depends_on) ? t.depends_on : []).map(d => db.get('tempo_tasks', d)?.name).filter(Boolean);

@@ -1,10 +1,10 @@
-// Subtarefas dentro da sessão: levar trecho / programa para a subtarefa, devolver, desfazer, etapa atual e fim da sessão.
+// Subtarefas dentro da sessão: marcar trecho / programa com a subtarefa SEM tirar da sessão, desfazer, etapa atual e fim da sessão.
 const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 const MIN = 6e4;
 function setup() {
   const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'],
-    ['db', 'ACTIONS', 'sbPintar', 'sbJanela', 'sbFatias', 'sbPrevia', 'sbCortes', 'sbApps', 'sbNormaliza', 'etapaFechaAoEncerrar', 'sbEtapaAtual', 'etapaMae', 'actForaSplit', 'sbEstado', 'sbSecaoHTML'],
+    ['db', 'ACTIONS', 'sbPintar', 'sbJanela', 'sbFatias', 'sbPrevia', 'sbCortes', 'sbApps', 'sbNormaliza', 'etapaFechaAoEncerrar', 'sbEtapaAtual', 'etapaMae', 'actForaSplit', 'sbEstado', 'sbSecaoHTML', 'sbSubMs', 'sbDivs', 'sbReintegra', 'sbLembraDesfazer', 'etapasDeHoje'],
     { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '', $: () => null, $$: () => [], tkProjectLabel: (p) => p.name, openLayer: () => ({ box: { querySelector: () => null, addEventListener() {} }, close() {} }) });
   m.db.data = m.db.empty();
   m.db.insert('tempo_projects', { id: 'p', name: 'Reels' }, true);
@@ -17,91 +17,80 @@ const ms = (e) => (e.segments || []).reduce((t, s) => t + ((s.e ? new Date(s.e) 
 const sessao = (m, ini, fim, extra = {}) => m.db.insert('tempo_time_entries', { id: 'run', project_id: 'p', task_id: 'mae', state: fim ? 'done' : 'running', segments: [{ s: new Date(ini).toISOString(), e: fim ? new Date(fim).toISOString() : null }], ...extra }, true);
 const soma = (m, task) => m.db.all('tempo_time_entries').filter(e => e.task_id === task).reduce((t, e) => t + ms(e), 0);
 
-test('levar um trecho para a subtarefa: sai da sessão, entra na subtarefa, o total não muda', () => {
+test('marcar um trecho com a subtarefa: a sessão e o total NÃO mudam', () => {
   const m = setup(); const t0 = Date.now() - 120 * MIN;
-  const e = sessao(m, t0, t0 + 100 * MIN);
-  const total = ms(e);
-  const r = m.sbPintar(e, [{ a: t0 + 20 * MIN, b: t0 + 50 * MIN }], 'ps', 'teste');
+  const e = sessao(m, t0, t0 + 100 * MIN); const total = ms(e);
+  const r = m.sbPintar(e, [{ a: t0 + 20 * MIN, b: t0 + 50 * MIN }], 'ps', '');
   assert.ok(r); assert.equal(Math.round(r.ms / MIN), 30);
-  assert.equal(Math.round(soma(m, 'ps') / MIN), 30);
-  assert.equal(Math.round(soma(m, 'mae') / MIN), 70);
-  assert.equal(Math.round((soma(m, 'ps') + soma(m, 'mae')) / MIN), Math.round(total / MIN));
-  const dono = m.db.get('tempo_time_entries', 'run');
-  assert.equal(dono.segments.length, 2);
-  assert.equal(dono.segments[0].why, 'moved');            // o buraco é "movido", não pausa
-  assert.equal(dono.segments[0].movedTo, 'p');
-  assert.match(m.db.all('tempo_time_entries').find(x => x.task_id === 'ps').notes, /^Movido de outra sessão/);
-});
-test('pintar por cima: do trecho da subtarefa para outra subtarefa e de volta para "Sem subtarefa"', () => {
-  const m = setup(); const t0 = Date.now() - 120 * MIN;
-  const e = sessao(m, t0, t0 + 100 * MIN);
-  m.sbPintar(e, [{ a: t0 + 20 * MIN, b: t0 + 50 * MIN }], 'ps', 't');
-  m.sbPintar(m.db.get('tempo_time_entries', 'run'), [{ a: t0 + 30 * MIN, b: t0 + 40 * MIN }], 'ae', 't');
-  assert.equal(Math.round(soma(m, 'ps') / MIN), 20); assert.equal(Math.round(soma(m, 'ae') / MIN), 10);
-  const volta = m.sbPintar(m.db.get('tempo_time_entries', 'run'), [{ a: t0, b: t0 + 100 * MIN }], 'mae', 't');
-  assert.ok(volta);
-  assert.equal(Math.round(soma(m, 'mae') / MIN), 100); assert.equal(soma(m, 'ps'), 0); assert.equal(soma(m, 'ae'), 0);
-  const dono = m.db.get('tempo_time_entries', 'run');
-  assert.equal(dono.segments.length, 1);                  // tudo junto de novo, sem lacuna
-  assert.equal(m.db.all('tempo_time_entries').length, 1);  // sessões vazias das subtarefas sumiram
-});
-test('desfazer devolve tudo como estava, inclusive com a sessão rodando', () => {
-  const m = setup(); const t0 = Date.now() - 60 * MIN;
-  const e = sessao(m, t0, null);
-  const antes = JSON.stringify(m.db.get('tempo_time_entries', 'run').segments);
-  const r = m.sbPintar(e, [{ a: t0 + 10 * MIN, b: t0 + 30 * MIN }], 'ps', 't');
-  assert.ok(r); assert.equal(m.db.all('tempo_time_entries').length, 2);
-  r.desfazer();
   assert.equal(m.db.all('tempo_time_entries').length, 1);
-  assert.equal(JSON.stringify(m.db.get('tempo_time_entries', 'run').segments), antes);
+  assert.equal(ms(m.db.get('tempo_time_entries', 'run')), total);
+  assert.equal(m.db.get('tempo_time_entries', 'run').segments.length, 1);
+  assert.equal(Math.round(m.sbSubMs('ps') / MIN), 30);
 });
-test('sessão rodando: o trecho aberto continua aberto e o cronômetro segue', () => {
-  const m = setup(); const t0 = Date.now() - 60 * MIN;
-  const e = sessao(m, t0, null);
-  m.sbPintar(e, [{ a: t0, b: Date.now() }], 'ps', 't');
-  const run = m.db.get('tempo_time_entries', 'run');
-  assert.equal(run.state, 'running'); assert.equal(run.segments[run.segments.length - 1].e, null);
-  assert.equal(Math.round(soma(m, 'ps') / MIN), 60);
+test('marcar por cima troca; "Sem subtarefa" tira a marcação; marcações vizinhas iguais se juntam', () => {
+  const m = setup(); const t0 = Date.now() - 120 * MIN; const e = sessao(m, t0, t0 + 100 * MIN);
+  m.sbPintar(e, [{ a: t0 + 20 * MIN, b: t0 + 50 * MIN }], 'ps', '');
+  m.sbPintar(e, [{ a: t0 + 30 * MIN, b: t0 + 40 * MIN }], 'ae', '');
+  assert.equal(Math.round(m.sbSubMs('ps') / MIN), 20); assert.equal(Math.round(m.sbSubMs('ae') / MIN), 10);
+  m.sbPintar(e, [{ a: t0 + 30 * MIN, b: t0 + 40 * MIN }], 'ps', '');
+  assert.equal(m.sbDivs('run').length, 1);
+  m.sbPintar(e, [{ a: t0 + 20 * MIN, b: t0 + 50 * MIN }], 'mae', '');
+  assert.equal(m.sbSubMs('ps'), 0); assert.equal(m.sbDivs('run').length, 0);
 });
-test('só o programa escolhido: leva o tempo dele (dentro do trecho marcado, se houver)', () => {
-  const m = setup(); const t0 = Date.now() - 120 * MIN;
-  const e = sessao(m, t0, t0 + 100 * MIN);
-  const log = [['Adobe Photoshop 2026', 0, 20], ['Google Chrome', 20, 30], ['Adobe Photoshop 2026', 30, 60]].map(([app, a, b]) => ({ app, doc: app + '.psd', from: new Date(t0 + a * MIN).toISOString(), to: new Date(t0 + b * MIN).toISOString() }));
-  m.ctx.actPoolBetween = (a, b) => log.filter(r => new Date(r.to) > a && new Date(r.from) < b);
-  const J = m.sbJanela(e); const mae = m.etapaMae(e);
-  const A = m.sbApps(e, mae, J);
-  const ps = A.groups.find(g => /photoshop/i.test(g.label)); assert.ok(ps);
-  const S = { ranges: [], app: ps.id, dest: 'ps', novo: '' };
-  assert.equal(Math.round(m.sbCortes(S, A).reduce((t, c) => t + c.b - c.a, 0) / MIN), 50);
-  S.ranges = [{ a: t0 + 10 * MIN, b: t0 + 40 * MIN }];                                  // só os 10 min do fim do 1º bloco e os 10 do começo do 2º
-  assert.equal(Math.round(m.sbCortes(S, A).reduce((t, c) => t + c.b - c.a, 0) / MIN), 20);
-  const p = m.sbPrevia(e, mae, S, A); assert.ok(p.ok); assert.match(p.txt, /20min/);
-  m.sbPintar(e, m.sbCortes(S, A), 'ps', 't');
-  assert.equal(Math.round(soma(m, 'ps') / MIN), 20);
+test('desfazer devolve as marcações como estavam (sessão rodando também)', () => {
+  const m = setup(); const t0 = Date.now() - 60 * MIN; const e = sessao(m, t0, null);
+  m.sbPintar(e, [{ a: t0, b: t0 + 10 * MIN }], 'ps', '');
+  const r = m.sbPintar(e, [{ a: t0 + 5 * MIN, b: t0 + 30 * MIN }], 'ae', '');
+  assert.ok(r); r.desfazer();
+  assert.equal(Math.round(m.sbSubMs('ps') / MIN), 10); assert.equal(m.sbSubMs('ae'), 0);
+  assert.equal(m.db.get('tempo_time_entries', 'run').state, 'running');
+  assert.equal(m.db.get('tempo_time_entries', 'run').segments[0].e, null);
+});
+test('a barra mostra a sessão inteira, dividida pelas marcações', () => {
+  const m = setup(); const t0 = Date.now() - 120 * MIN; const e = sessao(m, t0, t0 + 100 * MIN);
+  m.sbPintar(e, [{ a: t0 + 20 * MIN, b: t0 + 50 * MIN }], 'ps', '');
+  const live = m.db.get('tempo_time_entries', 'run'); const mae = m.etapaMae(live);
+  const f = m.sbFatias(live, mae, m.sbJanela(live));
+  assert.equal(f.map(x => x.key).join(','), 'sem,ps,sem');
+  assert.equal(Math.round(f.reduce((t, x) => t + x.b - x.a, 0) / MIN), 100);
 });
 test('prévia: sem trecho, sem destino e destino igual ao atual', () => {
-  const m = setup(); const t0 = Date.now() - 60 * MIN; const e = sessao(m, t0, t0 + 50 * MIN);
-  m.ctx.actPoolBetween = () => [];
-  const mae = m.etapaMae(e); const A = m.sbApps(e, mae, m.sbJanela(e));
-  assert.equal(m.sbPrevia(e, mae, { ranges: [], app: '', dest: 'ps' }, A).ok, false);
-  assert.equal(m.sbPrevia(e, mae, { ranges: [{ a: t0, b: t0 + 10 * MIN }], app: '', dest: '' }, A).ok, false);
-  assert.equal(m.sbPrevia(e, mae, { ranges: [{ a: t0, b: t0 + 10 * MIN }], app: '', dest: 'sem' }, A).ok, false);   // já está na tarefa
-  assert.equal(m.sbPrevia(e, mae, { ranges: [{ a: t0, b: t0 + 10 * MIN }], app: '', dest: 'ps' }, A).ok, true);
+  const m = setup(); const t0 = Date.now() - 120 * MIN; const e = sessao(m, t0, t0 + 100 * MIN); const mae = m.etapaMae(e);
+  const S = m.sbEstado('run'); const A = m.sbApps(e, mae, m.sbJanela(e));
+  assert.equal(m.sbPrevia(e, mae, S, A).ok, false);
+  S.ranges = [{ a: t0 + 10 * MIN, b: t0 + 20 * MIN }]; assert.equal(m.sbPrevia(e, mae, S, A).ok, false);
+  S.dest = 'ps'; assert.equal(m.sbPrevia(e, mae, S, A).ok, true);
+  m.sbPintar(e, S.ranges, 'ps', '');
+  assert.equal(m.sbPrevia(m.db.get('tempo_time_entries', 'run'), mae, S, A).ok, false);
+  assert.match(m.sbPrevia(e, mae, { ...S, dest: 'ae' }, A).txt, /continua na sessão/);
 });
-test('a barra continua mostrando a sessão inteira depois de levar o começo para uma subtarefa', () => {
+test('o botão Desfazer fica na seção depois de marcar', () => {
   const m = setup(); const t0 = Date.now() - 120 * MIN; const e = sessao(m, t0, t0 + 100 * MIN);
-  m.sbPintar(e, [{ a: t0, b: t0 + 40 * MIN }], 'ps', 't');
-  const run = m.db.get('tempo_time_entries', 'run');
-  const J = m.sbJanela(run);
-  assert.equal(Math.round((J.b - J.a) / MIN), 100);
-  const f = m.sbFatias(run, m.etapaMae(run), J);
-  assert.equal(f.filter(x => x.key === 'ps').length, 1); assert.equal(f.filter(x => x.key === 'sem').length, 1);
-  assert.match(m.sbSecaoHTML(run), /Por subtarefa|sb-strip/);
+  assert.doesNotMatch(m.sbSecaoHTML(e), /sb-desfaz/);
+  m.sbLembraDesfazer('run', '30min marcados.', () => {});
+  assert.match(m.sbSecaoHTML(e), /data-x="sb-desfaz"/);
+});
+test('sessão antiga com trecho "levado" para a subtarefa volta para a sessão e vira marcação', () => {
+  const m = setup(); const t0 = Date.now() - 180 * MIN; const iso = (x) => new Date(x).toISOString();
+  m.db.insert('tempo_time_entries', { id: 'run', project_id: 'p', task_id: 'mae', state: 'done', segments: [
+    { s: iso(t0), e: iso(t0 + 20 * MIN), why: 'moved', movedTo: 'p' }, { s: iso(t0 + 38 * MIN), e: iso(t0 + 100 * MIN) }] }, true);
+  m.db.insert('tempo_time_entries', { id: 'mv', project_id: 'p', task_id: 'ps', state: 'done', notes: 'Movido de outra sessão', segments: [{ s: iso(t0 + 20 * MIN), e: iso(t0 + 38 * MIN) }] }, true);
+  const n = m.sbReintegra(m.db.get('tempo_time_entries', 'run'));
+  assert.equal(n, 1);
+  assert.equal(m.db.get('tempo_time_entries', 'mv'), undefined);
+  assert.equal(Math.round(ms(m.db.get('tempo_time_entries', 'run')) / MIN), 100);
+  assert.equal(Math.round(m.sbSubMs('ps') / MIN), 18);
+});
+test('etapas de hoje listam as marcações', () => {
+  const m = setup(); const t0 = Date.now() - 60 * MIN; const e = sessao(m, t0, t0 + 50 * MIN);
+  m.sbPintar(e, [{ a: t0, b: t0 + 20 * MIN }], 'ps', '');
+  const l = m.etapasDeHoje(m.db.get('tasks'.replace('tasks', 'tempo_tasks'), 'mae'));
+  assert.equal(l.length, 1); assert.equal(Math.round(l[0].ms / MIN), 20);
 });
 test('terminei uma etapa: diz a terminada e a próxima; encerrar fecha a próxima sozinha', async () => {
   let ly = null;
   const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'],
-    ['db', 'ACTIONS', 'etapaFechaAoEncerrar', 'sbEtapaAtual'],
+    ['db', 'ACTIONS', 'etapaFechaAoEncerrar', 'sbEtapaAtual', 'sbSubMs'],
     { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '', $: () => null, $$: () => [], tkProjectLabel: (p) => p.name,
       openLayer: () => { const v = { '#et-nome': 'Preparar telas', '#et-prox': 'Animar 2D', '#et-fim': '' }; ly = { close() {}, box: { querySelector: (q) => (q in v ? { value: v[q] } : null), addEventListener: (ev, fn) => { if (ev === 'click') ly.click = fn; } } }; return ly; } });
   m.db.data = m.db.empty();
@@ -116,24 +105,22 @@ test('terminei uma etapa: diz a terminada e a próxima; encerrar fecha a próxim
   const ps = subs.find(s => s.name === 'Preparar telas'), ae = subs.find(s => s.name === 'Animar 2D');
   assert.ok(ps && ae);
   assert.equal(m.sbEtapaAtual('run').id, ae.id);                       // a próxima ficou como etapa atual
-  assert.ok(m.db.all('tempo_time_entries').some(e => e.task_id === ps.id));
-  // passam mais 30 min e a sessão é encerrada: a etapa atual fecha sozinha até o fim
+  assert.equal(m.db.all('tempo_time_entries').length, 1);              // nada saiu da sessão
+  assert.ok(Math.abs(m.sbSubMs(ps.id) - 60 * MIN) < 2 * MIN);           // a etapa 1 ficou marcada
   const agora = Date.now();
-  m.db.update('tempo_time_entries', 'run', { state: 'done', segments: [{ s: new Date(agora - 30 * MIN).toISOString(), e: new Date(agora - 1 * MIN).toISOString() }] }, true);
+  m.db.update('tempo_time_entries', 'run', { state: 'done', segments: [{ s: new Date(t0).toISOString(), e: new Date(agora).toISOString() }] }, true);
   m.db.setSetting('etapaMarca', { run: new Date(agora - 30 * MIN).toISOString() });
-  m.db.update('tempo_time_entries', m.db.all('tempo_time_entries').find(e => e.task_id === ps.id).id, { segments: [{ s: new Date(t0).toISOString(), e: new Date(agora - 30 * MIN).toISOString() }] }, true);   // a etapa 1 terminou 30 min atrás (sem sobrepor a sessão)
   const antesTotal = m.db.all('tempo_time_entries').reduce((t, e) => t + ms(e), 0);
   const r = m.etapaFechaAoEncerrar('run');
   assert.ok(r);
-  const dela = m.db.all('tempo_time_entries').filter(e => e.task_id === ae.id).reduce((t, e) => t + ms(e), 0);
-  assert.ok(dela >= 29 * MIN, 'a etapa atual ficou com o resto da sessão');
+  assert.ok(m.sbSubMs(ae.id) >= 29 * MIN, 'a etapa atual ficou com o resto da sessão');
   assert.equal(m.sbEtapaAtual('run'), null);
   assert.ok(Math.abs(m.db.all('tempo_time_entries').reduce((t, e) => t + ms(e), 0) - antesTotal) < 1000);   // o total da tarefa não mudou
 });
-test('terminei às hh:mm (antes de agora): o que veio depois fica na sessão', () => {
+test('terminei às hh:mm (antes de agora): a sessão continua inteira e só a parte até a hora fica marcada', () => {
   let ly = null; const t0 = new Date(); t0.setHours(9, 0, 0, 0);
   const agora = new Date(); const horaFim = `${String(Math.max(0, agora.getHours() - 1)).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
-  const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'], ['db', 'ACTIONS'],
+  const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'], ['db', 'ACTIONS', 'sbSubMs'],
     { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '', $: () => null, $$: () => [], tkProjectLabel: (p) => p.name,
       openLayer: () => { const v = { '#et-nome': 'Etapa 1', '#et-prox': '', '#et-fim': horaFim }; ly = { close() {}, box: { querySelector: (q) => (q in v ? { value: v[q] } : null), addEventListener: (ev, fn) => { if (ev === 'click') ly.click = fn; } } }; return ly; } });
   m.db.data = m.db.empty();
@@ -143,13 +130,14 @@ test('terminei às hh:mm (antes de agora): o que veio depois fica na sessão', (
   m.ctx.activeEntry = () => m.db.get('tempo_time_entries', 'run');
   m.ACTIONS['etapa-fim'](); ly.click({ target: { closest: (s) => (s === '[data-et-ok]' ? {} : null) } });
   const run = m.db.get('tempo_time_entries', 'run');
-  assert.equal(run.state, 'running'); assert.ok(ms(run) > 55 * MIN && ms(run) < 65 * MIN, 'sobra cerca de 1 h na sessão: ' + ms(run) / MIN);
+  assert.equal(run.state, 'running'); assert.ok(ms(run) > 179 * MIN, 'a sessão continua inteira');
+  const et1 = m.db.all('tempo_tasks').find(t => t.name === 'Etapa 1'); assert.ok(m.sbSubMs(et1.id) > 115 * MIN && m.sbSubMs(et1.id) < 125 * MIN, 'a Etapa 1 ficou marcada até a hora dita: ' + m.sbSubMs(et1.id) / MIN);
 });
-test('o chip "Em subtarefas" separa o que foi para subtarefa do que foi para outro projeto', () => {
+test('o chip "Em subtarefas" só conta o que foi levado de verdade (marcar não conta)', () => {
   const m = setup(); const t0 = Date.now() - 120 * MIN; const e = sessao(m, t0, t0 + 100 * MIN);
-  m.sbPintar(e, [{ a: t0 + 20 * MIN, b: t0 + 50 * MIN }], 'ps', 't');
+  m.sbPintar(e, [{ a: t0 + 20 * MIN, b: t0 + 50 * MIN }], 'ps', '');
   const f = m.actForaSplit(m.db.get('tempo_time_entries', 'run'));
-  assert.equal(Math.round(f.sub / MIN), 30); assert.equal(f.outro, 0);
+  assert.equal(f.sub, 0); assert.equal(f.outro, 0);
 });
 test('normalizar: trechos que se encostam viram um só e o motivo vale o do último', () => {
   const m = setup(); const a = '2026-11-25T10:00:00.000Z', b = '2026-11-25T10:30:00.000Z', c = '2026-11-25T11:00:00.000Z';
