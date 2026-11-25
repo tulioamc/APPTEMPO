@@ -16,7 +16,7 @@ const sbReset = () => { SB = null; SB_ULT = null; };
 let SB_ULT = null;   // { key, txt, run }
 function sbLembraDesfazer(key, txt, run) { SB_ULT = { key, txt, run }; }
 function sbEstado(key) {
-  if (!SB || SB.key !== key) SB = { key, ranges: [], drag: null, dragging: false, start: 0, moveu: false, app: '', dest: '', novo: '', criando: false, lembrar: false, det: '' };
+  if (!SB || SB.key !== key) SB = { key, ranges: [], drag: null, dragging: false, start: 0, moveu: false, app: '', dest: '', novo: '', criando: false, lembrar: false };
   return SB;
 }
 
@@ -95,32 +95,52 @@ function sbPintar(e, cuts, destTaskId, rotulo) {
   db.emit();
   return { ms, desfazer: () => { sbGuardaDivs(e.id, antes); db.emit(); } };
 }
-/* Sessões antigas em que um trecho foi LEVADO para uma subtarefa (versão anterior): junta de volta na sessão e deixa só a marcação. */
+/* Sessões antigas em que um trecho foi LEVADO para uma subtarefa (versões anteriores): o tempo volta para a sessão e a subtarefa fica só como marcação.
+   1) lançamentos "Movido de outra sessão" de subtarefa da mesma tarefa, dentro (ou encostados) da janela da sessão: voltam e são apagados;
+   2) buracos "movidos" para o mesmo projeto cujo lançamento de destino não existe mais (o tempo ficou perdido): viram tempo da sessão de novo;
+      a subtarefa é a que o histórico da sessão cita ("… › Subtarefa: 18min levados para a subtarefa"), se for uma só. */
 function sbReintegra(e) {
   const mae = etapaMae(e); if (!mae || e.state === undefined) return 0;
-  const subIds = new Set(subtasksOf(mae.id).map(s => s.id));
+  const subs = subtasksOf(mae.id), subIds = new Set(subs.map(s => s.id));
+  const now = Date.now(); let n = 0;
   const cand = db.all('tempo_time_entries').filter(x => x.id !== e.id && x.state === 'done' && x.project_id === e.project_id && subIds.has(x.task_id) && /^Movido de outra sessão/.test(x.notes || '') && (x.segments || []).length);
-  if (!cand.length) return 0;
-  const now = Date.now(); let n = 0, mexeu = true;
-  const feitos = new Set();
+  const feitos = new Set(); let mexeu = cand.length > 0;
   while (mexeu) {
     mexeu = false;
-    const w = sbWork(db.get('tempo_time_entries', e.id), now); if (!w.length) break;
+    const cur0 = db.get('tempo_time_entries', e.id); const w = sbWork(cur0, now); if (!w.length) break;
     const ini = Math.min(...w.map(x => x.a)), fim = Math.max(...w.map(x => x.b));
-    const gaps = []; const sg = (db.get('tempo_time_entries', e.id).segments || []);
-    for (let i = 0; i < sg.length - 1; i++) if (isForaWhy(sg[i].why) && sg[i].e && sg[i + 1].s && sg[i].movedTo === e.project_id) gaps.push({ a: SB_T(sg[i].e), b: SB_T(sg[i + 1].s) });
     cand.filter(x => !feitos.has(x.id)).forEach(x => {
       const xs = sbWork(x, now); if (!xs.length) return;
       const xa = Math.min(...xs.map(z => z.a)), xb = Math.max(...xs.map(z => z.b));
-      const dentro = xa >= ini - 2000 && xb <= fim + 2000;   // o trecho levado está dentro da janela desta sessão
-      const encosta = Math.abs(xb - ini) <= 2000 || Math.abs(xa - fim) <= 2000, naLacuna = dentro;
-      if (!naLacuna && !encosta) return;
+      const dentro = xa >= ini - 2000 && xb <= fim + 2000;
+      const encosta = Math.abs(xb - ini) <= 2000 || Math.abs(xa - fim) <= 2000;
+      if (!dentro && !encosta) return;
       const cur = db.get('tempo_time_entries', e.id);
       db.update('tempo_time_entries', e.id, { segments: sbNormaliza([...(cur.segments || []), ...x.segments.map(z => ({ s: z.s, e: z.e }))]), edits: auditEdit(cur, cur.segments, `Trecho de “${db.get('tempo_tasks', x.task_id)?.name || 'subtarefa'}” voltou para a sessão (a subtarefa agora só marca o trecho)`) }, true);
       sbGuardaDivs(e.id, sbAplica(sbDivs(e.id), xs.map(z => ({ a: z.a, b: z.b })), x.task_id));
       db.remove('tempo_time_entries', x.id, true);
       feitos.add(x.id); n++; mexeu = true;
     });
+  }
+  /* 2) buracos órfãos */
+  const cur = db.get('tempo_time_entries', e.id); const sg = (cur.segments || []).map(z => ({ ...z }));
+  const outros = db.all('tempo_time_entries').filter(x => x.id !== e.id).flatMap(x => sbWork(x, now));
+  const orfaos = [];
+  for (let i = 0; i < sg.length - 1; i++) {
+    const z = sg[i]; if (z.why !== 'moved' || z.movedTo !== e.project_id || z.troca || !z.e || !sg[i + 1].s) continue;
+    const A = SB_T(z.e), B = SB_T(sg[i + 1].s); if (B - A < 1000) continue;
+    if (sbLen(sbInter(outros, [{ a: A, b: B }])) >= 0.5 * (B - A)) continue;   // tem lançamento de destino: não é órfão
+    orfaos.push({ i, a: A, b: B });
+  }
+  if (orfaos.length) {
+    const nomes = [...new Set((cur.edits || []).map(x => { const m = /›\s*(.+?):\s*\d.*levados? para a subtarefa/.exec(x.reason || '') || /^Etapa “(.+?)” marcada/.exec(x.reason || ''); return m ? m[1].trim().toLowerCase() : null; }).filter(Boolean))];
+    const sub = nomes.length === 1 ? subs.find(x => x.name.trim().toLowerCase() === nomes[0]) : null;
+    const novos = sg.map((z, i) => orfaos.some(o => o.i === i) ? (({ why, movedTo, movedFrom, troca, ...r }) => r)(z) : z);
+    orfaos.forEach(o => novos.push({ s: new Date(o.a).toISOString(), e: new Date(o.b).toISOString() }));
+    const tot = orfaos.reduce((t, o) => t + o.b - o.a, 0);
+    db.update('tempo_time_entries', e.id, { segments: sbNormaliza(novos), edits: auditEdit(cur, cur.segments, `${fmtDur(tot)} que tinham sido levados para subtarefa e se perderam voltaram para a sessão${sub ? ` (marcados como “${sub.name}”)` : ''}`) }, true);
+    if (sub) sbGuardaDivs(e.id, sbAplica(sbDivs(e.id), orfaos.map(o => ({ a: o.a, b: o.b })), sub.id));
+    n += orfaos.length;
   }
   if (n) db.emit();
   return n;
@@ -244,13 +264,9 @@ function sbSecaoHTML(e) {
   S.ranges.concat(S.drag ? [S.drag] : []).forEach(r => { const x = pct(r.a), y = pct(r.b); if (y > x) barras += `<span class="res-sel-range" style="left:${x}%;width:${Math.max(.3, y - x)}%"></span>`; });
   const faixa = `<div class="act-strip sb-strip" data-mode="sub" data-ent="${esc(e.id)}" data-t0="${J.a}" data-span="${J.span}" style="position:relative" aria-label="Arraste para marcar um trecho">${barras}</div>`;
 
-  const linha = (key, nome, ms, sub) => {
-    const edit = sub && S.det === key;
-    return `<div class="sb-item${S.dest === key ? ' is-pick' : ''}${edit ? ' is-det' : ''}" style="--tb:${sbCor(mae, key)}">
-      <div class="sb-item-l"><button type="button" class="sb-pick" data-g="${esc(key)}" data-x="sb-dest" data-k="${esc(key)}" title="Clique para escolher ${esc(nome)} para o trecho"><i></i><span class="sb-n">${esc(nome)}</span></button>${sub ? `<button type="button" class="btn sm sb-detbtn" data-x="sb-det" data-k="${esc(key)}" aria-expanded="${!!edit}" title="Editar o nome ou apagar esta subtarefa">Detalhes</button>` : ''}<span class="mono small sb-t" title="Tempo desta subtarefa marcado nesta sessão">${ms ? fmtDur(ms) : '—'}</span></div>
-      ${edit ? `<div class="sb-edit"><input type="text" class="input sm" data-sb="ren" value="${esc(nome)}" autocomplete="off" aria-label="Nome da subtarefa"><button type="button" class="btn sm primary" data-x="sb-ren" data-k="${esc(key)}" title="Salvar o novo nome (Enter)">Salvar</button><button type="button" class="btn sm danger" data-x="sb-del" data-k="${esc(key)}" title="Apaga a subtarefa. As marcações dela somem e o tempo continua na sessão. Dá para desfazer logo depois.">Apagar</button></div>` : ''}
+  const linha = (key, nome, ms, sub) => `<div class="sb-item${S.dest === key ? ' is-pick' : ''}" style="--tb:${sbCor(mae, key)}">
+      <div class="sb-item-l"><button type="button" class="sb-pick" data-g="${esc(key)}" data-x="sb-dest" data-k="${esc(key)}" title="Clique para escolher ${esc(nome)} para o trecho"><i></i><span class="sb-n">${esc(nome)}</span></button>${sub ? `<button type="button" class="btn sm sb-detbtn" data-x="sb-det" data-k="${esc(key)}" title="Abre a janela da subtarefa: tempo registrado, programas, renomear e apagar">Detalhes</button>` : ''}<span class="mono small sb-t" title="Tempo desta subtarefa marcado nesta sessão">${ms ? fmtDur(ms) : '—'}</span></div>
     </div>`;
-  };
   const chips = `<div class="sb-lista"><div class="sb-lista-h lbl">Subtarefas</div>${linha('sem', 'Sem subtarefa', msPor.sem || 0, false)}${subs.map(x => linha(x.id, x.name, msPor[x.id] || 0, true)).join('')}</div>`;
 
   const A = sbApps(e, mae, J);
@@ -281,7 +297,7 @@ function sbRefresh() {
   const e = db.get('tempo_time_entries', SB.key); if (!e) return;
   const foco = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.sb : null;
   sec.outerHTML = sbSecaoHTML(e);
-  if (foco === 'novo' || foco === 'nome' || foco === 'ren') { const el = document.querySelector(`.sb-sec [data-sb="${foco}"]`); if (el) { el.focus(); const v = el.value; el.value = ''; el.value = v; } }
+  if (foco === 'novo' || foco === 'nome') { const el = document.querySelector(`.sb-sec [data-sb="${foco}"]`); if (el) { el.focus(); const v = el.value; el.value = ''; el.value = v; } }
 }
 /* Só a prévia e o botão (digitando o nome da subtarefa nova): não mexe nos campos. */
 function sbPreviaDom() {
@@ -338,9 +354,7 @@ function sbClick(ev, ctx) {
   const b = ev.target.closest?.('[data-x^="sb-"]'); if (!b) return false;
   const x = b.dataset.x, e = ctx.e, S = sbEstado(e.id), mae = etapaMae(e);
   if (x === 'sb-fold') { db.setSetting('sbFechado', !db.setting('sbFechado', false)); sbRefresh(); return true; }
-  if (x === 'sb-det') { S.det = S.det === b.dataset.k ? '' : b.dataset.k; sbRefresh(); const i = document.querySelector('.sb-sec [data-sb="ren"]'); if (i) i.focus(); return true; }
-  if (x === 'sb-ren') { sbRenomeia(ctx, b.dataset.k); return true; }
-  if (x === 'sb-del') { sbApaga(ctx, b.dataset.k); return true; }
+  if (x === 'sb-det') { sbDetalhe(ctx, b.dataset.k); return true; }
   if (x === 'sb-etapa') { ACTIONS['etapa-fim']({ dataset: { id: e.id } }); return true; }
   if (x === 'sb-dest') { S.dest = S.dest === b.dataset.k ? '' : b.dataset.k; sbRefresh(); return true; }
   if (x === 'sb-rm') { S.ranges.splice(Number(b.dataset.i), 1); sbRefresh(); return true; }
@@ -351,23 +365,22 @@ function sbClick(ev, ctx) {
   if (x === 'sb-desfaz') { const u = SB_ULT; SB_ULT = null; if (u && u.key === e.id) u.run(); ctx.refresh(); toast('Marcação desfeita'); return true; }
   return false;
 }
-function sbRenomeia(ctx, id) {
-  const t = db.get('tempo_tasks', id), S = sbEstado(ctx.e.id); if (!t) return;
-  const nome = (document.querySelector('.sb-sec [data-sb="ren"]')?.value || '').trim();
-  if (!nome) { toast('Dê um nome para a subtarefa'); return; }
+function sbRenomeia(ctx, id, nome) {
+  const t = db.get('tempo_tasks', id); if (!t) return false;
+  nome = String(nome || '').trim();
+  if (!nome) { toast('Dê um nome para a subtarefa'); return false; }
   const mae = etapaMae(ctx.e);
-  if (mae && subtasksOf(mae.id).some(x => x.id !== id && x.name.trim().toLowerCase() === nome.toLowerCase())) { toast('Já existe uma subtarefa com esse nome'); return; }
-  const antes = t.name; S.det = '';
-  if (nome !== antes) db.update('tempo_tasks', id, { name: nome }, true);
-  db.emit(); sbRefresh();
+  if (mae && subtasksOf(mae.id).some(x => x.id !== id && x.name.trim().toLowerCase() === nome.toLowerCase())) { toast('Já existe uma subtarefa com esse nome'); return false; }
+  const antes = t.name; if (nome === antes) return true;
+  db.update('tempo_tasks', id, { name: nome }, true); db.emit();
   sbLembraDesfazer(ctx.e.id, `Subtarefa renomeada para “${nome}”.`, () => { db.update('tempo_tasks', id, { name: antes }, true); db.emit(); });
-  sbRefresh();
+  sbRefresh(); return true;
 }
 /* Apagar: a subtarefa e as marcações dela somem; sessões que eram dela passam para a tarefa mãe (nenhum tempo se perde). */
 async function sbApaga(ctx, id) {
-  const t = db.get('tempo_tasks', id), S = sbEstado(ctx.e.id); if (!t) return;
-  const mae = db.get('tempo_tasks', t.parent_id); if (!mae) return;
-  if (!await confirmBox({ title: 'Apagar subtarefa?', body: `“${esc(t.name)}” sai da lista e das marcações. O tempo continua nas sessões, na tarefa ${esc(mae.name)}.`, ok: 'Apagar', danger: true })) return;
+  const t = db.get('tempo_tasks', id), S = sbEstado(ctx.e.id); if (!t) return false;
+  const mae = db.get('tempo_tasks', t.parent_id); if (!mae) return false;
+  if (!await confirmBox({ title: 'Apagar subtarefa?', body: `“${esc(t.name)}” sai da lista e das marcações. O tempo continua nas sessões, na tarefa ${esc(mae.name)}.`, ok: 'Apagar', danger: true })) return false;
   const copia = { ...t };
   const ents = db.all('tempo_time_entries').filter(x => x.task_id === id).map(x => x.id);
   const mapa = db.setting('sbDiv', {}) || {}; const divsAntes = JSON.parse(JSON.stringify(mapa)); const atualAntes = JSON.parse(JSON.stringify(db.setting('etapaAtual', {}) || {}));
@@ -385,6 +398,65 @@ async function sbApaga(ctx, id) {
   });
   sbRefresh();
   toast(`Subtarefa “${esc(t.name)}” apagada`, { ms: 9000, actions: [{ label: 'Desfazer', run: () => { const u = SB_ULT; SB_ULT = null; if (u) u.run(); sbRefresh(); toast('Desfeito'); } }] });
+  return true;
+}
+/* ---------- janela "Detalhes" da subtarefa ---------- */
+/* Tudo que a subtarefa tem: tempo marcado dentro das sessões + sessões antigas que eram só dela, programas usados nesse tempo. */
+function sbDetalheDados(subId) {
+  const now = Date.now(); const regs = []; const prog = {};
+  const somaProg = (a, b) => actPoolBetween(a, b).forEach(r => {
+    if (typeof pausaRec === 'function' && pausaRec(r) && !actWaTrabalho(r)) return;
+    const x = Math.max(a, SB_T(r.from)), y = Math.min(b, SB_T(r.to)); if (y <= x) return;
+    const k = shortProgram(r.app) || r.app; prog[k] = (prog[k] || 0) + (y - x);
+  });
+  const mapa = db.setting('sbDiv', {}) || {};
+  Object.keys(mapa).forEach(id => {
+    const e = db.get('tempo_time_entries', id); if (!e) return;
+    (mapa[id] || []).filter(d => d.sub === subId).forEach(d => {
+      sbInter(sbWork(e, now), [d]).forEach(c => { regs.push({ a: c.a, b: c.b, ms: c.b - c.a, sessao: e }); somaProg(c.a, c.b); });
+    });
+  });
+  db.all('tempo_time_entries').filter(e => e.task_id === subId).forEach(e => sbWork(e, now).forEach(c => { regs.push({ a: c.a, b: c.b, ms: c.b - c.a, sessao: e, propria: true }); somaProg(c.a, c.b); }));
+  regs.sort((p, q) => q.a - p.a);
+  const total = regs.reduce((t, r) => t + r.ms, 0);
+  const apps = Object.entries(prog).sort((p, q) => q[1] - p[1]);
+  return { regs, total, apps, sessoes: new Set(regs.map(r => r.sessao.id)).size };
+}
+function sbDetalheHTML(sub) {
+  const D = sbDetalheDados(sub.id), mae = db.get('tempo_tasks', sub.parent_id);
+  const ps = subProgsDe(sub.id); const ops = subOpcoes(sub.project_id).filter(o => !ps.includes(o));
+  const maxApp = D.apps.length ? D.apps[0][1] : 1;
+  const dia = (ms) => new Date(ms).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+  const tarefaDe = (e) => db.get('tempo_tasks', e.task_id)?.name || '';
+  return `<div class="dh"><h2>Subtarefa${mae ? ` <span class="faint">de ${esc(mae.name)}</span>` : ''}</h2><span class="grow"></span><button class="btn icon ghost" data-sbd="fechar" aria-label="Fechar" title="Fechar">${icon('x')}</button></div>
+  <div class="db stack" style="gap:14px">
+    <div class="field"><label for="sbd-nome">Nome</label><div class="row" style="gap:6px"><input id="sbd-nome" class="input" value="${esc(sub.name)}" autocomplete="off"><button type="button" class="btn primary" data-sbd="salvar" title="Salvar o novo nome (Enter)">Salvar</button></div></div>
+    <div class="sbd-resumo"><div><span class="small muted">Tempo registrado</span><b class="mono">${D.total ? fmtDur(D.total) : '—'}</b></div><div><span class="small muted">Trechos</span><b class="mono">${D.regs.length}</b></div><div><span class="small muted">Sessões</span><b class="mono">${D.sessoes}</b></div></div>
+    <div class="small muted" style="margin-top:-6px">Esse tempo continua dentro da tarefa${mae ? ` ${esc(mae.name)}` : ''}: a subtarefa só mostra a parte dele.</div>
+    <div><div class="lbl">Programas usados nesse tempo</div>${D.apps.length ? D.apps.slice(0, 8).map(([k, ms]) => `<div class="sbd-app"><span class="sbd-an">${esc(k)}</span><span class="sbd-bar"><i style="width:${Math.max(3, Math.round(ms / maxApp * 100))}%"></i></span><b class="mono small">${fmtDur(ms)}</b></div>`).join('') : '<div class="small muted">Ainda não tem tempo marcado nesta subtarefa.</div>'}</div>
+    <div class="field"><label>Programas associados <span class="faint">(o tempo neles vira sugestão para esta subtarefa)</span></label><div class="sp-chips">${ps.map(n => `<span class="sp-chip">${esc(n)}<button type="button" data-sbd="tira" data-n="${esc(n)}" aria-label="Tirar ${esc(n)}" title="Tirar ${esc(n)} desta subtarefa">×</button></span>`).join('') || '<span class="small muted">Nenhum</span>'}</div>
+      <select class="input sm" data-sbd="add" style="margin-top:6px;max-width:260px" aria-label="Associar um programa" title="Associar um programa a esta subtarefa"><option value="">+ Associar programa…</option>${ops.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select></div>
+    <div><div class="lbl">Registros</div>${D.regs.length ? `<div class="sbd-regs">${D.regs.slice(0, 40).map(r => `<div class="sbd-reg"><span class="small">${esc(dia(r.a))}</span><span class="mono small muted">${sbHM(r.a)}–${sbHM(r.b)}</span><span class="small muted sbd-rn">${r.propria ? 'sessão própria' : 'dentro de “' + esc(tarefaDe(r.sessao) || 'sessão') + '”'}</span><b class="mono small">${fmtDur(r.ms)}</b></div>`).join('')}${D.regs.length > 40 ? `<div class="small muted">+ ${D.regs.length - 40} trechos mais antigos</div>` : ''}</div>` : '<div class="small muted">Nenhum registro.</div>'}</div>
+  </div>
+  <div class="df"><button type="button" class="btn danger" data-sbd="apagar" title="Apaga a subtarefa. O tempo continua nas sessões. Dá para desfazer logo depois.">${icon('trash')} Apagar subtarefa</button><span class="grow"></span><button type="button" class="btn" data-sbd="fechar">Fechar</button></div>`;
+}
+function sbDetalhe(ctx, subId) {
+  if (!db.get('tempo_tasks', subId)) return;
+  const ly = openLayer({ wide: true, render: () => { const t = db.get('tempo_tasks', subId); return t ? sbDetalheHTML(t) : ''; } });
+  const salvar = () => { const v = ly.box.querySelector('#sbd-nome')?.value; if (sbRenomeia(ctx, subId, v)) ly.refresh(); };
+  ly.box.addEventListener('click', async (ev) => {
+    const b = ev.target.closest('[data-sbd]'); if (!b) return; const k = b.dataset.sbd;
+    if (k === 'fechar') ly.close();
+    else if (k === 'salvar') salvar();
+    else if (k === 'tira') { const m = { ...(db.setting('subProgs', {}) || {}) }; m[subId] = (m[subId] || []).filter(x => x !== b.dataset.n); db.setSetting('subProgs', m); ly.refresh(); }
+    else if (k === 'apagar') { if (await sbApaga(ctx, subId)) { ly.close(); ctx.refresh && ctx.refresh(); } }
+  });
+  ly.box.addEventListener('change', (ev) => {
+    const el = ev.target; if (el.dataset?.sbd !== 'add' || !el.value) return;
+    const m = { ...(db.setting('subProgs', {}) || {}) }; const l = m[subId] || []; if (!l.includes(el.value)) m[subId] = [...l, el.value];
+    db.setSetting('subProgs', m); ly.refresh();
+  });
+  ly.box.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.id === 'sbd-nome') { ev.preventDefault(); salvar(); } });
 }
 function sbCriar(e) {
   const S = sbEstado(e.id), mae = etapaMae(e); if (!mae) return;
@@ -411,7 +483,6 @@ function sbInput(ev, ctx) {
 function sbTecla(ev, ctx) {
   if (ev.key !== 'Enter') return false;
   const el = ev.target; if (!el.dataset) return false;
-  if (el.dataset.sb === 'ren') { ev.preventDefault(); sbRenomeia(ctx, sbEstado(ctx.e.id).det); return true; }
   if (el.dataset.sb === 'nome') { ev.preventDefault(); sbCriar(ctx.e); return true; }
   if (el.dataset.sb === 'novo') { ev.preventDefault(); sbMover(ctx); return true; }
   return false;

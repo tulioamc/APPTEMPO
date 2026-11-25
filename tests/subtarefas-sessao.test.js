@@ -4,7 +4,7 @@ const { load } = require('./helpers');
 const MIN = 6e4;
 function setup() {
   const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'],
-    ['db', 'ACTIONS', 'sbPintar', 'sbJanela', 'sbFatias', 'sbPrevia', 'sbCortes', 'sbApps', 'sbNormaliza', 'etapaFechaAoEncerrar', 'sbEtapaAtual', 'etapaMae', 'actForaSplit', 'sbEstado', 'sbSecaoHTML', 'sbSubMs', 'sbDivs', 'sbReintegra', 'sbLembraDesfazer', 'etapasDeHoje'],
+    ['db', 'ACTIONS', 'sbPintar', 'sbJanela', 'sbFatias', 'sbPrevia', 'sbCortes', 'sbApps', 'sbNormaliza', 'etapaFechaAoEncerrar', 'sbEtapaAtual', 'etapaMae', 'actForaSplit', 'sbEstado', 'sbSecaoHTML', 'sbSubMs', 'sbDivs', 'sbReintegra', 'sbLembraDesfazer', 'etapasDeHoje', 'sbDetalheDados', 'sbDetalheHTML'],
     { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '', $: () => null, $$: () => [], tkProjectLabel: (p) => p.name, openLayer: () => ({ box: { querySelector: () => null, addEventListener() {} }, close() {} }) });
   m.db.data = m.db.empty();
   m.db.insert('tempo_projects', { id: 'p', name: 'Reels' }, true);
@@ -152,11 +152,33 @@ test('reintegra também quando o buraco ficou como pausa comum e quando o trecho
   assert.equal(Math.round(m.sbSubMs('ps') / MIN), 18);
   assert.equal(Math.round(ms(m.db.get('tempo_time_entries', 'run')) / MIN), 90);
 });
-test('seção: chevron esconde a barra e os menus; Detalhes abre editar/apagar', () => {
+test('seção: chevron esconde a barra e os menus; Detalhes abre a janela (sem edição inline)', () => {
   const m = setup(); const t0 = Date.now() - 120 * MIN; const e = sessao(m, t0, t0 + 100 * MIN);
   let h = m.sbSecaoHTML(e);
-  assert.match(h, /data-x="sb-fold"/); assert.match(h, /sb-strip/); assert.match(h, /data-x="sb-det"/); assert.doesNotMatch(h, /data-x="sb-del"/);
-  m.sbEstado('run').det = 'ps'; h = m.sbSecaoHTML(e); assert.match(h, /data-x="sb-del"/); assert.match(h, /data-x="sb-ren"/);
+  assert.match(h, /data-x="sb-fold"/); assert.match(h, /sb-strip/); assert.match(h, /data-x="sb-det"/); assert.doesNotMatch(h, /data-x="sb-del"|data-sb="ren"/);
   m.db.setSetting('sbFechado', true); h = m.sbSecaoHTML(e);
   assert.doesNotMatch(h, /sb-strip/); assert.match(h, /is-fechado/);
+});
+test('janela da subtarefa: tempo registrado, trechos, programas associados, renomear e apagar', () => {
+  const m = setup(); const t0 = Date.now() - 120 * MIN; const e = sessao(m, t0, t0 + 100 * MIN);
+  m.sbPintar(e, [{ a: t0 + 20 * MIN, b: t0 + 50 * MIN }], 'ps', '');
+  const D = m.sbDetalheDados('ps');
+  assert.equal(Math.round(D.total / MIN), 30); assert.equal(D.regs.length, 1); assert.equal(D.sessoes, 1);
+  const h = m.sbDetalheHTML(m.db.get('tempo_tasks', 'ps'));
+  assert.match(h, /Preparar telas/); assert.match(h, /data-sbd="apagar"/); assert.match(h, /data-sbd="salvar"/); assert.match(h, /Programas associados/); assert.match(h, /continua dentro da tarefa/);
+});
+test('buracos "movidos" para subtarefa sem lançamento de destino (tempo perdido) voltam para a sessão e ficam marcados', () => {
+  const m = setup(); const t0 = Date.now() - 180 * MIN; const iso = (x) => new Date(x).toISOString();
+  m.db.insert('tempo_time_entries', { id: 'run', project_id: 'p', task_id: 'mae', state: 'running', edits: [{ at: iso(t0), reason: 'Photoshop › Preparar telas: 18min levados para a subtarefa' }], segments: [
+    { s: iso(t0), e: iso(t0 + 10 * MIN), why: 'moved', movedTo: 'p' },
+    { s: iso(t0 + 15 * MIN), e: iso(t0 + 30 * MIN), why: 'moved', movedTo: 'outro' },
+    { s: iso(t0 + 40 * MIN), e: iso(t0 + 50 * MIN), why: 'Sem registro' },
+    { s: iso(t0 + 55 * MIN), e: null }] }, true);
+  assert.equal(m.sbReintegra(m.db.get('tempo_time_entries', 'run')), 1);
+  const run = m.db.get('tempo_time_entries', 'run');
+  assert.equal(Math.round(m.sbSubMs('ps') / MIN), 5);
+  assert.equal(run.segments[0].e, iso(t0 + 30 * MIN));                       // o buraco foi preenchido e o trecho emendou
+  assert.equal(run.segments[0].movedTo, 'outro');                            // o que foi para outro projeto continua fora
+  assert.equal(m.actForaSplit(run).sub, 0);
+  assert.equal(m.sbReintegra(run), 0);
 });
