@@ -2272,3 +2272,20 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .tk-op-acoes > [data-x="add-sub"] { margin-left: auto; }
 .tk.sub .tk-op-acoes > [data-x="del-task"] { margin-left: auto; }
 @container (max-width: 560px) { .tk-op-grupos { display: flex !important; flex-wrap: wrap; } }
+/* Entrega = linha de corte (proposta B, 25/11): o fio É a divisa entre as duas tarefas; etiquetas centradas nele.
+   Nome à esquerda (pílula cheia), DEADLINE · data · hora à direita (pílula com contorno). Sem altura própria. */
+.tk-entrega { display: block !important; position: relative; height: 0; margin: 0 !important; padding: 0 !important; z-index: 3; }
+.tk-entrega::before { content: ''; position: absolute; left: 0; right: 0; top: -1px; width: auto; height: 2px; background: var(--accent); }
+.tk-entrega::after { content: none !important; }
+.tk-ent-linha { display: none !important; }
+.tk-ent-a, .tk-ent-b { position: absolute !important; top: -11px; height: 22px; box-sizing: border-box; border-radius: 999px !important; display: inline-flex !important; align-items: center; gap: 6px; }
+.tk-ent-a { left: 14px; padding: 0 10px 0 6px !important; background: var(--accent); color: #fff; max-width: 45%; }
+.tk-ent-b { right: 12px; padding: 0 8px 0 10px !important; background: var(--surface, #fff) !important; border: 2px solid var(--accent) !important; color: var(--accent); gap: 8px !important; grid-template-columns: none !important; }
+.tk-ent-a::before, .tk-ent-b::after { content: none !important; }
+.tk-ent-b .tk-ent-dl { opacity: 1; margin: 0; }
+.tk-ent-b .tk-ent-v, .tk-ent-b input, .tk-ent-b .tk-ent-x { color: var(--accent) !important; }
+.tk-ent-b .tk-hin.ent { width: 40px; background: transparent; border: 0; font: inherit; padding: 0; }
+.tk-ent-nome { width: auto; field-sizing: content; min-width: 60px; max-width: 220px; }
+/* as tarefas vizinhas ganham um respiro para as etiquetas não encostarem no texto */
+.tk:has(+ .tk-entrega) > .tk-l { padding-bottom: 15px; }
+.tk-entrega + .tk > .tk-l { padding-top: 15px; }
