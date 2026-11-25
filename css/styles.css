@@ -2302,3 +2302,18 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .tk-ent-b .tk-ent-v { justify-self: start; padding: 0 !important; }
 .tk-ent-b .tk-ent-x { justify-self: end; }
 @container (max-width: 560px) { .tk-entrega { display: flex !important; } .tk-ent-b { display: flex !important; margin-left: auto !important; } }
+/* Opções da tarefa (25/11, ajuste do Tulio): Depende de = caixa larga da coluna do tempo até perto do +; o + na coluna da
+   lixeira (em cima dela). Ações: Sem pressa à esquerda; + Subtarefa alinhado com a caixa (coluna do tempo) e + Ajuste ao lado;
+   lixeira na última coluna. */
+.tk-op-dep, .tk-op-dep .tk-op-c, .tk-deps { width: 100%; }
+.tk-deps { align-items: stretch; }
+.tk-dep-l { display: grid !important; grid-template-columns: minmax(0, 1fr) 44px; column-gap: 8px; align-items: center; width: 100%; }
+.tk-dep-cx { max-width: none !important; width: 100%; box-sizing: border-box; justify-content: space-between; }
+.tk-dep-mais { justify-self: end; }
+.tk-dep-sel { max-width: none !important; width: 100%; grid-column: 1 / 2; }
+.tk-op-acoes { display: grid !important; grid-template-columns: minmax(110px, 1fr) 40px 100px 124px 72px 40px 44px; column-gap: 8px; align-items: center; }
+.tk-op-acoes > [data-x="tk-sempressa"] { grid-column: 1 / 2; justify-self: start; }
+.tk-op-meio { grid-column: 4 / 7; display: flex; gap: 8px; align-items: center; }
+.tk-op-meio > [data-x="add-sub"] { margin-left: 0 !important; }
+.tk-op-acoes > .tk-op-del { grid-column: 7 / 8; justify-self: end; margin-left: 0 !important; }
+@container (max-width: 560px) { .tk-op-acoes { display: flex !important; flex-wrap: wrap; } .tk-op-acoes > .tk-op-del { margin-left: auto !important; } }
