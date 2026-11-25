@@ -39,7 +39,6 @@ const NAV = [
   { id: 'timesheet', label: 'Time Sheet', icon: 'clock' },
   { id: 'todo', label: 'To-do', icon: 'check' },
   { id: 'plano', label: 'Calendário', icon: 'cal' },
-  { id: 'relatorios', label: 'Relatórios', icon: 'chart' },
   { group: 'PJ' },
   { id: 'registry', label: 'Agências e clientes', icon: 'users' },
   { id: 'contacts', label: 'Contatos', icon: 'users' },
@@ -55,6 +54,14 @@ const NAV = [
   { group: 'Filho' },
   { id: 'shared', label: 'Despesas Rafa', icon: 'users' },
   { id: 'rafa', label: 'Dias de Rafa', icon: 'users' },
+  { group: 'Relatórios' },
+  { id: 'reports', label: 'Receita PJ', icon: 'chart', tip: 'Faturamento, recebido, em aberto e clientes (PJ)' },
+  { id: 'productivity', label: 'Produtividade', icon: 'chart', tip: 'Quanto você rende: por hora do dia, por dia da semana, foco e pausas' },
+  { id: 'usage', label: 'Uso de programas', icon: 'chart', tip: 'Em quais programas e sites o tempo foi' },
+  { id: 'reportspf', label: 'Gastos PF', icon: 'chart', tip: 'Para onde foi o dinheiro da conta pessoal, mês a mês' },
+  { id: 'relfilho', label: 'Gastos e dias do Rafa', icon: 'chart', tip: 'Gasto mês a mês, parte da Amanda, saldo e dias com você' },
+  { id: 'analises', label: 'Análises', icon: 'doc', tip: 'Análises semanal, mensal, trimestral, semestral e anual' },
+  { id: 'metas', label: 'Metas', icon: 'flag', tip: 'Metas e estrelas conquistadas' },
   { group: 'Geral' },
   { id: 'notices', label: 'Avisos', icon: 'bell', pend: true },
   { id: 'lixeira', label: 'Lixeira de log', icon: 'trash' },
@@ -73,7 +80,7 @@ const REL_GRUPOS = [
 const REL_TABS = REL_GRUPOS.flatMap(g => g.tabs);
 const relGrupoDe = (r) => REL_GRUPOS.find(g => g.tabs.some(([k]) => k === r)) || REL_GRUPOS[0];
 const relTab = (r) => REL_TABS.some(([k]) => k === r);
-const navOn = (id) => S.route === id || (id === 'relatorios' && relTab(S.route));
+const navOn = (id) => S.route === id;
 
 function go(route) {
   if (route === 'relatorios') route = relTab(db.setting('relTab', '')) ? db.setting('relTab', '') : 'productivity';
@@ -101,7 +108,7 @@ function sidebarNavHTML() {
   NAV.forEach(n => {
     if (n.group) { cur = n.group; const f = folded.includes(n.group); out.push(`<button class="nav-group nav-fold" data-act="nav-fold" data-g="${n.group}" aria-expanded="${!f}">${n.group}${icon(f ? 'chevR' : 'chevD')}</button>`); return; }
     if (cur && folded.includes(cur)) return;
-    out.push(`<button class="nav-btn ${navOn(n.id) ? 'active' : ''}" data-act="go" data-route="${n.id}" ${navOn(n.id) ? 'aria-current="page"' : ''}>${icon(n.icon)}<span>${n.label}</span>${n.pend && pendingOf(n.id).length ? `<span class="count pend-count" data-act="pend" data-id="${n.id}" role="button" tabindex="0" title="Ver o que está pendente">${pendingOf(n.id).length}</span>` : ''}</button>`);
+    out.push(`<button class="nav-btn ${navOn(n.id) ? 'active' : ''}" data-act="go" data-route="${n.id}" ${n.tip ? `data-tip="${esc(n.tip)}"` : ''} ${navOn(n.id) ? 'aria-current="page"' : ''}>${icon(n.icon)}<span>${n.label}</span>${n.pend && pendingOf(n.id).length ? `<span class="count pend-count" data-act="pend" data-id="${n.id}" role="button" tabindex="0" title="Ver o que está pendente">${pendingOf(n.id).length}</span>` : ''}</button>`);
   });
   return out.join('');
 }
@@ -153,16 +160,8 @@ function render() {
   if (S.route === 'relatorios') S.route = relTab(db.setting('relTab', '')) ? db.setting('relTab', '') : 'productivity';
   const view = VIEWS[S.route] || VIEWS.timesheet;
   const v = { ...view() };
-  if (relTab(S.route)) {
-    if (db.setting('relTab', '') !== S.route) { const r = S.route; setTimeout(() => db.setSetting('relTab', r), 0); }
-    const g = relGrupoDe(S.route);
-    // grupo: abre na última aba usada dele (ou na primeira)
-    const ultima = (gr) => { const u = (db.setting('relTabGrupo', {}) || {})[gr.id]; return gr.tabs.some(([k]) => k === u) ? u : gr.tabs[0][0]; };
-    if ((db.setting('relTabGrupo', {}) || {})[g.id] !== S.route) { const r = S.route, gid = g.id; setTimeout(() => db.setSetting('relTabGrupo', { ...(db.setting('relTabGrupo', {}) || {}), [gid]: r }), 0); }
-    v.html = `<div class="rel-nav"><div class="seg rel-tabs" role="tablist">${REL_GRUPOS.map(gr => `<button role="tab" aria-selected="${gr === g}" class="${gr === g ? 'on' : ''}" data-act="go" data-route="${ultima(gr)}" data-tip="${esc(gr.tabs.map(t => t[1]).join(' · '))}">${gr.label}</button>`).join('')}</div>`
-      + (g.tabs.length > 1 ? `<div class="rel-sub" role="tablist">${g.tabs.map(([k, l]) => `<button role="tab" aria-selected="${k === S.route}" class="btn sm ${k === S.route ? 'primary' : 'ghost'}" data-act="go" data-route="${k}">${l}</button>`).join('')}</div>` : '') + `</div>` + v.html;
-    v.title = 'Relatórios';
-  }
+  // relatórios: cada um é um item do grupo Relatórios no menu; guarda o último aberto (rota antiga "relatorios" volta nele)
+  if (relTab(S.route) && db.setting('relTab', '') !== S.route) { const r = S.route; setTimeout(() => db.setSetting('relTab', r), 0); }
   const scrollKeep = keepScroll();
   // preserva foco/cursor quando a tela é redesenhada durante a digitação
   const ae = document.activeElement; const fid = ae && ae.id && $('.content')?.contains(ae) ? ae.id : null; const sel = fid && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null; const fval = fid ? ae.value : null;

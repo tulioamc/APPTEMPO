@@ -189,7 +189,7 @@ VIEWS.reports = () => {
     </div></div>
   </div>
   <div class="panel"><div class="panel-h"><h3>Clientes com mais revisões</h3></div><div class="panel-b">${revRows.length ? `<div class="bars">${revRows.map(x => `<div class="bar-row"><span class="lab">${esc(x.c.name)}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${corGraf(hexOf('orange'))};width:${x.n / revRows[0].n * 100}%"></div></div><span class="val">${x.n} rodada(s) · ${fmtDur(x.ms)}</span></div>`).join('')}</div>` : '<div class="muted small">Nenhuma rodada de revisão registrada.</div>'}</div></div>`;
-  return { title: 'Relatórios', actions: `<button class="btn" data-act="csv-copy" data-kind="entries">${icon('copy')} Copiar sessões (CSV)</button>`, html };
+  return { title: 'Receita PJ', actions: `<button class="btn" data-act="csv-copy" data-kind="entries">${icon('copy')} Copiar sessões (CSV)</button>`, html };
 };
 function profitCols(med) {
   return {

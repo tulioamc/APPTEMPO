@@ -122,7 +122,7 @@ VIEWS.reportspf = () => {
 
   const insights = pfInsights(months, byMonth, cats, totOut, totIn);
 
-  return { title: 'Relatórios PF', actions: `<select class="input sm" data-on="pf-range" aria-label="Período"><option value="3" ${n === 3 ? 'selected' : ''}>3 meses</option><option value="6" ${n === 6 ? 'selected' : ''}>6 meses</option><option value="12" ${n === 12 ? 'selected' : ''}>12 meses</option></select><button class="btn sm" data-act="pf-csv">Exportar CSV</button>`, html: `
+  return { title: 'Gastos PF', actions: `<select class="input sm" data-on="pf-range" aria-label="Período"><option value="3" ${n === 3 ? 'selected' : ''}>3 meses</option><option value="6" ${n === 6 ? 'selected' : ''}>6 meses</option><option value="12" ${n === 12 ? 'selected' : ''}>12 meses</option></select><button class="btn sm" data-act="pf-csv">Exportar CSV</button>`, html: `
   <div class="stack pf-report" style="gap:14px">
     <div class="pf-kpis">
       <div class="kpi"><span class="k">Saídas no período</span><span class="v mono">${pfR(totOut)}</span><span class="s">média ${pfR(avgOut)} / mês</span></div>
