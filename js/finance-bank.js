@@ -235,7 +235,7 @@ function bankProjetoDoPix(hist, amt, dia, taken) {
 async function bankAutoPJ() {
   const cl = db.adapter.client; const learned = {}; const lastFee = {};
   (BANK.every || []).forEach(t => {
-    if (t.flow !== 'in' || !t.counterpart || !bankIsPJ(t)) return;
+    if (t.flow !== 'in' || !t.counterpart || !(bankIsPJ(t) || t.payment_id)) return;   // PF também aprende, desde que você já tenha ligado um pagamento dessa pessoa
     // aprende todos os vínculos da contraparte (valor → projeto), não só o primeiro
     if (t.payment_id) { const p = db.get('tempo_payments', t.payment_id); if (p) (learned[bankCpKey(t.counterpart)] ||= []).push({ pid: p.project_id, amt: Math.abs(Number(t.amount)) }); }
     if (t.category === 'Fee' && (t.posted_on || '') > (lastFee[t.counterpart] || '')) lastFee[t.counterpart] = t.posted_on;
@@ -246,7 +246,7 @@ async function bankAutoPJ() {
   const taken = new Set((BANK.every || []).map(t => t.payment_id).filter(Boolean));
   let did = false;
   for (const t of (BANK.every || [])) {
-    if (t.flow !== 'in' || t.payment_id || !t.counterpart || !bankIsPJ(t)) continue;
+    if (t.flow !== 'in' || t.payment_id || !t.counterpart || !(bankIsPJ(t) || learned[bankCpKey(t.counterpart)])) continue;
     // Regras de Fee: Brenda (e Pala Films, alias) só vira fee a partir de 12/01/2026; depois disso, valor < 15.000 não é fee.
     const feeOk = !((/brenda|pala films/i.test(t.counterpart) && (t.posted_on || '') < '2026-01-12') || ((t.posted_on || '') >= '2026-01-12' && Math.abs(Number(t.amount)) < 15000));
     if (fee.has(t.counterpart) && feeOk && !t.category) {
@@ -1024,6 +1024,21 @@ ACTIONS['bank-reopen'] = (el) => {
   delete closed[el.dataset.entity + ':' + el.dataset.ym];
   db.setSetting('closedMonths', closed); render();
 };
+// A conta PF da Nubank não manda extrato sozinha e o Nubank só entrega um mês por vez: pedido no meio do mês, o final fica de fora.
+// Quando o mês passado ainda não chegou até os últimos dias, vira um to-do para pedir o extrato do mês fechado; some quando os dados chegam.
+function bankExtratoAviso(hoje) {
+  const todos = (BANK.every || []).filter(t => t.entity === 'pf' && !/d660$/.test(t.account_tail || '') && t.posted_on);
+  if (!todos.length) return;
+  const d = hoje ? new Date(hoje + 'T12:00:00') : new Date();
+  const fim = new Date(d.getFullYear(), d.getMonth(), 0, 12);   // último dia do mês passado
+  const ym = ymd(fim).slice(0, 7), limite = ymd(new Date(fim.getTime() - 2 * 864e5));
+  const ultimo = todos.reduce((m, t) => (t.posted_on > m ? t.posted_on : m), '');
+  const key = 'extrato-pf:' + ym;
+  const ja = db.all('tempo_notices').find(n => n.key === key);
+  if (ultimo >= limite) { if (ja && ja.status === 'open') db.update('tempo_notices', ja.id, { status: 'done', decision: 'Resolvido: extrato chegou', decided_at: new Date().toISOString() }); return; }
+  if (ja) return;   // já criado (aberto ou concluído): não recria
+  db.insert('tempo_notices', { kind: 'todo', key, status: 'open', decision: '', decided_at: null, snooze_until: null, title: `Pedir o extrato PF de ${rbLabel(ym)} ao Nubank`, body: `A conta PF não envia extrato sozinha, e o Nubank só entrega um mês por vez. Peça o extrato do mês já fechado e mande para o Gmail. Hoje os dados chegam até ${fmtDate(ultimo)}.`, data: { auto: true } }, true);
+}
 // Sincroniza ao abrir a tela se a última leitura tiver mais de 2h.
 // checkedAt evita loop: render() chama a tela de novo, e a checagem não roda de novo por 60s.
 async function bankRefresh(force) {
@@ -1043,7 +1058,7 @@ async function bankRefresh(force) {
     }
     await bankLoadTxns();
   } catch (e) { BANK.msg = 'Erro: ' + e.message; }
-  finally { BANK.busy = false; render(); setTimeout(pixAlert, 400); }
+  finally { BANK.busy = false; try { bankExtratoAviso(); } catch (e) { /* aviso extra não trava a leitura */ } render(); setTimeout(pixAlert, 400); }
 }
 function bankPanel(entity) {
   const st = BANK.status, connected = !!(st && st.connected);
