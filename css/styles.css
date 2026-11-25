@@ -2373,3 +2373,7 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .cor-body .grp-kids .entry { background: transparent; }
 /* Hora da entrega (tarefa e deadline): o campo de hora é digitável e visível — não é o input invisível da data */
 .tk-hora input.tk-hin, .tk-ent-v input.tk-hin { position: static; inset: auto; opacity: 1; cursor: text; }
+/* + Nova tarefa e + Deadline num bloco próprio, embaixo da lista */
+.tk-novas { margin-top: 10px; }
+.tk-novas .tk-nova { padding: 9px 20px; }
+.tk-novas .tk-nova + .tk-nova { border-top: 1px solid var(--line); }
