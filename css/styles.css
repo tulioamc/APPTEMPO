@@ -2453,3 +2453,19 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .seg-b.act-hl, .usage-seg.act-hl, .prod-seg.act-hl, .hk-hl, .hk-pick { box-shadow: inset 0 0 0 2px var(--fg-2); }
 .usage-rest.act-hl { outline-color: var(--fg-2); }
 .prod-col:hover .prod-stack { box-shadow: 0 0 0 2px var(--fg-2); }
+/* Tarefas de hoje (25/11): etiquetas alinhadas com "Próximos prazos", tempo alinhado com "Ver no Calendário" e o play
+   no fim, embaixo da borda direita desse botão. Ordem: ✓ · hora · tarefa · etiquetas · tempo (estimado) · play. */
+.hj-panel .panel-h { padding-right: 14px; }
+.hj-panel .hj-bt-prazos { width: 136px; justify-content: flex-start; }
+.hj-panel .hj-bt-cal { width: 150px; justify-content: flex-start; margin-left: 0; }
+.hj-panel .hj-l { grid-template-columns: 18px 44px minmax(0, 1fr) 136px 110px 30px; column-gap: 10px; }
+.hj-panel .hj-l > :nth-child(4) { order: 9; justify-self: end; }
+.hj-panel .hj-l > :nth-child(5) { order: 5; justify-self: start; }
+.hj-panel .hj-l > :nth-child(6) { order: 6; justify-self: start; text-align: left; }
+.hj-panel .hj-l.hj-prazo { grid-template-columns: 18px 44px minmax(0, 1fr) 136px 110px auto; }
+.hj-est { color: var(--fg-3); font-family: var(--font-ui); font-size: .9em; }
+.hj-l.feita .hj-est { color: color-mix(in srgb, var(--ok-on) 65%, transparent); }
+.hj-play { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.hj-panel .hj-l .hj-agora { justify-self: end; }
+.hj-panel .hj-l:has(.hj-agora) .hj-dur { display: none; }
+.hj-panel .hj-l .hj-agora { grid-column: 5 / 7; justify-self: start; }
