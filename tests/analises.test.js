@@ -54,3 +54,15 @@ test('texto em blocos: título antes de ":" ou a primeira frase, números realç
   assert.ok(!r.includes('<x>'));
   assert.match(m.anItem('Prazo curto.', 1), /an-it-n">1</);
 });
+test('metas com barra: lê alvo e resultado, "até" é limite, e não desenha quando discorda da análise', () => {
+  const m = load(['js/store.js', 'js/domain.js', 'js/view-analises.js'], ['anNum', 'anMetaBarra'], { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, icon: () => '', fmtDur: (ms) => Math.round(ms / 6e4) + 'min', fmtMoney0: (v) => 'R$ ' + v });
+  assert.deepEqual({ ...m.anNum('34h34') }, { n: (34 * 60 + 34) * 6e4, u: 'ms' });
+  assert.deepEqual({ ...m.anNum('até 4h30') }, { n: 270 * 6e4, u: 'ms' });
+  assert.deepEqual({ ...m.anNum('R$ 33.000,00') }, { n: 33000, u: 'R$' });
+  assert.deepEqual({ ...m.anNum('59,3%') }, { n: 59.3, u: '%' });
+  const bate = m.anMetaBarra({ nome: 'Horas líquidas', alvo: '30 h', resultado: '34h34', conquistada: true }, {}, false);
+  assert.match(bate, /an-mbar ok/); assert.match(bate, /bateu/);
+  const limite = m.anMetaBarra({ nome: 'Distração na semana', alvo: 'até 5 h', resultado: '6h', conquistada: false }, {}, false);
+  assert.match(limite, /over/); assert.match(limite, /passou/);
+  assert.equal(m.anMetaBarra({ nome: 'Desafio', alvo: '1 h com até 5 pausas', resultado: 'Bateu: 6h06', conquistada: true }, {}, false), '');
+});

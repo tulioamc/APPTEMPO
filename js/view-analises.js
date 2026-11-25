@@ -48,12 +48,18 @@ function anFmtC(n, u) {
 /* ===== Visual das análises (25/11): títulos em negrito antes do texto, números realçados, gráficos na paleta do app,
    seções em cartões com ícone, prioridades numeradas, metas em blocos e o que é detalhe técnico recolhido. ===== */
 /* Gráficos em SVG com cores fixas (paleta única): o mesmo desenho serve na tela e no PDF. */
+/* Produtivo, Distração e Ocioso têm sempre a mesma cor (como na Produtividade); o resto segue a paleta pela posição. */
+function anCorSerie(nome, i) {
+  const n = String(nome || '').toLowerCase();
+  return /produtiv|trabalh/.test(n) ? GRAF_CORES[1] : /distra/.test(n) ? GRAF_CORES[7] : /ocios|fora do comp/.test(n) ? GRAF_CORES[6] : AN_CORES[i % AN_CORES.length];
+}
 const AN_TXT = '#565C6B', AN_TXT2 = '#8A909F', AN_GRADE = '#EEF0F4';
 function anChartSVG(g) {
   const rot = Array.isArray(g.rotulos) ? g.rotulos.map(String) : [];
   const series = (Array.isArray(g.series) ? g.series : []).filter(s => Array.isArray(s.valores)).slice(0, 6);
   if (!rot.length || !series.length) return '';
   const u = g.unidade || '';
+  const COR = series.map((s, i) => s.cor || anCorSerie(s.nome, i));
   // colunas com mais de uma série viram pilha (como os gráficos de produtividade do app): a altura é o total do dia
   const pilha = g.tipo === 'colunas' && series.length > 1;
   const somas = rot.map((_, i) => series.reduce((t, s) => t + (Number(s.valores[i]) || 0), 0));
@@ -61,7 +67,7 @@ function anChartSVG(g) {
   // topo do eixo arredondado (1, 2, 2,5, 5 × 10ⁿ) para as linhas de grade caírem em números redondos
   const bruto = Math.max(0, ...all) || 1, pot = Math.pow(10, Math.floor(Math.log10(bruto)));
   const max = [1, 2, 2.5, 5, 10].map(f => f * pot).find(x => x >= bruto);
-  const legenda = series.length > 1 ? `<div class="an-leg">${series.map((s, i) => `<span><i style="background:${AN_CORES[i]}"></i>${esc(s.nome || '')}</span>`).join('')}</div>` : '';
+  const legenda = series.length > 1 ? `<div class="an-leg">${series.map((s, i) => `<span><i style="background:${COR[i]}"></i>${esc(s.nome || '')}</span>`).join('')}</div>` : '';
   const head = `<div class="an-chart"><div class="an-chart-t">${esc(g.titulo || '')}</div>${legenda}`;
   const foot = `${g.nota ? `<div class="an-note">${anRealce(g.nota)}</div>` : ''}</div>`;
   if (g.tipo === 'barras') {
@@ -73,7 +79,7 @@ function anChartSVG(g) {
       const y0 = y + (lh - bh * series.length) / 2;
       series.forEach((s, k) => {
         const v = Number(s.valores[i]) || 0, w = Math.max(v > 0 ? 3 : 0, bw * v / max);
-        out += `<rect x="${lab}" y="${(y0 + k * bh).toFixed(1)}" width="${bw}" height="${bh - 2}" rx="${(bh - 2) / 2}" fill="${AN_GRADE}"/><rect x="${lab}" y="${(y0 + k * bh).toFixed(1)}" width="${w.toFixed(1)}" height="${bh - 2}" rx="${(bh - 2) / 2}" fill="${AN_CORES[k]}"><title>${esc(r)}: ${esc(anFmtC(s.valores[i], u))}</title></rect>`;
+        out += `<rect x="${lab}" y="${(y0 + k * bh).toFixed(1)}" width="${bw}" height="${bh - 2}" rx="${(bh - 2) / 2}" fill="${AN_GRADE}"/><rect x="${lab}" y="${(y0 + k * bh).toFixed(1)}" width="${w.toFixed(1)}" height="${bh - 2}" rx="${(bh - 2) / 2}" fill="${COR[k]}"><title>${esc(r)}: ${esc(anFmtC(s.valores[i], u))}</title></rect>`;
         if (series.length === 1 || k === series.length - 1) out += `<text x="${W}" y="${(y0 + k * bh + bh - 3).toFixed(1)}" font-size="11.5" font-weight="600" text-anchor="end" fill="#15171C">${esc(anFmtC(s.valores[i], u))}</text>`;
       });
       y += lh;
@@ -91,11 +97,11 @@ function anChartSVG(g) {
       const pts = rot.map((_, i) => { const v = Number(s.valores[i]); return isNaN(v) ? null : [L + step * i + step / 2, T + ph - ph * v / max, v]; });
       const ok = pts.filter(Boolean); if (!ok.length) return;
       const d = ok.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-      if (series.length === 1) marks += `<path d="M${ok[0][0].toFixed(1)},${T + ph} ${ok.map(p => `L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')} L${ok[ok.length - 1][0].toFixed(1)},${T + ph} Z" fill="${AN_CORES[k]}" opacity=".16"/>`;
-      marks += `<path d="${d}" fill="none" stroke="${AN_CORES[k]}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+      if (series.length === 1) marks += `<path d="M${ok[0][0].toFixed(1)},${T + ph} ${ok.map(p => `L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')} L${ok[ok.length - 1][0].toFixed(1)},${T + ph} Z" fill="${COR[k]}" opacity=".16"/>`;
+      marks += `<path d="${d}" fill="none" stroke="${COR[k]}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
       ok.forEach((p) => {
         const i = pts.indexOf(p);
-        marks += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" fill="#fff" stroke="${AN_CORES[k]}" stroke-width="2.2"><title>${esc(rot[i])}: ${esc(anFmtC(p[2], u))}</title></circle>`;
+        marks += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" fill="#fff" stroke="${COR[k]}" stroke-width="2.2"><title>${esc(rot[i])}: ${esc(anFmtC(p[2], u))}</title></circle>`;
         if (series.length === 1 && rot.length <= 12) marks += `<text x="${p[0].toFixed(1)}" y="${(p[1] - 9).toFixed(1)}" font-size="10.5" font-weight="600" text-anchor="middle" fill="#15171C">${esc(anFmtC(p[2], u))}</text>`;
       });
     });
@@ -105,7 +111,7 @@ function anChartSVG(g) {
       let base = T + ph; const x = L + step * i + (step - bw) / 2;
       series.forEach((s, k) => {
         const v = Number(s.valores[i]) || 0; if (v <= 0) return; const h = ph * v / max; base -= h;
-        marks += `<rect x="${x.toFixed(1)}" y="${base.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0.5, h - 1).toFixed(1)}" rx="2" fill="${AN_CORES[k]}"><title>${esc(r)} · ${esc(s.nome || '')}: ${esc(anFmtC(v, u))}</title></rect>`;
+        marks += `<rect x="${x.toFixed(1)}" y="${base.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0.5, h - 1).toFixed(1)}" rx="2" fill="${COR[k]}"><title>${esc(r)} · ${esc(s.nome || '')}: ${esc(anFmtC(v, u))}</title></rect>`;
       });
       if (somas[i] > 0 && rot.length <= 14) marks += `<text x="${(x + bw / 2).toFixed(1)}" y="${(base - 5).toFixed(1)}" font-size="10.5" font-weight="600" text-anchor="middle" fill="#15171C">${esc(anFmtC(somas[i], u))}</text>`;
     });
@@ -113,7 +119,7 @@ function anChartSVG(g) {
     const bw = Math.min(46, step * 0.62);
     rot.forEach((r, i) => {
       const v = Number(series[0].valores[i]) || 0, h = ph * v / max, x = L + step * i + (step - bw) / 2;
-      marks += `<rect x="${x.toFixed(1)}" y="${(T + ph - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${AN_CORES[0]}"><title>${esc(r)}: ${esc(anFmtC(v, u))}</title></rect>`;
+      marks += `<rect x="${x.toFixed(1)}" y="${(T + ph - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${COR[0]}"><title>${esc(r)}: ${esc(anFmtC(v, u))}</title></rect>`;
       if (rot.length <= 14 && v > 0) marks += `<text x="${(x + bw / 2).toFixed(1)}" y="${(T + ph - h - 5).toFixed(1)}" font-size="10.5" font-weight="600" text-anchor="middle" fill="#15171C">${esc(anFmtC(v, u))}</text>`;
     });
   }
@@ -141,13 +147,15 @@ function anPartes(txt) {
   }
   return { t: '', c: s };
 }
-function anItem(txt, n) {
+let AN_TELA = null;   // contexto do desenho atual: { t, v, tela } (tela = links e botões; no PDF fica sem)
+function anItem(txt, n, acao) {
   const p = anPartes(txt);
   if (!p.t && p.c.length <= 90) { p.t = p.c.replace(/\.$/, ''); p.c = ''; }   // frase curta: vira só o título
   if (p.c) p.c = p.c.charAt(0).toUpperCase() + p.c.slice(1);
-  return `<div class="an-it${n ? ' num' : ''}">${n ? `<span class="an-it-n">${n}</span>` : ''}<div class="an-it-b">${p.t ? `<div class="an-it-t">${esc(p.t)}</div>` : ''}${p.c ? `<div class="an-it-c">${anRealce(p.c)}</div>` : ''}</div></div>`;
+  return `<div class="an-it${n ? ' num' : ''}">${n ? `<span class="an-it-n">${n}</span>` : ''}<div class="an-it-b">${p.t ? `<div class="an-it-t">${anLk(esc(p.t))}</div>` : ''}${p.c ? `<div class="an-it-c">${anLk(anRealce(p.c))}</div>` : ''}</div>${acao && AN_TELA?.tela ? `<button type="button" class="btn sm ghost an-todo" data-act="an-todo" data-txt="${esc(anTodoTxt(txt))}" title="Criar um to-do com este item">${icon('plus')} To-do</button>` : ''}</div>`;
 }
-function anItens(xs, numerado) { return Array.isArray(xs) && xs.length ? `<div class="an-its">${xs.map((x, i) => anItem(x, numerado ? i + 1 : 0)).join('')}</div>` : ''; }
+function anItens(xs, numerado, acao) { return Array.isArray(xs) && xs.length ? `<div class="an-its">${xs.map((x, i) => anItem(x, numerado ? i + 1 : 0, acao)).join('')}</div>` : ''; }
+const anLk = (h) => (AN_TELA?.tela && typeof anLinkProj === 'function' ? anLinkProj(h) : h);
 /* Ícone de cada seção pelo assunto do título. */
 function anIcone(t) {
   const s = String(t || '').toLowerCase();
@@ -176,7 +184,11 @@ function anKpiHTML(k) {
 }
 
 /* Corpo do relatório (igual na tela e no PDF). pdf = true abre as seções recolhidas. */
-function anCorpoHTML(v, pdf = false) {
+function anCorpoHTML(v, pdf = false, ctx = {}) {
+  AN_TELA = { t: ctx.t || null, v, tela: !pdf };
+  try { return anCorpoMonta(v, pdf, ctx); } finally { AN_TELA = null; }
+}
+function anCorpoMonta(v, pdf, ctx) {
   const kpis = Array.isArray(v.kpis) && v.kpis.length ? `<div class="an-kpis">${v.kpis.slice(0, 8).map(anKpiHTML).join('')}</div>` : '';
   // análises antigas (só números de produtividade) ganham destaques a partir de "numeros"
   const n = v.numeros || {};
@@ -190,22 +202,28 @@ function anCorpoHTML(v, pdf = false) {
   // resumo: a primeira frase em destaque, o resto em texto normal com os números realçados
   const rs = v.resumo ? String(v.resumo).split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9])/) : [];
   const resumo = rs.length ? `<div class="an-resumo"><p class="an-lead">${anRealce(rs[0])}</p>${rs.length > 1 ? `<p>${anRealce(rs.slice(1).join(' '))}</p>` : ''}</div>` : '';
-  const graficos = Array.isArray(v.graficos) ? v.graficos.map(anChartSVG).filter(Boolean) : [];
+  // gráficos: evolução das análises do mesmo tipo, os do relatório e os do registro do app (quando faltam)
+  const evol = ctx.t && ctx.key ? anEvolucao(ctx.t, ctx.key) : [];
+  const proprios = Array.isArray(v.graficos) ? v.graficos : [];
+  const igual = (g) => proprios.some(x => String(x.titulo || '').trim().toLowerCase() === String(g.titulo || '').trim().toLowerCase());
+  const graficos = [...evol.filter(g => !igual(g)), ...proprios, ...anGraficosApp(v)].map(anChartSVG).filter(Boolean);
+  const cmp = ctx.cmp ? anComparaHTML(v, ctx.cmp.v, ctx.cmpRot || 'outro período') : '';
   const comps = v.comparacoes && typeof v.comparacoes === 'object' ? Object.entries(v.comparacoes).filter(([, t]) => t) : [];
   const compsHTML = comps.length ? `<div class="an-comps">${comps.map(([k, t]) => `<div class="an-comp"><div class="an-comp-k">${esc(AN_COMP_NOMES[k] || k.replace(/_/g, ' '))}</div><div class="an-comp-t">${anRealce(t)}</div></div>`).join('')}</div>` : '';
   const SEG = { sim: ['bom', '✓ Seguiu'], 'não': ['ruim', '✕ Não seguiu'], parcial: ['meio', '◐ Em parte'] };
   const acomp = Array.isArray(v.acompanhamento) && v.acompanhamento.length ? `<div class="an-its">${v.acompanhamento.map(a => { const s = SEG[a.seguiu] || ['', esc(a.seguiu || 'sem dados')]; return `<div class="an-it an-acomp"><div class="an-it-b"><div class="an-it-t">${esc(a.sugestao || '')} <span class="an-pill ${s[0]}">${s[1]}</span></div>${a.resultado ? `<div class="an-it-c">${anRealce(a.resultado)}</div>` : ''}</div></div>`; }).join('')}</div>` : '';
-  const metas = (titulo, xs, novas) => Array.isArray(xs) && xs.length ? `<div class="an-metas"><div class="an-sub">${esc(titulo)}</div><div class="an-meta-g">${xs.map(x => `<div class="an-meta ${x.conquistada === true ? 'bom' : x.conquistada === false ? 'ruim' : ''}${novas ? ' nova' : ''}"><span class="an-meta-i">${x.conquistada === true ? '⭐' : x.conquistada === false ? '✕' : '◎'}</span><div><b>${esc(x.nome || '')}</b><span>${x.alvo ? 'Meta: ' + anRealce(x.alvo) : ''}${x.resultado ? `<br>${anRealce(x.resultado)}` : ''}</span></div></div>`).join('')}</div></div>` : '';
+  const metas = (titulo, xs, novas) => Array.isArray(xs) && xs.length ? `<div class="an-metas"><div class="an-sub">${esc(titulo)}</div><div class="an-meta-g">${xs.map(x => `<div class="an-meta ${x.conquistada === true ? 'bom' : x.conquistada === false ? 'ruim' : ''}${novas ? ' nova' : ''}"><span class="an-meta-i">${x.conquistada === true ? '⭐' : x.conquistada === false ? '✕' : '◎'}</span><div class="an-meta-b"><b>${esc(x.nome || '')}</b><span>${x.alvo ? 'Meta: ' + anRealce(x.alvo) : ''}${x.resultado ? `<br>${anRealce(x.resultado)}` : ''}</span>${anMetaBarra(x, { t: ctx.t, v }, novas)}</div></div>`).join('')}</div></div>` : '';
   // seções vindas do gerador: prioridades numeradas; detalhes técnicos (brechas, integrações) recolhidos
   const secs = (Array.isArray(v.secoes) ? v.secoes : []).map(s => {
     const t = s.titulo || ''; const prior = /priorid/i.test(t); const tec = /brecha|integra/i.test(t);
-    return anSec(t, anItens(s.itens, prior), { n: Array.isArray(s.itens) ? s.itens.length : 0, recolhe: tec, pdf, largo: prior });
+    return anSec(t, anItens(s.itens, prior, prior), { n: Array.isArray(s.itens) ? s.itens.length : 0, recolhe: tec, pdf, largo: prior });
   });
-  const sug = Array.isArray(v.sugestoes) && v.sugestoes.length ? anItens(v.sugestoes, true) : '';
+  const sug = Array.isArray(v.sugestoes) && v.sugestoes.length ? anItens(v.sugestoes, true, true) : '';
   const metaSug = v.meta?.texto ? `<div class="an-destaque"><span class="an-sec-ic">${icon('flag')}</span><div><div class="an-sub">Meta sugerida</div>${anRealce(v.meta.texto)}</div></div>` : '';
   const metasHTML = metas('Período que passou', v.metas_passadas) + metas('Próximo período', v.metas_novas, true) + (v.metas_nota ? `<div class="an-note">${anRealce(v.metas_nota)}</div>` : '');
   return `${resumo}
     ${kpis || kpisAntigos}
+    ${cmp}
     ${graficos.length ? `<div class="an-graficos">${graficos.join('')}</div>` : ''}
     <div class="an-secs">
     ${anSec('O que os números dizem', anItens(v.analises), { ic: 'chart', n: (v.analises || []).length, largo: true })}
@@ -217,6 +235,163 @@ function anCorpoHTML(v, pdf = false) {
     ${anSec('Ideias para o Tempo', anItens(v.ideias_tempo), { ic: 'layers', n: (v.ideias_tempo || []).length, recolhe: true, pdf, largo: true })}
     </div>`;
 }
+
+/* ===== Dados do próprio app para a análise (25/11): gráficos do período, evolução, comparação e metas ao vivo ===== */
+const anDia = (s) => { const [y, m, d] = String(s || '').slice(0, 10).split('-').map(Number); return y ? new Date(y, m - 1, d).getTime() : null; };
+/* Intervalo [a, b) do período da análise (fim inclusivo vira o começo do dia seguinte), sem passar de agora. */
+function anRange(v) {
+  const a = anDia(anIni(v)), f = anDia(anFim(v)); if (a === null || f === null) return null;
+  return { a, b: Math.min(Date.now(), new Date(f).setDate(new Date(f).getDate() + 1)) };
+}
+/* Estatísticas de produtividade de um intervalo, com as mesmas regras da tela Produtividade. */
+function anStats(a, b) {
+  if (typeof prodCollect !== 'function' || typeof prodStats !== 'function' || !(b > a)) return null;
+  const oldP = PROD.period, oldR = PROD.range;
+  PROD.period = 'custom'; PROD.range = { a, b };
+  try { const C = prodCollect(); if (!C.union.length && !C.pauses.length) return null; return { C, S: prodStats(C) }; }
+  catch (e) { return null; } finally { PROD.period = oldP; PROD.range = oldR; }
+}
+const anRecebido = (a, b) => db.all('tempo_payments').filter(p => { const t = anDia(p.date); return t !== null && t >= a && t < b; }).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+const anH = (ms) => Math.round((ms || 0) / 36e3) / 100;   // ms → horas decimais (2 casas)
+
+/* 1) Gráficos do registro do app para o período, quando o relatório não trouxe um parecido. */
+function anGraficosApp(v) {
+  const r = anRange(v); const st = r && anStats(r.a, r.b); if (!st) return [];
+  const S = st.S, tem = (re) => (v.graficos || []).some(g => re.test(String(g.titulo || '')));
+  const out = [];
+  if (!tem(/hor[aá]ri|faixa|hora do dia|por hora/i)) {
+    const hs = S.hours.map((h, i) => [i, h]).filter(([, h]) => h.prod + h.dist > 0);
+    if (hs.length) {
+      const de = hs[0][0], ate = hs[hs.length - 1][0], xs = S.hours.slice(de, ate + 1);
+      out.push({ titulo: 'Por hora do dia', tipo: 'colunas', unidade: 'h', rotulos: xs.map((_, i) => `${de + i}h`), series: [{ nome: 'Produtivo', valores: xs.map(h => anH(h.prod)) }, { nome: 'Distração', valores: xs.map(h => anH(h.dist)) }], nota: 'Do registro do app, somando o período. A coluna mais alta é a hora em que você mais rende.' });
+    }
+  }
+  if (!tem(/por dia|dia da semana|horas por dia/i)) {
+    const ord = [1, 2, 3, 4, 5, 6, 0], nomes = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    out.push({ titulo: 'Por dia da semana', tipo: 'colunas', unidade: 'h', rotulos: ord.map(d => nomes[d]), series: [{ nome: 'Produtivo', valores: ord.map(d => anH(S.dows[d].prod)) }, { nome: 'Distração', valores: ord.map(d => anH(S.dows[d].dist)) }, { nome: 'Ocioso', valores: ord.map(d => anH(S.dows[d].ocio)) }], nota: 'Do registro do app. Ocioso é tempo fora do computador (almoço, trânsito…), não é desperdício.' });
+  }
+  return out;
+}
+
+/* 2) Evolução: as análises do mesmo tipo, uma ao lado da outra (até 12). Usa os números gravados; sem eles, o registro do app. */
+function anEvolucao(t, key) {
+  const xs = anLista(t.prefix).filter(x => String(x.key) <= String(key)).reverse().slice(-12);
+  if (xs.length < 2) return [];
+  const pts = xs.map(x => {
+    const n = x.v.numeros || {}; let prod = n.produtivo_ms, dist = n.distracao_ms, pct = n.pct_produtivo;
+    if (prod === undefined || dist === undefined) { const r = anRange(x.v); const st = r && anStats(r.a, r.b); if (st) { prod = st.S.tot.prod; dist = st.S.tot.dist; pct = st.S.pctProd; } }
+    const ini = anIni(x.v);
+    const rot = t.id === 'semana' ? (ini ? ini.slice(8, 10) + '/' + ini.slice(5, 7) : '') : t.id === 'mes' && ini ? new Date(anDia(ini)).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', '').replace(' de ', '/') : String(x.key).split(':')[1] || '';
+    return { rot, prod: prod ?? null, dist: dist ?? null, pct: pct ?? null };
+  });
+  const quem = t.id === 'semana' ? 'semana' : t.id === 'mes' ? 'mês' : 'período';
+  const out = [];
+  if (pts.some(p => p.prod)) out.push({ titulo: `Horas por ${quem}`, tipo: 'colunas', unidade: 'h', rotulos: pts.map(p => p.rot), series: [{ nome: 'Produtivo', valores: pts.map(p => anH(p.prod)) }, { nome: 'Distração', valores: pts.map(p => anH(p.dist)) }], nota: `Evolução das análises de ${t.label.toLowerCase()}: a última coluna é esta.` });
+  if (pts.filter(p => p.pct !== null && p.pct !== undefined).length >= 2) out.push({ titulo: `% produtivo por ${quem}`, tipo: 'linha', unidade: '%', rotulos: pts.map(p => p.rot), series: [{ nome: '% produtivo', valores: pts.map(p => (p.pct === null || p.pct === undefined ? NaN : Math.round(Number(p.pct) * 10) / 10)) }], nota: 'Produtivo ÷ (produtivo + distração). Meta: 70%.' });
+  return out;
+}
+
+/* 4) Comparar com outra análise do mesmo tipo: os números dos dois períodos lado a lado, com a diferença. */
+function anComparaHTML(v, w, rotW) {
+  const ra = anRange(v), rb = anRange(w); if (!ra || !rb) return '';
+  const A = anStats(ra.a, ra.b), B = anStats(rb.a, rb.b);
+  const n1 = v.numeros || {}, n2 = w.numeros || {};
+  const val = (st, n, k) => {
+    if (k === 'prod') return st ? st.S.tot.prod : n.produtivo_ms ?? null;
+    if (k === 'pct') return st ? st.S.pctProd : n.pct_produtivo ?? null;
+    if (k === 'dist') return st ? st.S.tot.dist : n.distracao_ms ?? null;
+    if (k === 'ocio') return st ? st.S.tot.ocio : n.ocioso_ms ?? null;
+    if (k === 'bloco') return st ? st.S.longest : n.maior_bloco_ms ?? null;
+    if (k === 'dias') return st ? st.S.days.length : null;
+    return null;
+  };
+  const linhas = [
+    ['prod', 'Horas líquidas', 'ms', 1], ['pct', '% produtivo', '%', 1], ['dist', 'Distração', 'ms', -1],
+    ['ocio', 'Fora do computador (ocioso)', 'ms', 0], ['bloco', 'Maior bloco de foco', 'ms', 1], ['dias', 'Dias com registro', 'n', 0], ['rec', 'Recebido (PJ)', 'R$', 1],
+  ];
+  const fmt = (x, u) => (x === null || x === undefined || isNaN(x) ? '—' : u === 'ms' ? fmtDur(x) : u === '%' ? (Math.round(x * 10) / 10).toLocaleString('pt-BR') + '%' : u === 'R$' ? fmtMoney0(x) : String(Math.round(x)));
+  const rows = linhas.map(([k, nome, u, bom]) => {
+    const a = k === 'rec' ? anRecebido(ra.a, ra.b) : val(A, n1, k), b = k === 'rec' ? anRecebido(rb.a, rb.b) : val(B, n2, k);
+    if ((a === null || a === undefined) && (b === null || b === undefined)) return '';
+    const d = (a ?? 0) - (b ?? 0); const sinal = Math.abs(d) < (u === 'ms' ? 6e4 : 0.05) ? 0 : Math.sign(d);
+    const cls = !sinal || !bom ? '' : sinal * bom > 0 ? 'bom' : 'ruim';
+    const dtxt = !sinal ? 'igual' : `${sinal > 0 ? '▲ +' : '▼ −'}${fmt(Math.abs(d), u)}`;
+    return `<tr><td>${nome}</td><td class="num mono"><b>${fmt(a, u)}</b></td><td class="num mono muted">${fmt(b, u)}</td><td class="num"><span class="an-dif ${cls}">${dtxt}</span></td></tr>`;
+  }).join('');
+  return `<div class="an-cmp"><div class="an-cmp-h"><span class="an-sec-ic">${icon('chart')}</span><h4>Comparando com ${esc(rotW)}</h4><button class="btn sm icon ghost" data-act="an-cmp-x" aria-label="Fechar a comparação" title="Fechar a comparação">${icon('x')}</button></div>
+    <table class="an-cmp-t"><thead><tr><th></th><th class="num">Este período</th><th class="num">${esc(rotW)}</th><th class="num">Diferença</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="an-note">Calculado do registro do app com as regras da Produtividade (quando o período tem registro). Verde = melhorou, vermelho = piorou; ocioso e dias não são julgados.</div></div>`;
+}
+
+/* 5) Metas com barra de progresso. As do próximo período são acompanhadas ao vivo com o registro do app. */
+function anNum(str) {
+  const s = String(str || '');
+  let m = s.match(/R\$\s?([\d.]+(?:,\d+)?)/); if (m) return { n: Number(m[1].replace(/\./g, '').replace(',', '.')), u: 'R$' };
+  m = s.match(/(\d+)h(\d{2})/); if (m) return { n: (Number(m[1]) * 60 + Number(m[2])) * 6e4, u: 'ms' };
+  m = s.match(/(\d+(?:,\d+)?)\s?h\b/); if (m) return { n: Number(m[1].replace(',', '.')) * 36e5, u: 'ms' };
+  m = s.match(/(\d+)\s?min\b/); if (m) return { n: Number(m[1]) * 6e4, u: 'ms' };
+  m = s.match(/(\d+(?:,\d+)?)\s?%/); if (m) return { n: Number(m[1].replace(',', '.')), u: '%' };
+  m = s.match(/(\d+(?:,\d+)?)/); if (m) return { n: Number(m[1].replace(',', '.')), u: 'n' };
+  return null;
+}
+/* Período seguinte ao da análise (onde valem as metas novas). */
+function anProximo(t, v) {
+  const f = anDia(anFim(v)); if (f === null) return null;
+  const a = new Date(f); a.setDate(a.getDate() + 1);
+  if (t.id === 'semana') { const b = new Date(a); b.setDate(b.getDate() + 7); return { a: a.getTime(), b: b.getTime() }; }
+  if (t.id === 'mes') return { a: a.getTime(), b: new Date(a.getFullYear(), a.getMonth() + 1, 1).getTime() };
+  return null;
+}
+/* Valor ao vivo de uma meta pelo nome dela (horas, %, distração, pausa, bloco, dia, dinheiro, projeto novo). */
+function anMetaAoVivo(x, alvo, r) {
+  if (!r || Date.now() < r.a) return null;
+  const b = Math.min(Date.now(), r.b), nome = String(x.nome || '').toLowerCase();
+  if (/financeir|receb|r\$/.test(nome) || alvo.u === 'R$') return anRecebido(r.a, b);
+  if (/projeto novo/.test(nome)) return db.all('tempo_projects').filter(p => !p.archived && new Date(p.created_at).getTime() >= r.a && new Date(p.created_at).getTime() < b).length;
+  const st = anStats(r.a, b); if (!st) return alvo.u === '%' ? null : 0;
+  const S = st.S;
+  if (/pausa/.test(nome) && alvo.u === '%') return S.base > 0 ? S.tot.dist / S.base * 100 : 0;
+  if (/produtivo/.test(nome) && alvo.u === '%') return S.pctProd;
+  if (/distra/.test(nome)) return S.tot.dist;
+  if (/bloco/.test(nome)) return S.longest;
+  if (/um dia/.test(nome)) return Math.max(0, ...S.dayTable.map(d => d.prod));
+  if (/hora|líquid|produtiv/.test(nome) && alvo.u === 'ms') return S.tot.prod;
+  return null;
+}
+function anMetaBarra(x, ctx, nova) {
+  const alvo = anNum(x.alvo); if (!alvo) return '';
+  const sobe = !/até|no máximo|máx/i.test(`${x.alvo} ${x.nome}`);
+  let v = null, aoVivo = false;
+  if (nova) { const r = ctx && ctx.t ? anProximo(ctx.t, ctx.v) : null; v = anMetaAoVivo(x, alvo, r); aoVivo = v !== null && r && Date.now() < r.b; }
+  else { const n = anNum(x.resultado); if (n && n.u === alvo.u) v = n.n; }
+  if (v === null || v === undefined || isNaN(v)) return '';
+  const num1 = (n) => (Math.round(n * 10) / 10).toLocaleString('pt-BR');
+  const fmt = (n) => (alvo.u === 'ms' ? fmtDur(n) : alvo.u === '%' ? num1(n) + '%' : alvo.u === 'R$' ? fmtMoney0(n) : num1(n));
+  const ok = sobe ? v >= alvo.n : v <= alvo.n;
+  // meta que já passou: se a conta daqui discorda do que a análise concluiu (desafio com regra própria), não desenha a barra
+  if (!nova && typeof x.conquistada === 'boolean' && ok !== x.conquistada) return '';
+  const p = alvo.n > 0 ? Math.min(1, v / alvo.n) : 0;
+  const txt = ok ? (sobe ? 'bateu' : 'dentro do limite') : sobe ? `faltam ${fmt(alvo.n - v)}` : `passou ${fmt(v - alvo.n)}`;
+  return `<div class="an-mbar ${ok ? 'ok' : sobe ? '' : 'over'}"><span style="width:${Math.round(p * 100)}%"></span></div><div class="an-mbar-t"><b>${fmt(v)}</b> de ${fmt(alvo.n)} · ${txt}${aoVivo ? ' · <em class="an-vivo" title="Atualiza sozinho com o registro do app">ao vivo</em>' : ''}</div>`;
+}
+
+/* 3) Itens que viram ação: "+ To-do" nas prioridades e sugestões; nomes de projeto viram link para o projeto. */
+function anTodoTxt(txt) { const p = anPartes(txt); const f = (p.c || '').split(/(?<=[.!?])\s+/)[0]; return (p.t ? `${p.t}${f ? ': ' + f : ''}` : f || String(txt)).replace(/\.$/, '').slice(0, 160); }
+function anLinkProj(html) {
+  const ps = db.all('tempo_projects').filter(p => !p.archived && String(p.name || '').length >= 4).sort((a, b) => String(b.name).length - String(a.name).length);
+  if (!ps.length) return html;
+  const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(^|[^\\wÀ-ú])(${ps.map(p => escRe(esc(p.name))).join('|')})(?=$|[^\\wÀ-ú])`, 'g');
+  const porNome = new Map(ps.map(p => [esc(p.name), p.id]));
+  return html.split(/(<[^>]+>)/).map(part => part.startsWith('<') ? part : part.replace(re, (m, pre, nome) => `${pre}<button type="button" class="an-proj" data-act="proj-open" data-id="${porNome.get(nome)}" title="Abrir o projeto">${nome}</button>`)).join('');
+}
+ACTIONS['an-todo'] = (el) => {
+  const txt = el.dataset.txt || ''; if (!txt) return;
+  if (db.all('tempo_notices').some(n => n.kind === 'todo' && n.status === 'open' && n.title === txt)) { toast('Já está no To-do'); return; }
+  if (typeof todoAddRaw === 'function') { todoAddRaw(txt); toast('Virou to-do'); }
+};
+CHANGES['an-cmp'] = (el) => { AN.cmp = el.value || null; render(); };
+ACTIONS['an-cmp-x'] = () => { AN.cmp = null; render(); };
 
 /* Estilo do PDF (A4), independente do CSS do app. */
 const AN_PDF_CSS = `@page{size:A4;margin:0}*{box-sizing:border-box}body{margin:0;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;color:#15171C;font-size:11px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -232,12 +407,14 @@ const AN_PDF_CSS = `@page{size:A4;margin:0}*{box-sizing:border-box}body{margin:0
 .an-pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#EEF0F4;font-size:9px;font-weight:600;color:#565C6B;margin-left:4px;vertical-align:1px}.an-pill.bom{background:#E3F7E7;color:#1F6B35}.an-pill.ruim{background:#FBE0DD;color:#9B2C22}.an-pill.meio{background:#FFF2DC;color:#A86400}
 .an-sub{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#8A909F;font-weight:600;margin:8px 0 4px}.an-meta-g{display:grid;grid-template-columns:1fr 1fr;gap:6px}.an-meta{display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid #E0E3EA;border-radius:8px;break-inside:avoid}.an-meta.bom{background:#E3F7E7;border-color:#BFEBC9}.an-meta span{color:#565C6B;display:block}.an-meta-i{font-size:12px;line-height:1.2}
 .an-destaque{display:flex;gap:10px;align-items:flex-start;margin-top:8px;padding:10px 12px;background:#E7EAFD;border-radius:8px;font-weight:600}.an-destaque .an-sub{margin:0 0 2px}.an-note{font-size:9.5px;color:#8A909F;margin-top:6px}
+.an-mbar{height:5px;border-radius:99px;background:#E5E8EE;overflow:hidden;margin-top:6px}.an-mbar>span{display:block;height:100%;background:#8C9CF2}.an-mbar.ok>span{background:#77DB89}.an-mbar.over>span{background:#F2958B}.an-mbar-t{font-size:9.5px;color:#565C6B;margin-top:3px}.an-vivo{font-style:normal;color:#1F6B35;font-weight:600}.an-todo{display:none}.an-proj{all:unset;font-weight:600}
 .rod{margin-top:24px;padding-top:8px;border-top:1px solid #E0E3EA;font-size:9px;color:#8A909F;display:flex;justify-content:space-between}`;
 function anPdfHTML(t, v) {
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(anTitulo(t, v))}</title><style>${AN_PDF_CSS}</style></head><body>
 <div class="capa"><div class="tag">Tempo · Análise ${esc(t.label.toLowerCase())}</div><h1>${esc(anTitulo(t, v))}</h1><div class="per">Período de ${anData(anIni(v))} a ${anData(anFim(v))}</div></div>
-<div class="pg">${anCorpoHTML(v, true)}<div class="rod"><span>Tulio · APP TEMPO</span><span>Gerado em ${esc(String(v.gerado_em || '').slice(0, 16).replace('T', ' '))}</span></div></div></body></html>`;
+<div class="pg">${anCorpoHTML(v, true, { t, key: anChave(t, v) })}<div class="rod"><span>Tulio · APP TEMPO</span><span>Gerado em ${esc(String(v.gerado_em || '').slice(0, 16).replace('T', ' '))}</span></div></div></body></html>`;
 }
+function anChave(t, v) { const x = anLista(t.prefix).find(y => y.v === v || (anIni(y.v) === anIni(v) && anFim(y.v) === anFim(v))); return x ? x.key : null; }
 function anPdfNome(t, v) { return `Analise_${t.label.replace(/\s+/g, '')}_${String(anIni(v) || 'periodo').slice(0, 10)}`; }
 
 function anAtual() {
@@ -247,8 +424,8 @@ function anAtual() {
   return { t, lista, item };
 }
 ACTIONS['an-ir'] = (el) => { const sec = document.getElementById(el.dataset.id); if (!sec) return; if (sec.tagName === 'DETAILS') sec.open = true; sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
-ACTIONS['an-tipo'] = (el) => { AN.tipo = el.dataset.tipo; AN.key = null; render(); };
-CHANGES['an-periodo'] = (el) => { AN.key = el.value; render(); };
+ACTIONS['an-tipo'] = (el) => { AN.tipo = el.dataset.tipo; AN.key = null; AN.cmp = null; render(); };
+CHANGES['an-periodo'] = (el) => { AN.key = el.value; AN.cmp = null; render(); };
 ACTIONS['an-pdf'] = () => {
   const { t, item } = anAtual(); if (!item) return;
   const html = anPdfHTML(t, item.v);
@@ -268,12 +445,19 @@ VIEWS.analises = () => {
   const { t, lista, item } = anAtual();
   const abas = `<div class="an-abas" role="tablist">${AN_TIPOS.map(x => `<button class="btn sm ${x.id === t.id ? '' : 'ghost'}" role="tab" aria-selected="${x.id === t.id}" data-act="an-tipo" data-tipo="${x.id}">${x.label}</button>`).join('')}</div>`;
   const periodo = lista.length ? `<select class="input sm" data-on="an-periodo" aria-label="Período">${lista.map(x => `<option value="${esc(x.key)}" ${item && x.key === item.key ? 'selected' : ''}>${esc(anData(anIni(x.v)))} a ${esc(anData(anFim(x.v)))}</option>`).join('')}</select>` : '';
+  // comparar com outra análise do mesmo tipo (a anterior vem sugerida primeiro)
+  const outras = item ? lista.filter(x => x.key !== item.key) : [];
+  const cmpItem = AN.cmp ? outras.find(x => x.key === AN.cmp) || null : null;
+  const cmpSel = outras.length ? `<select class="input sm" data-on="an-cmp" aria-label="Comparar com outro período" title="Mostra os números deste período lado a lado com outro"><option value="">Comparar com…</option>${outras.map(x => `<option value="${esc(x.key)}" ${cmpItem && cmpItem.key === x.key ? 'selected' : ''}>${esc(anData(anIni(x.v)))} a ${esc(anData(anFim(x.v)))}</option>`).join('')}</select>` : '';
   const pdf = item ? `<button class="btn sm" data-act="an-pdf" data-tip="Gera o relatório em PDF (A4) e abre">${icon('doc', 'ico')} PDF</button>` : '';
   const corpo = item
-    ? `<article class="an-rel"><header class="an-capa"><div class="tag">Análise ${esc(t.label.toLowerCase())}</div><h2>${esc(anTitulo(t, item.v))}</h2><div class="per">Período de ${anData(anIni(item.v))} a ${anData(anFim(item.v))} · gerada em ${esc(String(item.v.gerado_em || '').slice(0, 16).replace('T', ' '))}</div></header><div class="an-body">${anCorpoHTML(item.v)}</div></article>`
+    ? `<article class="an-rel"><header class="an-capa"><div class="tag">Análise ${esc(t.label.toLowerCase())}</div><h2>${esc(anTitulo(t, item.v))}</h2><div class="per">Período de ${anData(anIni(item.v))} a ${anData(anFim(item.v))} · gerada em ${esc(String(item.v.gerado_em || '').slice(0, 16).replace('T', ' '))}</div></header><div class="an-body">${anCorpoHTML(item.v, false, { t, key: item.key, cmp: cmpItem, cmpRot: cmpItem ? `${anData(anIni(cmpItem.v))} a ${anData(anFim(cmpItem.v))}` : '' })}</div></article>`
     : `<section class="card"><div class="muted">A análise ${t.id === 'semana' ? 'da semana' : t.id === 'mes' ? 'do mês' : 'de ' + t.label} aparece aqui depois da primeira geração, ${t.quando} (Recife).</div></section>`;
   // sumário: atalhos para cada seção do relatório (pula e abre a seção, se estiver recolhida)
   const secs = item ? [...corpo.matchAll(/class="an-sec[^"]*" id="(an-[^"]+)"[^>]*>(?:<summary[^>]*>|<div class="an-sec-h">)<span class="an-sec-ic">[\s\S]*?<\/span><h4>([^<]+)<\/h4>/g)].map(m => [m[1], m[2]]) : [];
   const sumario = secs.length > 2 ? `<nav class="an-sumario" aria-label="Seções da análise">${secs.map(([id, t]) => `<button class="an-ir" data-act="an-ir" data-id="${id}" data-tip="Ir para ${t}">${t.replace(/ \(.*\)$/, '')}</button>`).join('')}</nav>` : '';
-  return { title: 'Análises', actions: `<div class="row" style="gap:6px">${periodo}${pdf}</div>`, html: `<div class="stack" style="gap:14px">${abas}${sumario}${corpo}</div>` };
+  // metas ao vivo: redesenha a cada minuto enquanto a tela está aberta
+  clearTimeout(AN.timer);
+  if (typeof S !== 'undefined' && S.route === 'analises') AN.timer = setTimeout(() => { if (S.route === 'analises') render(); }, 60000);
+  return { title: 'Análises', actions: `<div class="row" style="gap:6px">${periodo}${cmpSel}${pdf}</div>`, html: `<div class="stack" style="gap:14px">${abas}${sumario}${corpo}</div>` };
 };
