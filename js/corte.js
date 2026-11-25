@@ -176,6 +176,10 @@ function openCorte({ from, to, origemId = null, titulo = 'Tempo não computado',
       function draw() {
         segs.sort((x, y) => x.a - y.a);
         let h = '';
+        // listrado só onde não há atividade nenhuma (pausa, ocioso ou sem registro); onde houve atividade o fundo é liso
+        { const ativ = blocos.filter(b => !b.pausa && !/loginwindow/i.test(b.app)).map(b => [Math.max(0, b.a), Math.min(W, b.b)]).sort((x, y) => x[0] - y[0]);
+          let c = 0; ativ.forEach(([a, b]) => { if (a - c > 0.5) h += `<div class="cr-vao" style="left:${pct(c)};width:${pct(a - c)}"></div>`; c = Math.max(c, b); });
+          if (W - c > 0.5) h += `<div class="cr-vao" style="left:${pct(c)};width:${pct(W - c)}"></div>`; }
         blocos.forEach(b => { h += `<div class="cr-blk${b.pausa ? ' pausa' : ''}" style="left:${pct(Math.max(0, b.a))};width:${pct(Math.min(W, b.b) - Math.max(0, b.a))};background:${b.pausa || /loginwindow/i.test(b.app) ? 'var(--border-strong)' : corteCor(b.app, b.doc)}"></div>`; });
         segs.forEach(s => { h += `<div class="cr-seg${s.id === sel ? ' on' : ''}${s.task ? '' : ' off'}" data-k="m" data-id="${s.id}" style="left:${pct(s.a)};width:${pct(s.b - s.a)}"><span class="n">${s.b - s.a} min</span><div class="cr-h" data-k="a" data-id="${s.id}" style="left:0"></div><div class="cr-h" data-k="b" data-id="${s.id}" style="right:0"></div></div>`; });
         h += `<div class="cr-ph" style="left:${pct(cur)}"></div>`;

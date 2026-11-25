@@ -2321,3 +2321,6 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .tk-mais-p { padding: 7px 10px 9px 22px !important; gap: 6px !important; }
 .tk-op { gap: 2px !important; }
 .tk-op-div { margin: 0 !important; }
+/* Corte: fundo liso; só os vãos sem atividade ficam listrados */
+.cr-band { background: var(--surface-2) !important; }
+.cr-vao { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--surface-3) 6px 12px); pointer-events: none; }
