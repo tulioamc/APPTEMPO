@@ -45,3 +45,12 @@ test('PDF: página completa com estilo próprio', () => {
   assert.match(h, /^<!DOCTYPE html>/); assert.match(h, /@page\{size:A4/); assert.match(h, /class="capa"/);
   require('fs').writeFileSync('/tmp/an-amostra.html', h);
 });
+test('texto em blocos: título antes de ":" ou a primeira frase, números realçados e escapados', () => {
+  const m = load(['js/store.js', 'js/domain.js', 'js/view-analises.js'], ['anPartes', 'anRealce', 'anItem'], { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, icon: () => '' });
+  assert.deepEqual({ ...m.anPartes('Horas líquidas: 34h34. Base 58h15.') }, { t: 'Horas líquidas', c: '34h34. Base 58h15.' });
+  assert.equal(m.anPartes('Nenhum recebimento até 22/11/2026. Último: R$ 20.198.').t, 'Nenhum recebimento até 22/11/2026');
+  const r = m.anRealce('Subiu de 3h22 para 4h45, R$ 13.500 e 59,3% em 18/11 <x>');
+  ['3h22', '4h45', 'R$ 13.500', '59,3%', '18/11'].forEach(n => assert.ok(r.includes(`<b class="an-n">${n}</b>`), n));
+  assert.ok(!r.includes('<x>'));
+  assert.match(m.anItem('Prazo curto.', 1), /an-it-n">1</);
+});
