@@ -63,6 +63,7 @@ create table if not exists tempo_projects (
   status_id uuid references tempo_status_options(id),
   payment_status_id uuid references tempo_status_options(id),
   deadline date, deadline_original date,
+  deadline_time text,                                                -- hora da entrega (HH:MM), opcional; sem hora = fim do expediente
   project_type text,                                                 -- Vídeo 2D / Vídeo 3D / Design / Outro
   budget numeric(14,2), remaining_override numeric(14,2),
   estimated_hours numeric(8,2), revisions_included int,

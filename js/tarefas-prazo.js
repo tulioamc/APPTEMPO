@@ -233,11 +233,11 @@ function tkMotor(agora = new Date(), dias = 120, opts = null) {
       const pv = tkPrev(t); const feito = Math.max(0, taskMs(t.id) - (hojeMs.t[t.id] || 0)) / 60e3;   // até ontem
       const prevSim = pv.manual ? pv.min * H.fator : pv.min;
       itens.push({ id: t.id, t, p, pid: p.id, nome: t.name, eu: souEu(t.owner), deps: (Array.isArray(t?.depends_on) ? t.depends_on : []).filter(d => abertas.some(x => x.id === d)),
-        resto: Math.ceil(Math.max(0, (Number.isFinite(prevSim) ? prevSim : 60) - feito) / 15 - 1e-6) * 15, feitoMin: feito, prev: pv.min, entrega: (() => { const a = tkEntrega(t), b = tkDataOk(entregaData(entDe[t.id])); return a && b ? (a < b ? a : b) : a || b || (p.deadline ? tkDataOk(fimExp(p.deadline)) : null); })(), marco: entDe[t.id] || null, chave: tkChave(t, p, agora) });
+        resto: Math.ceil(Math.max(0, (Number.isFinite(prevSim) ? prevSim : 60) - feito) / 15 - 1e-6) * 15, feitoMin: feito, prev: pv.min, entrega: (() => { const a = tkEntrega(t), b = tkDataOk(entregaData(entDe[t.id])); return a && b ? (a < b ? a : b) : a || b || (p.deadline ? tkDataOk((p.deadline_time ? diaDe(p.deadline, Number(p.deadline_time.slice(0, 2)) + Number(p.deadline_time.slice(3, 5)) / 60) : fimExp(p.deadline))) : null); })(), marco: entDe[t.id] || null, chave: tkChave(t, p, agora) });
     });
     else if (Number(p.estimated_hours) > 0) {
       const falta = Number(p.estimated_hours) * 60 - Math.max(0, projectMs(p.id) - (hojeMs.p[p.id] || 0)) / 60e3;
-      if (falta > 3) itens.push({ id: 'p:' + p.id, _q: 1, t: null, p, pid: p.id, nome: p.name, eu: true, deps: [], resto: Math.ceil(falta / 15) * 15, feitoMin: 0, prev: falta, entrega: p.deadline ? fimExp(p.deadline) : null, chave: `${p.deadline || '9999'}T99|00000` });
+      if (falta > 3) itens.push({ id: 'p:' + p.id, _q: 1, t: null, p, pid: p.id, nome: p.name, eu: true, deps: [], resto: Math.ceil(falta / 15) * 15, feitoMin: 0, prev: falta, entrega: p.deadline ? (p.deadline_time ? diaDe(p.deadline, Number(p.deadline_time.slice(0, 2)) + Number(p.deadline_time.slice(3, 5)) / 60) : fimExp(p.deadline)) : null, chave: `${p.deadline || '9999'}T99|00000` });
     }
   });
   const porId = Object.fromEntries(itens.map(x => [x.id, x]));

@@ -91,6 +91,7 @@ window.DB_COLUMNS = {
   "deadline",
   "deadline_original",
   "project_type",
+  "deadline_time",
   "budget",
   "remaining_override",
   "estimated_hours",
