@@ -331,11 +331,13 @@ function planoCascata(itens) {
   // 25/11: to-dos e rotina maleável ficam POR CIMA (fundo translúcido), ocupando parte do bloco de baixo (planoSobrepor).
   const fundo = itens.filter(x => x.k === 'fixo' && !planoSobreTipo(x)); fundo.forEach(x => { x._left = 0; x._w = 100; x._fundo = true; x._z = 0; });
   const ord = planoFaixasLivre(itens.filter(x => x.k !== 'fixo' && !planoSobreTipo(x)));
-  ord.forEach((x, k) => { x._left = x._l * (100 / x._n); x._w = 100 / x._n; x._nivel = 0; x._z = k + 1; });
+  ord.forEach((x, k) => { x._left = x._l * (100 / x._n) * PL_CALHA; x._w = 100 / x._n * PL_CALHA; x._nivel = 0; x._z = k + 1; });
   return [...fundo, ...ord, ...planoSobrepor(itens.filter(planoSobreTipo), ord)];
 }
 /* Itens que ficam por cima dos outros, com fundo translúcido e contorno inteiro: to-dos e rotina maleável
    (a fixada, inegociável, continua de fundo). */
+/* Como no Google Agenda: os blocos de baixo deixam uma calha à direita (7%), por onde os de cima passam e se destacam. */
+const PL_CALHA = 0.93;
 const planoSobreTipo = (x) => x.k === 'todo' || x.k === 'todos' || (x.k === 'fixo' && x.m && x.m.pin === false);
 let PL_ALT_AGORA = null, PL_COLW_AGORA = null;   // altura de 1 h na grade que está sendo desenhada (para saber quanto ocupa o texto de um bloco)
 /* Regra (25/11): o item de cima entra um pouco recuado (o bloco de baixo continua aparecendo na esquerda) e pode cobrir
@@ -354,8 +356,10 @@ function planoSobrepor(over, base) {
     const fimX = planoFimVisual(x);
     const viz = postos.filter(p => p.a < fimX - 1e-9 && planoFimVisual(p) > x.a + 1e-9);
     let left = viz.length ? INSET : 0; let divide = null;
+    // nada embaixo: ocupa como um bloco comum (com a calha), e outro item pode passar por cima dele depois
+    if (!viz.length) { x._left = 0; x._w = 100 * PL_CALHA; x._sobre = true; x._z = 60 + i; x._n = 1; postos.push(x); return; }
     viz.forEach(p => {
-      const zona = p._sobre ? tH1 : tH;
+      const zona = p._sobre ? (p.k === 'fixo' ? tH : tH1) : tH;
       if (!(x.a < p.a + zona - 1e-9 && fimX > p.a + 1e-9)) return;   // não encosta no texto dele
       if (!p._sobre) { left = Math.max(left, (p._left ?? 0) + (p._w ?? 100) * 0.5); return; }
       const fimTxt = (p._left ?? 0) + Math.min(p._w ?? 100, larguraTxt(p)) + 2;
@@ -383,7 +387,7 @@ function planoFaixas(itens0, unico = true, dia = '') {
   const W = 100 / 3; const out = [];
   lanes.forEach((ls, li) => {
     const base = planoFaixasLivre(ls.filter(x => !planoSobreTipo(x)));
-    base.forEach(x => { x._left = x._l * (100 / x._n); x._w = 100 / x._n; });
+    base.forEach(x => { x._left = x._l * (100 / x._n) * PL_CALHA; x._w = 100 / x._n * PL_CALHA; });
     const over = planoSobrepor(ls.filter(planoSobreTipo), base);
     [...base, ...over].forEach(x => {
       x._left = li * W + (x._left ?? 0) * W / 100; x._w = (x._w ?? 100) * W / 100;

@@ -2663,3 +2663,9 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .pl-grade > .pl-sobre.pl-evento.todo, .pl-grade > .pl-sobre.pl-evento { background: color-mix(in srgb, var(--surface) 62%, transparent) !important; border: 1.5px solid var(--accent) !important; }
 .pl-grade > .pl-sobre.pl-fixo { background: color-mix(in oklab, var(--accent-soft) 60%, transparent) !important; border: 1.5px solid color-mix(in oklab, var(--accent) 45%, transparent) !important; color: var(--accent); }
 .pl-grade > .pl-sobre { box-shadow: 0 1px 4px rgba(20,24,40,.08); }
+/* Itens por cima (25/11): fundo bem claro e translúcido (o bloco de baixo aparece de leve), contorno 100%,
+   caixinha colada no texto e texto inteiro (quebra em vez de cortar com …) */
+.pl-grade > .pl-sobre.pl-evento.todo, .pl-grade > .pl-sobre.pl-evento { background: color-mix(in srgb, var(--surface) 84%, transparent) !important; }
+.pl-grade > .pl-sobre.pl-evento.todo { display: flex !important; flex-direction: row !important; align-items: flex-start !important; gap: 5px !important; padding: 3px 6px !important; }
+.pl-grade > .pl-sobre .pl-todo-ck { flex: none; margin: 1px 0 0 !important; }
+.pl-grade > .pl-sobre .pl-tx b { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
