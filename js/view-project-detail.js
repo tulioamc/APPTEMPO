@@ -79,10 +79,14 @@ function pdTasks(p) {
   const row = (t, isSub) => {
     if (!isSub && t.tipo === 'reuniao') {   // tarefa fixa de reuniões: sem prazo, sem status, fora do planejamento; só soma o tempo
       const ms = taskMs(t.id);
-      return `<div class="tk tk-reuniao"><div class="tk-l"><div class="tk-nome"><span class="tk-reu-ico" data-tip="Tarefa fixa de reuniões: todo registro de reunião deste projeto sem tarefa entra aqui sozinho. Sem prazo e fora do planejamento.">${icon('users')}</span><input class="tk-in n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome"></div>
-        <span class="tk-reu-tag" data-tip="Não tem prazo nem entra no planejamento; só vai somando o tempo das reuniões">fixa · só soma</span>
-        <span class="tk-reu-t mono" data-tip="Tempo de reuniões registrado neste projeto (líquido)">${fmtDur(ms)}</span>
-        <span class="tk-acoes">${`<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar reunião" title="Começar a registrar uma reunião deste projeto">${icon('play')}</button>`}</span></div></div>`;
+      return `<div class="tk tk-reuniao"><div class="tk-l">
+        <div class="tk-nome"><span class="tk-nome-l"><span class="tk-reu-ico" data-tip="Tarefa fixa de reuniões: todo registro de reunião deste projeto sem tarefa entra aqui sozinho. Sem prazo e fora do planejamento.">${icon('users')}</span><input class="tk-in n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome"></span><span class="tk-dep">Tarefa fixa · só soma o tempo</span></div>
+        <span class="tk-resp"></span>
+        <div class="tk-st"><span class="tk-reu-tag" data-tip="Não tem prazo nem entra no planejamento; só vai somando o tempo das reuniões">Fixa</span></div>
+        <div class="tk-tempo"><span class="tk-t1"><b>${tkHHMM(ms / 60e3)}</b><i>(trabalhado)</i></span></div>
+        <span class="tk-data"><span class="tk-dv faint" data-tip="Reuniões não têm prazo">sem prazo</span></span>
+        <span class="tk-hora"></span>
+        <span class="tk-acoes"><button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar reunião" title="Começar a registrar uma reunião deste projeto">${icon('play')}</button></span></div></div>`;
     }
     const liq = isSub ? db.where('tempo_time_entries', e => e.task_id === t.id).reduce((s, e) => s + entryMs(e), 0) : taskMs(t.id);
     const bruto = db.where('tempo_time_entries', e => (isSub ? e.task_id === t.id : (e.task_id === t.id || subtasksOf(t.id).some(x => x.id === e.task_id)))).reduce((s, e) => s + entryBrutoMs(e), 0);
@@ -100,14 +104,15 @@ function pdTasks(p) {
       <span class="tk-acoes">${souEu(t.owner) ? `<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` : ''}<button class="btn sm icon ghost" data-x="tk-abrir" data-id="${t.id}" aria-label="${aberto ? 'Fechar' : 'Mais opções'}" aria-expanded="${aberto}">${icon(aberto ? 'chevU' : 'chevD')}</button></span>
     </div>
     ${aberto ? `<div class="tk-mais-p">
-      ${t.status_inherited !== false ? `<span class="small muted" data-tip="Mudar o status do projeto muda o desta tarefa também">${icon('layers')} Segue o status do projeto</span>` : `<button class="btn sm" data-x="inherit" data-id="${t.id}" data-tip="Esta tarefa foi mudada à mão e não segue mais o status do projeto">${icon('undo')} Voltar a seguir o projeto</button>`}
-      ${!isSub ? comboBtn('wt', t.work_type_id, 'task-wt', t.id) : ''}
-      ${!isSub ? depsHTML(t) : ''}
-      <span class="grow"></span>
-      ${!isSub ? `<button class="btn sm ${t.sem_pressa ? '' : 'ghost'}" data-x="tk-sempressa" data-id="${t.id}" data-tip="${t.sem_pressa ? 'Sem pressa (ligado): vai depois de todas as outras tarefas no planejamento e anda conforme entram novas. Se tiver entrega, volta ao normal 2 dias úteis antes. Clique para desligar' : 'Sem pressa: a tarefa vai depois de todas as outras no planejamento e anda conforme entram novas; com entrega, volta ao normal 2 dias úteis antes para não passar do prazo'}">${t.sem_pressa ? '✓ ' : ''}Sem pressa</button>` : ''}
-      ${!isSub ? `<button class="btn sm ghost" data-x="add-sub" data-id="${t.id}">${icon('plus')} Subtarefa</button>` : ''}
-      ${!isSub && !ADJUST_RE.test(t.name) ? `<button class="btn sm ghost" data-x="add-adjust" data-id="${t.id}" data-tip="Registrar um ajuste desta tarefa (cria [Ajuste NN] para você preencher o prazo)">Ajuste</button>` : ''}
-      <button class="btn sm icon ghost" data-x="del-task" data-id="${t.id}" aria-label="Excluir">${icon('trash')}</button>
+      <div class="tk-op"><span class="tk-op-l">Status</span><label class="check small tk-op-c" data-tip="Ligado: mudar o status do projeto muda o desta tarefa também. Desligado: a tarefa tem o status dela e não acompanha o projeto"><input type="checkbox" data-x-chk="tk-herda" data-id="${t.id}" ${t.status_inherited !== false ? 'checked' : ''}> Segue o projeto</label></div>
+      ${!isSub ? `<div class="tk-op"><span class="tk-op-l">Tipo de trabalho</span><span class="tk-op-c">${comboBtn('wt', t.work_type_id, 'task-wt', t.id)}</span></div>` : ''}
+      ${!isSub ? `<div class="tk-op tk-op-dep"><span class="tk-op-l">Depende de</span><span class="tk-op-c">${depsHTML(t)}</span></div>` : ''}
+      <div class="tk-op-acoes">
+        ${!isSub ? `<button class="btn sm ${t.sem_pressa ? 'on' : ''}" data-x="tk-sempressa" data-id="${t.id}" data-tip="${t.sem_pressa ? 'Sem pressa (ligado): vai depois de todas as outras tarefas no planejamento e anda conforme entram novas. Se tiver entrega, volta ao normal 2 dias úteis antes. Clique para desligar' : 'Sem pressa: a tarefa vai depois de todas as outras no planejamento e anda conforme entram novas; com entrega, volta ao normal 2 dias úteis antes para não passar do prazo'}">${t.sem_pressa ? '✓ ' : ''}Sem pressa</button>` : ''}
+        ${!isSub ? `<button class="btn sm" data-x="add-sub" data-id="${t.id}" data-tip="Criar uma subtarefa dentro desta">${icon('plus')} Subtarefa</button>` : ''}
+        ${!isSub && !ADJUST_RE.test(t.name) ? `<button class="btn sm" data-x="add-adjust" data-id="${t.id}" data-tip="Registrar um ajuste desta tarefa (cria [Ajuste NN] para você preencher o prazo)">${icon('plus')} Ajuste</button>` : ''}
+        <button class="btn sm icon ghost tk-op-del" data-x="del-task" data-id="${t.id}" aria-label="Excluir" title="Excluir esta tarefa">${icon('trash')}</button>
+      </div>
     </div>` : ''}
   </div>`;
   };
@@ -303,6 +308,10 @@ function bindProjectDrawer(ly, id, st) {
     if (el.dataset.entF === 'hora') { const h = horaLer(el.value); if (h === null) { toast('Não entendi a hora. Use 18, 18h30 ou 18:30.'); render(); return; } v = h || null; }
     projEntregasSalvar(id, projEntregas(id).map(x => x.id === eid ? { ...x, [el.dataset.entF]: v } : x)); db.emit();
   });
+  // seguir (ou não) o status do projeto
+  ly.box.addEventListener('change', (e) => { const c = e.target.closest?.('[data-x-chk="tk-herda"]'); if (!c) return; const t = db.get('tempo_tasks', c.dataset.id); if (!t) return;
+    if (c.checked) resetTaskInheritance(t); else db.update('tempo_tasks', t.id, { status_inherited: false }, true);
+    db.emit(); toast(c.checked ? 'A tarefa volta a seguir o status do projeto' : 'A tarefa tem status próprio agora'); });
   // esconder canceladas
   ly.box.addEventListener('change', (e) => { const c = e.target.closest?.('[data-x-chk="esc-canc"]'); if (!c) return; db.setSetting('tkEsconderCancelados', c.checked); db.emit(); ly.refresh(); });
   // reordenar tarefas pela alça de 6 pontinhos (24/11): a ordem nova vira o "order" das tarefas de topo
@@ -375,7 +384,7 @@ function depsHTML(t) {
   const deps = Array.isArray(t.depends_on) ? t.depends_on : [];
   const chips = deps.map(d => { const x = db.get('tempo_tasks', d); return x ? `<button class="btn sm ghost" data-x="dep-del" data-id="${t.id}" data-dep="${d}" title="Remover dependência">${esc(x.name)} ×</button>` : ''; }).join('');
   const opts = tasksOf(t.project_id).filter(x => !x.parent_id && x.id !== t.id && !deps.includes(x.id)).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
-  return `<span class="row" style="gap:4px"><span class="small faint">depende de</span>${chips}${opts ? `<select class="input sm" data-pd="dep-add" data-id="${t.id}" aria-label="Adicionar dependência"><option value="">+ tarefa</option>${opts}</select>` : ''}</span>`;
+  return `<span class="row" style="gap:4px;flex-wrap:wrap">${chips}${opts ? `<select class="input sm" data-pd="dep-add" data-id="${t.id}" aria-label="Adicionar dependência" title="Esta tarefa só começa depois da escolhida terminar"><option value="">${deps.length ? '+ outra' : 'Nenhuma · escolher'}</option>${opts}</select>` : ''}</span>`;
 }
 /* Mudança de prazo de tarefa: pede o motivo e, se já havia prazo, pergunta se é ajuste. Retorna false se cancelou. */
 async function taskDeadlineFlow(t, v) {

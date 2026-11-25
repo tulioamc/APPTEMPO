@@ -2189,11 +2189,9 @@ body.pl-arrastando, body.pl-arrastando * { user-select: none !important; -webkit
 .pl-bloco.cc .pl-cc-l3 { opacity: .9; }
 /* Tarefa fixa de reuniões no topo da lista */
 .tk.tk-reuniao { background: color-mix(in oklab, var(--accent-soft) 55%, transparent); }
-.tk-reuniao .tk-l { display: flex; align-items: center; gap: 10px; }
-.tk-reuniao .tk-nome { flex: 1; display: flex; align-items: center; gap: 6px; }
-.tk-reu-ico { display: inline-flex; color: var(--accent); }
+.tk-reu-ico { display: inline-flex; color: var(--accent); margin: 0 5px 0 -18px; width: 13px; }
 .tk-reu-ico svg { width: 14px; height: 14px; }
-.tk-reu-tag { font-size: .75em; color: var(--accent); border: 1px solid var(--accent-line); border-radius: 4px; padding: 1px 6px; }
+.tk-reu-tag { display: inline-block; font-size: 10px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 3px 10px; }
 .tk-reu-t { font-size: .85em; color: var(--fg-2); }
 /* Lista de tarefas: alça de 6 pontinhos na mesma linha do nome */
 .tk-nome-l { display: flex; align-items: center; min-width: 0; }
@@ -2215,3 +2213,16 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .pl-bloco.cc .pl-cc-top .pl-tx { flex: 1 1 auto; }
 .pl-bloco.cc .pl-cc-x { position: absolute !important; top: 4px; right: 4px; opacity: 0 !important; transition: opacity .12s; z-index: 3; }
 .pl-bloco.cc:hover .pl-cc-x { opacity: 1 !important; }
+/* O que é do calendário fica dentro da grade: nada dele passa por cima de janelas (a linha de entrega tinha z-index 90 > janelas 80) */
+.pl-grade { isolation: isolate; }
+/* Opções da tarefa (aberta): grupos com rótulo pequeno em cima, tudo na mesma altura; ações à direita */
+.tk-mais-p { display: flex !important; flex-wrap: wrap; align-items: flex-end !important; gap: 10px 18px !important; padding: 4px 14px 12px 20px !important; }
+.tk-op { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tk-op-l { font-size: 10px; font-weight: 600; color: var(--fg-3); text-transform: uppercase; letter-spacing: .04em; }
+.tk-op-c { display: flex; align-items: center; min-height: 28px; gap: 6px; }
+.tk-op-c .combo-btn { min-height: 26px; }
+.tk-op-dep .input.sm { min-width: 150px; height: 28px; }
+.tk-op-acoes { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: nowrap; }
+.tk-op-acoes .btn.sm { height: 28px; white-space: nowrap; }
+.tk-op-acoes .btn.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.tk-op-del:hover { color: var(--danger, #B91C1C); }
