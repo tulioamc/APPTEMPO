@@ -140,3 +140,27 @@ ACTIONS['pjc-tk'] = (el) => {
   const ok = statusCat(t.status_id) === 'done';
   const alvo = statuses('work').find(s => s.category === (ok ? 'todo' : 'done')); if (alvo) setTaskStatus(t, alvo.id); db.emit();
 };
+
+/* Relatórios › Filho (25/11): mês a mês, o que foi gasto com o Rafa, a parte da Amanda, o que ela mandou, a diferença e o
+   saldo acumulado, e quantos dias ele ficou com você (Dias de Rafa). Mesmas contas da tela Despesas Rafa. */
+VIEWS.relfilho = () => {
+  const d = skData(); const meses = skMonths(d).slice(0, 12);
+  const nomeMes = (ym) => { const s = new Date(ym + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); };
+  const diasT = (ym) => { if (typeof rafaQuem !== 'function') return null; const [y, m] = ym.split('-').map(Number); let n = 0; const fim = new Date(y, m, 0).getDate(); for (let i = 1; i <= fim; i++) if (rafaQuem(`${ym}-${String(i).padStart(2, '0')}`) === 'T') n++; return n; };
+  const linhas = meses.map(ym => ({ ym, c: skCalc(d, ym), dias: diasT(ym) })).filter(x => x.c.has);
+  const ant = [...linhas].reverse(); let saldo = 0; const saldoDe = {};
+  ant.forEach(x => { if (x.c.fixed.length || x.c.m.extras.length) saldo += x.c.diff; saldoDe[x.ym] = saldo; });
+  const soma = (k) => linhas.reduce((t, x) => t + (x.c[k] || 0), 0);
+  const n = linhas.length || 1; const ano = String(new Date().getFullYear());
+  const doAno = linhas.filter(x => x.ym.startsWith(ano));
+  const kpis = `<div class="kpis">
+    <div class="kpi"><span class="k">Gasto por mês</span><span class="v" data-tip="Média dos meses mostrados (até 12)">${fmtMoney(soma('total') / n)}</span><span class="s">média de ${linhas.length} ${linhas.length === 1 ? 'mês' : 'meses'}</span></div>
+    <div class="kpi"><span class="k">Gasto em ${ano}</span><span class="v">${fmtMoney(doAno.reduce((t, x) => t + x.c.total, 0))}</span><span class="s">${doAno.length} ${doAno.length === 1 ? 'mês' : 'meses'}</span></div>
+    <div class="kpi"><span class="k">Parte da Amanda</span><span class="v" data-tip="Soma do que cabia à Amanda nos meses mostrados">${fmtMoney(soma('due'))}</span><span class="s">recebido ${fmtMoney(soma('received'))}</span></div>
+    <div class="kpi"><span class="k">Saldo acumulado</span><span class="v" style="color:${skBalance(d) < 0 ? 'var(--danger)' : 'var(--ok-ink, #1F7A3A)'}" data-tip="Positivo: a Amanda mandou mais do que a parte dela. Negativo: ficou faltando">${fmtMoney(skBalance(d))}</span><span class="s">desde o começo</span></div>
+  </div>`;
+  const tab = linhas.length ? `<div class="panel"><div class="panel-h"><h3>Mês a mês</h3><span class="grow"></span><button class="btn sm ghost" data-act="go" data-route="shared" data-tip="Abrir Despesas Rafa para lançar extras ou o valor recebido">Abrir Despesas Rafa</button></div><div class="panel-b tight"><table class="grid">
+    <thead><tr><th>Mês</th><th style="text-align:right">Gasto</th><th style="text-align:right">Parte da Amanda</th><th style="text-align:right">Recebido</th><th style="text-align:right">Diferença</th><th style="text-align:right">Saldo</th><th style="text-align:right" data-tip="Dias T no Dias de Rafa (com você)">Dias com você</th></tr></thead>
+    <tbody>${linhas.map(x => `<tr><td><b>${nomeMes(x.ym)}</b></td><td class="mono" style="text-align:right">${fmtMoney(x.c.total)}</td><td class="mono" style="text-align:right">${fmtMoney(x.c.due)}</td><td class="mono" style="text-align:right">${fmtMoney(x.c.received)}</td><td class="mono" style="text-align:right;color:${x.c.diff < -0.5 ? 'var(--danger)' : 'inherit'}">${fmtMoney(x.c.diff)}</td><td class="mono" style="text-align:right">${fmtMoney(saldoDe[x.ym] ?? 0)}</td><td class="mono" style="text-align:right">${x.dias ?? '—'}</td></tr>`).join('')}</tbody></table></div></div>` : '<div class="empty">Ainda não há despesas do Rafa lançadas.</div>';
+  return { title: 'Relatórios', html: kpis + tab };
+};

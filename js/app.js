@@ -62,7 +62,16 @@ const NAV = [
 ];
 const VIEWS = {};
 /* Relatórios: uma seção só, com abas. Cada aba continua sendo a sua tela (rota própria). */
-const REL_TABS = [['productivity', 'Produtividade'], ['usage', 'Uso de programas'], ['reports', 'PJ'], ['reportspf', 'PF'], ['metas', 'Metas'], ['analises', 'Análises']];
+/* Relatórios e análises numa seção só (25/11): grupos PJ · PF · Filho · Relatórios · Geral, cada um com as suas abas. */
+const REL_GRUPOS = [
+  { id: 'pj', label: 'PJ', tabs: [['reports', 'Financeiro'], ['productivity', 'Produtividade'], ['usage', 'Uso de programas']] },
+  { id: 'pf', label: 'PF', tabs: [['reportspf', 'Financeiro']] },
+  { id: 'filho', label: 'Filho', tabs: [['relfilho', 'Despesas e dias']] },
+  { id: 'rel', label: 'Relatórios', tabs: [['analises', 'Semanal, mensal e mais']] },
+  { id: 'geral', label: 'Geral', tabs: [['metas', 'Metas']] },
+];
+const REL_TABS = REL_GRUPOS.flatMap(g => g.tabs);
+const relGrupoDe = (r) => REL_GRUPOS.find(g => g.tabs.some(([k]) => k === r)) || REL_GRUPOS[0];
 const relTab = (r) => REL_TABS.some(([k]) => k === r);
 const navOn = (id) => S.route === id || (id === 'relatorios' && relTab(S.route));
 
@@ -146,7 +155,12 @@ function render() {
   const v = { ...view() };
   if (relTab(S.route)) {
     if (db.setting('relTab', '') !== S.route) { const r = S.route; setTimeout(() => db.setSetting('relTab', r), 0); }
-    v.html = `<div class="seg rel-tabs" role="tablist">${REL_TABS.map(([k, l]) => `<button role="tab" aria-selected="${k === S.route}" class="${k === S.route ? 'on' : ''}" data-act="go" data-route="${k}">${l}</button>`).join('')}</div>` + v.html;
+    const g = relGrupoDe(S.route);
+    // grupo: abre na última aba usada dele (ou na primeira)
+    const ultima = (gr) => { const u = (db.setting('relTabGrupo', {}) || {})[gr.id]; return gr.tabs.some(([k]) => k === u) ? u : gr.tabs[0][0]; };
+    if ((db.setting('relTabGrupo', {}) || {})[g.id] !== S.route) { const r = S.route, gid = g.id; setTimeout(() => db.setSetting('relTabGrupo', { ...(db.setting('relTabGrupo', {}) || {}), [gid]: r }), 0); }
+    v.html = `<div class="rel-nav"><div class="seg rel-tabs" role="tablist">${REL_GRUPOS.map(gr => `<button role="tab" aria-selected="${gr === g}" class="${gr === g ? 'on' : ''}" data-act="go" data-route="${ultima(gr)}" data-tip="${esc(gr.tabs.map(t => t[1]).join(' · '))}">${gr.label}</button>`).join('')}</div>`
+      + (g.tabs.length > 1 ? `<div class="rel-sub" role="tablist">${g.tabs.map(([k, l]) => `<button role="tab" aria-selected="${k === S.route}" class="btn sm ${k === S.route ? 'primary' : 'ghost'}" data-act="go" data-route="${k}">${l}</button>`).join('')}</div>` : '') + `</div>` + v.html;
     v.title = 'Relatórios';
   }
   const scrollKeep = keepScroll();

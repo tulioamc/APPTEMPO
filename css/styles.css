@@ -2355,3 +2355,13 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .cor-n { font-size: .82em; color: var(--fg-3); }
 .cor-proj .grp-caret { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--fg-2); }
 .cor-group { margin: 12px 2px 4px !important; font-size: 11px !important; }
+/* Relatórios: grupos (PJ · PF · Filho · Relatórios · Geral) e as abas do grupo embaixo */
+.rel-nav { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.rel-nav .rel-tabs { margin-bottom: 0; }
+.rel-sub { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Recentes › Cronológico: o cabeçalho tem o nome da tarefa; as sessões embaixo mostram só horário, tipo e duração */
+.cor-cron > .entry .what .t, .cor-cron > .entry .what .p, .cor-cron .grp-kids .entry .what .t, .cor-cron .grp-kids .entry .what .p { display: none; }
+.cor-cron > .entry .what::after { content: 'Sessão'; font-size: .88em; color: var(--fg-3); }
+/* Recentes: Cronológico/Aglomerado à direita; linha clarinha e fina entre as tarefas */
+.cor-mode { justify-content: flex-end; }
+.cor-body .cor-task + .cor-task { border-top: 1px solid color-mix(in srgb, var(--fg) 7%, transparent); margin-top: 4px !important; padding-top: 4px; }
