@@ -5,7 +5,7 @@
    são registradas para sempre e aparecem na aba Avisos, ordenadas por data.
    ===================================================================== */
 
-const NOTICE_KINDS = { sessao: ['Sessão aberta', 'clock'], conta: ['Conta a pagar', 'money'], pause: ['Pausa', 'alert'], prazo: ['Prazo', 'clock'], cobranca: ['Cobrança', 'money'], orcamento: ['Orçamento', 'doc'], reminder: ['Lembrete', 'bell'], todo: ['To-do', 'check'], reembolso: ['Reembolso', 'money'], nfse: ['Nota ou comprovante', 'money'] };
+const NOTICE_KINDS = { longo: ['Cronômetro esquecido?', 'clock'], semreg: ['Dia sem registro', 'clock'], sessao: ['Sessão aberta', 'clock'], conta: ['Conta a pagar', 'money'], pause: ['Pausa', 'alert'], prazo: ['Prazo', 'clock'], cobranca: ['Cobrança', 'money'], orcamento: ['Orçamento', 'doc'], reminder: ['Lembrete', 'bell'], todo: ['To-do', 'check'], reembolso: ['Reembolso', 'money'], nfse: ['Nota ou comprovante', 'money'] };
 const noticeKind = (k) => NOTICE_KINDS[k] || [k, 'bell'];
 
 /* Cria um aviso pendente. A chave evita duplicar o mesmo aviso (ex.: mesmo prazo no mesmo dia). */
@@ -56,6 +56,8 @@ const noticeBtnsBase = (n) => {
   if (n.kind === 'alice') return `<div class="row gap-s"><button class="btn sm primary" data-act="alice-sim" data-id="${n.id}">Sim</button><button class="btn sm" data-act="alice-nao" data-id="${n.id}">Não</button></div>`;
   if (n.kind === 'wa') return `<div class="row gap-s"><button class="btn sm primary" data-act="wa-abrir">Classificar agora</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button></div>`;
   if (n.kind === 'sessao') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Manter aberta</button></div>`;
+  if (n.kind === 'longo') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}" title="Encerra a sessão no começo do trecho sem troca de programa">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ack" data-id="${n.id}" title="Estava trabalhando de verdade: mantém o tempo">Estava trabalhando</button></div>`;
+  if (n.kind === 'semreg') return `<div class="row gap-s"><button class="btn sm primary" data-act="ts-manual" data-a="${n.data?.a || ''}" data-b="${n.data?.b || ''}" title="Abre uma sessão manual de hoje para lançar as horas">Lançar horas</button><button class="btn sm ghost" data-act="notice-ack" data-id="${n.id}" title="Hoje não teve trabalho fora do app">Não trabalhei</button></div>`;
   if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm" data-act="notice-pick" data-id="${n.id}">Escolher projeto, tarefa ou subtarefa</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
   return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Virar to-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
 };
@@ -370,10 +372,50 @@ function scanAlerts() {
     decideNotice(n, 'accepted', 'Resolvido: a situação mudou'); SCAN_CHANGED = true;
   });
   scanSessoesAbertas(today);
+  try { scanTrechoLongo(); scanDiaSemRegistro(today); } catch (e) { /* aviso extra não pode travar a varredura */ }
   avisosResolvidosSozinhos();
   SCAN_SEEN = null;
   db.all('tempo_notices').filter(n => n.status === 'snoozed' && n.snooze_until && n.snooze_until <= today).forEach(n => db.update('tempo_notices', n.id, { status: 'pending', snooze_until: null }, true));
   if (SCAN_CHANGED) db.emit(); // só avisa a tela se algo mudou (evita laço)
+}
+
+/* Cronômetro esquecido (25/11): sessão rodando há 3 h ou mais no mesmo programa e arquivo, sem nenhuma pausa nem troca.
+   Pergunta uma vez por trecho; corta no começo do trecho ou mantém. Some sozinho quando você troca de programa ou pausa. */
+const LONGO_MS = 3 * 36e5;
+function longoInicio(e) {
+  const segs = e.segments || []; const last = segs[segs.length - 1];
+  if (!last || !last.s || last.e || e.state !== 'running') return null;
+  const s0 = new Date(last.s).getTime();
+  const recs = (typeof actList === 'function' ? actList(e.id) : []).filter(r => new Date(r.to).getTime() > s0).sort((a, b) => new Date(a.from) - new Date(b.from));
+  if (!recs.length) return null;
+  const k = (r) => `${r.app || ''}|${r.doc || ''}`; const ult = recs[recs.length - 1]; let ini = new Date(ult.from).getTime();
+  for (let i = recs.length - 2; i >= 0 && k(recs[i]) === k(ult); i--) ini = new Date(recs[i].from).getTime();
+  return { ini: Math.max(ini, s0), app: ult.app || 'o mesmo programa', doc: ult.doc || '' };
+}
+function scanTrechoLongo() {
+  openEntries().forEach(e => {
+    const L = longoInicio(e); if (!L || Date.now() - L.ini < LONGO_MS) return;
+    const cut = new Date(L.ini).toISOString();
+    addNotice({ kind: 'longo', key: `longo:${e.id}:${cut}`, title: `${fmtDur(Date.now() - L.ini)} no ${typeof shortProgram === 'function' ? shortProgram(L.app) : L.app} sem nenhuma pausa`, body: `Desde ${fmtTime(cut)} sem trocar de programa${L.doc ? ' nem de arquivo' : ''}. Se o cronômetro ficou esquecido, corte; se estava trabalhando, mantenha.`, entity: 'entry', entity_id: e.id, data: { entry_id: e.id, cut } }, true);
+  });
+}
+/* Dia útil sem registro (25/11): depois das 19h, se hoje (dia útil, fora de férias e feriado) tem menos de 1 h de trabalho
+   registrado, pergunta se trabalhou fora do app (na agência, por exemplo) e oferece lançar as horas. */
+function trabalhoDoDiaMs(dia) {
+  const a = new Date(dia + 'T00:00:00').getTime(), b = a + 864e5; const iv = [];
+  db.all('tempo_time_entries').forEach(e => (e.segments || []).forEach(sg => { if (!sg.s || sg.why) return; const x = Math.max(a, new Date(sg.s).getTime()), y = Math.min(b, sg.e ? new Date(sg.e).getTime() : Date.now()); if (y > x) iv.push([x, y]); }));
+  iv.sort((p, q) => p[0] - q[0]); let tot = 0, fim = 0;
+  iv.forEach(([x, y]) => { if (y <= fim) return; tot += y - Math.max(x, fim); fim = y; });
+  return tot;
+}
+function scanDiaSemRegistro(today) {
+  const agora = new Date(); const dow = agora.getDay();
+  if (dow === 0 || dow === 6 || agora.getHours() < 19 || FERIAS_HOJE) return;
+  if (feriadosDoAno(agora.getFullYear()).some(f => f.data === today)) return;
+  if (!db.all('tempo_time_entries').length) return;
+  const ms = trabalhoDoDiaMs(today); if (ms >= 36e5) return;
+  const a = new Date(today + 'T09:00:00').getTime(), b = new Date(today + 'T18:00:00').getTime();
+  addNotice({ kind: 'semreg', key: `semreg:${today}`, title: `Hoje tem só ${fmtDur(ms)} registrado`, body: 'Dia útil quase sem registro. Trabalhou fora do app (na agência, por exemplo)? Lance as horas para não ficarem fora da conta.', data: { dia: today, a, b } }, true);
 }
 
 /* Aviso que você já resolveu por outro caminho (antes de ver o aviso) sai sozinho (25/11):
@@ -403,6 +445,12 @@ function avisosResolvidosSozinhos() {
         if (d.tipo === 'comprovante' && typeof rbName === 'function' && rbName('reimb_pay', row.pay_id) === 'Pago') return fecha(n, 'a linha já está como Pago');
         if (d.tipo !== 'comprovante' && n.kind === 'nfse' && typeof nfseIgual === 'function' && nfseIgual(row.amount, d.valor)) return fecha(n, 'a linha já tem o valor da nota');
       }
+      if (n.kind === 'longo' && temSessoes && d.entry_id) {
+        const e = db.get('tempo_time_entries', d.entry_id);
+        if (!e || e.state !== 'running') return fecha(n, 'a sessão foi pausada ou encerrada');
+        const L = longoInicio(e); if (!L || new Date(L.ini).toISOString() !== d.cut) return fecha(n, 'você trocou de programa ou pausou');
+      }
+      if (n.kind === 'semreg' && temSessoes && d.dia && trabalhoDoDiaMs(d.dia) >= 36e5) return fecha(n, 'as horas do dia foram lançadas');
       if (n.kind === 'alice' && d.dia && typeof alDias === 'function' && (alDias()[d.dia] || []).includes(d.tipo)) return fecha(n, 'já está marcado no calendário');
     } catch (e) { /* um aviso com dado estranho não pode travar a varredura */ }
   });

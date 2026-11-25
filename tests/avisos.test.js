@@ -33,3 +33,16 @@ test('sem sessões carregadas não resolve nada (dados ainda chegando)', () => {
   m.avisosResolvidosSozinhos();
   assert.strictEqual(m.db.get('tempo_notices', n.id).status, 'pending');
 });
+
+test('dia útil sem registro: conta só o trabalho do dia (pausas fora) e some quando as horas entram', () => {
+  const m = load(['js/store.js', 'js/domain.js', 'js/notices.js'], ['db', 'trabalhoDoDiaMs', 'avisosResolvidosSozinhos'],
+    { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '', esc: (s) => String(s), $: () => null, $$: () => [], FERIAS_HOJE: false, SCAN_SEEN: null, SCAN_CHANGED: false, todoAlarmSync() {} });
+  m.db.data = m.db.empty();
+  const d = '2026-11-24', t = (h) => new Date(`${d}T${h}:00`).toISOString();
+  m.db.insert('tempo_time_entries', { id: 'a', state: 'done', segments: [{ s: t('09:00'), e: t('09:20') }, { s: t('09:20'), e: t('09:50'), why: 'WhatsApp' }] }, true);
+  assert.equal(m.trabalhoDoDiaMs(d), 20 * 6e4);
+  const n = m.db.insert('tempo_notices', { kind: 'semreg', status: 'pending', decision: '', data: { dia: d } }, true);
+  m.avisosResolvidosSozinhos(); assert.equal(m.db.get('tempo_notices', n.id).status, 'pending');
+  m.db.insert('tempo_time_entries', { id: 'b', state: 'done', segments: [{ s: t('14:00'), e: t('16:00') }] }, true);
+  m.avisosResolvidosSozinhos(); assert.equal(m.db.get('tempo_notices', n.id).status, 'accepted');
+});

@@ -94,6 +94,14 @@ CHANGES['rb-import'] = async (el) => {
 const rbSum = (rows) => rows.reduce((t, r) => t + (Number(r.amount) || 0), 0);
 const rbN = (rows) => `${rows.length} linha${rows.length === 1 ? '' : 's'}`;
 
+/* Quanto tempo o plano está levando: dias desde o pagamento (ou a data da linha) de cada reembolso que você espera. */
+function rbEsperaDias(r) { const d = String(r.paid_on || r.date || '').slice(0, 10); if (!d) return null; const t = new Date(d + 'T12:00:00').getTime(); return isNaN(t) ? null : Math.max(0, Math.floor((Date.now() - t) / 864e5)); }
+function rbEsperaTxt(rs) {
+  const ds = rs.map(r => ({ r, d: rbEsperaDias(r) })).filter(x => x.d !== null).sort((a, b) => b.d - a.d);
+  if (!ds.length) return '';
+  const tip = 'Esperando o reembolso do plano\n' + ds.slice(0, 12).map(x => `${x.r.name || 'sem nome'} (${x.r.month}): há ${x.d} dias`).join('\n') + (ds.length > 12 ? `\n+ ${ds.length - 12}` : '');
+  return ` · <span data-tip="${esc(tip)}">o mais antigo espera há ${ds[0].d} dias</span>`;
+}
 VIEWS.reimb = () => {
   if (typeof exReembSync === 'function') exReembSync();
   const all = db.all('tempo_reimb_rows');
@@ -145,7 +153,7 @@ VIEWS.reimb = () => {
   const summary = all.length ? `
     <div class="rb-top">
       <div class="rb-etapas">
-        ${[['pagar', 'Falta você pagar'], ['requer', 'Falta você requerer'], ['receber', 'Falta você receber']].map(([k, lab]) => { const rs = all.filter(FILTERS[k].test); return `<button class="card rb-etapa ${f === k ? 'on' : ''}" data-act="rb-filter" data-f="${k}"><span class="k">${lab}</span><b class="v">${money(rbSum(rs))}</b><span class="small muted">${rbN(rs)}</span></button>`; }).join('')}
+        ${[['pagar', 'Falta você pagar'], ['requer', 'Falta você requerer'], ['receber', 'Falta você receber']].map(([k, lab]) => { const rs = all.filter(FILTERS[k].test); return `<button class="card rb-etapa ${f === k ? 'on' : ''}" data-act="rb-filter" data-f="${k}"><span class="k">${lab}</span><b class="v">${money(rbSum(rs))}</b><span class="small muted">${rbN(rs)}${k === 'receber' ? rbEsperaTxt(rs) : ''}</span></button>`; }).join('')}
       </div>
       <div class="card rb-avg">
         <span class="k">Média mensal · últimos ${closed.length} ${closed.length === 1 ? 'mês fechado' : 'meses fechados'}</span>
