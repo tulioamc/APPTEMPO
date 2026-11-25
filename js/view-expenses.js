@@ -35,12 +35,13 @@ function exCopyMonth(target, src) {
   if (exRows(target).length || !src) return false;
   exRows(src).forEach(r => {
     if (r.status === EX_OFF) return;
-    if (r.kind === 'in' && !exInRepete(r)) return;
+    if (r.kind === 'in' && !exInRepete(r) && !r.inst_total) return;   // entrada parcelada (acordo) segue até a última parcela
     if (r.inst_total && (r.inst_no || 1) >= r.inst_total) return;
     db.insert('tempo_expenses', {
       month: target, kind: r.kind, name: r.name || '', cat: r.cat || '', note: '', amount: null, amount_sug: exPorDiaValor(r, target) ?? r.amount ?? r.amount_sug ?? null,
       due_date: r.due_date ? exDateIn(target, exDayOf(r.due_date)) : null, paid_on: null, status: EX_OPEN[r.kind],
-      inst_no: r.inst_total ? (r.inst_no || 1) + 1 : null, inst_total: r.inst_total || null, order: r.order ?? 0
+      inst_no: r.inst_total ? (r.inst_no || 1) + 1 : null, inst_total: r.inst_total || null, order: r.order ?? 0,
+      ...(r.kind === 'in' && r.inst_total && r.project_id ? { project_id: r.project_id } : {})   // a parcela seguinte continua ligada ao projeto
     }, true);
   });
   return true;

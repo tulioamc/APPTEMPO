@@ -114,7 +114,9 @@ function nfseEntradaAplicar(d) {
   const link = d.arquivo ? `LINK COMPROVANTE: ${String(d.arquivo).normalize('NFC')}` : '';
   const nota = link && !String(r.note || '').includes(link) ? [String(r.note || '').trim(), link].filter(Boolean).join(' · ') : r.note;
   const valor = d.valor ?? r.amount ?? r.amount_sug;
+  const antes = { ...r };
   db.update('tempo_expenses', r.id, { status: 'Recebido', paid_on: d.pagoEm || ymd(new Date()), amount: valor, amount_sug: null, note: nota }, true);
+  if (typeof exSyncPayment === 'function') exSyncPayment(antes, db.get('tempo_expenses', r.id));   // linha ligada a projeto: vira pagamento do projeto
   return true;
 }
 function nfseEntradaReport(it, ent) {
