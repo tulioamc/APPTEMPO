@@ -1,5 +1,5 @@
 /* Gráficos de tempo: barras horizontais (tarefa, projeto) e colunas empilhadas por mês (projeto, cliente, agência). */
-const CHART_FALLBACK = '#7C8592';
+const CHART_FALLBACK = GRAF_CINZA;
 
 /* Padrão de gráficos: cada item tem uma chave (data-hk). Dentro do mesmo [data-hkroot], passar o mouse num item
    ou num chip acende esse item e esmaece o resto. Tudo mostra a parte, a % e o valor. */
@@ -10,8 +10,8 @@ function stdBarsHTML(items, fmtVal, total = null) {
   if (!rows.length) return '<div class="faint small">Sem registro.</div>';
   const tot = total || rows.reduce((s, i) => s + i.v, 0);
   const max = Math.max(...rows.map(i => i.v));
-  const bars = rows.map(i => `<div class="bar-row" data-hk="${esc(i.key)}" data-hkv="${i.v}"><span class="lab" title="${esc(i.label)}">${esc(i.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${(i.v / max * 100).toFixed(1)}%;background:${i.color || 'var(--accent)'}"></div></div><span class="val mono">${fmtVal(i.v)} · ${hkPct(i.v, tot)}</span></div>`).join('');
-  const chips = rows.map(i => `<span class="act-chip" data-hk="${esc(i.key)}" data-hkv="${i.v}" style="--tb:${i.color || 'var(--accent)'}"><i></i>${esc(i.label)} <span class="faint">${hkPct(i.v, tot)} · ${fmtVal(i.v)}</span></span>`).join('');
+  const bars = rows.map(i => `<div class="bar-row" data-hk="${esc(i.key)}" data-hkv="${i.v}"><span class="lab" title="${esc(i.label)}">${esc(i.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${(i.v / max * 100).toFixed(1)}%;background:${corGraf(i.color) || GRAF_CORES[0]}"></div></div><span class="val mono">${fmtVal(i.v)} · ${hkPct(i.v, tot)}</span></div>`).join('');
+  const chips = rows.map(i => `<span class="act-chip" data-hk="${esc(i.key)}" data-hkv="${i.v}" style="--tb:${corGraf(i.color) || GRAF_CORES[0]}"><i></i>${esc(i.label)} <span class="faint">${hkPct(i.v, tot)} · ${fmtVal(i.v)}</span></span>`).join('');
   return `<div data-hkroot data-hktot="${tot}" data-hkfmt="${fmtKey(fmtVal)}"><div class="bars">${bars}</div><div class="act-chips" style="margin-top:8px">${chips}</div></div>`;
 }
 function hbarsHTML(items) {
@@ -37,11 +37,11 @@ function monthsHTML(entries, keyOf, labelOf, colorOf) {
   if (!totals.some(Boolean)) return '<div class="faint small">Sem tempo nos últimos 12 meses.</div>';
   const cols = months.map((m, idx) => {
     const parts = Object.entries(data[m.k] || {}).sort((a, b) => b[1] - a[1]);
-    return `<div class="mcol" title="${m.name}: ${fmtH(totals[idx])}"><div class="mstack" style="height:${(totals[idx] / max * 100).toFixed(1)}%">${parts.map(([k, ms]) => `<span data-hk="${esc(labelOf(k))}" style="flex:0 0 ${(ms / totals[idx] * 100).toFixed(2)}%;background:${colorOf(k)}" title="${esc(labelOf(k))} · ${fmtH(ms)} · ${hkPct(ms, totals[idx])} deste mês"></span>`).join('')}</div><span class="mlab">${m.name}</span></div>`;
+    return `<div class="mcol" title="${m.name}: ${fmtH(totals[idx])}"><div class="mstack" style="height:${(totals[idx] / max * 100).toFixed(1)}%">${parts.map(([k, ms]) => `<span data-hk="${esc(labelOf(k))}" style="flex:0 0 ${(ms / totals[idx] * 100).toFixed(2)}%;background:${corGraf(colorOf(k))}" title="${esc(labelOf(k))} · ${fmtH(ms)} · ${hkPct(ms, totals[idx])} deste mês"></span>`).join('')}</div><span class="mlab">${m.name}</span></div>`;
   }).join('');
   const grand = totals.reduce((s, v) => s + v, 0);
   const kt = (k) => months.reduce((s, m) => s + ((data[m.k] || {})[k] || 0), 0);
-  const legend = Object.keys(keys).map(k => `<span class="act-chip" data-hk="${esc(labelOf(k))}" data-hkv="${kt(k)}" style="--tb:${colorOf(k)}"><i></i>${esc(labelOf(k))} <span class="faint">${hkPct(kt(k), grand)} · ${fmtH(kt(k))}</span></span>`).join('');
+  const legend = Object.keys(keys).map(k => `<span class="act-chip" data-hk="${esc(labelOf(k))}" data-hkv="${kt(k)}" style="--tb:${corGraf(colorOf(k))}"><i></i>${esc(labelOf(k))} <span class="faint">${hkPct(kt(k), grand)} · ${fmtH(kt(k))}</span></span>`).join('');
   return `<div data-hkroot data-hktot="${grand}" data-hkfmt="h"><div class="mchart">${cols}</div><div class="act-chips" style="margin-top:8px">${legend}</div></div>`;
 }
 
@@ -62,4 +62,28 @@ function partyChartsHTML(ps) {
   const items = ps.map(p => ({ label: p.name, ms: projectMs(p.id), color: pcol[p.id] }));
   return `<div class="panel" style="margin-bottom:12px"><div class="panel-h"><h3>Tempo por projeto</h3></div><div class="panel-b">${hbarsHTML(items)}</div></div>
     <div class="panel" style="margin-bottom:12px"><div class="panel-h"><h3>Últimos 12 meses</h3></div><div class="panel-b">${monthsHTML(entries, e => e.project_id, pname, k => pcol[k] || CHART_FALLBACK)}</div></div>`;
+}
+
+/* Gráfico de linha no padrão do app (paleta única, grade clara, rótulos cinza), pequeno o bastante para caber numa dica.
+   Usado ao passar o mouse numa categoria: evolução mês a mês. fmt formata os valores (ex.: dinheiro curto). */
+function linhaMiniSVG(rotulos, valores, fmt = (v) => String(v), cor = GRAF_CORES[0], W = 300, H = 120) {
+  const vs = valores.map(v => Number(v) || 0); if (!vs.length) return '';
+  const bruto = Math.max(...vs) || 1, pot = Math.pow(10, Math.floor(Math.log10(bruto)));
+  const max = [1, 2, 2.5, 5, 10].map(f => f * pot).find(x => x >= bruto);
+  const L = 44, R = 8, T = 8, B = 20, pw = W - L - R, ph = H - T - B, step = vs.length > 1 ? pw / (vs.length - 1) : 0;
+  const px = (i) => L + (vs.length > 1 ? step * i : pw / 2), py = (v) => T + ph - ph * v / max;
+  const grid = [0, .5, 1].map(f => `<line x1="${L}" x2="${W - R}" y1="${py(max * f).toFixed(1)}" y2="${py(max * f).toFixed(1)}" stroke="#E0E3EA"/><text x="${L - 5}" y="${(py(max * f) + 3).toFixed(1)}" font-size="9" text-anchor="end" fill="#8A909F">${esc(fmt(max * f))}</text>`).join('');
+  const pts = vs.map((v, i) => [px(i), py(v)]);
+  const area = `M${pts[0][0].toFixed(1)},${(T + ph).toFixed(1)} ${pts.map(p => `L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')} L${pts[pts.length - 1][0].toFixed(1)},${(T + ph).toFixed(1)} Z`;
+  const linha = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const cada = Math.ceil(rotulos.length / 6);
+  const xl = rotulos.map((r, i) => i % cada && i !== rotulos.length - 1 ? '' : `<text x="${px(i).toFixed(1)}" y="${H - 6}" font-size="9" text-anchor="middle" fill="#8A909F">${esc(r)}</text>`).join('');
+  const dots = pts.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i === pts.length - 1 ? 3.5 : 2.5}" fill="#fff" stroke="${cor}" stroke-width="2"/>`).join('');
+  return `<svg class="linha-mini" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">${grid}<path d="${area}" fill="${cor}" opacity=".16"/><path d="${linha}" fill="none" stroke="${cor}" stroke-width="2" stroke-linejoin="round"/>${dots}${xl}</svg>`;
+}
+/* Dica com gráfico: data-tipg='{"t":"Título","r":[rótulos],"v":[valores],"u":"R$","s":"linha extra"}' */
+function tipGrafHTML(raw) {
+  let d; try { d = JSON.parse(raw); } catch (e) { return ''; }
+  const fmt = d.u === 'R$' ? (v) => (Math.abs(v) >= 1000 ? 'R$ ' + (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mil' : 'R$ ' + Math.round(v).toLocaleString('pt-BR')) : d.u === 'h' ? (v) => fmtH(v) : (v) => String(Math.round(v));
+  return `<div class="tip-h">${esc(d.t || '')}</div>${d.s ? `<div>${esc(d.s)}</div>` : ''}${linhaMiniSVG(d.r || [], d.v || [], fmt, corGraf(d.c) || GRAF_CORES[0])}`;
 }

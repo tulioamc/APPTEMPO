@@ -4,7 +4,7 @@
    e escolhe uma tarefa para cada um. Os trechos nunca se sobrepõem entre si, nem a outra sessão.
    Ao salvar, o intervalo sai da sessão de origem (carveOutSegments) e entra na tarefa escolhida (um horário, uma sessão).
    ===================================================================== */
-const CORTE_CORES = ['#D85A30', '#7F77DD', '#1D9E75', '#378ADD', '#D4537E', '#BA7517', '#639922', '#534AB7'];
+const CORTE_CORES = GRAF_CORES;
 const CORTE_MIN = 60000;
 
 /* Funções puras (testáveis) ------------------------------------------------ */

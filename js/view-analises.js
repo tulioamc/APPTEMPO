@@ -15,7 +15,7 @@ const AN_TIPOS = [
   { id: 'sem', label: '6 meses', prefix: 'relSemestral:', quando: 'em 1º de janeiro e 1º de julho' },
   { id: 'ano', label: 'Ano', prefix: 'relAnual:', quando: 'em 1º de janeiro' },
 ];
-const AN_CORES = ['#2E43D6', '#22a06b', '#d64545', '#b45309', '#7c3aed', '#0ea5a4'];   // mesma paleta dos gráficos do Financeiro
+const AN_CORES = GRAF_CORES;   // paleta única dos gráficos (colors.js)
 const AN = { tipo: 'semana', key: null };
 
 function anLista(prefix) {
@@ -63,11 +63,11 @@ function anChartSVG(g) {
     const bh = Math.max(8, (lh - 8) / series.length);
     let y = 4, out = '';
     rot.forEach((r, i) => {
-      out += `<text x="0" y="${y + (lh - 6) / 2 + 4}" font-size="12" fill="#495057">${esc(r.length > 28 ? r.slice(0, 27) + '…' : r)}</text>`;
+      out += `<text x="0" y="${y + (lh - 6) / 2 + 4}" font-size="12" fill="#565C6B">${esc(r.length > 28 ? r.slice(0, 27) + '…' : r)}</text>`;
       series.forEach((s, k) => {
         const v = Number(s.valores[i]) || 0, w = Math.max(v > 0 ? 2 : 0, (W - lab - valW) * v / max);
         out += `<rect x="${lab}" y="${y + k * bh}" width="${w.toFixed(1)}" height="${bh - 2}" rx="3" fill="${AN_CORES[k]}"/>`;
-        if (series.length === 1 || k === series.length - 1) out += `<text x="${lab + w + 6}" y="${y + k * bh + bh - 4}" font-size="11" fill="#212529">${esc(anFmtC(s.valores[i], u))}</text>`;
+        if (series.length === 1 || k === series.length - 1) out += `<text x="${lab + w + 6}" y="${y + k * bh + bh - 4}" font-size="11" fill="#15171C">${esc(anFmtC(s.valores[i], u))}</text>`;
       });
       y += Math.max(lh, bh * series.length + 6);
     });
@@ -75,9 +75,9 @@ function anChartSVG(g) {
   }
   // colunas e linha: eixo com 4 linhas de grade
   const W = 640, H = 220, L = 54, B = 28, T = 10, R = 10, pw = W - L - R, ph = H - B - T;
-  const grid = [0, 0.25, 0.5, 0.75, 1].map(f => { const yy = T + ph - ph * f; return `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#E9ECEF"/><text x="${L - 6}" y="${yy + 4}" font-size="10" text-anchor="end" fill="#868E96">${esc(anFmtC(max * f, u))}</text>`; }).join('');
+  const grid = [0, 0.25, 0.5, 0.75, 1].map(f => { const yy = T + ph - ph * f; return `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#E0E3EA"/><text x="${L - 6}" y="${yy + 4}" font-size="10" text-anchor="end" fill="#8A909F">${esc(anFmtC(max * f, u))}</text>`; }).join('');
   const step = pw / rot.length;
-  const xl = rot.map((r, i) => `<text x="${L + step * i + step / 2}" y="${H - 8}" font-size="10" text-anchor="middle" fill="#495057">${esc(r.length > 10 ? r.slice(0, 9) + '…' : r)}</text>`).join('');
+  const xl = rot.map((r, i) => `<text x="${L + step * i + step / 2}" y="${H - 8}" font-size="10" text-anchor="middle" fill="#565C6B">${esc(r.length > 10 ? r.slice(0, 9) + '…' : r)}</text>`).join('');
   let marks = '';
   if (g.tipo === 'linha') {
     series.forEach((s, k) => {
@@ -91,7 +91,7 @@ function anChartSVG(g) {
     series.forEach((s, k) => rot.forEach((r, i) => {
       const v = Number(s.valores[i]) || 0, h = ph * v / max, x = L + step * i + (step - gw) / 2 + bw * k;
       marks += `<rect x="${x.toFixed(1)}" y="${(T + ph - h).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${AN_CORES[k]}"><title>${esc(r)}: ${esc(anFmtC(s.valores[i], u))}</title></rect>`;
-      if (series.length === 1 && rot.length <= 14 && v > 0) marks += `<text x="${(x + (bw - 2) / 2).toFixed(1)}" y="${(T + ph - h - 4).toFixed(1)}" font-size="10" text-anchor="middle" fill="#212529">${esc(anFmtC(v, u))}</text>`;
+      if (series.length === 1 && rot.length <= 14 && v > 0) marks += `<text x="${(x + (bw - 2) / 2).toFixed(1)}" y="${(T + ph - h - 4).toFixed(1)}" font-size="10" text-anchor="middle" fill="#15171C">${esc(anFmtC(v, u))}</text>`;
     }));
   }
   return `${head}<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(g.titulo || '')}" font-family="inherit">${grid}${marks}${xl}</svg>${foot}`;
@@ -133,18 +133,18 @@ function anCorpoHTML(v) {
 }
 
 /* Estilo do PDF (A4), independente do CSS do app. */
-const AN_PDF_CSS = `@page{size:A4;margin:0}*{box-sizing:border-box}body{margin:0;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;color:#212529;font-size:11.5px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.pg{padding:44px 48px}.capa{background:#1F2A44;color:#fff;padding:40px 48px 30px}.capa .tag{font-size:10px;letter-spacing:.14em;text-transform:uppercase;opacity:.7}.capa h1{font-size:26px;margin:6px 0 4px;font-weight:700}.capa .per{opacity:.8;font-size:12px}
-.an-resumo{font-size:13.5px;line-height:1.55;margin:0 0 18px;padding:14px 16px;background:#F1F3F5;border-left:4px solid #3B5BDB;border-radius:6px}
-.an-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 18px}.an-kpi{border:1px solid #DEE2E6;border-radius:10px;padding:10px 12px;break-inside:avoid}.an-kpi .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:#868E96;font-weight:600}.an-kpi .v{font-size:19px;font-weight:700;margin:2px 0}.an-kpi .d{font-size:10px;color:#495057}.an-kpi.bom .d b{color:#2F9E44}.an-kpi.ruim .d b{color:#E03131}.an-kpi.bom{border-top:3px solid #2F9E44}.an-kpi.ruim{border-top:3px solid #E03131}
-.an-graficos{display:grid;grid-template-columns:1fr;gap:14px;margin:0 0 10px}.an-chart{border:1px solid #DEE2E6;border-radius:10px;padding:12px 14px;break-inside:avoid}.an-chart-t{font-weight:700;font-size:12.5px;margin-bottom:6px}.an-leg{display:flex;gap:12px;flex-wrap:wrap;font-size:10px;color:#495057;margin-top:4px}.an-leg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
-.an-sec{margin:16px 0 0;break-inside:avoid}.an-sec h4{font-size:13px;margin:0 0 6px;padding-bottom:4px;border-bottom:2px solid #E9ECEF;color:#1F2A44}.an-ul{margin:0;padding-left:18px}.an-ul li{margin:3px 0}
-.an-dl{display:grid;grid-template-columns:150px 1fr;gap:4px 12px;margin:0}.an-dl dt{font-weight:600;color:#495057}.an-dl dd{margin:0}
-.an-tab{width:100%;border-collapse:collapse;font-size:10.5px}.an-tab th{text-align:left;background:#F1F3F5;padding:6px 8px}.an-tab td{padding:6px 8px;border-top:1px solid #E9ECEF;vertical-align:top}
-.an-pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#E9ECEF;font-size:10px}.an-pill.bom{background:#D3F9D8;color:#2B8A3E}.an-pill.ruim{background:#FFE3E3;color:#C92A2A}
-.an-metas{margin-top:6px}.an-sub{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#868E96;margin:6px 0 4px}.an-meta{display:flex;gap:10px;align-items:baseline;padding:6px 10px;border:1px solid #E9ECEF;border-radius:8px;margin:4px 0}.an-meta.bom{background:#EBFBEE;border-color:#B2F2BB}.an-meta span{color:#495057;flex:1}.an-meta em{font-style:normal;font-size:10px;color:#2B8A3E}.an-meta em.no{color:#868E96}
-.an-destaque{margin-top:8px;padding:8px 12px;background:#EDF2FF;border-radius:8px;font-weight:600;color:#3B5BDB}.an-note{font-size:10px;color:#868E96;margin-top:4px}
-.rod{margin-top:28px;padding-top:8px;border-top:1px solid #E9ECEF;font-size:9.5px;color:#ADB5BD;display:flex;justify-content:space-between}`;
+const AN_PDF_CSS = `@page{size:A4;margin:0}*{box-sizing:border-box}body{margin:0;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;color:#15171C;font-size:11.5px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pg{padding:44px 48px}.capa{background:#E7EAFD;color:#15171C;padding:40px 48px 30px}.capa .tag{font-size:10px;letter-spacing:.14em;text-transform:uppercase;opacity:.7}.capa h1{font-size:26px;margin:6px 0 4px;font-weight:700}.capa .per{opacity:.8;font-size:12px}
+.an-resumo{font-size:13.5px;line-height:1.55;margin:0 0 18px;padding:14px 16px;background:#EEF0F4;border-left:4px solid #8C9CF2;border-radius:6px}
+.an-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 18px}.an-kpi{border:1px solid #E0E3EA;border-radius:10px;padding:10px 12px;break-inside:avoid}.an-kpi .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:#8A909F;font-weight:600}.an-kpi .v{font-size:19px;font-weight:700;margin:2px 0}.an-kpi .d{font-size:10px;color:#565C6B}.an-kpi.bom .d b{color:#77DB89}.an-kpi.ruim .d b{color:#F2958B}.an-kpi.bom{border-top:3px solid #77DB89}.an-kpi.ruim{border-top:3px solid #F2958B}
+.an-graficos{display:grid;grid-template-columns:1fr;gap:14px;margin:0 0 10px}.an-chart{border:1px solid #E0E3EA;border-radius:10px;padding:12px 14px;break-inside:avoid}.an-chart-t{font-weight:700;font-size:12.5px;margin-bottom:6px}.an-leg{display:flex;gap:12px;flex-wrap:wrap;font-size:10px;color:#565C6B;margin-top:4px}.an-leg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.an-sec{margin:16px 0 0;break-inside:avoid}.an-sec h4{font-size:13px;margin:0 0 6px;padding-bottom:4px;border-bottom:2px solid #E0E3EA;color:#15171C}.an-ul{margin:0;padding-left:18px}.an-ul li{margin:3px 0}
+.an-dl{display:grid;grid-template-columns:150px 1fr;gap:4px 12px;margin:0}.an-dl dt{font-weight:600;color:#565C6B}.an-dl dd{margin:0}
+.an-tab{width:100%;border-collapse:collapse;font-size:10.5px}.an-tab th{text-align:left;background:#EEF0F4;padding:6px 8px}.an-tab td{padding:6px 8px;border-top:1px solid #E0E3EA;vertical-align:top}
+.an-pill{display:inline-block;padding:1px 8px;border-radius:99px;background:#E0E3EA;font-size:10px}.an-pill.bom{background:#E3F7E7;color:#1F6B35}.an-pill.ruim{background:#FBE0DD;color:#9B2C22}
+.an-metas{margin-top:6px}.an-sub{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#8A909F;margin:6px 0 4px}.an-meta{display:flex;gap:10px;align-items:baseline;padding:6px 10px;border:1px solid #E0E3EA;border-radius:8px;margin:4px 0}.an-meta.bom{background:#E3F7E7;border-color:#BFEBC9}.an-meta span{color:#565C6B;flex:1}.an-meta em{font-style:normal;font-size:10px;color:#1F6B35}.an-meta em.no{color:#8A909F}
+.an-destaque{margin-top:8px;padding:8px 12px;background:#E7EAFD;border-radius:8px;font-weight:600;color:#2E43D6}.an-note{font-size:10px;color:#8A909F;margin-top:4px}
+.rod{margin-top:28px;padding-top:8px;border-top:1px solid #E0E3EA;font-size:9.5px;color:#ADB5BD;display:flex;justify-content:space-between}`;
 function anPdfHTML(t, v) {
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(anTitulo(t, v))}</title><style>${AN_PDF_CSS}</style></head><body>
 <div class="capa"><div class="tag">Tempo · Análise ${esc(t.label.toLowerCase())}</div><h1>${esc(anTitulo(t, v))}</h1><div class="per">Período de ${anData(anIni(v))} a ${anData(anFim(v))}</div></div>

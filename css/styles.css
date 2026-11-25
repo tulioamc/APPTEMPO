@@ -2377,3 +2377,75 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .tk-novas { margin-top: 10px; }
 .tk-novas .tk-nova { padding: 9px 20px; }
 .tk-novas .tk-nova + .tk-nova { border-top: 1px solid var(--line); }
+/* Entrega (25/11): pílula começa exatamente na coluna do nome das tarefas; o puxador fica fora, na mesma coluna
+   dos puxadores das tarefas, e só aparece ao passar o mouse. Nome cabe ~75% mais texto e cresce com o que é digitado. */
+.tk-entrega .tk-ent-a { margin-left: 0 !important; padding: 0 12px 0 10px !important; max-width: 100%; overflow: visible; }
+.tk-entrega .tk-ent-a .tk-ent-grip { position: absolute; left: -14px; top: 50%; transform: translateY(-50%); margin: 0 !important; padding: 2px 0; color: var(--fg-3); opacity: 0; transition: opacity .12s; }
+.tk-entrega:hover .tk-ent-grip, .tk-entrega.arrastando .tk-ent-grip { opacity: 1; }
+.tk-entrega .tk-ent-nome { field-sizing: fixed; min-width: 6em; max-width: 100%; text-overflow: ellipsis; }
+@container (max-width: 560px) { .tk-entrega .tk-ent-a { max-width: 62%; } }
+/* ===== Gráficos: paleta única (25/11) — mesma de GRAF_CORES em colors.js. Tons médios, nada escuro. ===== */
+:root { --g1:#8C9CF2; --g2:#7FD69A; --g3:#F5A973; --g4:#B69CEE; --g5:#F29BC2; --g6:#6FCFC9; --g7:#EDC75E; --g8:#F2958B; --g-cinza:#B4BAC6; }
+.bar-fill { background: var(--g1); }
+.bar-fill.bg-gray, .seg-b.bg-gray { background: var(--g-cinza); }
+.bar-fill.bg-brown, .seg-b.bg-brown { background: #D9A98A; }
+.bar-fill.bg-orange, .seg-b.bg-orange { background: var(--g3); }
+.bar-fill.bg-yellow, .seg-b.bg-yellow { background: var(--g7); }
+.bar-fill.bg-green, .seg-b.bg-green { background: var(--g2); }
+.bar-fill.bg-blue, .seg-b.bg-blue { background: var(--g1); }
+.bar-fill.bg-purple, .seg-b.bg-purple { background: var(--g4); }
+.bar-fill.bg-pink, .seg-b.bg-pink { background: var(--g5); }
+.bar-fill.bg-red, .seg-b.bg-red { background: var(--g8); }
+.bar-fill.fill, .seg-b.fill { box-shadow: none; }
+.bar-track { background: var(--surface-2); border-radius: 3px; }
+.ap-bar i { background: var(--g1); }
+.pf-bar { background: color-mix(in srgb, var(--g1) 45%, var(--surface)); }
+.pf-bar:hover, .pf-bar.now { background: var(--g1); box-shadow: none; }
+/* faixas com cores mais claras: texto escuro e suave por cima, em vez de branco */
+.usage-seg { color: rgba(21, 23, 28, .82); }
+.usage-seg.act-hl { box-shadow: inset 0 0 0 2px var(--fg-2); }
+/* Recentes: projeto fechado não mostra linha embaixo; a linha só aparece aberto, separando o cabeçalho das tarefas */
+.cor-proj > summary.entry { border-bottom: 0 !important; box-shadow: none; }
+.cor-proj[open] > summary.entry { border-bottom: 1px solid var(--line) !important; }
+/* Produtividade: mesmas cores de Produtivo/Distração/Ocioso em todo lugar */
+.prod-p { background: var(--g2); } .prod-d { background: var(--g8); } .prod-o { background: var(--g-cinza); } .prod-x { background: var(--g3); } .prod-z { background: color-mix(in srgb, var(--g-cinza) 50%, var(--surface)); }
+.prod-seg.act-hl { box-shadow: inset 0 0 0 2px var(--fg-2); }
+/* Relatórios no mesmo padrão: cartões de número sem listras coloridas, avisos/insights neutros */
+.pf-report .kpi::before { content: none; }
+.pf-insight, .pf-insight:nth-child(2n), .pf-insight:nth-child(3n) { border-left: 1px solid var(--line); background: var(--surface); }
+.pf-kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.pf-donut svg { filter: none; }
+/* Análises: cartões de número e gráficos iguais aos do resto do app */
+.an-kpi { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; }
+.an-kpi .k { font-size: .76em; }
+.an-kpi .v { font-size: 1.35em; }
+.an-kpi.bom, .an-kpi.ruim { border-top: 1px solid var(--line); }
+.an-kpi.ruim .d b { color: var(--danger); }
+.an-chart { border-radius: var(--radius); }
+.an-chart-t { font-size: .92em; }
+.an-sec h4 { border-bottom: 1px solid var(--line); font-size: .95em; }
+.an-resumo { background: var(--surface-2); border-left: 3px solid var(--g1); }
+.an-destaque { background: var(--accent-soft); }
+/* Relatórios PF: tabela mais arejada, valores curtos, nome da categoria com bolinha e gráfico na dica */
+.pf-report table.tbl td, .pf-report table.tbl th { padding: 8px 12px; }
+.pf-report table.tbl tbody tr + tr td { border-top: 1px solid color-mix(in srgb, var(--fg) 6%, transparent); }
+.pf-cat { display: inline-flex; align-items: center; gap: 8px; cursor: default; white-space: nowrap; }
+.pf-cat i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.pf-cat:hover { color: var(--accent); }
+.strip-tip.tip-graf { max-width: none; padding-bottom: 8px; }
+.strip-tip .linha-mini { display: block; margin-top: 6px; }
+.pf-donut .act-chips { justify-content: center; }
+/* Cartão do cronômetro: os 3 botões numa linha só; "Continuar de onde parou" também numa linha (rola de lado se não couber) */
+.timer-actions.linha1 { flex-wrap: nowrap; }
+.timer-actions.linha1 .btn { flex: 1 1 auto; min-width: 0; padding: 8px 12px; font-size: .95em; white-space: nowrap; justify-content: center; }
+.timer-card .recent { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.timer-card .recent::-webkit-scrollbar { display: none; }
+.timer-card .recent .btn { flex: none; white-space: nowrap; }
+/* Relatório PF › Saídas por mês: mesmas colunas dos outros gráficos do app (cor da paleta, canto 4px, sem trilho nem sombra) */
+.pf-report .pf-chart { height: 200px; gap: 6px; padding: 8px 0 0; }
+.pf-report .pf-bar-wrap { background: none; border-radius: 0; }
+.pf-report .pf-bar { width: 70%; max-width: 40px; background: var(--g1); border-radius: 4px 4px 0 0; transition: opacity .15s; }
+.pf-report .pf-bar:hover { background: var(--g1); transform: none; opacity: .8; }
+.pf-report .pf-bar.now { background: color-mix(in srgb, var(--g1) 55%, var(--surface)); box-shadow: none; }
+.pf-report .pf-col-l { font-size: .7em; color: var(--fg-3); font-weight: 400; letter-spacing: 0; }
+.pf-report .pf-col-v { font-size: .72em; }

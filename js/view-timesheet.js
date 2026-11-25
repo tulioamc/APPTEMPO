@@ -89,7 +89,7 @@ VIEWS.timesheet = () => {
     timer = `<div class="timer-card">
       <span class="timer-state"><span class="dot"></span>Sem sessão ativa</span>
       <div class="timer-digits faint">00:00<span class="sec">:00</span></div>
-      <div class="timer-actions"><button class="btn primary" data-act="ts-start">${icon('play')} Iniciar registro</button>${focoBtnHTML()}<button class="btn" data-act="ts-forgot">${icon('plus')} Esqueci de iniciar</button></div>
+      <div class="timer-actions linha1"><button class="btn primary" data-act="ts-start">${icon('play')} Iniciar registro</button>${focoBtnHTML()}<button class="btn" data-act="ts-forgot">${icon('plus')} Esqueci de iniciar</button></div>
       ${rec.length ? `<div class="stack" style="gap:6px"><span class="lbl">Continuar de onde parou</span><div class="recent">${rec.map((r, i) => `<button class="btn sm" data-act="ts-quick" data-i="${i}" title="${esc(selPath(r.sel).join(' › '))}">${icon('play')} ${esc(r.label)}</button>`).join('')}</div></div>` : ''}
     </div>`;
   }
@@ -902,11 +902,11 @@ function openEntryModal(id, startIso = null, endIso = null) {
    datas e horas (o title vira data-tip para não aparecer a dica nativa do sistema). Com mais de uma linha, a primeira
    é o título. Aparece depois de 300 ms parado em cima; elementos grandes (barras, blocos) ancoram no mouse. */
 let stripTip = null, tipAlvo = null, tipTimer = null, tipMouse = { x: 0, y: 0 };
-const TIP_SEL = '[data-tip], [title], button[aria-label], a[aria-label], select[aria-label], input[type="date"][aria-label], input[type="time"][aria-label], .tk-hin[aria-label]';
+const TIP_SEL = '[data-tipg], [data-tip], [title], button[aria-label], a[aria-label], select[aria-label], input[type="date"][aria-label], input[type="time"][aria-label], .tk-hin[aria-label]';
 function tipAlvoDe(t) {
   // o mais perto do mouse ganha (ex.: o pin dentro do bloco da rotina mostra a dica dele, não a do bloco)
   for (let el = t?.closest?.(TIP_SEL); el; el = el.parentElement?.closest?.(TIP_SEL)) {
-    if (el.dataset.tip) return el;
+    if (el.dataset.tip || el.dataset.tipg) return el;
     const ti = el.getAttribute('title'); if (ti) { el.dataset.tip = ti; el.removeAttribute('title'); return el; }
     const al = el.getAttribute('aria-label');
     if (al && ((el.tagName !== 'BUTTON' && el.tagName !== 'A') || !el.textContent.trim())) { el.dataset.tip = al; return el; }
@@ -926,8 +926,10 @@ function tipPos() {
   stripTip.style.left = x + 'px'; stripTip.style.top = (embaixo ? base : topo - h) + 'px';
 }
 function tipMostra() {
-  if (!tipAlvo || !tipAlvo.isConnected || !tipAlvo.dataset.tip) return;
+  if (!tipAlvo || !tipAlvo.isConnected || !(tipAlvo.dataset.tip || tipAlvo.dataset.tipg)) return;
   if (!stripTip) { stripTip = document.createElement('div'); stripTip.className = 'strip-tip'; stripTip.setAttribute('role', 'tooltip'); document.body.appendChild(stripTip); }
+  if (tipAlvo.dataset.tipg && typeof tipGrafHTML === 'function') { stripTip.innerHTML = tipGrafHTML(tipAlvo.dataset.tipg); stripTip.classList.add('tip-graf'); stripTip.style.display = 'block'; tipPos(); return; }
+  stripTip.classList.remove('tip-graf');
   const [tit, ...linhas] = tipAlvo.dataset.tip.split('\n');
   const tempo = (l) => { const m = l.match(/^(.*): (\S[^:]*)$/); return m ? `${esc(m[1])}: <b>${esc(m[2])}</b>` : esc(l); };
   stripTip.innerHTML = linhas.length ? `<div class="tip-h">${esc(tit)}</div>${linhas.map(l => `<div>${tempo(l)}</div>`).join('')}` : `<div class="tip-u">${esc(tit)}</div>`;

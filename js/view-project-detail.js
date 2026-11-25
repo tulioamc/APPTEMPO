@@ -118,7 +118,7 @@ function pdTasks(p) {
   </div>`;
   };
   const entHTML = (e) => `<div class="tk-entrega" data-ent="${e.id}"><span class="tk-ent-a"><span class="tk-ent-grip" draggable="true" data-ent-grip title="Arraste para mudar de lugar entre as tarefas"><svg viewBox="0 0 8 12" aria-hidden="true"><circle cx="2" cy="2" r="1.1"/><circle cx="6" cy="2" r="1.1"/><circle cx="2" cy="6" r="1.1"/><circle cx="6" cy="6" r="1.1"/><circle cx="2" cy="10" r="1.1"/><circle cx="6" cy="10" r="1.1"/></svg></span>
-    <input class="tk-ent-nome" value="${esc(e.nome || '')}" placeholder="ENTREGA" data-ent-f="nome" aria-label="Nome da entrega"></span>
+    <input class="tk-ent-nome" value="${esc(e.nome || '')}" placeholder="ENTREGA" data-ent-f="nome" aria-label="Nome da entrega" style="width:${(Math.max(8, String(e.nome || '').length + 1) * .74).toFixed(2)}em" oninput="this.style.width=(Math.max(8,this.value.length+1)*.74).toFixed(2)+'em'"></span>
     <span class="tk-ent-linha"></span>
     <span class="tk-ent-b"><span class="tk-ent-dl">DEADLINE</span>
     <label class="tk-ent-v"><span>${e.dia ? fmtDate(e.dia) : 'data'}</span><input type="date" value="${e.dia || ''}" data-ent-f="dia" aria-label="Data da entrega"></label>

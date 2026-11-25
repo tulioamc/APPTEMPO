@@ -4,10 +4,9 @@
    Ajuste manual: db.setting('actLinks') = {itemKey: groupId}. "Desfazer" vira 'solo:<chave>'; "Agrupar" copia o id do grupo de destino.
    Mover: o tempo do grupo sai desta sessão e vira uma sessão nova no projeto/tarefa escolhido. */
 
-const ACT_COLORS = ['#F59E0B', '#7C3AED', '#2563EB', '#60A5FA', '#DB2777', '#059669', '#92400E', '#64748B'];
+const ACT_COLORS = GRAF_CORES;   // paleta única dos gráficos (colors.js)
 const ACT_START_H = 7, ACT_SPAN = 17 * 3600000;
-const ACT_PALETTE = ['#F59E0B', '#7C3AED', '#2563EB', '#60A5FA', '#DB2777', '#059669', '#92400E', '#64748B', '#EF4444', '#14B8A6', '#84CC16', '#111827',
-  '#F97316', '#EAB308', '#22C55E', '#06B6D4', '#0EA5E9', '#6366F1', '#8B5CF6', '#EC4899', '#F43F5E', '#A3E635', '#78716C', '#FDE047'];
+const ACT_PALETTE = [...new Set([...GRAF_CORES, ...['#F59E0B', '#7C3AED', '#2563EB', '#60A5FA', '#DB2777', '#059669', '#EF4444', '#14B8A6', '#84CC16', '#F97316', '#EAB308', '#22C55E', '#06B6D4', '#0EA5E9', '#6366F1', '#8B5CF6', '#EC4899', '#F43F5E', '#A3E635', '#FDE047'].map(corGraf)])];
 /* cor escolhida por grupo (chave = id do grupo): db.setting('actColors') */
 const actColorMap = () => db.setting('actColors', {}) || {};
 /* Cor global por ferramenta (programa ou site do Chrome): chave 'n:<nome>'. Mudou uma vez, muda em todas as sessões,
@@ -54,12 +53,14 @@ const colorKeyOf = (gid) => {
   }
   return gid;
 };
-const toolColor = (name) => actColorMap()['n:' + name] || (name === WA_DISTRACAO ? PAUSE_HATCH.whatsapp : name === WA_CLIENTE ? faixaCor('waCli').a : null) || programFor(name)?.color || actDefaultColor(name);
+const toolColor = (name) => corGraf(toolColorBruta(name));
+const toolColorBruta = (name) => actColorMap()['n:' + name] || (name === WA_DISTRACAO ? PAUSE_HATCH.whatsapp : name === WA_CLIENTE ? faixaCor('waCli').a : null) || programFor(name)?.color || actDefaultColor(name);
 /* Cor de um grupo na faixa:
    - programa e site do Chrome: a cor da ferramenta (global, 'n:<nome>');
    - arquivo de um programa: herda a cor do programa (a não ser que a cor do próprio arquivo tenha sido escolhida);
    - sem nada disso: cor da lista, por posição. */
-function groupColor(gid, i) {
+function groupColor(gid, i) { return corGraf(groupColorBruta(gid, i)); }
+function groupColorBruta(gid, i) {
   const ck = colorKeyOf(gid);
   if (ck.startsWith('n:')) return toolColor(ck.slice(2));
   if (gid.startsWith('a:')) {
@@ -432,10 +433,10 @@ const FAIXA_CORES = {
   unspec: { nome: 'Em uso agora / Não especificado', dica: 'Trabalho ainda sem programa registrado (liso)', a: '#CBD5E1', b: '#CBD5E1', liso: true },
   idle: { nome: 'Pausa: parado', dica: 'Ocioso, sono, sem registro, tela bloqueada', a: '#60A5FA', b: '#DBEAFE' },
   other: { nome: 'Pausa: outras', dica: 'Pausa manual e demais motivos', a: '#A1A1AA', b: '#E4E4E7' },
-  whatsapp: { nome: 'WhatsApp Distração', dica: 'Pausa: conversa com amigos', a: '#6CF1AE', b: '#15803D' },
+  whatsapp: { nome: 'WhatsApp Distração', dica: 'Pausa: conversa com amigos', a: '#6CF1AE', b: '#3FBF7F' },
   waCli: { nome: 'WhatsApp Produtivo', dica: 'Trabalho: contato ou grupo de cliente (liso, não é pausa)', a: '#A7F3D0', b: '#A7F3D0', liso: true },
   instagram: { nome: 'Instagram', dica: 'Pausa', a: '#F9A8D4', b: '#FCE7F3' },
-  telegram: { nome: 'Telegram', dica: 'Pausa', a: '#1E40AF', b: '#93C5FD' },
+  telegram: { nome: 'Telegram', dica: 'Pausa', a: '#6E8FE0', b: '#C9DBFB' },
 };
 const faixaCor = (k) => { const d = FAIXA_CORES[k] || FAIXA_CORES.other; const m = (db.setting('faixaCores', {}) || {})[k] || {}; return { a: m.a || d.a, b: m.b || d.b }; };
 /* As faixas leem as cores por variáveis de CSS (não precisa redesenhar cada tela ao mudar). */
@@ -635,7 +636,7 @@ function pauseChipsHTML(e) {
   const total = items.reduce((t, x) => t + x.ms, 0);
   const fora = actForaMs(e);
   const foraChip = fora > 0 ? `<span class="act-chip act-chip-fora" style="--tb:#94A3B8" data-tip="${esc('Tempo desta sessão que foi registrado em outro projeto (movido ou troca de projeto).\nSó aparece aqui: não conta como pausa, nem como trabalho, nem no bruto desta sessão.')}"><i></i>Outro projeto <span class="faint">${fmtDur(fora)}</span></span>` : '';
-  return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#64748B">Pausas <span class="faint">${fmtDur(total)}</span></span>${foraChip}${pauseBucketsOf(items).map(b => b.kind === 'whatsapp' ? { ...b, detail: waDistracaoTop([e]) } : b).map(pauseBucketChip).join('')}</div>`;
+  return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#A9B0BE">Pausas <span class="faint">${fmtDur(total)}</span></span>${foraChip}${pauseBucketsOf(items).map(b => b.kind === 'whatsapp' ? { ...b, detail: waDistracaoTop([e]) } : b).map(pauseBucketChip).join('')}</div>`;
 }
 /* Conversas de WhatsApp (não de trabalho) que mais tomaram tempo nas sessões: para o balãozinho do chip. */
 function waDistracaoTop(es, n = 8) {

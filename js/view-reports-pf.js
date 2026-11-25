@@ -20,10 +20,12 @@ const pfScope = (cat) => { const p = pfParts(cat); return p.length > 1 ? p[0].ch
 const pfHelp = (t) => `<div class="pf-help small muted">${t}</div>`;
 const pfDiffTxt = (v) => (!v ? '—' : `${v > 0 ? '+' : '−'}${pfR(Math.abs(v))}`);
 const pfR = (v) => fmtMoney(v) || 'R$ 0';
+/* Valor curto para a tabela (o exato fica na dica): R$ 3,9 mil · R$ 604 */
+const pfK = (v) => { const a = Math.abs(v), s = v < 0 ? '−' : ''; return a >= 1000 ? `${s}R$ ${(a / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} mil` : `${s}R$ ${Math.round(a).toLocaleString('pt-BR')}`; };
 const pfPct = (a, b) => (b ? ((a - b) / b) * 100 : null);
 const pfPctTxt = (p) => p === null ? '—' : `${p > 0 ? '+' : ''}${p.toFixed(0)}%`;
-const PF_PALETTE = ['var(--accent)', 'var(--t-yellow-fg)', 'var(--ok)', 'var(--t-pink-fg)', 'var(--t-purple-fg)', 'var(--t-blue-fg)', 'var(--t-orange-fg)', 'var(--fg-3)'];
-const pfCor = (k, i) => (k === 'Outros' ? 'var(--fg-3)' : typeof chartCat === 'function' ? chartCat(k) : PF_PALETTE[i % PF_PALETTE.length]);
+const PF_PALETTE = GRAF_CORES;
+const pfCor = (k, i) => (k === 'Menores de 1%' ? GRAF_CINZA : corGraf(typeof chartCat === 'function' ? chartCat(k) : PF_PALETTE[i % PF_PALETTE.length]));
 const pfChip = (p) => `<span class="pf-chip ${p === null ? '' : p > 0 ? 'up' : p < 0 ? 'down' : ''}">${pfPctTxt(p)}</span>`;
 
 /* Dados de hoje: extrato da conta PF já categorizado (Financeiro PF), com estornos abatendo a categoria,
@@ -46,10 +48,10 @@ function pfDonut(items, total) {
   const R = 70, C = 2 * Math.PI * R; let acc = 0;
   const arcs = items.map((it, i) => {
     const frac = it.total / total; const len = frac * C;
-    const seg = `<circle data-hk="${esc(it.k)}" r="${R}" cx="90" cy="90" fill="none" style="stroke:${pfCor(it.k, i)}" stroke-width="28" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-acc}" transform="rotate(-90 90 90)"><title>${esc(it.k)}: ${pfR(it.total)}</title></circle>`;
+    const seg = `<circle data-hk="${esc(it.k)}" ${it.membros ? `data-tip="${esc(`${it.k} · ${pfR(it.total)}\n${it.membros.map(c => `${c.k}: ${pfR(c.total)}`).join('\n')}`)}"` : it.serie ? `data-tipg="${esc(JSON.stringify(it.serie))}"` : `data-tip="${esc(it.k + ': ' + pfR(it.total))}"`} r="${R}" cx="90" cy="90" fill="none" style="stroke:${pfCor(it.k, i)}" stroke-width="28" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-acc}" transform="rotate(-90 90 90)"></circle>`;
     acc += len; return seg;
   }).join('');
-  const legend = items.map((it, i) => `<span class="act-chip" data-hk="${esc(it.k)}" data-hkv="${it.total}" style="--tb:${pfCor(it.k, i)}"><i></i>${esc(it.k)} <span class="faint">${((it.total / total) * 100).toFixed(0)}% · ${esc(pfR(it.total))}</span></span>`).join('');
+  const legend = items.map((it, i) => `<span class="act-chip" data-hk="${esc(it.k)}" data-hkv="${it.total}" style="--tb:${pfCor(it.k, i)}" ${it.membros ? `data-tip="${esc(`${it.k}\n${it.membros.map(c => `${c.k}: ${pfR(c.total)}`).join('\n')}`)}"` : it.serie ? `data-tipg="${esc(JSON.stringify(it.serie))}"` : ''}><i></i>${esc(it.k)} <span class="faint">${((it.total / total) * 100).toFixed(0)}% · ${esc(pfR(it.total))}</span></span>`).join('');
   return `<div class="pf-donut" data-hkroot data-hktot="${total}"><svg viewBox="0 0 180 180" width="180" height="180" role="img" aria-label="Distribuição das saídas por categoria">${arcs}<text x="90" y="86" text-anchor="middle" class="small" fill="currentColor">Total</text><text x="90" y="104" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">${esc(pfR(total))}</text></svg><div class="act-chips">${legend}</div></div>`;
 }
 
@@ -93,11 +95,13 @@ VIEWS.reportspf = () => {
     const total = vals.reduce((s, x) => s + x, 0);
     const earlier = vals.slice(0, -1); const avgEarly = earlier.reduce((s, x) => s + x, 0) / Math.max(1, earlier.length);
     const lastV = vals[vals.length - 1];
-    return { k, scope: scopeOf[k] || '—', vals, total, last: lastV, avgEarly, diff: lastV - avgEarly, delta: pfPct(lastV, avgEarly) };
+    const serie = { t: k, s: `Total ${pfR(total)} · média ${pfR(total / months.length)}/mês`, r: months.map(pfMonthLabel), v: vals.map(x => Math.round(x)), u: 'R$' };
+    return { k, scope: scopeOf[k] || '—', vals, total, last: lastV, avgEarly, diff: lastV - avgEarly, delta: pfPct(lastV, avgEarly), serie };
   }).sort((a, b) => b.total - a.total);
-  const top = cats.slice(0, 6);
-  const rest = cats.slice(6).reduce((s, c) => s + c.total, 0);
-  const donutItems = rest ? [...top, { k: 'Outros', total: rest }] : top;
+  // rosca: toda categoria com 1% ou mais aparece sozinha; só as menores de 1% vão para "Pequenas" (a dica lista quais)
+  const grandes = cats.filter(c => c.total > 0 && c.total / (totOut || 1) >= .01);
+  const miudas = cats.filter(c => c.total > 0 && c.total / (totOut || 1) < .01);
+  const donutItems = miudas.length ? [...grandes, { k: 'Menores de 1%', total: miudas.reduce((s, c) => s + c.total, 0), membros: miudas }] : grandes;
 
   // mesmo período do ano passado
   const prevYearOut = pfOutSum(pfMonths(n, -12));
@@ -112,9 +116,9 @@ VIEWS.reportspf = () => {
 
   const head = `<th>Categoria</th>${months.map(m => `<th class="num">${pfMonthLabel(m)}</th>`).join('')}<th class="num">Total</th><th class="num">Média/mês</th><th class="num" title="Quanto o último mês ficou acima (vermelho) ou abaixo (verde) da média dos meses anteriores">${pfMonthLabel(last)} vs média</th>`;
   const cmpCell = (delta, diff) => `<td class="num">${pfChip(delta)} <span class="small muted mono">${pfDiffTxt(diff)}</span></td>`;
-  const body = cats.map(c => `<tr><td>${esc(c.k)}</td>${c.vals.map(v => `<td class="num mono">${v ? pfR(v) : '<span class="faint">—</span>'}</td>`).join('')}
-    <td class="num mono"><b>${pfR(c.total)}</b></td><td class="num mono">${pfR(c.total / months.length)}</td>${cmpCell(c.delta, c.diff)}</tr>`).join('');
-  const totRow = `<tr class="tot"><td><b>Total de saídas</b></td>${months.map(m => `<td class="num mono"><b>${pfR(byMonth[m].out)}</b></td>`).join('')}<td class="num mono"><b>${pfR(totOut)}</b></td><td class="num mono"><b>${pfR(avgOut)}</b></td><td class="num">${pfChip(pfPct(byMonth[last].out, avgOut))} <span class="small muted mono">${pfDiffTxt(byMonth[last].out - avgOut)}</span></td></tr>`;
+  const body = cats.map((c, i) => `<tr><td><span class="pf-cat" data-tipg="${esc(JSON.stringify({ ...c.serie, c: pfCor(c.k, i) }))}"><i style="background:${pfCor(c.k, i)}"></i>${esc(c.k)}</span></td>${c.vals.map(v => `<td class="num mono" ${v ? `data-tip="${esc(pfR(v))}"` : ''}>${v ? pfK(v) : '<span class="faint">—</span>'}</td>`).join('')}
+    <td class="num mono" data-tip="${esc(pfR(c.total))}"><b>${pfK(c.total)}</b></td><td class="num mono" data-tip="${esc(pfR(c.total / months.length))}">${pfK(c.total / months.length)}</td>${cmpCell(c.delta, c.diff)}</tr>`).join('');
+  const totRow = `<tr class="tot"><td><span class="pf-cat" data-tipg="${esc(JSON.stringify({ t: 'Total de saídas', s: `Média ${pfR(avgOut)}/mês`, r: months.map(pfMonthLabel), v: months.map(m => Math.round(byMonth[m].out)), u: 'R$' }))}"><b>Total de saídas</b></span></td>${months.map(m => `<td class="num mono" data-tip="${esc(pfR(byMonth[m].out))}"><b>${pfK(byMonth[m].out)}</b></td>`).join('')}<td class="num mono" data-tip="${esc(pfR(totOut))}"><b>${pfK(totOut)}</b></td><td class="num mono" data-tip="${esc(pfR(avgOut))}"><b>${pfK(avgOut)}</b></td><td class="num">${pfChip(pfPct(byMonth[last].out, avgOut))} <span class="small muted mono">${pfDiffTxt(byMonth[last].out - avgOut)}</span></td></tr>`;
 
   const insights = pfInsights(months, byMonth, cats, totOut, totIn);
 
@@ -131,10 +135,10 @@ VIEWS.reportspf = () => {
     <div class="panel"><div class="panel-h"><h3>Leitura do período</h3></div><div class="panel-b"><div class="pf-insights">${insights.map(t => `<div class="pf-insight">${t}</div>`).join('') || '<div class="muted">Ainda não há dados suficientes.</div>'}</div></div></div>
     <div class="grid2">
       <div class="panel"><div class="panel-h"><h3>Saídas por mês</h3></div><div class="panel-b">${pfHelp('Cada coluna é um mês: a altura é o total de saídas. Embaixo, o saldo do mês (entradas − saídas). Passe o mouse para ver entradas, saídas e saldo.')}<div class="pf-chart">${monthBars}</div></div></div>
-      <div class="panel"><div class="panel-h"><h3>Onde o dinheiro foi</h3></div><div class="panel-b">${pfHelp('Quanto cada categoria pesou no total de saídas do período. Passe o mouse sobre um pedaço para ver o valor.')}${pfDonut(donutItems, totOut)}</div></div>
+      <div class="panel"><div class="panel-h"><h3>Onde o dinheiro foi</h3></div><div class="panel-b">${pfHelp('Quanto cada categoria pesou no total de saídas do período. Passe o mouse sobre uma categoria para ver a evolução mês a mês; as menores de 1% ficam juntas e a dica diz quais são.')}${pfDonut(donutItems, totOut)}</div></div>
     </div>
     <div class="panel"><div class="panel-h"><h3>Saídas por categoria, mês a mês</h3></div>
-      <div class="panel-b tight">${pfHelp('Cada linha é uma categoria do extrato PF (as mesmas do Financeiro PF). Em “vs média”, o último mês é comparado com a média dos meses anteriores: <b>verde</b> = gastou menos (bom), <b>vermelho</b> = gastou mais.')}<div class="table-scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody>${body || '<tr><td colspan="99" class="empty">Sem saídas no período.</td></tr>'}${totRow}</tbody></table></div></div></div>
+      <div class="panel-b tight">${pfHelp('Cada linha é uma categoria do extrato PF (as mesmas do Financeiro PF). Valores arredondados; passe o mouse num valor para ver o exato e no nome da categoria para ver a evolução. Em “vs média”, o último mês é comparado com a média dos meses anteriores: <b>verde</b> = gastou menos (bom), <b>vermelho</b> = gastou mais.')}<div class="table-scroll"><table class="tbl"><thead><tr>${head}</tr></thead><tbody>${body || '<tr><td colspan="99" class="empty">Sem saídas no período.</td></tr>'}${totRow}</tbody></table></div></div></div>
   </div>` };
 };
 

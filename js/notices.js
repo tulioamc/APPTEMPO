@@ -370,9 +370,42 @@ function scanAlerts() {
     decideNotice(n, 'accepted', 'Resolvido: a situação mudou'); SCAN_CHANGED = true;
   });
   scanSessoesAbertas(today);
+  avisosResolvidosSozinhos();
   SCAN_SEEN = null;
   db.all('tempo_notices').filter(n => n.status === 'snoozed' && n.snooze_until && n.snooze_until <= today).forEach(n => db.update('tempo_notices', n.id, { status: 'pending', snooze_until: null }, true));
   if (SCAN_CHANGED) db.emit(); // só avisa a tela se algo mudou (evita laço)
+}
+
+/* Aviso que você já resolveu por outro caminho (antes de ver o aviso) sai sozinho (25/11):
+   - pausa sugerida: a sessão foi apagada/encerrada, ou o trecho já não tem tempo trabalhado (você já cortou);
+   - "Começar…?" do log: a sessão foi apagada;
+   - nota/comprovante do reembolso: a linha já está paga (comprovante) ou já tem o valor da nota;
+   - Alice: o dia já está marcado no calendário. */
+function avisosResolvidosSozinhos() {
+  if (!db.loaded && db.loaded !== undefined) return;
+  const pend = db.all('tempo_notices').filter(n => ['pending', 'snoozed'].includes(n.status));
+  const fecha = (n, txt) => { decideNotice(n, 'accepted', 'Resolvido: ' + txt); SCAN_CHANGED = true; };
+  const temSessoes = db.all('tempo_time_entries').length > 0;
+  pend.forEach(n => {
+    try {
+      const d = n.data || {};
+      if (n.kind === 'pause' && temSessoes && d.entry_id) {
+        const e = db.get('tempo_time_entries', d.entry_id);
+        if (!e) return fecha(n, 'a sessão não existe mais');
+        if (e.state !== 'running') return fecha(n, 'a sessão já foi encerrada');
+        const a = new Date(d.from).getTime(), b = new Date(d.to).getTime();
+        const trabalhado = (e.segments || []).some(sg => !sg.why && Math.min(b, sg.e ? new Date(sg.e).getTime() : Infinity) - Math.max(a, new Date(sg.s).getTime()) > 30e3);
+        if (!trabalhado) return fecha(n, 'a pausa já está na sessão');
+      }
+      if (n.kind === 'start' && temSessoes && d.entry_id && !db.get('tempo_time_entries', d.entry_id)) return fecha(n, 'a sessão não existe mais');
+      if ((n.kind === 'nfse' || n.kind === 'reembolso') && n.entity === 'reimb' && d.nome && d.ym && typeof nfseLinha === 'function' && db.all('tempo_reimb_rows').length) {
+        const row = nfseLinha(d.nome, d.ym, false); if (!row) return;
+        if (d.tipo === 'comprovante' && typeof rbName === 'function' && rbName('reimb_pay', row.pay_id) === 'Pago') return fecha(n, 'a linha já está como Pago');
+        if (d.tipo !== 'comprovante' && n.kind === 'nfse' && typeof nfseIgual === 'function' && nfseIgual(row.amount, d.valor)) return fecha(n, 'a linha já tem o valor da nota');
+      }
+      if (n.kind === 'alice' && d.dia && typeof alDias === 'function' && (alDias()[d.dia] || []).includes(d.tipo)) return fecha(n, 'já está marcado no calendário');
+    } catch (e) { /* um aviso com dado estranho não pode travar a varredura */ }
+  });
 }
 
 /* Sessão esquecida aberta (1.4): cronômetro rodando desde um dia anterior e sem nenhum sinal de atividade há 2h ou mais.

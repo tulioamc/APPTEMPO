@@ -17,6 +17,24 @@ const COLOR_NAMES = Object.fromEntries(PRESET_COLORS);
 function hexOf(c) { if (!c) return '#D9DCE2'; if (c[0] === '#') return c.toUpperCase(); return LEGACY_COLOR[c] || '#D9DCE2'; }
 /* texto da etiqueta: mesmo matiz e saturação da cor, luminosidade oposta.
    caixa clara (L 100%→50%): texto 50%→0%; caixa escura (L 50%→0%): texto 100%→50% */
+/* Paleta única dos gráficos (registro, relatórios, análises, financeiro): tons médios e vivos, nunca escuros.
+   A mesma ordem em todo lugar: a 1ª série é sempre o azul, a 2ª o verde, e assim por diante. (25/11) */
+const GRAF_CORES = ['#8C9CF2', '#7FD69A', '#F5A973', '#B69CEE', '#F29BC2', '#6FCFC9', '#EDC75E', '#F2958B', '#9BC4F2', '#B9D97A', '#D9A98A', '#A9B0BE'];
+const GRAF_CINZA = '#B4BAC6';
+/* Cor de gráfico a partir de qualquer cor (inclusive as escolhidas à mão): mantém o matiz e só clareia as escuras,
+   para nenhum bloco/barra ficar pesado. Cores já claras passam iguais. */
+function corGraf(c) {
+  if (!c || typeof c !== 'string' || c[0] !== '#' || !/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(c)) return c;
+  let h = c.slice(1); if (h.length === 3) h = h.split('').map(x => x + x).join('');
+  let [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let l = (mx + mn) / 2, s = 0, hu = 0;
+  if (mx !== mn) { const d = mx - mn; s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn); hu = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; hu /= 6; }
+  if (l >= .62) return c.toUpperCase().length === 7 ? c.toUpperCase() : '#' + h.toUpperCase();
+  l = .66; s = Math.min(s, .78, (mx - mn) * 2.2);   // cinza escuro vira cinza claro, não uma cor
+  const q = l < .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  const f = (t) => { if (t < 0) t += 1; if (t > 1) t -= 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < .5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+  return '#' + [f(hu + 1 / 3), f(hu), f(hu - 1 / 3)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+}
 function relLum(hex) {
   const n = parseInt(hexOf(hex).slice(1), 16);
   const [r, g, b] = [n >> 16, n >> 8 & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); });

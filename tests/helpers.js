@@ -16,6 +16,8 @@ function makeContext(extra = {}) {
 /* Carrega os arquivos na ordem dada e devolve os nomes pedidos (const/let/function de topo). */
 function load(files, names, extra) {
   const ctx = makeContext(extra);
+  // a paleta e as cores (colors.js) vêm antes de tudo no app; os testes também
+  if (!files.includes('js/colors.js')) files = ['js/colors.js', ...files];
   const src = files.map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n;\n')
     + `\n;globalThis.__out = {${names.map(n => `${n}: typeof ${n} === 'undefined' ? undefined : ${n}`).join(', ')}};`;
   vm.runInContext(src, ctx, { filename: files.join('+') });

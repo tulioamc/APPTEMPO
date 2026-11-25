@@ -10,7 +10,7 @@ const PROD_GAP = 60e3; /* blocos de foco: pausas de até 1 min não quebram o fo
 const PROD_DOW = [1, 2, 3, 4, 5, 6, 0]; /* segunda primeiro */
 const PROD_DOW_LBL = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const PROD_NAME = { prod: "Produtivo", dist: "Distração", ocio: "Ocioso" };
-const PROD_COLOR = { prod: "#9FD6AE", dist: "#EFAFAF", ocio: "#EED9A0" };   /* tons pastel (mesmas das barras) */
+const PROD_COLOR = { prod: GRAF_CORES[1], dist: GRAF_CORES[7], ocio: GRAF_CORES[6] };   /* paleta única dos gráficos: verde, vermelho suave, amarelo */
 const PROD_CLS = { prod: "prod-p", dist: "prod-d", ocio: "prod-y" };
 const PROD_KEYS = ["prod", "dist", "ocio"];
 const PROD_TYPE = { dist: "Distração", ocio: "Ocioso" };
@@ -251,7 +251,7 @@ function prodMetasBloco(kind) {
   const novos = [];
   itens.forEach(({ m, v, desafio }) => { if (prodWon(m, v) && !got[m.id]) { got[m.id] = desafio ? 2 : 1; novos.push({ m, pts: desafio ? 2 : 1 }); } });
   if (novos.length) {
-    store[key] = got; db.setSetting('prodEstrelas', store);
+    store[key] = got; setTimeout(() => db.setSetting('prodEstrelas', store), 0);   // gravar fora do desenho da tela (não redesenha no meio)
     novos.forEach(({ m, pts }) => { try { toast(`⭐ ${m.nome} conquistada (+${pts} estrela${pts > 1 ? 's' : ''})`); } catch (e) {} });
   }
   const cards = itens.map(({ m, v, desafio }) => {
@@ -550,10 +550,10 @@ function prodWhatsAppHTML() {
   const clientes = {}; d.pessoas.filter(p => waEhTrabalho(p.c)).forEach(p => { const cl = p.c.client_id ? db.get('tempo_clients', p.c.client_id) : p.c.agency_id ? db.get('tempo_agencies', p.c.agency_id) : null; const k = cl?.name || p.nome; clientes[k] = (clientes[k] || 0) + p.ms; });
   const topCli = Object.entries(clientes).sort((x, y) => y[1] - x[1]).slice(0, 5);
   return `<section class="panel"><div class="panel-h"><h3>WhatsApp</h3><span class="small muted">no período: ${fmtDur(tot)} · trabalho ${fmtDur(trab)} (${Math.round(trab / tot * 100)}%) · amigos ${fmtDur(tot - trab)}</span></div><div class="panel-b grid2" style="align-items:start;gap:18px">
-    <div><div class="lbl" style="margin-bottom:6px">Com quem</div><div class="bars">${d.pessoas.slice(0, 12).map(p => `<div class="bar-row"><span class="lab">${esc(p.nome)} ${chip(p.c)}</span><div class="bar-track"><div class="bar-fill" style="width:${(p.ms / max * 100).toFixed(1)}%;background:${waEhTrabalho(p.c) ? '#47BD86' : '#6cf1ae'}"></div></div><span class="mono small">${fmtDur(p.ms)}</span></div>`).join('')}</div></div>
+    <div><div class="lbl" style="margin-bottom:6px">Com quem</div><div class="bars">${d.pessoas.slice(0, 12).map(p => `<div class="bar-row"><span class="lab">${esc(p.nome)} ${chip(p.c)}</span><div class="bar-track"><div class="bar-fill" style="width:${(p.ms / max * 100).toFixed(1)}%;background:${waEhTrabalho(p.c) ? PROD_COLOR.prod : PROD_COLOR.dist}"></div></div><span class="mono small">${fmtDur(p.ms)}</span></div>`).join('')}</div></div>
     <div class="stack" style="gap:14px">
-      <div><div class="lbl" style="margin-bottom:6px">Por dia (trabalho × amigos)</div><div class="wa-dias">${diasK.map(k => { const x = d.dias[k]; return `<div class="wa-dia" data-tip="${esc(`${fmtDate(k)}\nTrabalho ${fmtDur(x.trab)} · amigos ${fmtDur(x.amigo)}`)}"><div class="wa-col"><span style="height:${(x.amigo / maxD * 100).toFixed(1)}%;background:#6cf1ae"></span><span style="height:${(x.trab / maxD * 100).toFixed(1)}%;background:#47BD86"></span></div><span class="small faint">${k.slice(8)}</span></div>`; }).join('')}</div></div>
-      <div><div class="lbl" style="margin-bottom:6px">Horários</div><div class="wa-dias">${d.horas.map((ms, h) => `<div class="wa-dia" data-tip="${String(h).padStart(2, '0')}h · ${fmtDur(ms)}"><div class="wa-col"><span style="height:${(ms / maxH * 100).toFixed(1)}%;background:#47BD86;opacity:.7"></span></div><span class="small faint">${h % 3 === 0 ? String(h).padStart(2, '0') : ''}</span></div>`).join('')}</div></div>
+      <div><div class="lbl" style="margin-bottom:6px">Por dia (trabalho × amigos)</div><div class="wa-dias">${diasK.map(k => { const x = d.dias[k]; return `<div class="wa-dia" data-tip="${esc(`${fmtDate(k)}\nTrabalho ${fmtDur(x.trab)} · amigos ${fmtDur(x.amigo)}`)}"><div class="wa-col"><span style="height:${(x.amigo / maxD * 100).toFixed(1)}%;background:${PROD_COLOR.dist}"></span><span style="height:${(x.trab / maxD * 100).toFixed(1)}%;background:${PROD_COLOR.prod}"></span></div><span class="small faint">${k.slice(8)}</span></div>`; }).join('')}</div></div>
+      <div><div class="lbl" style="margin-bottom:6px">Horários</div><div class="wa-dias">${d.horas.map((ms, h) => `<div class="wa-dia" data-tip="${String(h).padStart(2, '0')}h · ${fmtDur(ms)}"><div class="wa-col"><span style="height:${(ms / maxH * 100).toFixed(1)}%;background:${PROD_COLOR.prod};opacity:.7"></span></div><span class="small faint">${h % 3 === 0 ? String(h).padStart(2, '0') : ''}</span></div>`).join('')}</div></div>
       ${topCli.length ? `<div><div class="lbl" style="margin-bottom:6px">Clientes que mais chamam</div>${topCli.map(([n, ms]) => `<div class="row between small"><span>${esc(n)}</span><span class="mono">${fmtDur(ms)}</span></div>`).join('')}</div>` : ''}
     </div>
   </div></section>`;
