@@ -73,7 +73,7 @@ test('rotina: terça depois de segunda T começa 5h30, academia separada, trabal
   const ac2 = m.planoJanelas('2026-11-26').fixos.find(f => f[2] === 'Academia');
   assert.equal(ac2[0], 7 + 20 / 60, 'outro dia não muda');
 });
-test('to-do com hora ocupa a agenda (30 min por padrão); só com data vai para o topo do dia', () => {
+test('to-do com hora aparece na agenda (30 min por padrão) mas não ocupa o plano; só com data vai para o topo do dia', () => {
   const m = setup();
   m.db.data.tempo_notices = [
     { id: 't1', kind: 'todo', status: 'open', title: 'Ligar pro contador', data: { due: '2026-11-24T15:00', semHora: false } },
@@ -84,7 +84,8 @@ test('to-do com hora ocupa a agenda (30 min por padrão); só com data vai para 
   const t1 = ev.find(e => e.id === 't1'), t2 = ev.find(e => e.id === 't2');
   assert.deepEqual([t1.ini, t1.fim, !!t1.diaTodo], [15, 15.5, false]);
   assert.equal(t2.diaTodo, true);
-  assert.ok(m.planoJanelas('2026-11-24').jan.every(([a, b]) => b <= 15 || a >= 15.5));
+  assert.equal(t1.ocupa, false, 'to-do coexiste com as tarefas planejadas: não tira horário do plano');
+  assert.ok(m.planoJanelas('2026-11-24').jan.some(([a, b]) => a <= 15 && b >= 15.5), 'o horário do to-do continua livre para o plano');
   m.db.setSetting('planoModo', 'dia');
   assert.ok(m.VIEWS.plano().html.includes('To-do sem data'));
 });

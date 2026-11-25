@@ -474,7 +474,7 @@ function avisosResolvidosSozinhos() {
         const L = longoInicio(e); if (!L || new Date(L.ini).toISOString() !== d.cut) return fecha(n, 'o Mac voltou a registrar atividade');
       }
       if (n.kind === 'semreg' && temSessoes && d.dia && trabalhoDoDiaMs(d.dia) >= 36e5) return fecha(n, 'as horas do dia foram lançadas');
-      if (n.kind === 'alice' && d.dia && typeof alDias === 'function' && (alDias()[d.dia] || []).includes(d.tipo)) return fecha(n, 'já está marcado no calendário');
+      if (n.kind === 'alice' && d.dia && typeof alTem === 'function' && alTem(d.dia, d.tipo)) return fecha(n, 'já está marcado no calendário');
     } catch (e) { /* um aviso com dado estranho não pode travar a varredura */ }
   });
 }

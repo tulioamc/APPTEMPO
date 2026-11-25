@@ -126,7 +126,8 @@ function planoEventos(dia, paraPlano = false) {
     const [hh, mm] = n.data.due.slice(11, 16).split(':').map(Number); const ini = hh + mm / 60;
     let fim = n.data.end ? (([a, b]) => a + b / 60)(n.data.end.split(':').map(Number)) : ini + (Number(n.data.est) > 0 ? Number(n.data.est) : 30) / 60;
     fim = Math.max(fim, ini + TODO_MIN_H);   // lembrete só com a hora também ocupa 30 min
-    out.push({ id: n.id, ini, fim: Math.min(24, fim), titulo: n.title, origem: 'todo', feito, ocupa: !feito });
+    /* to-do NÃO ocupa o horário do planejamento (25/11): pode coexistir com tarefas planejadas; o plano passa por baixo e a grade desenha o to-do por cima */
+    out.push({ id: n.id, ini, fim: Math.min(24, fim), titulo: n.title, origem: 'todo', feito, ocupa: false });
   });
   return out.sort((x, y) => x.ini - y.ini);
 }
@@ -575,7 +576,7 @@ const planoMostra = (k) => { const v = (db.setting('planoMesFiltro', {}) || {})[
 /* Filtros sempre à vista: um botão por tipo (ligado = aparece), no padrão dos seletores do app. */
 function planoFiltroHTML() {
   return `<div class="seg pl-filtros" role="group" aria-label="Mostrar no calendário"><span class="pl-filtros-l">Mostrar</span>${PL_FILTROS.map(([k, l]) => `<button type="button" class="${planoMostra(k) ? 'on' : ''}" data-act="pl-filtro" data-k="${k}" aria-pressed="${planoMostra(k)}">${l}</button>`).join('')}<button type="button" class="pl-cc-btn${planoMostra('corcli') ? ' on' : ''}" data-act="pl-filtro" data-k="corcli" aria-pressed="${planoMostra('corcli')}" data-tip="Tarefas com cor do cliente: o que está planejado fica preenchido com a cor do cliente (texto branco ou preto conforme a legibilidade). O que já foi registrado continua como está.">Cor do cliente</button><button type="button" class="pl-nr-btn${planoMostra('naofeito') ? ' on' : ''}" data-act="pl-filtro" data-k="naofeito" aria-pressed="${planoMostra('naofeito')}" data-tip="Não rolou: esmaece o calendário e mostra o plano da manhã por cima. Verde = rolou, amarelo = não rolou mas foi ajustado, vermelho = não rolou e não foi feito.">Não rolou</button>${(() => { const cs = agendaContas(); const vis = cs.filter(c => !agendaContasOff()[c]).length; const erro = typeof AGG !== 'undefined' && (AGG.erro || (AGG.errosContas || []).length);
-    return `<button type="button" class="${vis ? 'on' : ''}${erro ? ' erro' : ''}" data-act="pl-agendas" data-tip="${esc(erro ? 'Google Agenda com erro. Clique para ver.' : 'Escolher quais agendas aparecem; Google: sincronizar e contas')}">${icon('calendar')} Agendas${cs.length ? ` ${vis}/${cs.length}` : ''}${erro ? ' ⚠' : ''}</button>`; })()}</div>`;
+    return `<button type="button" class="${vis ? 'on' : ''}${erro ? ' erro' : ''}" data-act="pl-agendas" data-tip="${esc(erro ? 'Google Agenda com erro. Clique para ver.' : 'Escolher quais agendas aparecem; Google: sincronizar e contas')}">${icon('calendar')} Agendas${cs.length ? ` ${vis}/${cs.length}` : ''}${erro ? ' ⚠' : ''}</button>`; })()}${typeof alMarcar === 'function' ? `<button type="button" data-act="alice-painel" data-tip="Ciclo da Alice: procurar agora no WhatsApp (cistite e menstruação), horário da busca diária e previsão do próximo ciclo">${icon('search')} Ciclo Alice</button>` : ''}</div>`;
 }
 ACTIONS['pl-filtro'] = (el) => { const f = { ...(db.setting('planoMesFiltro', {}) || {}) }; f[el.dataset.k] = !planoMostra(el.dataset.k); db.setSetting('planoMesFiltro', f); db.emit(); };
 /* Um botão só para as agendas: caixinha para mostrar/esconder cada uma e, embaixo, o Google (sincronizar, contas). */

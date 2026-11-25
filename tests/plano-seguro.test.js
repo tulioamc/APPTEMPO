@@ -293,3 +293,14 @@ test('cor do mês: a do cliente quando existe; senão a do projeto', () => {
   assert.notEqual(m.planoCorCli('a'), m.planoCor('a'));
   assert.equal(m.planoCorCli('b'), m.planoCor('b'));
 });
+
+test('to-do com hora pode coexistir com bloco fixado: não gera aviso, não empurra, mas compromisso do Google continua valendo', () => {
+  const m = setup();
+  m.db.data.tempo_projects = [proj('a')]; m.db.data.tempo_tasks = [tarefa('t1', 'a')];
+  m.db.data.tempo_notices = [{ id: 'todo1', kind: 'todo', status: 'open', title: 'Ver IPTU', data: { due: '2026-11-25T13:00', semHora: false } }];
+  setPins(m, [{ id: 'p1', dia: '2026-11-25', pid: 'a', tid: 't1', ini: 10.75, h: 3.25 }]);   // 10h45–14h por cima do to-do de 13h–13h30
+  assert.ok(!m.planoDiagnostico(AGORA).some(x => x.id.startsWith('evento:')), 'to-do não é "bate com"');
+  assert.ok(!m.planoOcupadosDoDia('2026-11-25').some(o => o[2] === 'Ver IPTU'), 'Reorganizar não trata o to-do como bloco');
+  m.db.data.tempo_settings.push({ id: 'ag', key: 'agendaEventos', value: [{ id: 'g1', ini: new Date(2026, 10, 25, 13, 0).toISOString(), fim: new Date(2026, 10, 25, 13, 30).toISOString(), titulo: 'Reunião', agenda: 'x' }] }); bump(m);
+  assert.ok(m.planoDiagnostico(AGORA).some(x => x.id.startsWith('evento:')), 'reunião do Google continua batendo');
+});

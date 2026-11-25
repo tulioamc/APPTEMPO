@@ -16,7 +16,7 @@ const sbReset = () => { SB = null; SB_ULT = null; };
 let SB_ULT = null;   // { key, txt, run }
 function sbLembraDesfazer(key, txt, run) { SB_ULT = { key, txt, run }; }
 function sbEstado(key) {
-  if (!SB || SB.key !== key) SB = { key, ranges: [], drag: null, dragging: false, start: 0, moveu: false, app: '', dest: '', novo: '', criando: false, lembrar: false };
+  if (!SB || SB.key !== key) SB = { key, ranges: [], drag: null, dragging: false, start: 0, moveu: false, app: '', arq: '', conf: 'tudo', dest: '', novo: '', criando: false, lembrar: false };
   return SB;
 }
 
@@ -228,7 +228,14 @@ const sbHM = (ms) => fmtTime(new Date(ms).toISOString());
 /* Programas usados na sessão: { groups, records } de actAnalyzeList. */
 function sbApps(e, mae, J) {
   const A = actAnalyzeList(actList(e.id), 'program');
-  return { groups: A.groups.filter(g => g.id !== 'outros'), records: A.records };
+  const groups = A.groups.filter(g => g.id !== 'outros');
+  return { groups, todos: groups, records: A.records };
+}
+/* Sites (Chrome) ou arquivos de um programa nesta sessão, do que mais ao que menos tempo. */
+function sbArquivosDe(A, gid) {
+  const por = {};
+  A.records.filter(r => r.gid === gid && r.doc && r.doc !== 'Outros sites').forEach(r => { const d = String(r.doc).trim(); por[d] = (por[d] || 0) + (SB_T(r.to) - SB_T(r.from)); });
+  return Object.entries(por).filter(([, ms]) => ms > 0).sort((x, y) => y[1] - x[1]).map(([doc, ms]) => ({ doc, ms }));
 }
 function sbAppsDe(a, b) {
   const by = {};
@@ -244,7 +251,7 @@ function sbAppsDe(a, b) {
 function sbCortes(S, A) {
   const rs = S.ranges.map(r => ({ a: r.a, b: r.b }));
   if (!S.app) return rs;
-  const iv = actMergeIntervals(A.records.filter(r => r.gid === S.app).map(r => ({ a: SB_T(r.from), b: SB_T(r.to) })).filter(c => c.b > c.a));
+  const iv = actMergeIntervals(A.records.filter(r => r.gid === S.app && (!S.arq || String(r.doc || '').trim() === S.arq)).map(r => ({ a: SB_T(r.from), b: SB_T(r.to) })).filter(c => c.b > c.a));
   if (!rs.length) return iv;
   const out = [];
   iv.forEach(c => rs.forEach(r => { const a = Math.max(c.a, r.a), b = Math.min(c.b, r.b); if (b > a) out.push({ a, b }); }));
@@ -258,7 +265,7 @@ function sbDestinoId(e, mae, S) {
 /* Prévia do que o botão "Mover" vai fazer. */
 function sbPrevia(e, mae, S, A) {
   const cuts = sbCortes(S, A);
-  const app = S.app ? A.groups.find(g => g.id === S.app) : null;
+  const app = S.app ? A.todos.find(g => g.id === S.app) : null;
   if (!cuts.length) return { ok: false, txt: S.app ? 'Esse programa não tem tempo nos trechos marcados.' : 'Arraste um trecho na barra ou escolha um programa.' };
   const dest = sbDestinoId(e, mae, S);
   if (!dest) return { ok: false, txt: S.dest === '__novo' ? 'Dê um nome para a nova subtarefa.' : 'Escolha a subtarefa.' };
@@ -310,17 +317,24 @@ function sbSecaoHTML(e) {
 
   const A = sbApps(e, mae, J);
   const opApp = A.groups.map(g => `<option value="${esc(g.id)}"${S.app === g.id ? ' selected' : ''}>${esc(g.label)} · ${fmtDur(g.ms)}</option>`).join('');
+  const arqs = S.app ? sbArquivosDe(A, S.app) : [];
+  const opArq = `<option value="">Todo o programa</option>${arqs.map(x => `<option value="${esc(x.doc)}"${S.arq === x.doc ? ' selected' : ''}>${esc(x.doc)} · ${fmtDur(x.ms)}</option>`).join('')}`;
   const opDest = `<option value="">Escolha…</option><option value="sem"${S.dest === 'sem' ? ' selected' : ''}>Sem subtarefa</option>${subs.map(s => `<option value="${esc(s.id)}"${S.dest === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="__novo"${S.dest === '__novo' ? ' selected' : ''}>+ Nova subtarefa…</option>`;
   const prev = sbPrevia(e, mae, S, A);
   const rangeChips = S.ranges.length
     ? `<div class="sb-sel">${S.ranges.map((r, i) => `<span class="sp-chip">${sbHM(r.a)}–${sbHM(r.b)} · ${fmtDur(r.b - r.a)}<button type="button" data-x="sb-rm" data-i="${i}" aria-label="Tirar este trecho" title="Tirar este trecho da marcação">×</button></span>`).join('')}<button type="button" class="btn sm ghost" data-x="sb-limpar" title="Desmarcar todos os trechos">Limpar</button></div>`
     : `<div class="small muted sb-dica">Arraste na barra para marcar um trecho (clicar num pedaço marca ele inteiro; Shift soma outro trecho).</div>`;
-  const appSel = S.app ? A.groups.find(g => g.id === S.app) : null;
-  const lembrar = appSel && S.dest && S.dest !== 'sem' && S.dest !== '__novo'
-    ? `<label class="sb-lembrar" title="Nas próximas sessões, o tempo em ${esc(appSel.label)} aparece como sugestão para esta subtarefa (só entra se você aceitar)"><input type="checkbox" data-sb="lembrar"${S.lembrar ? ' checked' : ''}> Lembrar: ${esc(appSel.label)} costuma ser ${esc(sbNome(mae, S.dest))}</label>` : '';
+  const appSel = S.app ? A.todos.find(g => g.id === S.app) : null;
+  const outra = appSel && S.dest && S.dest !== 'sem' && S.dest !== '__novo' ? subtasksOf(mae.id).find(x => x.id !== S.dest && subProgsDe(x.id).some(n => subMesmo(n, appSel.label))) : null;
+  const rd = (v, t, tip) => `<label class="sb-lembrar" title="${esc(tip)}"><input type="radio" name="sb-conf" data-sb="conf" value="${v}"${S.conf === v ? ' checked' : ''}> ${t}</label>`;
+  const lembrar = outra
+    ? `<div class="sb-conf"><span class="small muted">${esc(appSel.label)} já está em “${esc(outra.name)}”. E agora?</span>${rd('dividir', 'Dividir: a partir de agora é a nova', 'Marca só o trecho escolhido na nova subtarefa; “' + outra.name + '” continua com o resto')}${rd('tudo', 'Mudar tudo para a nova', 'Todo o tempo de ' + appSel.label + ' passa a contar na nova subtarefa (sai de “' + outra.name + '”)')}${rd('arquivo', 'Só o site/arquivo selecionado', 'Escolha o site ou arquivo acima: só ele vai para a nova; o resto do programa fica em “' + outra.name + '”')}</div>`
+    : appSel && S.dest && S.dest !== 'sem' && S.dest !== '__novo'
+      ? `<label class="sb-lembrar" title="Nas próximas sessões, o tempo em ${esc(appSel.label)} passa a contar nesta subtarefa sozinho"><input type="checkbox" data-sb="lembrar"${S.lembrar ? ' checked' : ''}> Lembrar: ${esc(appSel.label)}${S.arq ? ' › ' + esc(S.arq) : ''} costuma ser ${esc(sbNome(mae, S.dest))}</label>` : '';
   const form = `<div class="sb-assign">${rangeChips}
     <div class="sb-row">
       <label class="sb-f"><span class="small muted">Programa</span><select class="input sm" data-sb="app" aria-label="Só o tempo deste programa" title="Escolha um programa para marcar só o tempo dele (dentro do trecho selecionado, se houver)"><option value="">Todos os programas</option>${opApp}</select></label>
+      ${S.app ? `<label class="sb-f"><span class="small muted">Site / arquivo</span><select class="input sm" data-sb="arq" aria-label="Site ou arquivo do programa" title="Opcional. Sem escolher, vale tudo do programa; escolhendo, só o site ou arquivo marcado vai para a subtarefa">${opArq}</select></label>` : ''}
       <span class="sb-seta" aria-hidden="true">›</span>
       <label class="sb-f"><span class="small muted">Subtarefa</span><select class="input sm" data-sb="dest" aria-label="Subtarefa de destino" title="Para onde vai o tempo">${opDest}</select></label>
       ${S.dest === '__novo' ? `<label class="sb-f"><span class="small muted">Nome</span><input type="text" class="input sm" data-sb="novo" value="${esc(S.novo)}" placeholder="Ex.: Animar Cena 01" autocomplete="off" aria-label="Nome da nova subtarefa"></label>` : ''}
@@ -462,24 +476,24 @@ function sbDetalheDados(subId) {
 /* Programas usados nas sessões da tarefa (ainda não associados a esta subtarefa), do que mais ao que menos tempo: as sugestões. */
 function sbSugestoesDe(sub) {
   const mae = db.get('tempo_tasks', sub.parent_id); if (!mae || typeof actList !== 'function') return [];
-  const subs = subtasksOf(mae.id); const meus = subProgsDe(sub.id).map(x => String(x).trim().toLowerCase());
+  const subs = subtasksOf(mae.id); const meus = subProgsDe(sub.id);
   const por = {}; const now = Date.now();
   sbEntriesDe(mae).forEach(e => {
     const work = sbWork(e, now); if (!work.length) return;
     actList(e.id).forEach(r => {
       if (typeof pausaRec === 'function' && pausaRec(r) && !(typeof actWaTrabalho === 'function' && actWaTrabalho(r))) return;
-      let nome = ''; try { nome = toolName(r) || shortProgram(r.app) || r.app; } catch (er) { nome = r.app; }
-      if (!nome) return;
+      const nome = subCanon(r); if (!nome) return;
       const ms = sbLen(sbInter(work, [{ a: SB_T(r.from), b: SB_T(r.to) }])); if (ms <= 0) return;
-      por[nome] = (por[nome] || 0) + ms;
+      const site = typeof isChromeSite === 'function' && isChromeSite(r.app, r.doc);
+      const k = subChave(nome); por[k] = por[k] || { nome, ms: 0, site }; por[k].ms += ms;
     });
   });
-  return Object.entries(por).filter(([n, ms]) => ms >= 60e3 && !meus.includes(n.trim().toLowerCase())).sort((p, q) => q[1] - p[1]).slice(0, 8)
-    .map(([nome, ms]) => ({ nome, ms, em: subs.find(x => x.id !== sub.id && subProgsDe(x.id).some(n => String(n).trim().toLowerCase() === nome.trim().toLowerCase())) || null }));
+  return Object.values(por).filter(x => x.ms >= 60e3 && !meus.some(n => subMesmo(n, x.nome))).sort((p, q) => q.ms - p.ms).slice(0, 10)
+    .map(x => ({ ...x, em: subs.find(o => o.id !== sub.id && subProgsDe(o.id).some(n => subMesmo(n, x.nome))) || null }));
 }
 function sbDetalheHTML(sub) {
   const D = sbDetalheDados(sub.id), mae = db.get('tempo_tasks', sub.parent_id);
-  const ps = subProgsDe(sub.id); const ops = subOpcoes(sub.project_id).filter(o => !ps.includes(o));
+  const ps = subProgsDe(sub.id); const padrao = subProgsPadrao(sub.id);
   const maxApp = D.apps.length ? D.apps[0][1] : 1; const sug = sbSugestoesDe(sub);
   const dia = (ms) => new Date(ms).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
   const tarefaDe = (e) => db.get('tempo_tasks', e.task_id)?.name || '';
@@ -489,10 +503,11 @@ function sbDetalheHTML(sub) {
     <div class="sbd-resumo"><div><span class="small muted">Tempo registrado</span><b class="mono">${D.total ? fmtDur(D.total) : '—'}</b></div><div><span class="small muted">Trechos</span><b class="mono">${D.regs.length}</b></div><div><span class="small muted">Sessões</span><b class="mono">${D.sessoes}</b></div></div>
     <div class="small muted" style="margin-top:-6px">Esse tempo continua dentro da tarefa${mae ? ` ${esc(mae.name)}` : ''}: a subtarefa só mostra a parte dele.</div>
     <div><div class="lbl">Programas usados nesse tempo</div>${D.apps.length ? D.apps.slice(0, 8).map(([k, ms]) => `<div class="sbd-app"><span class="sbd-an">${esc(k)}</span><span class="sbd-bar"><i style="width:${Math.max(3, Math.round(ms / maxApp * 100))}%"></i></span><b class="mono small">${fmtDur(ms)}</b></div>`).join('') : '<div class="small muted">Ainda não tem tempo marcado nesta subtarefa.</div>'}</div>
-    ${sug.length ? `<div class="field"><label>Sugestões <span class="faint">(programas usados nas sessões desta tarefa; clique para associar e já aplicar)</span></label><div class="sp-chips">${sug.map(x => `<button type="button" class="sp-chip sbd-sug" data-sbd="assoc" data-n="${esc(x.nome)}" title="${x.em ? `Hoje ${esc(x.nome)} está em “${esc(x.em.name)}”. Se associar aqui, vale esta subtarefa.` : `Associar ${esc(x.nome)} a esta subtarefa: o tempo dele nas sessões já passa a contar aqui`}">+ ${esc(x.nome)} <span class="faint">${fmtDur(x.ms)}${x.em ? ' · em ' + esc(x.em.name) : ''}</span></button>`).join('')}</div></div>` : ''}
-    <div class="field"><label>Programas associados</label><div class="sp-chips">${ps.map(n => `<span class="sp-chip">${esc(n)}<button type="button" data-sbd="tira" data-n="${esc(n)}" aria-label="Tirar ${esc(n)}" title="Tirar ${esc(n)} desta subtarefa">×</button></span>`).join('') || '<span class="small muted">Nenhum</span>'}</div>
-      <select class="input sm" data-sbd="add" style="margin-top:6px;max-width:260px" aria-label="Associar um programa" title="Associar um programa a esta subtarefa"><option value="">+ Associar programa…</option>${ops.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select>
-      <div class="small muted" style="margin-top:6px">Associar aplica na hora: o tempo do programa nas sessões da tarefa passa a contar aqui (sem tirar da sessão). O que você marcar à mão na barra vale mais; se passar o programa para outra subtarefa, vale a nova.</div></div>
+    <div class="field"><label>Programas e sites desta subtarefa</label>
+      <div class="sp-chips">${ps.map(n => `<span class="sp-chip" ${padrao.includes(n) ? `data-tip="Automático: tudo de ${esc(n)} vai para esta subtarefa. Clique no × para tirar."` : ''}>${esc(n)}<button type="button" data-sbd="tira" data-n="${esc(n)}" aria-label="Tirar ${esc(n)}" title="Tirar ${esc(n)} desta subtarefa">×</button></span>`).join('') || '<span class="small muted">Nenhum</span>'}
+      <select class="sp-add" data-sbd="add" aria-label="Associar um programa ou site" title="Associar um programa ou site a esta subtarefa"><option value="">+ Associar…</option>${subOpcoesHTML(sub.project_id, ps)}</select></div>
+      <div class="small muted" style="margin-top:6px">Associar aplica na hora: o tempo do programa ou site nas sessões da tarefa passa a contar aqui (sem tirar da sessão). O que você marcar à mão na barra vale mais; se passar para outra subtarefa, vale a nova.</div></div>
+    ${sug.length ? `<div class="field"><label>Sugestões <span class="faint">(usados nas sessões desta tarefa e ainda não associados)</span></label><div class="sbd-sugs">${sug.map(x => `<div class="sbd-sug-l"><span class="sbd-an">${esc(x.nome)}${x.site ? ' <span class="faint small">site</span>' : ''}</span><b class="mono small" data-tip="Tempo nas sessões desta tarefa">${fmtDur(x.ms)}</b><span class="small muted sbd-sug-em">${x.em ? 'em ' + esc(x.em.name) : ''}</span><button type="button" class="btn sm" data-sbd="assoc" data-n="${esc(x.nome)}" title="${x.em ? `Hoje ${esc(x.nome)} está em “${esc(x.em.name)}”. Se associar aqui, vale esta subtarefa.` : `Associar ${esc(x.nome)} a esta subtarefa: o tempo dele nas sessões já passa a contar aqui`}">Associar</button></div>`).join('')}</div></div>` : ''}
     <div><div class="lbl">Registros</div>${D.regs.length ? `<div class="sbd-regs">${D.regs.slice(0, 40).map(r => `<div class="sbd-reg"><span class="small">${esc(dia(r.a))}</span><span class="mono small muted">${sbHM(r.a)}–${sbHM(r.b)}</span><span class="small muted sbd-rn">${r.propria ? 'sessão própria' : 'dentro de “' + esc(tarefaDe(r.sessao) || 'sessão') + '”'}</span><b class="mono small">${fmtDur(r.ms)}</b></div>`).join('')}${D.regs.length > 40 ? `<div class="small muted">+ ${D.regs.length - 40} trechos mais antigos</div>` : ''}</div>` : '<div class="small muted">Nenhum registro.</div>'}</div>
   </div>
   <div class="df"><button type="button" class="btn danger" data-sbd="apagar" title="Apaga a subtarefa. O tempo continua nas sessões. Dá para desfazer logo depois.">${icon('trash')} Apagar subtarefa</button><span class="grow"></span><button type="button" class="btn" data-sbd="fechar">Fechar</button></div>`;
@@ -505,7 +520,7 @@ function sbDetalhe(ctx, subId) {
     const b = ev.target.closest('[data-sbd]'); if (!b) return; const k = b.dataset.sbd;
     if (k === 'fechar') ly.close();
     else if (k === 'salvar') salvar();
-    else if (k === 'tira') { const m = { ...(db.setting('subProgs', {}) || {}) }; m[subId] = (m[subId] || []).filter(x => x !== b.dataset.n); db.setSetting('subProgs', m); db.emit(); ly.refresh(); sbRefresh(); }
+    else if (k === 'tira') { subTira(subId, b.dataset.n); db.emit(); ly.refresh(); sbRefresh(); }
     else if (k === 'assoc') { subAssocia(subId, b.dataset.n); db.emit(); ly.refresh(); sbRefresh(); }
     else if (k === 'apagar') { if (await sbApaga(ctx, subId)) { ly.close(); ctx.refresh && ctx.refresh(); } }
   });
@@ -526,7 +541,15 @@ function sbCriar(e) {
 function sbChange(ev, ctx) {
   const el = ev.target; const k = el.dataset && el.dataset.sb; if (!k || !ctx.e) return false;
   const S = sbEstado(ctx.e.id);
-  if (k === 'app') { S.app = el.value; sbRefresh(); }
+  if (k === 'arq') { S.arq = el.value; if (S.arq && !S.dest) { const r = subRegraDoNome(S.arq), mae = r && etapaMae(ctx.e); if (r && mae) { const sub = subtasksOf(mae.id).find(x => subNorm(x.name) === subNorm(r.sub)); if (sub) S.dest = sub.id; else { S.dest = '__novo'; S.novo = r.sub; } } } sbRefresh(); }
+  else if (k === 'conf') { S.conf = el.value; sbRefresh(); }
+  else if (k === 'app') {
+    S.app = el.value; S.arq = '';
+    // regra de sempre: Pinterest → Procura de referência, Magnific → Geração de Imagem IA (só sugere o destino, se você ainda não escolheu)
+    const r = S.app && !S.dest ? subRegraDoNome(String(S.app).replace(/^(p:|site:)/, '')) : null, mae = r && etapaMae(ctx.e);
+    if (r && mae) { const sub = subtasksOf(mae.id).find(x => subNorm(x.name) === subNorm(r.sub)); if (sub) S.dest = sub.id; else { S.dest = '__novo'; S.novo = r.sub; } }
+    sbRefresh();
+  }
   else if (k === 'dest') { S.dest = el.value; sbRefresh(); }
   else if (k === 'novo') { S.novo = el.value; sbPreviaDom(); }
   else if (k === 'lembrar') S.lembrar = !!el.checked;
@@ -551,13 +574,18 @@ function sbMover(ctx) {
   if (!p.ok) { toast(p.txt); return; }
   let dest = sbDestinoId(e, mae, S);
   if (dest === '__criar') dest = sbSubDe(mae, S.novo).id;
-  const app = S.app ? A.groups.find(g => g.id === S.app) : null;
+  const app = S.app ? A.todos.find(g => g.id === S.app) : null;
   const nome = dest === mae.id ? 'Sem subtarefa' : db.get('tempo_tasks', dest)?.name;
   const cuts = sbCortes(S, A);
   const r = sbPintar(e, cuts, dest, '');
   if (!r) { toast('Nada para marcar'); return; }
-  if (S.lembrar && app && dest !== mae.id) subAssocia(dest, app.label);
-  S.ranges = []; S.app = ''; S.novo = ''; S.dest = dest === mae.id ? 'sem' : dest; S.lembrar = false;
+  const nome1 = S.arq || (app && app.label);
+  const conflito = app && dest !== mae.id && subtasksOf(mae.id).some(x => x.id !== dest && subProgsDe(x.id).some(n => subMesmo(n, app.label)));
+  if (app && dest !== mae.id) {
+    if (conflito) { if (S.conf === 'tudo') subAssocia(dest, app.label); else if (S.conf === 'arquivo' && S.arq) subAssocia(dest, S.arq); }
+    else if (S.lembrar) subAssocia(dest, nome1);
+  }
+  S.ranges = []; S.app = ''; S.arq = ''; S.conf = 'tudo'; S.novo = ''; S.dest = dest === mae.id ? 'sem' : dest; S.lembrar = false;
   const txt = `${fmtDur(r.ms)}${app ? ' de ' + app.label : ''} marcados como ${dest === mae.id ? 'sem subtarefa' : nome}.`;
   sbLembraDesfazer(e.id, txt, r.desfazer);
   ctx.refresh();

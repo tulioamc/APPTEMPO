@@ -109,7 +109,7 @@ ACTIONS['rafa-open'] = (el) => {
         <div id="rf-notas" class="stack" style="gap:6px">${rafaNotas(iso).map(rafaNotaLinhaHTML).join('')}</div>
         <button type="button" class="btn sm ghost" data-act="rafa-nota-add" style="align-self:flex-start;margin-top:4px">${icon('plus')} Adicionar nota</button></div>
       ${typeof alMarcar === 'function' ? `<div class="field" style="margin-top:10px"><span class="lbl">Alice <span class="faint">(marcar à mão; o WhatsApp também marca sozinho)</span></span>
-        <div class="row" style="gap:6px">${[['M', 'AL:M · Menstruação', 'm'], ['C', 'AL:C · Cistite', 'c']].map(([k, l, c]) => `<button type="button" class="btn sm al-tg ${(alDias()[iso] || []).includes(k) ? 'on' : ''}" data-act="rafa-al" data-k="${k}" aria-pressed="${(alDias()[iso] || []).includes(k)}"><span class="al-chip ${c}">${l.split(' · ')[0]}</span> ${l.split(' · ')[1]}</button>`).join('')}</div></div>` : ''}
+        <div class="row" style="gap:6px">${[['M', 'AL:M · Menstruação', 'm'], ['C', 'AL:C · Cistite', 'c']].map(([k, l, c]) => `<button type="button" class="btn sm al-tg ${alTem(iso, k) ? 'on' : ''}" data-act="rafa-al" data-k="${k}" aria-pressed="${alTem(iso, k)}"><span class="al-chip ${c}">${l.split(' · ')[0]}</span> ${l.split(' · ')[1]}</button>`).join('')}</div></div>` : ''}
       <div class="row" style="justify-content:flex-end;gap:8px;margin-top:16px">
         <button class="btn ghost" data-act="close-layer">Cancelar</button>
         <button class="btn" data-act="rafa-save" data-day="${iso}">Salvar</button>
@@ -135,7 +135,7 @@ ACTIONS['rafa-save'] = (el) => {
   const todas = { ...(db.setting('diaNotas', {}) || {}) };
   if (notas.length) todas[iso] = notas; else delete todas[iso];
   db.setSetting('diaNotas', todas);
-  if (typeof alMarcar === 'function') document.querySelectorAll('.al-tg').forEach(b => { const on = b.classList.contains('on'); if (on !== (alDias()[iso] || []).includes(b.dataset.k)) alMarcar(iso, b.dataset.k, on); });
+  if (typeof alMarcar === 'function') document.querySelectorAll('.al-tg').forEach(b => { const on = b.classList.contains('on'); if (on !== alTem(iso, b.dataset.k)) alMarcar(iso, b.dataset.k, on); });
   db.emit();
   document.querySelector('[data-act="close-layer"]')?.click();
   rafaPerguntarFimDeSemana(iso, patch.who);

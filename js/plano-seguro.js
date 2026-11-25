@@ -36,7 +36,7 @@ function planoPins() {
 }
 /* Única porta de escrita: grava só o que é válido (então o lixo antigo some na primeira mudança que você fizer). */
 const planoPinsSalvar = (lista) => db.setSetting('planoPins', planoPinsLimpar(lista));
-/* O que ocupa o dia para quem é empurrado: rotina + compromissos (Google, bloqueios e to-dos com hora). */
+/* O que ocupa o dia para quem é empurrado: rotina + compromissos (Google e bloqueios; to-do não ocupa, pode sobrepor). */
 function planoOcupadosDoDia(dia) {
   return [...planoFixosDoDia(dia), ...planoEventos(dia, true).filter(e => !e.diaTodo && e.ocupa !== false && e.fim > e.ini).map(e => [e.ini, e.fim, e.titulo])];
 }
@@ -148,7 +148,7 @@ function planoDiagnostico(agora = new Date()) {
     out.push({ id: 'choque:' + c.dia, nivel: 'aviso', dia: c.dia, titulo: `${fmtDate(c.dia)}: blocos fixados no mesmo horário`, texto: `${nomes.map(n => `“${n}”`).join(' e ')} estão fixados por cima um do outro. Só uma coisa pode acontecer de cada vez.`,
       corrigir: { rotulo: 'Empurrar para depois, sem sobrepor', run: () => { const r = planoEmpurrar(planoPins(), [], planoOcupadosDoDia, { dias: [c.dia], proximoDia: planoProximoUtil }); planoPinsSalvar([...r.base, ...r.empurrados]); } } });
   });
-  // 3) bloco fixado por cima de um compromisso (Google, bloqueio ou to-do com hora)
+  // 3) bloco fixado por cima de um compromisso (Google ou bloqueio; to-do pode coexistir)
   const vistoEv = new Set();
   planoPins().filter(p => p.dia >= hoje).forEach(p => {
     planoEventos(p.dia, true).filter(e => !e.diaTodo && e.ocupa !== false && e.fim > e.ini && e.ini < p.ini + p.h - 1e-6 && e.fim > p.ini + 1e-6).forEach(e => {

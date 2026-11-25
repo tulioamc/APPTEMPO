@@ -259,6 +259,9 @@ function lockCheck() {
 setInterval(() => db.refresh(), 60000);
 setInterval(() => { try { pzReverTudo(); lockCheck(); } catch (e) { console.warn('pausas', e); } }, 60000);
 setTimeout(() => { try { pzReverTudo(); lockCheck(); } catch (e) { console.warn('pausas', e); } }, 15000);
+// varredura diária do WhatsApp da Alice (horário configurável; roda assim que abrir se perdeu o horário)
+setInterval(() => { try { if (typeof alTique === 'function') alTique(); } catch (e) { console.warn('alice', e); } }, 60000);
+setTimeout(() => { try { if (typeof alTique === 'function') alTique(); } catch (e) { console.warn('alice', e); } }, 25000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') db.refresh(); });
 /* Ponte do app de Mac. O app guarda os eventos numa fila e só tira da fila quando esta função roda. */
 window.TempoBridge = {

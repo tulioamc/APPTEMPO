@@ -131,10 +131,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                 done(ids)
             }
         }
-        whatsapp.sendAlice = { [weak self] itens in
-            guard let self = self, let json = self.jsonString(itens) else { return }
-            self.web.evaluateJavaScript("window.TempoBridge && window.TempoBridge.reportAlice && window.TempoBridge.reportAlice(\(json)); true", completionHandler: nil)
-        }
         whatsapp.onNoAccess = { [weak self] in
             self?.showNotice("Tempo: WhatsApp", "Não consegui ler o WhatsApp. Ative Acesso Total ao Disco para o Tempo nos Ajustes do Sistema.")
         }
@@ -162,6 +158,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     @objc private func readWhatsAppNow() { whatsapp.runNow() }
+
+    /// Varredura do WhatsApp da Alice (agendada pelo site ou "Procurar agora"): devolve o resultado em TempoBridge.aliceResultado.
+    /// Se a página não receber, o site pergunta de novo no minuto seguinte; nada fica marcado como lido no Mac.
+    private func handleAlice(_ d: [String: Any]) {
+        let desde = (d["desde"] as? NSNumber)?.int64Value ?? 0
+        let auto = (d["auto"] as? Bool) ?? false
+        whatsapp.procurarAlice(desde: desde, auto: auto) { [weak self] r in
+            guard let self = self, let json = self.jsonString(r) else { return }
+            self.web.evaluateJavaScript("window.TempoBridge && window.TempoBridge.aliceResultado && window.TempoBridge.aliceResultado(\(json)); true", completionHandler: nil)
+        }
+    }
     @objc private func rereadNotes() {
         showNotice("Tempo", "Relendo notas e comprovantes dos últimos 3 meses…")
         whatsapp.relerNotas { [weak self] n in
@@ -320,6 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         case "foco": handleFoco(d); return
         case "salvar": salvar.pasta = d["pasta"] as? String; return   // pasta do projeto atual, para o Salvar como
         case "nfReler": notas.reler(); return
+        case "aliceProcurar": handleAlice(d); return
         default: break
         }
         guard let title = d["title"] as? String, let body = d["body"] as? String else { return }

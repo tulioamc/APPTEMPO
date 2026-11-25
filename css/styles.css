@@ -2653,12 +2653,13 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .pl-agora::before { background: var(--fg); box-shadow: 0 0 0 2px var(--surface); }
 .pl-agora-h { background: var(--fg); color: var(--surface); box-shadow: 0 0 0 2px var(--surface); }
 /* Etapas na sessão atual (25/11) */
-.et-box { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.et-box { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 3px; }
 .et-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 2px; }
-.et-l { display: grid; grid-template-columns: minmax(0, 1fr) auto 64px; gap: 10px; align-items: baseline; padding: 3px 0; }
+.et-lista { max-height: 124px; overflow-y: auto; display: flex; flex-direction: column; }
+.et-l { display: grid; grid-template-columns: minmax(0, 1fr) auto 56px; gap: 10px; align-items: baseline; padding: 2px 0; font-size: .92em; }
 .et-l + .et-l { border-top: 1px solid color-mix(in srgb, var(--fg) 6%, transparent); }
 .et-l b { text-align: right; }
-.et-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .92em; }
+.et-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Calendário (25/11): to-dos e rotina maleável por cima dos outros blocos, fundo translúcido e contorno 100% */
 .pl-grade > .pl-sobre.pl-evento.todo, .pl-grade > .pl-sobre.pl-evento { background: color-mix(in srgb, var(--surface) 62%, transparent) !important; border: 1.5px solid var(--accent) !important; }
 .pl-grade > .pl-sobre.pl-fixo { background: color-mix(in oklab, var(--accent-soft) 60%, transparent) !important; border: 1.5px solid color-mix(in oklab, var(--accent) 45%, transparent) !important; color: var(--accent); }
@@ -2723,7 +2724,11 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .sbd-reg b { text-align: right; }
 .sbd-rn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.sbd-sug { cursor: pointer; }
+.sbd-sugs { display: flex; flex-direction: column; }
+.sbd-sug-l { display: grid; grid-template-columns: minmax(0, 1fr) 64px minmax(0, 150px) 84px; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.sbd-sug-l b { text-align: right; }
+.sbd-sug-em { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sbd-sug-l .btn { justify-self: end; box-shadow: none; }
 
 /* Botões da sessão atual: menores, alinhados em grade e preenchendo a largura (Pausar e Encerrar lado a lado, primeiro) */
 .timer-actions.grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 6px; }

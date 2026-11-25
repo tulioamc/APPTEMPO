@@ -4,7 +4,7 @@ const { load } = require('./helpers');
 const MIN = 6e4;
 function setup() {
   const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'],
-    ['db', 'ACTIONS', 'sbPintar', 'sbJanela', 'sbFatias', 'sbPrevia', 'sbCortes', 'sbApps', 'sbNormaliza', 'etapaFechaAoEncerrar', 'sbEtapaAtual', 'etapaMae', 'actForaSplit', 'sbEstado', 'sbSecaoHTML', 'sbSubMs', 'sbDivs', 'sbReintegra', 'sbLembraDesfazer', 'etapasDeHoje', 'sbDetalheDados', 'sbDetalheHTML', 'sbAuto', 'sbDivsEf', 'subAssocia', 'sbSugestoesDe'],
+    ['db', 'ACTIONS', 'sbPintar', 'sbJanela', 'sbFatias', 'sbPrevia', 'sbCortes', 'sbApps', 'sbNormaliza', 'etapaFechaAoEncerrar', 'sbEtapaAtual', 'etapaMae', 'actForaSplit', 'sbEstado', 'sbSecaoHTML', 'sbSubMs', 'sbDivs', 'sbReintegra', 'sbLembraDesfazer', 'etapasDeHoje', 'sbDetalheDados', 'sbDetalheHTML', 'sbAuto', 'sbDivsEf', 'subAssocia', 'sbSugestoesDe', 'subMesmo', 'subProgsDe', 'subTira', 'subOpcoesHTML'],
     { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '', $: () => null, $$: () => [], tkProjectLabel: (p) => p.name, openLayer: () => ({ box: { querySelector: () => null, addEventListener() {} }, close() {} }) });
   m.db.data = m.db.empty();
   m.db.insert('tempo_projects', { id: 'p', name: 'Reels' }, true);
@@ -165,7 +165,7 @@ test('janela da subtarefa: tempo registrado, trechos, programas associados, reno
   const D = m.sbDetalheDados('ps');
   assert.equal(Math.round(D.total / MIN), 30); assert.equal(D.regs.length, 1); assert.equal(D.sessoes, 1);
   const h = m.sbDetalheHTML(m.db.get('tempo_tasks', 'ps'));
-  assert.match(h, /Preparar telas/); assert.match(h, /data-sbd="apagar"/); assert.match(h, /data-sbd="salvar"/); assert.match(h, /Programas associados/); assert.match(h, /continua dentro da tarefa/);
+  assert.match(h, /Preparar telas/); assert.match(h, /data-sbd="apagar"/); assert.match(h, /data-sbd="salvar"/); assert.match(h, /Programas e sites desta subtarefa/); assert.match(h, /continua dentro da tarefa/);
 });
 test('buracos "movidos" para subtarefa sem lançamento de destino (tempo perdido) voltam para a sessão e ficam marcados', () => {
   const m = setup(); const t0 = Date.now() - 180 * MIN; const iso = (x) => new Date(x).toISOString();
@@ -224,4 +224,26 @@ test('sugestões: programas das sessões da tarefa, do maior para o menor, sem o
   m.subAssocia('ps', sug[0].nome);
   sug = m.sbSugestoesDe(m.db.get('tempo_tasks', 'ps')); assert.equal(sug.length, 1);
   assert.match(m.sbDetalheHTML(m.db.get('tempo_tasks', 'ps')), /Sugestões/);
+});
+
+test('"Adobe Photoshop (Beta)" e "Photoshop" são o mesmo programa', () => {
+  const m = setup();
+  assert.ok(m.subMesmo('Adobe Photoshop (Beta)', 'Photoshop'));
+  assert.ok(m.subMesmo('Adobe Illustrator 2027 (Beta)', 'Illustrator'));
+  assert.ok(!m.subMesmo('Photoshop', 'Illustrator'));
+  m.subAssocia('ps', 'Photoshop');
+  assert.doesNotMatch(m.subOpcoesHTML('p', ['Photoshop']), /value="Photoshop"/);
+  assert.match(m.subOpcoesHTML('p', []), /<optgroup label="Sites">/);
+});
+test('regra de sempre: Pinterest vai sozinho para "Procura de referência" e Magnific para "Geração de Imagem IA"; × tira', () => {
+  const m = setup();
+  m.db.insert('tempo_tasks', { id: 'ref', project_id: 'p', parent_id: 'mae', name: 'Procura de referência', order: 5 }, true);
+  m.db.insert('tempo_tasks', { id: 'ia', project_id: 'p', parent_id: 'mae', name: 'Geração de Imagem IA', order: 6 }, true);
+  assert.deepEqual(m.subProgsDe('ref'), ['Pinterest']);
+  assert.deepEqual(m.subProgsDe('ia'), ['Magnific']);
+  assert.deepEqual(m.subProgsDe('ps'), []);
+  m.subTira('ref', 'Pinterest'); assert.deepEqual(m.subProgsDe('ref'), []);
+  m.subAssocia('ref', 'Pinterest'); assert.deepEqual(m.subProgsDe('ref'), ['Pinterest']);
+  m.subAssocia('ps', 'Pinterest');                       // associado a outra: vale a outra
+  assert.deepEqual(m.subProgsDe('ref'), []); assert.deepEqual(m.subProgsDe('ps'), ['Pinterest']);
 });

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SQLite3
 import PDFKit
@@ -133,8 +134,6 @@ final class WhatsAppMonitor {
     var sendConversas: (([String: Any]) -> Void)?
     /// PDF de conversa que não é de terapia (a pasta de notas emitidas confere se é nota sua).
     var onPdf: ((Data) -> Void)?
-    /// Mensagens da Alice com "menstru…" ou "cistite" (só essa conversa, só mensagens dela) -> TempoBridge.reportAlice.
-    var sendAlice: (([[String: Any]]) -> Void)?
     /// Não conseguiu abrir o banco do WhatsApp (avisa uma vez só).
     var onNoAccess: (() -> Void)?
 
@@ -210,8 +209,6 @@ final class WhatsAppMonitor {
         if !linhas.isEmpty { DispatchQueue.main.async { self.sendCounts?(linhas) } }
         if let conv = lerConversas(agora: agora.timeIntervalSince1970) { DispatchQueue.main.async { self.sendConversas?(conv) } }
         lerNotas(desde: agora.addingTimeInterval(-60 * 86400).timeIntervalSince1970)
-        let al = lerAlice(desde: agora.addingTimeInterval(-400 * 86400).timeIntervalSince1970)
-        if !al.isEmpty { DispatchQueue.main.async { self.sendAlice?(al) } }
         let pend = pendentes()
         if !pend.isEmpty {
             DispatchQueue.main.async {
@@ -222,37 +219,63 @@ final class WhatsAppMonitor {
 
     // MARK: - Banco do WhatsApp (somente leitura)
 
+    /// Varredura da Alice (1x por dia pelo horário do site, ou na hora pelo botão "Procurar agora"). `desde` = último id de mensagem
+    /// já lido (0 = primeira vez: olha os últimos 400 dias). `auto` = veio do agendamento: espera o WhatsApp estar aberto e sincronizado.
+    /// done (thread principal): ["ok": Bool, "motivo": "fechado"|"acesso", "itens": [...], "ultimoId": Int, "auto": Bool].
+    func procurarAlice(desde: Int64, auto: Bool, done: @escaping ([String: Any]) -> Void) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            func fim(_ r: [String: Any]) { DispatchQueue.main.async { done(r) } }
+            if auto && !self.whatsappPronto() { fim(["ok": false, "motivo": "fechado", "auto": true]); return }
+            guard let r = self.lerAlice(depoisDe: desde) else { fim(["ok": false, "motivo": "acesso", "auto": auto]); return }
+            fim(["ok": true, "itens": r.itens, "ultimoId": r.ultimoId, "auto": auto])
+        }
+    }
+
+    /// WhatsApp aberto há pelo menos 1 minuto (deu tempo de sincronizar as mensagens novas).
+    private func whatsappPronto() -> Bool {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "net.whatsapp.WhatsApp").first else { return false }
+        guard let aberto = app.launchDate else { return true }
+        return Date().timeIntervalSince(aberto) >= 60
+    }
+
     /// Ciclo da Alice: na conversa dela (nome em defaults "aliceNome", padrão "Alice"), só as mensagens DELA que falam
-    /// de menstruação ou cistite. Mensagem curta (até 60 letras) vai com o texto, para o site achar a data ("menstruei dia 20");
-    /// mensagem longa vai sem texto: o site só pergunta se é para marcar. Nada de outras conversas é lido.
-    private func lerAlice(desde: Double) -> [[String: Any]] {
+    /// de menstruação ou cistite e que chegaram depois de `depoisDe` (id da mensagem). Mensagem curta (até 60 letras) vai com o texto,
+    /// para o site achar a data ("menstruei dia 20"); mensagem longa vai sem texto: o site só pergunta se é para marcar.
+    /// Nada de outras conversas é lido. nil = não conseguiu abrir o banco.
+    private func lerAlice(depoisDe: Int64) -> (itens: [[String: Any]], ultimoId: Int64)? {
         let nome = UserDefaults.standard.string(forKey: "aliceNome") ?? "Alice"
-        guard !nome.isEmpty, let db = abrir() else { return [] }
+        guard !nome.isEmpty else { return ([], 0) }
+        guard let db = abrir() else { return nil }
         defer { sqlite3_close(db) }
         let sql = """
         select m.Z_PK, m.ZMESSAGEDATE + ?, m.ZTEXT
         from ZWAMESSAGE m join ZWACHATSESSION s on m.ZCHATSESSION = s.Z_PK
-        where s.ZSESSIONTYPE = 0 and s.ZPARTNERNAME like ? and m.ZISFROMME = 0 and m.ZMESSAGEDATE + ? >= ?
+        where s.ZSESSIONTYPE = 0 and s.ZPARTNERNAME like ? and m.ZISFROMME = 0 and m.ZMESSAGEDATE + ? >= ? and m.Z_PK > ?
           and (m.ZTEXT like '%menstru%' or m.ZTEXT like '%cistite%' or m.ZTEXT like '%cistíte%')
-        order by m.ZMESSAGEDATE
+        order by m.Z_PK
         """
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
         let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
         sqlite3_bind_double(stmt, 1, WhatsAppMonitor.epocaCoreData)
         sqlite3_bind_text(stmt, 2, "%\(nome)%", -1, transient)
         sqlite3_bind_double(stmt, 3, WhatsAppMonitor.epocaCoreData)
-        sqlite3_bind_double(stmt, 4, desde)
+        sqlite3_bind_double(stmt, 4, Date().addingTimeInterval(-400 * 86400).timeIntervalSince1970)
+        sqlite3_bind_int64(stmt, 5, depoisDe)
         var out: [[String: Any]] = []
+        var ultimo: Int64 = 0
         while sqlite3_step(stmt) == SQLITE_ROW {
+            let pk = sqlite3_column_int64(stmt, 0)
             let t = texto(stmt, 2) ?? ""
             let tipo = t.range(of: "menstru", options: [.caseInsensitive, .diacriticInsensitive]) != nil ? "M" : "C"
-            var item: [String: Any] = ["id": "wa\(sqlite3_column_int64(stmt, 0))", "ts": sqlite3_column_double(stmt, 1), "tipo": tipo, "curta": t.count <= 60]
+            var item: [String: Any] = ["id": "wa\(pk)", "ts": sqlite3_column_double(stmt, 1), "tipo": tipo, "curta": t.count <= 60]
             if t.count <= 60 { item["texto"] = t }
             out.append(item)
+            ultimo = max(ultimo, pk)
         }
-        return out
+        return (out, ultimo)
     }
 
     private func abrir() -> OpaquePointer? {

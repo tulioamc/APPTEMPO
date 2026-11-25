@@ -4,7 +4,32 @@
    Na janelinha da tarefa mãe aparece a sugestão: o tempo das sessões da tarefa (ou do projeto, sem tarefa) gasto nesses
    programas. Nada é movido sozinho: só quando você aceita, o tempo sai da sessão e vira uma sessão da subtarefa.
    Guardado em tempo_settings: 'subProgs' = { subtarefaId: [nomes] } e 'subProgIgn' = { subtarefaId: [sessãoId…] }. */
-const subProgsDe = (tid) => ((db.setting('subProgs', {}) || {})[tid] || []).filter(Boolean);
+/* Regras de sempre (25/11): tudo do Pinterest vai para "Procura de referência" e tudo do Magnific para "Geração de Imagem IA".
+   Valem em qualquer tarefa que tenha uma subtarefa com esse nome; dá para tirar o site (×) ou associá-lo a outra subtarefa. */
+const SUB_REGRAS = [{ sub: 'Procura de referência', progs: ['Pinterest'] }, { sub: 'Geração de Imagem IA', progs: ['Magnific'] }];
+const subNorm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+/* Chave para achar o mesmo programa com nomes diferentes: "Adobe Photoshop (Beta)" = "Photoshop"; "Adobe Illustrator 2027 (Beta)" = "Illustrator". */
+const subChave = (s) => subNorm(s).replace(/\((beta|[^)]*beta[^)]*)\)/g, ' ').replace(/\badobe\b/g, ' ').replace(/\b(19|20)\d\d\b/g, ' ').replace(/\bcc\b/g, ' ').replace(/\s+/g, ' ').trim();
+const subMesmo = (a, b) => { const x = subChave(a), y = subChave(b); return !!x && !!y && (x === y); };
+const subRegraDoNome = (prog) => SUB_REGRAS.find(r => r.progs.some(p => subNorm(p) === subNorm(prog))) || null;
+function subProgsPadrao(tid) {
+  const t = db.get('tempo_tasks', tid); if (!t || !t.parent_id) return [];
+  const r = SUB_REGRAS.find(x => subNorm(x.sub) === subNorm(t.name)); if (!r) return [];
+  const m = db.setting('subProgs', {}) || {}; const tira = (db.setting('subProgsTira', {}) || {})[tid] || [];
+  const irmaos = db.all('tempo_tasks').filter(x => x.parent_id === t.parent_id);
+  return r.progs.filter(p => !tira.some(n => subNorm(n) === subNorm(p)) && !irmaos.some(x => (m[x.id] || []).some(n => subNorm(n) === subNorm(p))));
+}
+const subProgsDe = (tid) => { const g = ((db.setting('subProgs', {}) || {})[tid] || []).filter(Boolean); const pd = subProgsPadrao(tid); return pd.length ? [...g, ...pd] : g; };
+/* Tira um programa/site da subtarefa (se era da regra de sempre, guarda que você tirou). */
+function subTira(subId, nome) {
+  const q = subNorm(nome); const m = { ...(db.setting('subProgs', {}) || {}) };
+  m[subId] = (m[subId] || []).filter(x => subNorm(x) !== q); db.setSetting('subProgs', m);
+  if (subProgsPadrao(subId).some(p => subNorm(p) === q)) { const t = { ...(db.setting('subProgsTira', {}) || {}) }; t[subId] = [...(t[subId] || []), nome]; db.setSetting('subProgsTira', t); }
+}
+/* Nome de um registro como o app mostra em todo lugar: programa do cadastro (Photoshop), site do Chrome ou conversa do WhatsApp. */
+function subCanon(r) {
+  try { if (/whatsapp/i.test(String(r.app || '')) || isChromeSite(r.app, r.doc)) return toolName(r); return shortProgram(r.app) || r.app; } catch (e) { return r.app; }
+}
 /* Nomes com que um registro de atividade pode ser reconhecido: programa do cadastro, nome curto e site do Chrome. */
 function subNomesDoRec(r) {
   const out = new Set();
@@ -64,16 +89,32 @@ function subMover(e, cuts, sub) {
 }
 /* Opções para escolher: programas do cadastro e o que já apareceu nas sessões deste projeto. */
 function subOpcoes(projectId) {
-  const set = new Set((typeof programas === 'function' ? programas() : []).map(p => p.name));
-  if (typeof actList === 'function') db.all('tempo_time_entries').filter(e => e.project_id === projectId).slice(-40).forEach(e => actList(e.id).forEach(r => { try { const n = toolName(r); if (n) set.add(n); } catch (er) {} }));
-  return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const g = subOpcoesGrupos(projectId); return [...g.programas, ...g.sites];
+}
+/* Programas e sites separados, sem repetidos (Photoshop = Adobe Photoshop (Beta)). */
+function subOpcoesGrupos(projectId) {
+  const lp = []; const ls = [];
+  const add = (lista, n) => { n = String(n || '').trim(); if (n && !lista.some(x => subMesmo(x, n))) lista.push(n); };
+  (typeof programas === 'function' ? programas() : []).forEach(p => add(lp, p.name));
+  if (typeof CHROME_SITE_NAMES !== 'undefined') CHROME_SITE_NAMES.forEach(n => add(ls, n));
+  if (typeof actList === 'function') db.all('tempo_time_entries').filter(e => e.project_id === projectId).slice(-40).forEach(e => actList(e.id).forEach(r => {
+    try { const n = subCanon(r); if (typeof isChromeSite === 'function' && isChromeSite(r.app, r.doc)) add(ls, n); else add(lp, n); } catch (er) {}
+  }));
+  const ord = (a, b) => a.localeCompare(b, 'pt-BR');
+  return { programas: lp.sort(ord), sites: ls.sort(ord) };
+}
+/* <option>s com "Programas" e "Sites" separados, sem o que já está associado. */
+function subOpcoesHTML(projectId, jaTem) {
+  const g = subOpcoesGrupos(projectId); const livre = (n) => !(jaTem || []).some(x => subMesmo(x, n));
+  const op = (n) => `<option value="${esc(n)}">${esc(n)}</option>`;
+  const P = g.programas.filter(livre), S = g.sites.filter(livre);
+  return `${P.length ? `<optgroup label="Programas">${P.map(op).join('')}</optgroup>` : ''}${S.length ? `<optgroup label="Sites">${S.map(op).join('')}</optgroup>` : ''}`;
 }
 
 /* Janelinha da subtarefa: os programas dela (chips com ×) e uma lista para acrescentar. */
 function subProgsHTML(sub) {
   const ps = subProgsDe(sub.id);
-  const ops = subOpcoes(sub.project_id).filter(o => !ps.includes(o));
-  return `<div class="tk-op tk-op-prog"><span class="tk-op-l" data-tip="O tempo nesses programas, nas sessões da tarefa, vira sugestão para esta subtarefa (só entra se você aceitar)">Programas</span><span class="tk-op-c sp-chips">${ps.map(n => `<span class="sp-chip">${esc(n)}<button type="button" data-act="sp-tira" data-id="${sub.id}" data-n="${esc(n)}" aria-label="Tirar ${esc(n)}" title="Tirar ${esc(n)} desta subtarefa">×</button></span>`).join('')}<select class="sp-add" data-on="sp-add" data-id="${sub.id}" aria-label="Acrescentar programa ou site" title="Programas e sites desta subtarefa"><option value="">+ programa ou site</option>${ops.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select></span></div>`;
+  return `<div class="tk-op tk-op-prog"><span class="tk-op-l" data-tip="O tempo nesses programas, nas sessões da tarefa, vira sugestão para esta subtarefa (só entra se você aceitar)">Programas</span><span class="tk-op-c sp-chips">${ps.map(n => `<span class="sp-chip">${esc(n)}<button type="button" data-act="sp-tira" data-id="${sub.id}" data-n="${esc(n)}" aria-label="Tirar ${esc(n)}" title="Tirar ${esc(n)} desta subtarefa">×</button></span>`).join('')}<select class="sp-add" data-on="sp-add" data-id="${sub.id}" aria-label="Acrescentar programa ou site" title="Programas e sites desta subtarefa"><option value="">+ programa ou site</option>${subOpcoesHTML(sub.project_id, ps)}</select></span></div>`;
 }
 /* Janelinha da tarefa mãe: as sugestões, uma por subtarefa, com Aceitar e Ignorar. */
 function subSugestoesHTML(parent) {
@@ -91,16 +132,15 @@ function subAssocia(subId, nome) {
   const m = { ...(db.setting('subProgs', {}) || {}) }; const q = nome.toLowerCase();
   subtasksOf(sub.parent_id).forEach(x => { if (x.id !== subId && (m[x.id] || []).some(n => String(n).trim().toLowerCase() === q)) m[x.id] = m[x.id].filter(n => String(n).trim().toLowerCase() !== q); });
   const l = m[subId] || []; if (!l.some(n => String(n).trim().toLowerCase() === q)) m[subId] = [...l, nome];
-  db.setSetting('subProgs', m); return true;
+  db.setSetting('subProgs', m);
+  const tr = db.setting('subProgsTira', {}) || {}; if ((tr[subId] || []).length) db.setSetting('subProgsTira', { ...tr, [subId]: tr[subId].filter(n => subNorm(n) !== q) });
+  return true;
 }
 CHANGES['sp-add'] = (el) => {
   const v = el.value; if (!v) return;
   subAssocia(el.dataset.id, v); db.emit();
 };
-ACTIONS['sp-tira'] = (el) => {
-  const m = { ...(db.setting('subProgs', {}) || {}) }; m[el.dataset.id] = (m[el.dataset.id] || []).filter(x => x !== el.dataset.n);
-  db.setSetting('subProgs', m); db.emit();
-};
+ACTIONS['sp-tira'] = (el) => { subTira(el.dataset.id, el.dataset.n); db.emit(); };
 ACTIONS['sp-aceita'] = (el) => {
   const parent = db.get('tempo_tasks', el.dataset.id); if (!parent) return;
   const x = subSugestoes(parent).find(y => y.sub.id === el.dataset.sub); if (!x) return;
@@ -146,12 +186,23 @@ function etapasDeHoje(mae) {
   }
   return out.sort((x, y) => new Date(x.a) - new Date(y.a));
 }
+/* Trechos seguidos da mesma etapa viram uma linha só (começo do primeiro até o fim do último, tempo somado, nº de trechos na dica). */
+function etapasAgrupa(xs) {
+  const out = [];
+  xs.forEach(x => {
+    const u = out[out.length - 1];
+    if (u && u.sub && x.sub && u.sub.id === x.sub.id) { u.itens.push(x); u.ms += x.ms; if (!u.b || (x.b && new Date(x.b) > new Date(u.b))) u.b = x.b; if (!x.b) u.b = null; }
+    else out.push({ sub: x.sub, a: x.a, b: x.b, ms: x.ms, itens: [x] });
+  });
+  return out;
+}
 function etapasHTML(a) {
   const mae = etapaMae(a); if (!mae) return '';
-  const xs = etapasDeHoje(mae);
+  const xs = etapasAgrupa(etapasDeHoje(mae));
   const desde = etapaInicio(a);
   const atual = typeof sbEtapaAtual === 'function' ? sbEtapaAtual(a.id) : null;
-  const lista = xs.map(x => `<div class="et-l"><span class="et-n">${esc(x.sub?.name || 'Etapa')}</span><span class="mono small muted">${fmtTime(x.a)}–${x.b ? fmtTime(x.b) : '…'}</span><b class="mono small">${fmtDur(x.ms)}</b></div>`).join('');
+  const dica = (g) => g.itens.length > 1 ? ` data-tip="${esc(g.itens.length + ' trechos: ' + g.itens.map(i => `${fmtTime(i.a)}–${i.b ? fmtTime(i.b) : '…'} (${fmtDur(i.ms)})`).join(' · '))}"` : '';
+  const lista = xs.length ? `<div class="et-lista">${xs.map(x => `<div class="et-l"${dica(x)}><span class="et-n">${esc(x.sub?.name || 'Etapa')}${x.itens.length > 1 ? ` <span class="faint">· ${x.itens.length} trechos</span>` : ''}</span><span class="mono small muted">${fmtTime(x.a)}–${x.b ? fmtTime(x.b) : '…'}</span><b class="mono small">${fmtDur(x.ms)}</b></div>`).join('')}</div>` : '';
   const topo = atual ? `<span class="small" data-tip="A etapa que você disse que vem depois da última. O tempo dela é contado a partir daqui, quando você marcar o fim dela ou encerrar a sessão">Agora: <b>${esc(atual.name)}</b> · desde ${fmtTime(desde)}</span>` : `<span class="small muted" data-tip="A etapa atual conta a partir daqui">etapa atual desde ${fmtTime(desde)}</span>`;
   return `<div class="et-box"><div class="et-h"><span class="lbl">Etapas de ${esc(mae.name)}</span>${topo}</div>${lista || '<div class="small muted">Nenhuma etapa marcada hoje. Ao terminar uma parte do trabalho, aperte "Terminei uma etapa".</div>'}</div>`;
 }
