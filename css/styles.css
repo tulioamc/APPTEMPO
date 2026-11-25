@@ -2371,3 +2371,5 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 /* sessões da mesma tarefa: fundo cinza bem claro, um tom abaixo da linha da tarefa */
 .cor-body .grp-kids { background: color-mix(in srgb, var(--fg) 4%, var(--bg-1, transparent)); border-radius: 8px; }
 .cor-body .grp-kids .entry { background: transparent; }
+/* Hora da entrega (tarefa e deadline): o campo de hora é digitável e visível — não é o input invisível da data */
+.tk-hora input.tk-hin, .tk-ent-v input.tk-hin { position: static; inset: auto; opacity: 1; cursor: text; }
