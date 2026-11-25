@@ -39,12 +39,12 @@ function corridoProjHTML(p) {
     if (sub) { if (!T.subs.has(sub.id)) T.subs.set(sub.id, { name: sub.name, list: [] }); T.subs.get(sub.id).list.push(e); }
     else T.direct.push(e);
   });
-  const aglo = db.setting('resMode', 'cron') === 'agl';
+  const aglo = true; // Recentes é sempre aglomerado
   const taskHTML = [...tasks.values()].map(T => {
     const tids = T.list.map(e => e.id).join(',');
     const tTotal = T.list.reduce((s, e) => s + entryMs(e), 0);
-    const subsHTML = [...T.subs.values()].map(sb => `<div class="cor-sub"><div class="cor-subh"><span>↳ ${esc(sb.name)}</span><span class="mono small">${fmtDur(sb.list.reduce((s, e) => s + entryMs(e), 0))}</span></div><div class="grp-kids">${sb.list.map(entryRowHTML).join('')}</div></div>`).join('');
-    const body = aglo ? groupedRowsHTML(T.list) : T.direct.map(entryRowHTML).join('') + subsHTML;
+    const subsHTML = [...T.subs.values()].map(sb => `<div class="cor-sub"><div class="cor-subh"><span>↳ ${esc(sb.name)}</span><span class="mono small">${fmtDur(sb.list.reduce((s, e) => s + entryMs(e), 0))}</span></div><div class="grp-kids">${sb.list.map(e => entryRowHTML(e)).join('')}</div></div>`).join('');
+    const body = aglo ? groupedRowsHTML(T.list, { sess: true }) : T.direct.map(e => entryRowHTML(e)).join('') + subsHTML;
     // Aglomerado: a linha agrupada já traz o nome da tarefa e o total — sem cabeçalho repetido.
     if (aglo) return `<div class="cor-task">${body}</div>`;
     return `<div class="cor-task cor-cron"><div class="cor-taskh" ${db.get('tempo_projects', p.pid) ? `data-act="proj-open" data-id="${p.pid}"` : `data-act="ts-resumo" data-title="${esc(T.name)}" data-ids="${tids}"`}><span></span><b>${esc(T.name)}</b><span></span><span class="dur" data-tip="Tempo de trabalho nesta tarefa (sem pausas), somando as sessões">${fmtDur(tTotal)}</span><span></span></div>${body}</div>`;
@@ -63,7 +63,7 @@ function corridoProjHTML(p) {
       <div class="what cor-what"><div class="t">${esc(pr.name)}</div><div class="p">${cl ? clientTag(cl) : '<span class="faint">Sem cliente</span>'}<span class="cor-n" data-tip="Sessões registradas neste projeto no período">${p.list.length} ${p.list.length === 1 ? 'sessão' : 'sessões'}</span></div></div>
       <span class="ent-tag">${tags}</span><span class="dur">${fmtDur(total)}</span><button type="button" class="grp-caret" data-act="grp-caret" aria-label="Ver tarefas" title="Ver tarefas">▾</button>
     </summary>
-    <div class="cor-body">${modeBtns}${taskHTML}</div>
+    <div class="cor-body">${taskHTML}</div>
   </details>`;
 }
 

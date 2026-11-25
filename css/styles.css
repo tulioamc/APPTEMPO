@@ -2365,3 +2365,9 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 /* Recentes: Cronológico/Aglomerado à direita; linha clarinha e fina entre as tarefas */
 .cor-mode { justify-content: flex-end; }
 .cor-body .cor-task + .cor-task { border-top: 1px solid color-mix(in srgb, var(--fg) 7%, transparent); margin-top: 4px !important; padding-top: 4px; }
+/* Recentes: sessões dentro da tarefa só com "Sessão 01", separadas por linha clarinha */
+.cor-body .grp-kids .entry + .entry { border-top: 1px solid color-mix(in srgb, var(--fg) 7%, transparent); }
+.what.sess .t { font-weight: 500; color: var(--fg-2); }
+/* sessões da mesma tarefa: fundo cinza bem claro, um tom abaixo da linha da tarefa */
+.cor-body .grp-kids { background: color-mix(in srgb, var(--fg) 4%, var(--bg-1, transparent)); border-radius: 8px; }
+.cor-body .grp-kids .entry { background: transparent; }

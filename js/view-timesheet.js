@@ -966,12 +966,14 @@ function entryPathHTML(e) {
   if (!head && !rest.length) return 'Sem projeto';
   return `<span class="row" style="gap:6px;flex-wrap:wrap">${head}${head && rest.length ? '<span class="faint">›</span>' : ''}${rest.join(' <span class="faint">›</span> ')}</span>`;
 }
-function entryRowHTML(e) {
+function entryRowHTML(e, sess) {
   const x = entryPath(e); const sub = entrySub(e);
+  // sess: número da sessão dentro de um grupo — o nome e o caminho já estão na linha de cima, então não repete.
+  const nome = sess ? `<span data-tip="${esc(entryTitle(e))}">Sessão ${String(sess).padStart(2, '0')}</span>` : esc(entryTitle(e));
   return `<div class="entry" data-act="ts-edit" data-id="${e.id}">
           <span class="when">${fmtTime(entryStart(e))}–${e.state === 'done' ? fmtTime(entryEnd(e)) : '…'}</span>
-          <div class="what"><div class="t">${esc(entryTitle(e))} ${e.state !== 'done' ? `<span class="tag pill c-blue small">${e.state === 'running' ? 'em andamento' : 'pausada'}</span>` : ''}${e.edits?.length ? ' <span class="inh" title="Editada">editada</span>' : ''}${e.revision_id ? ' <span class="inh">revisão</span>' : ''}</div>
-          <div class="p">${entryPathHTML(e)}${e.notes && x.project ? ' · ' + esc(e.notes.split('\n')[0]) : ''}</div></div>
+          <div class="what${sess ? ' sess' : ''}"><div class="t">${nome} ${e.state !== 'done' ? `<span class="tag pill c-blue small">${e.state === 'running' ? 'em andamento' : 'pausada'}</span>` : ''}${e.edits?.length ? ' <span class="inh" title="Editada">editada</span>' : ''}${e.revision_id ? ' <span class="inh">revisão</span>' : ''}</div>
+          ${sess ? '' : `<div class="p">${entryPathHTML(e)}${e.notes && x.project ? ' · ' + esc(e.notes.split('\n')[0]) : ''}</div>`}</div>
           <span class="ent-tag">${wtTag(e.work_type_id)}<button class="btn icon ghost ent-cut" data-act="corte-sessao" data-id="${e.id}" aria-label="Ajustar tempo" title="Ajustar tempo (cortar e mover trechos)">${icon('scissors')}</button></span><span class="dur" data-tip="${esc(`Trabalho ${fmtDur(entryMs(e))}\nBruto ${fmtDur(entryBrutoMs(e))} · pausas ${fmtDur(pauseGapsOf([e]).reduce((t, g) => t + (new Date(g.e) - new Date(g.s)), 0))}\n${(e.segments || []).length} intervalo(s)`)}" ${e.state !== 'done' ? `data-tick="${e.id}"` : ''}>${e.state !== 'done' ? fmtClock(entryMs(e)) : fmtDur(entryMs(e))}</span><span class="ent-caret" aria-hidden="true"></span>
         </div>`;
 }
@@ -979,7 +981,7 @@ function entryRowHTML(e) {
 function entryHeadHTML() {
   return `<div class="entry-head"><span>Horário</span><span>Tarefa</span><span>Categoria</span><span class="r">Tempo</span><span></span></div>`;
 }
-function groupedRowsHTML(entries) {
+function groupedRowsHTML(entries, opts = {}) {
   const groups = new Map();
   entries.forEach(e => {
     const key = e.state === 'done' ? `${entryTitle(e)}|${entrySub(e)}` : `run:${e.id}`;
@@ -998,7 +1000,7 @@ function groupedRowsHTML(entries) {
         <div class="what"><div class="t">${esc(entryTitle(list[0]))} <span class="tag pill small">${list.length} sessões</span></div><div class="p">${entryPathHTML(list[0])}</div></div>
         <span class="ent-tag">${tags}</span><span class="dur" data-tip="${esc(`${list.length} sessões · trabalho ${fmtDur(total)}\nMédia por sessão: ${fmtDur(total / list.length)}\nMaior: ${fmtDur(Math.max(...list.map(entryMs)))}`)}">${fmtDur(total)}</span><button type="button" class="grp-caret" data-act="grp-caret" aria-label="Ver sessões" title="Ver sessões">▾</button>
       </summary>
-      <div class="grp-kids">${list.map(entryRowHTML).join('')}</div>
+      <div class="grp-kids">${list.map((e, i) => entryRowHTML(e, opts.sess ? i + 1 : 0)).join('')}</div>
     </details>`;
   }).join('');
 }
