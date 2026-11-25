@@ -2722,3 +2722,5 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .sbd-reg { display: grid; grid-template-columns: 90px 110px 1fr 64px; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); align-items: center; }
 .sbd-reg b { text-align: right; }
 .sbd-rn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sbd-sug { cursor: pointer; }

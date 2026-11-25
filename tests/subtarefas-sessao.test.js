@@ -4,7 +4,7 @@ const { load } = require('./helpers');
 const MIN = 6e4;
 function setup() {
   const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'],
-    ['db', 'ACTIONS', 'sbPintar', 'sbJanela', 'sbFatias', 'sbPrevia', 'sbCortes', 'sbApps', 'sbNormaliza', 'etapaFechaAoEncerrar', 'sbEtapaAtual', 'etapaMae', 'actForaSplit', 'sbEstado', 'sbSecaoHTML', 'sbSubMs', 'sbDivs', 'sbReintegra', 'sbLembraDesfazer', 'etapasDeHoje', 'sbDetalheDados', 'sbDetalheHTML'],
+    ['db', 'ACTIONS', 'sbPintar', 'sbJanela', 'sbFatias', 'sbPrevia', 'sbCortes', 'sbApps', 'sbNormaliza', 'etapaFechaAoEncerrar', 'sbEtapaAtual', 'etapaMae', 'actForaSplit', 'sbEstado', 'sbSecaoHTML', 'sbSubMs', 'sbDivs', 'sbReintegra', 'sbLembraDesfazer', 'etapasDeHoje', 'sbDetalheDados', 'sbDetalheHTML', 'sbAuto', 'sbDivsEf', 'subAssocia', 'sbSugestoesDe'],
     { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '', $: () => null, $$: () => [], tkProjectLabel: (p) => p.name, openLayer: () => ({ box: { querySelector: () => null, addEventListener() {} }, close() {} }) });
   m.db.data = m.db.empty();
   m.db.insert('tempo_projects', { id: 'p', name: 'Reels' }, true);
@@ -181,4 +181,47 @@ test('buracos "movidos" para subtarefa sem lançamento de destino (tempo perdido
   assert.equal(run.segments[0].movedTo, 'outro');                            // o que foi para outro projeto continua fora
   assert.equal(m.actForaSplit(run).sub, 0);
   assert.equal(m.sbReintegra(run), 0);
+});
+function comProgramas() {
+  const m = setup(); const t0 = Date.now() - 180 * MIN; const iso = (x) => new Date(x).toISOString();
+  sessao(m, t0, t0 + 100 * MIN);
+  const recs = [{ from: iso(t0), to: iso(t0 + 40 * MIN), app: 'Adobe Photoshop 2026', doc: 'a.psd' }, { from: iso(t0 + 40 * MIN), to: iso(t0 + 100 * MIN), app: 'Adobe After Effects 2026', doc: 'b.aep' }];
+  m.ctx.actList = (id) => (id === 'run' ? recs : []);
+  return { m, t0 };
+}
+test('associar um programa à subtarefa já aplica: o tempo dele nas sessões conta na subtarefa, sem tirar da sessão', () => {
+  const { m } = comProgramas();
+  assert.equal(m.sbSubMs('ps'), 0);
+  m.subAssocia('ps', 'Photoshop');
+  assert.equal(Math.round(m.sbSubMs('ps') / MIN), 40);
+  assert.equal(m.db.all('tempo_time_entries').length, 1);
+  assert.equal(Math.round(ms(m.db.get('tempo_time_entries', 'run')) / MIN), 100);
+});
+test('o que foi marcado à mão vale mais que o programa; "Sem subtarefa" também', () => {
+  const { m, t0 } = comProgramas();
+  m.subAssocia('ps', 'Photoshop');
+  const e = m.db.get('tempo_time_entries', 'run');
+  m.sbPintar(e, [{ a: t0, b: t0 + 10 * MIN }], 'ae', '');                    // à mão: Animar 2D
+  assert.equal(Math.round(m.sbSubMs('ae') / MIN), 10); assert.equal(Math.round(m.sbSubMs('ps') / MIN), 30);
+  m.sbPintar(e, [{ a: t0 + 10 * MIN, b: t0 + 20 * MIN }], 'mae', '');        // à mão: sem subtarefa
+  assert.equal(Math.round(m.sbSubMs('ps') / MIN), 20);
+  const r = m.sbPintar(e, [{ a: t0 + 20 * MIN, b: t0 + 25 * MIN }], 'mae', '');
+  r.desfazer(); assert.equal(Math.round(m.sbSubMs('ps') / MIN), 20);
+});
+test('trocar o programa para outra subtarefa: vale a nova; o já marcado à mão fica', () => {
+  const { m, t0 } = comProgramas();
+  m.subAssocia('ps', 'Photoshop');
+  m.sbPintar(m.db.get('tempo_time_entries', 'run'), [{ a: t0, b: t0 + 10 * MIN }], 'ps', '');   // registrado à mão
+  m.subAssocia('ae', 'Photoshop');
+  assert.deepEqual(m.db.setting('subProgs', {}).ps || [], []);
+  assert.equal(Math.round(m.sbSubMs('ae') / MIN), 30);                       // o resto do Photoshop vai para a nova
+  assert.equal(Math.round(m.sbSubMs('ps') / MIN), 10);                       // o registrado à mão continua
+});
+test('sugestões: programas das sessões da tarefa, do maior para o menor, sem os já associados', () => {
+  const { m } = comProgramas();
+  let sug = m.sbSugestoesDe(m.db.get('tempo_tasks', 'ps'));
+  assert.equal(sug.length, 2); assert.ok(sug[0].ms >= sug[1].ms);
+  m.subAssocia('ps', sug[0].nome);
+  sug = m.sbSugestoesDe(m.db.get('tempo_tasks', 'ps')); assert.equal(sug.length, 1);
+  assert.match(m.sbDetalheHTML(m.db.get('tempo_tasks', 'ps')), /Sugestões/);
 });

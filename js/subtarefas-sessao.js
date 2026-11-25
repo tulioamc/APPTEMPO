@@ -30,13 +30,42 @@ function sbGuardaDivs(id, l) {
   if (l.length) m[id] = l; else delete m[id];
   db.setSetting('sbDiv', m);
 }
-/* Tempo trabalhado de uma subtarefa marcado dentro de sessões (soma em todas as sessões). */
+/* Sessões em que as subtarefas de uma tarefa podem aparecer: as da tarefa mãe e as das subtarefas dela. */
+function sbEntriesDe(mae) {
+  const ids = new Set([mae.id, ...subtasksOf(mae.id).map(x => x.id)]);
+  return db.all('tempo_time_entries').filter(x => ids.has(x.task_id));
+}
+/* Divisão automática pelos programas associados às subtarefas (Photoshop → Preparar telas): vale onde o usuário não marcou nada. */
+const SB_AUTO_C = new Map();
+function sbAuto(e, now = Date.now()) {
+  const mae = etapaMae(e); if (!mae || typeof actList !== 'function' || typeof subProgsDe !== 'function') return [];
+  const subs = subtasksOf(mae.id).filter(x => subProgsDe(x.id).length); if (!subs.length) return [];
+  const sg = e.segments || []; const ult = sg[sg.length - 1] || {};
+  const key = [e.id, sg.length, ult.s, ult.e, JSON.stringify(subs.map(x => [x.id, subProgsDe(x.id)])), e.state === 'done' ? 0 : Math.floor(now / 60000)].join('|');
+  const c = SB_AUTO_C.get(e.id); if (c && c.key === key) return c.v;
+  const work = sbWork(e, now); let l = [];
+  if (work.length) {
+    const recs = actList(e.id).filter(r => !(typeof pausaRec === 'function' && pausaRec(r) && !(typeof actWaTrabalho === 'function' && actWaTrabalho(r))));
+    subs.slice().reverse().forEach(sub => {
+      const progs = subProgsDe(sub.id);
+      const iv = actMergeIntervals(recs.filter(r => subCasa(r, progs)).map(r => ({ a: SB_T(r.from), b: SB_T(r.to) })).filter(x => x.b > x.a));
+      const pcs = sbInter(work, iv);
+      if (pcs.length) l = sbAplica(l, pcs, sub.id);
+    });
+  }
+  SB_AUTO_C.set(e.id, { key, v: l }); return l;
+}
+/* Divisão que vale: a automática por programa, com o que o usuário marcou à mão por cima ("Sem subtarefa" também vale). */
+function sbDivsEf(e, now = Date.now()) {
+  const man = sbDivs(e.id), auto = sbAuto(e, now);
+  if (!auto.length) return man;
+  return [...sbAplica(auto, man.map(d => ({ a: d.a, b: d.b })), null), ...man].sort((p, q) => p.a - q.a);
+}
+/* Tempo trabalhado de uma subtarefa dentro de sessões (soma em todas as sessões da tarefa). */
 function sbSubMs(subId, now = Date.now()) {
-  const m = db.setting('sbDiv', {}) || {}; let t = 0;
-  Object.keys(m).forEach(id => {
-    const ds = (m[id] || []).filter(d => d.sub === subId); if (!ds.length) return;
-    const e = db.get('tempo_time_entries', id); if (e) t += sbLen(sbInter(sbWork(e, now), ds));
-  });
+  const sub = db.get('tempo_tasks', subId), mae = sub && db.get('tempo_tasks', sub.parent_id); if (!mae) return 0;
+  let t = 0;
+  sbEntriesDe(mae).forEach(e => { if (e.task_id === subId) return; const ds = sbDivsEf(e, now).filter(d => d.sub === subId); if (ds.length) t += sbLen(sbInter(sbWork(e, now), ds)); });
   return t;
 }
 /* Tira os cortes das marcações e, se o destino é uma subtarefa, marca os cortes nela. Junta marcações vizinhas iguais. */
@@ -55,9 +84,9 @@ function sbAplica(divs, cuts, destSub) {
 /* Quanto tempo trabalhado mudaria de marcação se os cortes fossem para o destino. */
 function sbMudaria(e, cuts, destSub, now = Date.now()) {
   const pcs = sbInter(sbWork(e, now), actMergeIntervals(cuts));
-  const divs = sbDivs(e.id);
-  if (destSub) return sbLen(pcs) - sbLen(sbInter(pcs, divs.filter(d => d.sub === destSub)));
-  return sbLen(sbInter(pcs, divs));
+  const ef = sbDivsEf(e, now);
+  if (destSub) return sbLen(pcs) - sbLen(sbInter(pcs, ef.filter(d => d.sub === destSub)));
+  return sbLen(sbInter(pcs, ef.filter(d => d.sub !== 'sem')));
 }
 /* Intervalos em ordem, juntando os que se encostam (até 1 s). O motivo/destino que vale é o do último de cada bloco. */
 function sbNormaliza(segs) {
@@ -82,18 +111,26 @@ function sbSubDe(mae, nome) {
 
 /* O motor: marca os cortes (ms) com a subtarefa de destino (mae.id = "Sem subtarefa", tira a marcação). O tempo NÃO sai da sessão.
    Devolve { ms, desfazer } ou null se nada muda. */
+/* O que marcar faria: nova lista de marcações do usuário, quanto tempo muda de subtarefa e se só "fixa" o que o programa já dava. */
+function sbPlano(e, cuts, dest, now = Date.now()) {
+  const antes = sbDivs(e.id);
+  let novo = sbAplica(antes, cuts, dest);
+  if (!dest) { const pcs = sbInter(cuts, sbAuto(e, now)); if (pcs.length) novo = sbAplica(novo, pcs, 'sem'); }   // "sem subtarefa" também vence o automático
+  const ms = sbMudaria(e, cuts, dest, now);
+  const igual = JSON.stringify(novo) === JSON.stringify(antes);
+  return { antes, novo, ms, igual, fixa: !ms && !igual, msFixo: !ms && !igual ? sbLen(sbInter(sbWork(e, now), cuts)) : 0 };
+}
 function sbPintar(e, cuts, destTaskId, rotulo) {
   const mae = etapaMae(e); if (!mae || !destTaskId) return null;
   const now = Date.now();
   cuts = actMergeIntervals((cuts || []).map(c => ({ a: c.a, b: Math.min(c.b, now) })).filter(c => c.b - c.a >= 1000));
   if (!cuts.length) return null;
   const dest = destTaskId === mae.id ? null : destTaskId;
-  const ms = sbMudaria(e, cuts, dest, now);
-  if (!ms) return null;
-  const antes = sbDivs(e.id);
-  sbGuardaDivs(e.id, sbAplica(antes, cuts, dest));
+  const P = sbPlano(e, cuts, dest, now);
+  if (!P.ms && P.igual) return null;
+  sbGuardaDivs(e.id, P.novo);
   db.emit();
-  return { ms, desfazer: () => { sbGuardaDivs(e.id, antes); db.emit(); } };
+  return { ms: P.ms || P.msFixo, fixou: P.fixa, desfazer: () => { sbGuardaDivs(e.id, P.antes); db.emit(); } };
 }
 /* Sessões antigas em que um trecho foi LEVADO para uma subtarefa (versões anteriores): o tempo volta para a sessão e a subtarefa fica só como marcação.
    1) lançamentos "Movido de outra sessão" de subtarefa da mesma tarefa, dentro (ou encostados) da janela da sessão: voltam e são apagados;
@@ -156,7 +193,7 @@ function sbJanela(e) {
 function sbFatias(e, mae, J) {
   const subIds = new Set(subtasksOf(mae.id).map(s => s.id));
   const base = subIds.has(e.task_id) ? e.task_id : 'sem';
-  const divs = sbDivs(e.id).filter(d => subIds.has(d.sub)).sort((p, q) => p.a - q.a); const out = [];
+  const divs = sbDivsEf(e).filter(d => subIds.has(d.sub)).sort((p, q) => p.a - q.a); const out = [];
   sbWork(e).forEach(w => {
     let pos = w.a;
     divs.filter(d => d.b > w.a && d.a < w.b).forEach(d => {
@@ -226,8 +263,10 @@ function sbPrevia(e, mae, S, A) {
   const dest = sbDestinoId(e, mae, S);
   if (!dest) return { ok: false, txt: S.dest === '__novo' ? 'Dê um nome para a nova subtarefa.' : 'Escolha a subtarefa.' };
   const nome = S.dest === 'sem' ? 'Sem subtarefa' : S.dest === '__novo' ? (S.novo || '').trim() : sbNome(mae, S.dest);
-  const ms = sbMudaria(e, cuts, dest === mae.id ? null : dest);
-  if (!ms) return { ok: false, txt: `Nada para marcar: esse tempo já está em ${nome}.` };
+  const P = sbPlano(e, cuts, dest === mae.id ? null : dest);
+  if (!P.ms && P.igual) return { ok: false, txt: `Nada para marcar: esse tempo já está em ${nome}.` };
+  if (!P.ms) return { ok: true, ms: P.msFixo, txt: `Esse tempo já conta em ${nome} pelo programa. Marcar fixa ${fmtDur(P.msFixo)} nela: não muda se o programa for para outra subtarefa.` };
+  const ms = P.ms;
   const onde = S.ranges.length ? ` (${S.ranges.length === 1 ? sbHM(S.ranges[0].a) + '–' + sbHM(S.ranges[0].b) : S.ranges.length + ' trechos'})` : '';
   return { ok: true, ms, txt: `Vai marcar ${fmtDur(ms)}${app ? ' de ' + app.label : ''}${onde} como ${nome === 'Sem subtarefa' ? 'sem subtarefa' : nome}. O tempo continua na sessão.` };
 }
@@ -249,7 +288,7 @@ function sbSecaoHTML(e) {
   const criar = S.criando ? `<div class="sb-criar"><input type="text" class="input sm" data-sb="nome" placeholder="Nome da subtarefa" autocomplete="off" aria-label="Nome da nova subtarefa"><button type="button" class="btn sm primary" data-x="sb-criar" title="Criar a subtarefa (Enter)">Criar</button><button type="button" class="btn sm ghost" data-x="sb-nova" title="Cancelar">Cancelar</button></div>` : '';
   const agora = atual && aberta ? `<div class="sb-atual"><span class="small muted">Etapa atual</span><b>${esc(atual.name)}</b><span class="small muted">desde ${fmtTime(etapaInicio(e))}</span></div>` : '';
   if (!J) return `<div class="act-sec sb-sec">${cab(btns)}${criar}${agora}<div class="small muted">A sessão ainda não tem tempo registrado.</div></div>`;
-  if (fechado) { const marc = sbDivs(e.id).filter(d => subs.some(x => x.id === d.sub)); const t = sbLen(sbInter(sbWork(e), marc)); return `<div class="act-sec sb-sec is-fechado">${cab(btns)}<div class="small muted">${subs.length} ${subs.length === 1 ? 'subtarefa' : 'subtarefas'}${t ? ` · ${fmtDur(t)} marcados nesta sessão` : ''}</div></div>`; }
+  if (fechado) { const marc = sbDivsEf(e).filter(d => subs.some(x => x.id === d.sub)); const t = sbLen(sbInter(sbWork(e), marc)); return `<div class="act-sec sb-sec is-fechado">${cab(btns)}<div class="small muted">${subs.length} ${subs.length === 1 ? 'subtarefa' : 'subtarefas'}${t ? ` · ${fmtDur(t)} marcados nesta sessão` : ''}</div></div>`; }
 
   const fatias = sbFatias(e, mae, J);
   const msPor = {}; fatias.forEach(f => { msPor[f.key] = (msPor[f.key] || 0) + (f.b - f.a); });
@@ -409,12 +448,10 @@ function sbDetalheDados(subId) {
     const x = Math.max(a, SB_T(r.from)), y = Math.min(b, SB_T(r.to)); if (y <= x) return;
     const k = shortProgram(r.app) || r.app; prog[k] = (prog[k] || 0) + (y - x);
   });
-  const mapa = db.setting('sbDiv', {}) || {};
-  Object.keys(mapa).forEach(id => {
-    const e = db.get('tempo_time_entries', id); if (!e) return;
-    (mapa[id] || []).filter(d => d.sub === subId).forEach(d => {
-      sbInter(sbWork(e, now), [d]).forEach(c => { regs.push({ a: c.a, b: c.b, ms: c.b - c.a, sessao: e }); somaProg(c.a, c.b); });
-    });
+  const subT = db.get('tempo_tasks', subId), maeT = subT && db.get('tempo_tasks', subT.parent_id);
+  if (maeT) sbEntriesDe(maeT).forEach(e => {
+    if (e.task_id === subId) return;
+    sbDivsEf(e, now).filter(d => d.sub === subId).forEach(d => sbInter(sbWork(e, now), [d]).forEach(c => { regs.push({ a: c.a, b: c.b, ms: c.b - c.a, sessao: e }); somaProg(c.a, c.b); }));
   });
   db.all('tempo_time_entries').filter(e => e.task_id === subId).forEach(e => sbWork(e, now).forEach(c => { regs.push({ a: c.a, b: c.b, ms: c.b - c.a, sessao: e, propria: true }); somaProg(c.a, c.b); }));
   regs.sort((p, q) => q.a - p.a);
@@ -422,10 +459,28 @@ function sbDetalheDados(subId) {
   const apps = Object.entries(prog).sort((p, q) => q[1] - p[1]);
   return { regs, total, apps, sessoes: new Set(regs.map(r => r.sessao.id)).size };
 }
+/* Programas usados nas sessões da tarefa (ainda não associados a esta subtarefa), do que mais ao que menos tempo: as sugestões. */
+function sbSugestoesDe(sub) {
+  const mae = db.get('tempo_tasks', sub.parent_id); if (!mae || typeof actList !== 'function') return [];
+  const subs = subtasksOf(mae.id); const meus = subProgsDe(sub.id).map(x => String(x).trim().toLowerCase());
+  const por = {}; const now = Date.now();
+  sbEntriesDe(mae).forEach(e => {
+    const work = sbWork(e, now); if (!work.length) return;
+    actList(e.id).forEach(r => {
+      if (typeof pausaRec === 'function' && pausaRec(r) && !(typeof actWaTrabalho === 'function' && actWaTrabalho(r))) return;
+      let nome = ''; try { nome = toolName(r) || shortProgram(r.app) || r.app; } catch (er) { nome = r.app; }
+      if (!nome) return;
+      const ms = sbLen(sbInter(work, [{ a: SB_T(r.from), b: SB_T(r.to) }])); if (ms <= 0) return;
+      por[nome] = (por[nome] || 0) + ms;
+    });
+  });
+  return Object.entries(por).filter(([n, ms]) => ms >= 60e3 && !meus.includes(n.trim().toLowerCase())).sort((p, q) => q[1] - p[1]).slice(0, 8)
+    .map(([nome, ms]) => ({ nome, ms, em: subs.find(x => x.id !== sub.id && subProgsDe(x.id).some(n => String(n).trim().toLowerCase() === nome.trim().toLowerCase())) || null }));
+}
 function sbDetalheHTML(sub) {
   const D = sbDetalheDados(sub.id), mae = db.get('tempo_tasks', sub.parent_id);
   const ps = subProgsDe(sub.id); const ops = subOpcoes(sub.project_id).filter(o => !ps.includes(o));
-  const maxApp = D.apps.length ? D.apps[0][1] : 1;
+  const maxApp = D.apps.length ? D.apps[0][1] : 1; const sug = sbSugestoesDe(sub);
   const dia = (ms) => new Date(ms).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
   const tarefaDe = (e) => db.get('tempo_tasks', e.task_id)?.name || '';
   return `<div class="dh"><h2>Subtarefa${mae ? ` <span class="faint">de ${esc(mae.name)}</span>` : ''}</h2><span class="grow"></span><button class="btn icon ghost" data-sbd="fechar" aria-label="Fechar" title="Fechar">${icon('x')}</button></div>
@@ -434,8 +489,10 @@ function sbDetalheHTML(sub) {
     <div class="sbd-resumo"><div><span class="small muted">Tempo registrado</span><b class="mono">${D.total ? fmtDur(D.total) : '—'}</b></div><div><span class="small muted">Trechos</span><b class="mono">${D.regs.length}</b></div><div><span class="small muted">Sessões</span><b class="mono">${D.sessoes}</b></div></div>
     <div class="small muted" style="margin-top:-6px">Esse tempo continua dentro da tarefa${mae ? ` ${esc(mae.name)}` : ''}: a subtarefa só mostra a parte dele.</div>
     <div><div class="lbl">Programas usados nesse tempo</div>${D.apps.length ? D.apps.slice(0, 8).map(([k, ms]) => `<div class="sbd-app"><span class="sbd-an">${esc(k)}</span><span class="sbd-bar"><i style="width:${Math.max(3, Math.round(ms / maxApp * 100))}%"></i></span><b class="mono small">${fmtDur(ms)}</b></div>`).join('') : '<div class="small muted">Ainda não tem tempo marcado nesta subtarefa.</div>'}</div>
-    <div class="field"><label>Programas associados <span class="faint">(o tempo neles vira sugestão para esta subtarefa)</span></label><div class="sp-chips">${ps.map(n => `<span class="sp-chip">${esc(n)}<button type="button" data-sbd="tira" data-n="${esc(n)}" aria-label="Tirar ${esc(n)}" title="Tirar ${esc(n)} desta subtarefa">×</button></span>`).join('') || '<span class="small muted">Nenhum</span>'}</div>
-      <select class="input sm" data-sbd="add" style="margin-top:6px;max-width:260px" aria-label="Associar um programa" title="Associar um programa a esta subtarefa"><option value="">+ Associar programa…</option>${ops.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select></div>
+    ${sug.length ? `<div class="field"><label>Sugestões <span class="faint">(programas usados nas sessões desta tarefa; clique para associar e já aplicar)</span></label><div class="sp-chips">${sug.map(x => `<button type="button" class="sp-chip sbd-sug" data-sbd="assoc" data-n="${esc(x.nome)}" title="${x.em ? `Hoje ${esc(x.nome)} está em “${esc(x.em.name)}”. Se associar aqui, vale esta subtarefa.` : `Associar ${esc(x.nome)} a esta subtarefa: o tempo dele nas sessões já passa a contar aqui`}">+ ${esc(x.nome)} <span class="faint">${fmtDur(x.ms)}${x.em ? ' · em ' + esc(x.em.name) : ''}</span></button>`).join('')}</div></div>` : ''}
+    <div class="field"><label>Programas associados</label><div class="sp-chips">${ps.map(n => `<span class="sp-chip">${esc(n)}<button type="button" data-sbd="tira" data-n="${esc(n)}" aria-label="Tirar ${esc(n)}" title="Tirar ${esc(n)} desta subtarefa">×</button></span>`).join('') || '<span class="small muted">Nenhum</span>'}</div>
+      <select class="input sm" data-sbd="add" style="margin-top:6px;max-width:260px" aria-label="Associar um programa" title="Associar um programa a esta subtarefa"><option value="">+ Associar programa…</option>${ops.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select>
+      <div class="small muted" style="margin-top:6px">Associar aplica na hora: o tempo do programa nas sessões da tarefa passa a contar aqui (sem tirar da sessão). O que você marcar à mão na barra vale mais; se passar o programa para outra subtarefa, vale a nova.</div></div>
     <div><div class="lbl">Registros</div>${D.regs.length ? `<div class="sbd-regs">${D.regs.slice(0, 40).map(r => `<div class="sbd-reg"><span class="small">${esc(dia(r.a))}</span><span class="mono small muted">${sbHM(r.a)}–${sbHM(r.b)}</span><span class="small muted sbd-rn">${r.propria ? 'sessão própria' : 'dentro de “' + esc(tarefaDe(r.sessao) || 'sessão') + '”'}</span><b class="mono small">${fmtDur(r.ms)}</b></div>`).join('')}${D.regs.length > 40 ? `<div class="small muted">+ ${D.regs.length - 40} trechos mais antigos</div>` : ''}</div>` : '<div class="small muted">Nenhum registro.</div>'}</div>
   </div>
   <div class="df"><button type="button" class="btn danger" data-sbd="apagar" title="Apaga a subtarefa. O tempo continua nas sessões. Dá para desfazer logo depois.">${icon('trash')} Apagar subtarefa</button><span class="grow"></span><button type="button" class="btn" data-sbd="fechar">Fechar</button></div>`;
@@ -448,13 +505,13 @@ function sbDetalhe(ctx, subId) {
     const b = ev.target.closest('[data-sbd]'); if (!b) return; const k = b.dataset.sbd;
     if (k === 'fechar') ly.close();
     else if (k === 'salvar') salvar();
-    else if (k === 'tira') { const m = { ...(db.setting('subProgs', {}) || {}) }; m[subId] = (m[subId] || []).filter(x => x !== b.dataset.n); db.setSetting('subProgs', m); ly.refresh(); }
+    else if (k === 'tira') { const m = { ...(db.setting('subProgs', {}) || {}) }; m[subId] = (m[subId] || []).filter(x => x !== b.dataset.n); db.setSetting('subProgs', m); db.emit(); ly.refresh(); sbRefresh(); }
+    else if (k === 'assoc') { subAssocia(subId, b.dataset.n); db.emit(); ly.refresh(); sbRefresh(); }
     else if (k === 'apagar') { if (await sbApaga(ctx, subId)) { ly.close(); ctx.refresh && ctx.refresh(); } }
   });
   ly.box.addEventListener('change', (ev) => {
     const el = ev.target; if (el.dataset?.sbd !== 'add' || !el.value) return;
-    const m = { ...(db.setting('subProgs', {}) || {}) }; const l = m[subId] || []; if (!l.includes(el.value)) m[subId] = [...l, el.value];
-    db.setSetting('subProgs', m); ly.refresh();
+    subAssocia(subId, el.value); db.emit(); ly.refresh(); sbRefresh();
   });
   ly.box.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.id === 'sbd-nome') { ev.preventDefault(); salvar(); } });
 }
@@ -499,7 +556,7 @@ function sbMover(ctx) {
   const cuts = sbCortes(S, A);
   const r = sbPintar(e, cuts, dest, '');
   if (!r) { toast('Nada para marcar'); return; }
-  if (S.lembrar && app && dest !== mae.id) { const m = { ...(db.setting('subProgs', {}) || {}) }; const l = m[dest] || []; if (!l.includes(app.label)) { m[dest] = [...l, app.label]; db.setSetting('subProgs', m); } }
+  if (S.lembrar && app && dest !== mae.id) subAssocia(dest, app.label);
   S.ranges = []; S.app = ''; S.novo = ''; S.dest = dest === mae.id ? 'sem' : dest; S.lembrar = false;
   const txt = `${fmtDur(r.ms)}${app ? ' de ' + app.label : ''} marcados como ${dest === mae.id ? 'sem subtarefa' : nome}.`;
   sbLembraDesfazer(e.id, txt, r.desfazer);

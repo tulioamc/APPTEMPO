@@ -77,17 +77,25 @@ function subProgsHTML(sub) {
 }
 /* Janelinha da tarefa mãe: as sugestões, uma por subtarefa, com Aceitar e Ignorar. */
 function subSugestoesHTML(parent) {
+  return '';   // o programa associado já divide as sessões sozinho (V2.06.170); não há mais "Aceitar" que tira o tempo da sessão
   const sg = subSugestoes(parent); if (!sg.length) return '';
   return `<div class="sp-sug"><div class="sp-sug-h"><span class="tk-op-l">Sugestão por programa</span><span class="small muted">só entra se você aceitar</span></div>${sg.map(x => `<div class="sp-sug-l"><div class="sp-sug-t"><b>${esc(x.sub.name)}</b><span class="small muted">${esc(x.progs.join(', '))} · ${x.porSessao.length} ${x.porSessao.length === 1 ? 'sessão' : 'sessões'}</span></div><span class="mono sp-sug-v" data-tip="${esc(`Tempo nesses programas\n${x.porSessao.map(s => `${fmtDate(ymd(new Date(entryStart(s.e))))}: ${fmtDur(s.ms)}`).join('\n')}`)}">${fmtDur(x.ms)}</span><button class="btn sm primary" data-act="sp-aceita" data-id="${parent.id}" data-sub="${x.sub.id}" title="Move esse tempo para a subtarefa ${esc(x.sub.name)}">Aceitar</button><button class="btn sm ghost" data-act="sp-ignora" data-id="${parent.id}" data-sub="${x.sub.id}" title="Não sugerir de novo o tempo destas sessões">Ignorar</button></div>`).join('')}</div>`;
 }
 /* Total sugerido (para o pontinho na seta da tarefa). */
-const subSugTotal = (parent) => { try { return subSugestoes(parent).reduce((t, x) => t + x.ms, 0); } catch (e) { return 0; } };
+const subSugTotal = (parent) => { return 0; try { return subSugestoes(parent).reduce((t, x) => t + x.ms, 0); } catch (e) { return 0; } };
 
+/* Associa um programa a uma subtarefa. Um programa fica em UMA subtarefa da tarefa: se estava em outra, vale a nova.
+   O tempo do programa nas sessões já passa a contar na subtarefa (só divide a sessão; o que o usuário marcou à mão continua valendo). */
+function subAssocia(subId, nome) {
+  nome = String(nome || '').trim(); const sub = db.get('tempo_tasks', subId); if (!nome || !sub) return false;
+  const m = { ...(db.setting('subProgs', {}) || {}) }; const q = nome.toLowerCase();
+  subtasksOf(sub.parent_id).forEach(x => { if (x.id !== subId && (m[x.id] || []).some(n => String(n).trim().toLowerCase() === q)) m[x.id] = m[x.id].filter(n => String(n).trim().toLowerCase() !== q); });
+  const l = m[subId] || []; if (!l.some(n => String(n).trim().toLowerCase() === q)) m[subId] = [...l, nome];
+  db.setSetting('subProgs', m); return true;
+}
 CHANGES['sp-add'] = (el) => {
   const v = el.value; if (!v) return;
-  const m = { ...(db.setting('subProgs', {}) || {}) }; const l = m[el.dataset.id] || [];
-  if (!l.includes(v)) m[el.dataset.id] = [...l, v];
-  db.setSetting('subProgs', m); db.emit();
+  subAssocia(el.dataset.id, v); db.emit();
 };
 ACTIONS['sp-tira'] = (el) => {
   const m = { ...(db.setting('subProgs', {}) || {}) }; m[el.dataset.id] = (m[el.dataset.id] || []).filter(x => x !== el.dataset.n);
@@ -125,14 +133,12 @@ function etapasDeHoje(mae) {
   const h0 = new Date(); h0.setHours(0, 0, 0, 0);
   const out = db.all('tempo_time_entries').filter(e => subs.some(s => s.id === e.task_id) && entryStart(e) && new Date(entryEnd(e) || Date.now()) >= h0)
     .map(e => ({ e, sub: subs.find(s => s.id === e.task_id), a: entryStart(e), b: entryEnd(e), ms: entryMs(e) }));
-  /* marcações dentro das sessões da tarefa (o tempo continua na sessão) */
-  if (typeof sbDivs === 'function') {
-    const mapa = db.setting('sbDiv', {}) || {};
-    Object.keys(mapa).forEach(id => {
-      const e = db.get('tempo_time_entries', id); if (!e || (typeof etapaMae === 'function' && (etapaMae(e) || {}).id !== mae.id)) return;
+  /* marcações dentro das sessões da tarefa (o tempo continua na sessão): as do usuário e as dos programas associados */
+  if (typeof sbDivsEf === 'function') {
+    sbEntriesDe(mae).forEach(e => {
       const w = sbWork(e);
-      (mapa[id] || []).forEach(d => {
-        const sub = subs.find(s => s.id === d.sub); if (!sub || d.b < h0.getTime()) return;
+      sbDivsEf(e).forEach(d => {
+        const sub = subs.find(x => x.id === d.sub); if (!sub || d.b < h0.getTime() || sub.id === e.task_id) return;
         const ms = sbLen(sbInter(w, [d])); if (ms < 1000) return;
         out.push({ e, sub, a: new Date(d.a).toISOString(), b: new Date(d.b).toISOString(), ms });
       });
