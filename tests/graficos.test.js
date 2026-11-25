@@ -28,3 +28,11 @@ test('gráfico de linha da dica: SVG com um ponto por mês e valores escapados',
   assert.ok(!tip.includes('<b>Moradia') && tip.includes('Moradia') && tip.includes('<svg'));
   assert.strictEqual(m.tipGrafHTML('não é json'), '');
 });
+
+test('gráfico fixo (depois do clique): botão X e cada bolinha com o mês e o valor exato', () => {
+  const m = load(['js/store.js', 'js/domain.js', 'js/charts-time.js'], ['tipGrafHTML'], { fmtH: (v) => v + 'h', icon: () => '<svg></svg>' });
+  const h = m.tipGrafHTML(JSON.stringify({ t: 'Moradia', r: ['jan/26', 'fev/26'], v: [3920.8, 3900], u: 'R$' }), true);
+  assert.ok(h.includes('data-tg-x'));
+  assert.strictEqual((h.match(/class="lm-alvo"/g) || []).length, 2);
+  assert.ok(/data-tip="jan\/26\n?[^"]*3\.920,80/.test(h.replace(/&#10;|\\n/g, '\n')) || h.includes('3.920,80'));
+});

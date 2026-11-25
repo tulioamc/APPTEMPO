@@ -2494,3 +2494,12 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .tk-lista .panel-b:has(> .tk-entrega:last-child) { padding-bottom: 16px; }
 .tk-entrega::before { left: 0 !important; right: 0 !important; }
 .tk-lista .panel-b:has(> .tk-entrega:first-child) { padding-top: 14px; }
+/* Gráfico da dica que fica parado depois do clique (Gastos PF e onde mais houver data-tipg) */
+.pf-tr { cursor: pointer; }
+.pf-report table.tbl tbody tr.pf-tr:hover td { background: var(--accent-soft); }
+.tg-fixo { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px 10px; width: 492px; max-width: calc(100vw - 16px); }
+.tg-fixo-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+.tg-fixo .linha-mini { display: block; width: 100%; height: auto; margin-top: 8px; }
+.tg-fixo .lm-alvo { cursor: default; }
+.tg-fixo .lm-alvo:hover { fill: color-mix(in srgb, var(--g1) 18%, transparent); }
+.tg-fixo-rod { margin-top: 4px; }

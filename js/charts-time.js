@@ -66,7 +66,7 @@ function partyChartsHTML(ps) {
 
 /* Gráfico de linha no padrão do app (paleta única, grade clara, rótulos cinza), pequeno o bastante para caber numa dica.
    Usado ao passar o mouse numa categoria: evolução mês a mês. fmt formata os valores (ex.: dinheiro curto). */
-function linhaMiniSVG(rotulos, valores, fmt = (v) => String(v), cor = GRAF_CORES[0], W = 300, H = 120) {
+function linhaMiniSVG(rotulos, valores, fmt = (v) => String(v), cor = GRAF_CORES[0], W = 300, H = 120, fmtPonto = null) {
   const vs = valores.map(v => Number(v) || 0); if (!vs.length) return '';
   const bruto = Math.max(...vs) || 1, pot = Math.pow(10, Math.floor(Math.log10(bruto)));
   const max = [1, 2, 2.5, 5, 10].map(f => f * pot).find(x => x >= bruto);
@@ -78,12 +78,36 @@ function linhaMiniSVG(rotulos, valores, fmt = (v) => String(v), cor = GRAF_CORES
   const linha = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
   const cada = Math.ceil(rotulos.length / 6);
   const xl = rotulos.map((r, i) => i % cada && i !== rotulos.length - 1 ? '' : `<text x="${px(i).toFixed(1)}" y="${H - 6}" font-size="9" text-anchor="middle" fill="#8A909F">${esc(r)}</text>`).join('');
-  const dots = pts.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i === pts.length - 1 ? 3.5 : 2.5}" fill="#fff" stroke="${cor}" stroke-width="2"/>`).join('');
+  // com fmtPonto (gráfico fixo): cada bolinha tem uma área maior de mouse e a dica com o mês e o valor exato
+  const dots = pts.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i === pts.length - 1 ? 3.5 : 2.5}" fill="#fff" stroke="${cor}" stroke-width="2"/>${fmtPonto ? `<circle class="lm-alvo" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="11" fill="transparent" data-tip="${esc(`${rotulos[i]}\n${fmtPonto(vs[i])}`)}"/>` : ''}`).join('');
   return `<svg class="linha-mini" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">${grid}<path d="${area}" fill="${cor}" opacity=".16"/><path d="${linha}" fill="none" stroke="${cor}" stroke-width="2" stroke-linejoin="round"/>${dots}${xl}</svg>`;
 }
-/* Dica com gráfico: data-tipg='{"t":"Título","r":[rótulos],"v":[valores],"u":"R$","s":"linha extra"}' */
-function tipGrafHTML(raw) {
+/* Dica com gráfico: data-tipg='{"t":"Título","r":[rótulos],"v":[valores],"u":"R$","s":"linha extra"}'
+   fixo = true: versão maior, para o cartão que fica parado depois do clique (bolinhas com o valor no mouse). */
+function tipGrafHTML(raw, fixo = false) {
   let d; try { d = JSON.parse(raw); } catch (e) { return ''; }
+  const exato = d.u === 'R$' ? (v) => fmtMoney(v) || 'R$ 0' : d.u === 'h' ? (v) => fmtH(v) : (v) => String(v);
+  if (fixo) return `<div class="tg-fixo-h"><b>${esc(d.t || '')}</b><button type="button" class="btn sm icon ghost" data-tg-x aria-label="Fechar o gráfico" title="Fechar o gráfico">${icon('x')}</button></div>${d.s ? `<div class="small muted">${esc(d.s)}</div>` : ''}${linhaMiniSVG(d.r || [], d.v || [], (v) => (Math.abs(v) >= 1000 && d.u === 'R$' ? 'R$ ' + (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mil' : d.u === 'R$' ? 'R$ ' + Math.round(v).toLocaleString('pt-BR') : exato(v)), corGraf(d.c) || GRAF_CORES[0], 460, 190, exato)}<div class="tg-fixo-rod small muted">Passe o mouse nas bolinhas para ver o valor de cada mês.</div>`;
   const fmt = d.u === 'R$' ? (v) => (Math.abs(v) >= 1000 ? 'R$ ' + (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mil' : 'R$ ' + Math.round(v).toLocaleString('pt-BR')) : d.u === 'h' ? (v) => fmtH(v) : (v) => String(Math.round(v));
   return `<div class="tip-h">${esc(d.t || '')}</div>${d.s ? `<div>${esc(d.s)}</div>` : ''}${linhaMiniSVG(d.r || [], d.v || [], fmt, corGraf(d.c) || GRAF_CORES[0])}`;
+}
+
+/* Clicar num item com gráfico de dica (data-tipg) deixa o gráfico parado num cartão: dá para passar o mouse em cada
+   bolinha e ver o valor. Fecha no X, clicando fora ou com Esc. */
+let TG_FIXO = null;
+function tgFecha() { if (TG_FIXO) { TG_FIXO.remove(); TG_FIXO = null; } }
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('click', (e) => {
+    if (TG_FIXO && (e.target.closest?.('[data-tg-x]') || !TG_FIXO.contains(e.target))) { const era = TG_FIXO; tgFecha(); if (!e.target.closest?.('[data-tipg]') || era.dataset.src === e.target.closest('[data-tipg]')?.dataset.tipg) return; }
+    const el = e.target.closest?.('[data-tipg]'); if (!el || (TG_FIXO && TG_FIXO.contains(el))) return;
+    e.preventDefault(); e.stopPropagation();
+    if (typeof tipEsconde === 'function') tipEsconde();
+    const box = document.createElement('div'); box.className = 'tg-fixo'; box.dataset.src = el.dataset.tipg; box.setAttribute('role', 'dialog');
+    box.innerHTML = tipGrafHTML(el.dataset.tipg, true); document.body.appendChild(box); TG_FIXO = box;
+    const r = el.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
+    const x = Math.max(8, Math.min(r.left, innerWidth - w - 8)); const y = r.bottom + 8 + h < innerHeight ? r.bottom + 8 : Math.max(8, r.top - h - 8);
+    box.style.left = x + 'px'; box.style.top = y + 'px';
+  }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') tgFecha(); });
+  document.addEventListener('scroll', (e) => { if (TG_FIXO && !TG_FIXO.contains(e.target)) tgFecha(); }, true);
 }
