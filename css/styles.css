@@ -367,7 +367,7 @@ table.grid.static tbody tr:hover td { background: transparent; }
 .task-row.sub { padding-left: 34px; }
 .task-row:last-child { border-bottom: 0; }
 .task-row .n { flex: 1; min-width: 140px; }
-.inh { font-size: .72em; color: var(--fg-3); border: 1px dashed var(--line-strong); border-radius: 4px; padding: 0 5px; }
+.inh { font-size: .72em; color: var(--fg-3); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; }
 .bars { display: flex; flex-direction: column; gap: 8px; }
 .bar-row { display: grid; grid-template-columns: minmax(90px, 200px) minmax(0,1fr) auto; gap: 10px; align-items: center; font-size: .9em; }
 .bar-row .lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2324,3 +2324,19 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 /* Corte: fundo liso; só os vãos sem atividade ficam listrados */
 .cr-band { background: var(--surface-2) !important; }
 .cr-vao { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--surface-3) 6px 12px); pointer-events: none; }
+/* Recentes do Time Sheet (25/11): mais compacto, tudo nas mesmas colunas do projeto, sem linhas tracejadas */
+.cor-list { gap: 6px !important; padding: 10px 14px 14px !important; }
+.cor-proj { margin-bottom: 0 !important; }
+.cor-proj > summary.entry { padding: 8px 14px; }
+.cor-body { padding: 0 0 6px !important; border-top: 1px solid var(--line); }
+.cor-mode { padding: 8px 14px 4px; }
+.cor-task { margin-top: 2px !important; }
+.cor-taskh { display: grid !important; grid-template-columns: var(--entry-cols); gap: 16px; align-items: center; padding: 8px 14px 3px !important; border-bottom: 0 !important; font-size: .92em; cursor: pointer; }
+.cor-taskh b { font-weight: 700; }
+.cor-taskh .dur { font-family: var(--font-mono); font-size: .9em; color: var(--fg-2); text-align: right; }
+.cor-body .entry { padding: 6px 14px; border-bottom: 0; }
+.cor-body .entry:hover { background: var(--surface-2); }
+.cor-body .grp-kids { padding-left: 0; margin-left: 0; border-left: 0; }
+.cor-sub { margin: 2px 0 !important; }
+.cor-subh { padding: 4px 14px 2px 126px !important; font-size: 12px !important; }
+.cor-body .inh { border-style: solid !important; }

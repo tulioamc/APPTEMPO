@@ -45,9 +45,9 @@ function corridoProjHTML(p) {
     const tTotal = T.list.reduce((s, e) => s + entryMs(e), 0);
     const subsHTML = [...T.subs.values()].map(sb => `<div class="cor-sub"><div class="cor-subh"><span>↳ ${esc(sb.name)}</span><span class="mono small">${fmtDur(sb.list.reduce((s, e) => s + entryMs(e), 0))}</span></div><div class="grp-kids">${sb.list.map(entryRowHTML).join('')}</div></div>`).join('');
     const body = aglo ? groupedRowsHTML(T.list) : T.direct.map(entryRowHTML).join('') + subsHTML;
-    return `<div class="cor-task"><div class="cor-taskh" ${db.get('tempo_projects', p.pid) ? `data-act="proj-open" data-id="${p.pid}"` : `data-act="ts-resumo" data-title="${esc(T.name)}" data-ids="${tids}"`}><b>${esc(T.name)}</b><span class="mono small">${fmtDur(tTotal)}</span></div>${body}</div>`;
+    return `<div class="cor-task"><div class="cor-taskh" ${db.get('tempo_projects', p.pid) ? `data-act="proj-open" data-id="${p.pid}"` : `data-act="ts-resumo" data-title="${esc(T.name)}" data-ids="${tids}"`}><span></span><b>${esc(T.name)}</b><span></span><span class="dur" data-tip="Tempo de trabalho nesta tarefa (sem pausas), somando as sessões">${fmtDur(tTotal)}</span><span></span></div>${body}</div>`;
   }).join('');
-  const modeBtns = `<div class="row cor-mode" style="gap:6px;padding:8px 0 4px"><button class="btn sm ${aglo ? '' : 'primary'}" data-act="ts-cor-mode" data-m="cron">Cronológico</button><button class="btn sm ${aglo ? 'primary' : ''}" data-act="ts-cor-mode" data-m="agl">Aglomerado</button></div>`;
+  const modeBtns = `<div class="row cor-mode" style="gap:6px"><button class="btn sm ${aglo ? '' : 'primary'}" data-act="ts-cor-mode" data-m="cron">Cronológico</button><button class="btn sm ${aglo ? 'primary' : ''}" data-act="ts-cor-mode" data-m="agl">Aglomerado</button></div>`;
   const ids = p.list.map(e => e.id).join(',');
   const firstMs = Math.min(...p.list.map(e => new Date(entryStart(e)).getTime()));
   const endOf = (e) => new Date(entryEnd(e) || entryStart(e)).getTime();
