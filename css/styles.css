@@ -2249,3 +2249,26 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .tk-ent-a::before, .tk-ent-b::after { content: ''; position: absolute; top: 50%; width: 8px; height: 8px; margin-top: -4px; background: var(--accent); transform: rotate(45deg); }
 .tk-ent-a::before { left: -4px; } .tk-ent-b::after { right: -4px; }
 .tk-ent-nome { text-transform: none; }
+/* Opções da tarefa: grupos alinhados por cima; Depende de = caixas empilhadas, + ao lado da primeira */
+.tk-op-grupos { align-items: flex-start !important; }
+.tk-deps { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.tk-dep-l { display: flex; align-items: center; gap: 6px; }
+.tk-dep-cx { display: inline-flex; align-items: center; gap: 6px; height: 28px; max-width: 190px; padding: 0 6px 0 10px; border: 1px solid var(--line, #D5D9E3); border-radius: 8px; background: var(--surface, #fff); font-size: 11px; }
+.tk-dep-nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tk-dep-x, .tk-dep-mais { border: 0; background: none; cursor: pointer; color: var(--fg-3); font-size: 13px; line-height: 1; padding: 0 2px; flex: none; }
+.tk-dep-mais { width: 28px; height: 28px; border: 1px solid var(--line, #D5D9E3); border-radius: 8px; background: var(--surface, #fff); color: var(--fg-2); font-size: 15px; }
+.tk-dep-x:hover, .tk-dep-mais:hover { color: var(--accent); }
+.tk-dep-sel { max-width: 190px; height: 28px; }
+.tk-op-dep .tk-op-c { align-items: flex-start; }
+/* Opções da tarefa nas MESMAS colunas da linha (25/11): Status na coluna do nome; Tipo de trabalho começa na coluna do
+   responsável (Túlio); Depende de começa na coluna do tempo (00:00 trabalhado). Ações: Sem pressa à esquerda, o resto à direita. */
+.tk-mais-p { padding: 13px 10px 16px 22px !important; }
+.tk-mais-p::before { left: 22px; right: 10px; }
+.tk-op-grupos { display: grid !important; grid-template-columns: minmax(110px, 1fr) 40px 100px 124px 72px 40px 44px; column-gap: 8px; row-gap: 10px; align-items: start !important; justify-content: stretch !important; }
+.tk-op-grupos > .tk-op:nth-child(1) { grid-column: 1 / 2; }
+.tk-op-grupos > .tk-op:nth-child(2) { grid-column: 2 / 4; }
+.tk-op-grupos > .tk-op-dep { grid-column: 4 / -1; }
+.tk-op-acoes { width: 100%; }
+.tk-op-acoes > [data-x="add-sub"] { margin-left: auto; }
+.tk.sub .tk-op-acoes > [data-x="del-task"] { margin-left: auto; }
+@container (max-width: 560px) { .tk-op-grupos { display: flex !important; flex-wrap: wrap; } }

@@ -242,6 +242,7 @@ function bindProjectDrawer(ly, id, st) {
     if (x === 'tk-alerta') { e.preventDefault(); return tkAlerta(db.get('tempo_tasks', bid), b.dataset.k); }
     if (x === 'ent-del') { if (!await confirmBox({ title: 'Apagar esta entrega?', body: 'As tarefas continuam; só o deadline some.', ok: 'Apagar', danger: true })) return; projEntregasSalvar(id, projEntregas(id).filter(z => z.id !== bid)); db.emit(); return; }
     if (x === 'tk-abrir') { TK_ABERTAS.has(bid) ? TK_ABERTAS.delete(bid) : TK_ABERTAS.add(bid); ly.refresh(); return; }
+    if (x === 'dep-mais') { const sl = e.target.closest('.tk-deps')?.querySelector('.tk-dep-sel'); if (sl) { sl.hidden = false; sl.focus(); } return; }
     if (x === 'tk-reuniao') { reuniaoTarefa(id, true); reunioesVincular(); db.emit(); toast('Tarefa “Reuniões” criada'); return; }
     if (x === 'tk-sempressa') { const t = db.get('tempo_tasks', bid); if (t) { db.update('tempo_tasks', t.id, { sem_pressa: !t.sem_pressa }, true); db.emit(); toast(t.sem_pressa ? 'Sem pressa desligado' : 'Sem pressa: vai depois de todas as outras'); } return; }
     if (x === 'add-sub') { const t = db.get('tempo_tasks', bid); db.insert('tempo_tasks', { project_id: id, parent_id: t.id, name: 'Nova subtarefa', status_id: t.status_id, status_inherited: true, deadline: null, notes: '', order: subtasksOf(t.id).length }); setTimeout(() => { const ins = $$('[data-pd="tname"]', ly.box); const last = ins.find(i => db.get('tempo_tasks', i.dataset.id)?.name === 'Nova subtarefa'); last?.select(); }, 30); }
@@ -382,10 +383,15 @@ function openVideoFlowDialog(pid, onDone) {
 }
 /* Ligação entre tarefas: "depende de" com chips para remover e um seletor para adicionar. */
 function depsHTML(t) {
-  const deps = Array.isArray(t.depends_on) ? t.depends_on : [];
-  const chips = deps.map(d => { const x = db.get('tempo_tasks', d); return x ? `<button class="btn sm ghost" data-x="dep-del" data-id="${t.id}" data-dep="${d}" title="Remover dependência">${esc(x.name)} ×</button>` : ''; }).join('');
-  const opts = tasksOf(t.project_id).filter(x => !x.parent_id && x.id !== t.id && !deps.includes(x.id)).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
-  return `<span class="row" style="gap:4px;flex-wrap:wrap">${chips}${opts ? `<select class="input sm" data-pd="dep-add" data-id="${t.id}" aria-label="Adicionar dependência" title="Esta tarefa só começa depois da escolhida terminar"><option value="">${deps.length ? '+ outra' : 'Nenhuma · escolher'}</option>${opts}</select>` : ''}</span>`;
+  // Depende de (25/11, desenho do Tulio): uma caixa por tarefa, uma embaixo da outra (largura limitada, sem quebrar);
+  // o + fica ao lado da primeira; ao clicar, surge a caixa nova embaixo para escolher a próxima.
+  const deps = (Array.isArray(t.depends_on) ? t.depends_on : []).filter(d => db.get('tempo_tasks', d));
+  const opts = tasksOf(t.project_id).filter(x => !x.parent_id && x.id !== t.id && !deps.includes(x.id) && x.tipo !== 'reuniao').map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  const sel = (vis) => opts ? `<select class="input sm tk-dep-sel" data-pd="dep-add" data-id="${t.id}" aria-label="Adicionar dependência" title="Esta tarefa só começa depois da escolhida terminar"${vis ? '' : ' hidden'}><option value="">Escolher tarefa…</option>${opts}</select>` : '';
+  if (!deps.length) return `<span class="tk-deps">${sel(true) || '<span class="faint small">—</span>'}</span>`;
+  const caixa = (d, i) => { const x = db.get('tempo_tasks', d);
+    return `<span class="tk-dep-l"><span class="tk-dep-cx" data-tip="${esc(x.name)}"><span class="tk-dep-nm">${esc(x.name)}</span><button type="button" class="tk-dep-x" data-x="dep-del" data-id="${t.id}" data-dep="${d}" aria-label="Remover dependência" title="Remover: deixa de esperar esta tarefa">×</button></span>${i === 0 && opts ? `<button type="button" class="tk-dep-mais" data-x="dep-mais" data-id="${t.id}" aria-label="Adicionar outra" title="Esperar mais uma tarefa">+</button>` : ''}</span>`; };
+  return `<span class="tk-deps">${deps.map(caixa).join('')}${sel(false)}</span>`;
 }
 /* Mudança de prazo de tarefa: pede o motivo e, se já havia prazo, pergunta se é ajuste. Retorna false se cancelou. */
 async function taskDeadlineFlow(t, v) {
