@@ -332,7 +332,7 @@ function suggestStart(p, seg) {
   db.update('tempo_time_entries', e.id, { segments: [{ s: new Date(freeStartFrom(new Date(seg.from).getTime(), e.id)).toISOString(), e: null }] }, true);
   notifyNative(p ? `Contando em ${p.name}` : `Detectada atividade no ${shortProgram(seg.app)}`, `Confirme para entrar no bruto, negue para arquivar.`);
   const unsaved = !seg.folder ? 'Arquivo ainda não salvo. ' : '';
-  addNotice({ kind: 'start', key: `start:${e.id}`, title: p ? `Começar ${p.name}?` : `Detectada atividade no ${shortProgram(seg.app)}`, body: `${unsaved}Confirme para entrar no bruto, negue para arquivar.`, entity: 'entry', entity_id: e.id, project_id: pid, data: { project_id: pid, entry_id: e.id, snapshot: null, from: seg.from, app: seg.app, unsaved: !seg.folder } });
+  addNotice({ kind: 'start', key: `start:${e.id}`, title: p ? `Começar ${p.name}? (atividade desde ${fmtTime(seg.from)})` : `Detectada atividade no ${shortProgram(seg.app)} às ${fmtTime(seg.from)}`, body: `${unsaved}Confirme para entrar no bruto, negue para arquivar.`, entity: 'entry', entity_id: e.id, project_id: pid, data: { project_id: pid, entry_id: e.id, snapshot: null, from: seg.from, app: seg.app, unsaved: !seg.folder } });
 }
 async function suggestActivity(seg) {
   if (!isMacApp() || !seg || !seg.app) return;   // atividade só vem do app de Mac

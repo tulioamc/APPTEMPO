@@ -71,16 +71,15 @@ VIEWS.timesheet = () => {
       <div class="row between"><span class="timer-state"><span class="dot ${a.state === 'running' ? 'live' : 'paused'}"></span>${a.state === 'running' ? 'Registrando' : 'Pausado'} · desde ${fmtTime(entryStart(a))}</span>${wtTag(a.work_type_id)}</div>
       <div class="timer-digits" data-tick="${a.id}" data-fmt="big">${bigClock(entryMs(a))}</div>
       <div class="timer-path">${pathHTML(selPath(sel))}</div>${hjProximaLinha(a)}
-      <div class="field"><label for="ts-notes">Notas da sessão</label><textarea id="ts-notes" class="input" data-on="ts-notes" placeholder="Interrupções, espera pelo cliente, próximo passo…" style="min-height:56px">${esc(a.notes)}</textarea></div>
-      <div class="timer-actions">
-        ${a.state === 'running' ? `<button class="btn" data-act="ts-pause">${icon('pause')} Pausar</button>` : `<button class="btn primary" data-act="ts-resume">${icon('play')} Retomar</button>`}
-        <button class="btn" data-act="ts-switch">Trocar de projeto</button>
-        ${typeof etapaMae === 'function' && etapaMae(a) ? `<button class="btn" data-act="etapa-fim" data-id="${a.id}" title="Marca o fim de uma etapa: diz qual terminou e qual é a próxima. O tempo desde a última marca vai para a etapa que terminou; o cronômetro continua">${icon('flag')} Terminei uma etapa</button>` : ''}
-        <button class="btn danger" data-act="ts-stop">${icon('stop')} Encerrar</button>
-        ${focoBtnHTML()}
+      <div class="timer-actions grade">
+        ${a.state === 'running' ? `<button class="btn" data-act="ts-pause" title="Pausa o cronômetro">${icon('pause')} Pausar</button>` : `<button class="btn primary" data-act="ts-resume" title="Retoma o cronômetro">${icon('play')} Retomar</button>`}
+        <button class="btn danger" data-act="ts-stop" title="Encerra a sessão">${icon('stop')} Encerrar</button>
+        ${typeof etapaMae === 'function' && etapaMae(a) ? `<button class="btn" data-act="etapa-fim" data-id="${a.id}" title="Marca o fim de uma etapa: diz qual terminou e qual é a próxima. O tempo desde a última marca fica marcado nessa subtarefa (continua na sessão); o cronômetro segue">${icon('flag')} Terminei uma etapa</button>` : ''}
+        <button class="btn" data-act="ts-switch" title="Encerra e começa em outro projeto">Trocar de projeto</button>
         <button class="btn" data-act="corte-sessao" data-id="${a.id}" title="Cortar, mover e trocar a tarefa dos trechos da sessão">${icon('scissors')} Ajustar tempo</button>
-        <button class="btn" data-act="ts-log-start" data-id="${a.id}">Início pelo log</button>
-        <button class="btn" data-act="ts-edit" data-id="${a.id}">${icon('edit')} Abrir sessão atual</button>
+        <button class="btn" data-act="ts-log-start" data-id="${a.id}" title="Puxa o início da sessão para trás, usando a atividade do log">Início pelo log</button>
+        ${focoBtnHTML()}
+        <button class="btn" data-act="ts-edit" data-id="${a.id}" title="Abre a janela completa da sessão">${icon('edit')} Abrir sessão atual</button>
       </div>
       ${typeof etapasHTML === 'function' ? etapasHTML(a) : ''}
       ${sessionSumHTML(a)}

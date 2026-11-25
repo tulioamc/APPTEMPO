@@ -2724,3 +2724,13 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .sbd-rn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .sbd-sug { cursor: pointer; }
+
+/* Botões da sessão atual: menores, alinhados em grade e preenchendo a largura (Pausar e Encerrar lado a lado, primeiro) */
+.timer-actions.grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 6px; }
+.timer-actions.grade .btn { min-height: 32px; padding: 5px 10px; font-size: .9em; white-space: nowrap; justify-content: center; width: 100%; }
+/* Subtarefas da sessão: lista resumida, com rolagem quando são muitas */
+.sb-lista { gap: 4px; padding: 8px 10px; max-height: 190px; overflow-y: auto; }
+.sb-lista-h { position: sticky; top: -8px; background: var(--surface, #fff); padding: 0 0 4px; z-index: 1; }
+.sb-item { padding: 3px 8px; gap: 0; border-width: 1px; }
+.sb-item-l { gap: 6px; }
+.sb-detbtn { padding: 1px 8px; min-height: 22px; font-size: .8em; }

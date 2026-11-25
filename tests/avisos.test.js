@@ -46,3 +46,17 @@ test('dia útil sem registro: conta só o trabalho do dia (pausas fora) e some q
   m.db.insert('tempo_time_entries', { id: 'b', state: 'done', segments: [{ s: t('14:00'), e: t('16:00') }] }, true);
   m.avisosResolvidosSozinhos(); assert.equal(m.db.get('tempo_notices', n.id).status, 'accepted');
 });
+
+test('"Começar…?" some sozinho quando a sessão já roda há mais de 1h ou a sessão atual já cobre a atividade', () => {
+  const m = setup(); const iso = (x) => new Date(x).toISOString(); const agora = Date.now();
+  m.db.insert('tempo_time_entries', { id: 'velha', state: 'running', segments: [{ s: iso(agora - 90 * 60000), e: null }] }, true);
+  m.db.insert('tempo_time_entries', { id: 'nova', state: 'running', segments: [{ s: iso(agora - 10 * 60000), e: null }] }, true);
+  const a = aviso(m, { kind: 'start', data: { entry_id: 'velha' } });
+  m.avisosResolvidosSozinhos();
+  assert.strictEqual(m.db.get('tempo_notices', a.id).status, 'accepted');
+  const m2 = setup();
+  m2.db.insert('tempo_time_entries', { id: 'prov', state: 'running', segments: [{ s: iso(agora - 10 * 60000), e: null }] }, true);
+  const b = aviso(m2, { kind: 'start', data: { entry_id: 'prov' } });
+  m2.avisosResolvidosSozinhos();
+  assert.strictEqual(m2.db.get('tempo_notices', b.id).status, 'pending');   // recente e é a provisória: fica
+});

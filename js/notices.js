@@ -58,8 +58,26 @@ const noticeBtnsBase = (n) => {
   if (n.kind === 'sessao') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Manter aberta</button></div>`;
   if (n.kind === 'longo') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}" title="Encerra a sessão no último sinal de atividade do Mac">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ack" data-id="${n.id}" title="Trabalhou longe do Mac: mantém o tempo">Estava trabalhando</button></div>`;
   if (n.kind === 'semreg') return `<div class="row gap-s"><button class="btn sm primary" data-act="ts-manual" data-a="${n.data?.a || ''}" data-b="${n.data?.b || ''}" title="Abre uma sessão manual de hoje para lançar as horas">Lançar horas</button><button class="btn sm ghost" data-act="notice-ack" data-id="${n.id}" title="Hoje não teve trabalho fora do app">Não trabalhei</button></div>`;
-  if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm" data-act="notice-pick" data-id="${n.id}">Escolher projeto, tarefa ou subtarefa</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
+  if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button>${noticeJuntarOk(n) ? `<button class="btn sm" data-act="notice-join" data-id="${n.id}" title="Puxa o início da sessão atual para ${fmtTime(entryStart(db.get('tempo_time_entries', n.data.entry_id)))}, a hora em que esta atividade começou, e tira este aviso">Juntar à sessão atual</button>` : ''}<button class="btn sm" data-act="notice-pick" data-id="${n.id}">Escolher projeto, tarefa ou subtarefa</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
   return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Virar to-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
+};
+/* "Juntar à sessão atual": há uma sessão rodando que começou DEPOIS da atividade do aviso (e não é a provisória do aviso). */
+function noticeJuntarOk(n) {
+  const d = n.data || {}; const at = activeEntry(); const prov = d.entry_id ? db.get('tempo_time_entries', d.entry_id) : null;
+  return !!(at && prov && at.id !== prov.id && at.state !== 'done' && new Date(entryStart(prov)).getTime() < new Date(entryStart(at)).getTime());
+}
+ACTIONS['notice-join'] = (el) => {
+  const n = db.get('tempo_notices', el.dataset.id); if (!n || !noticeJuntarOk(n)) return;
+  const at = activeEntry(), prov = db.get('tempo_time_entries', n.data.entry_id);
+  const oldMs = new Date(entryStart(at)).getTime(), snap = JSON.parse(JSON.stringify(prov));
+  db.remove('tempo_time_entries', prov.id, true);
+  const ms = freeStartFrom(new Date(entryStart(prov)).getTime(), at.id);
+  if (ms >= oldMs) { const { id: _o, ...rest } = snap; db.insert('tempo_time_entries', rest, true); return toast('Esse horário já está em outra sessão.'); }
+  const segs = JSON.parse(JSON.stringify(at.segments)); segs[0] = { ...segs[0], s: new Date(ms).toISOString() };
+  db.update('tempo_time_entries', at.id, { segments: segs });
+  const np = typeof applyRetroPauses === 'function' ? applyRetroPauses(db.get('tempo_time_entries', at.id), ms, oldMs) : 0;
+  decideNotice(n, 'accepted', `Juntado à sessão atual (início às ${fmtTime(new Date(ms).toISOString())})`, { data: { ...n.data, snapshot: snap } });
+  db.emit(); toast(`Início da sessão atual ajustado para ${fmtTime(new Date(ms).toISOString())}${np ? ` (${np} pausa(s))` : ''}`);
 };
 /* Escolher na hora: abre a sessão provisória para pôr projeto, tarefa ou subtarefa antes de confirmar. */
 ACTIONS['notice-pick'] = (el) => { const n = db.get('tempo_notices', el.dataset.id); if (n?.data?.entry_id) openEntryModal(n.data.entry_id); };
@@ -440,6 +458,11 @@ function avisosResolvidosSozinhos() {
         if (!trabalhado) return fecha(n, 'a pausa já está na sessão');
       }
       if (n.kind === 'start' && temSessoes && d.entry_id && !db.get('tempo_time_entries', d.entry_id)) return fecha(n, 'a sessão não existe mais');
+      if (n.kind === 'start' && d.entry_id) {
+        const prov = db.get('tempo_time_entries', d.entry_id); const at = activeEntry();
+        if (prov && prov.state !== 'done' && Date.now() - new Date(entryStart(prov)).getTime() > 36e5) return fecha(n, 'a sessão já roda há mais de 1h');
+        if (prov && at && at.id !== prov.id && new Date(entryStart(at)).getTime() <= new Date(entryStart(prov)).getTime()) return fecha(n, 'a sessão atual já cobre essa atividade');
+      }
       if ((n.kind === 'nfse' || n.kind === 'reembolso') && n.entity === 'reimb' && d.nome && d.ym && typeof nfseLinha === 'function' && db.all('tempo_reimb_rows').length) {
         const row = nfseLinha(d.nome, d.ym, false); if (!row) return;
         if (d.tipo === 'comprovante' && typeof rbName === 'function' && rbName('reimb_pay', row.pay_id) === 'Pago') return fecha(n, 'a linha já está como Pago');
