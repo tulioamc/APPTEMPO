@@ -337,18 +337,32 @@ function planoCascata(itens) {
 /* Itens que ficam por cima dos outros, com fundo translúcido e contorno inteiro: to-dos e rotina maleável
    (a fixada, inegociável, continua de fundo). */
 const planoSobreTipo = (x) => x.k === 'todo' || x.k === 'todos' || (x.k === 'fixo' && x.m && x.m.pin === false);
-let PL_ALT_AGORA = null;   // altura de 1 h na grade que está sendo desenhada (para saber quanto ocupa o texto de um bloco)
+let PL_ALT_AGORA = null, PL_COLW_AGORA = null;   // altura de 1 h na grade que está sendo desenhada (para saber quanto ocupa o texto de um bloco)
 /* Regra (25/11): o item de cima entra um pouco recuado (o bloco de baixo continua aparecendo na esquerda) e pode cobrir
-   o corpo do bloco de baixo; se ele cair em cima do TEXTO de outro (título e linhas do topo, ~44 px), encolhe para a
-   metade da direita desse bloco; se mesmo assim não couber, divide a largura no meio. */
+   o corpo do bloco de baixo. Se ele cair em cima do TEXTO de outro:
+   - bloco de trabalho (texto no topo, ~44 px): vai para a metade da direita dele;
+   - outro to-do/rotina: começa logo depois de onde o texto do outro termina (texto curto = sobra mais espaço);
+   - se o texto do outro é grande e não sobra espaço: os dois dividem a largura no meio (o de baixo quebra o texto). */
+const planoTxtDe = (x) => (x.k === 'todo' ? x.e?.titulo : x.k === 'todos' ? `${(x.lista || []).length} to-dos` : x.k === 'fixo' ? x.n || x.m?.nome : '') || '';
 function planoSobrepor(over, base) {
-  const tH = 44 / (PL_ALT_AGORA || (typeof PL_ALT !== 'undefined' ? PL_ALT : 48)), INSET = 8;
+  const alt = PL_ALT_AGORA || (typeof PL_ALT !== 'undefined' ? PL_ALT : 48);
+  const colW = PL_COLW_AGORA || globalThis.__PL_COLW || 160;   // largura da coluna em px (estimada), para medir o texto
+  const tH = 44 / alt, tH1 = 20 / alt, INSET = 8;
+  const larguraTxt = (x) => Math.min(100, (30 + planoTxtDe(x).length * 6.3) / colW * 100);   // % da coluna
   const postos = [...base];
   over.slice().sort((x, y) => x.a - y.a || (y.b - y.a) - (x.b - x.a)).forEach((x, i) => {
     const fimX = planoFimVisual(x);
     const viz = postos.filter(p => p.a < fimX - 1e-9 && planoFimVisual(p) > x.a + 1e-9);
-    let left = viz.length ? INSET : 0;
-    viz.forEach(p => { if (x.a < p.a + tH - 1e-9 && fimX > p.a + 1e-9) left = Math.max(left, (p._left ?? 0) + (p._w ?? 100) * 0.5); });
+    let left = viz.length ? INSET : 0; let divide = null;
+    viz.forEach(p => {
+      const zona = p._sobre ? tH1 : tH;
+      if (!(x.a < p.a + zona - 1e-9 && fimX > p.a + 1e-9)) return;   // não encosta no texto dele
+      if (!p._sobre) { left = Math.max(left, (p._left ?? 0) + (p._w ?? 100) * 0.5); return; }
+      const fimTxt = (p._left ?? 0) + Math.min(p._w ?? 100, larguraTxt(p)) + 2;
+      if (100 - fimTxt >= Math.max(28, Math.min(40, larguraTxt(x)))) left = Math.max(left, fimTxt);
+      else divide = p;
+    });
+    if (divide) { const meio = (divide._left ?? 0) + (divide._w ?? 100) / 2; divide._w = meio - (divide._left ?? 0); left = Math.max(left, meio); }
     let w = 100 - left;
     if (w < 30) { left = 50; w = 50; }
     x._left = left; x._w = w; x._sobre = true; x._z = 60 + i; x._n = 1;
@@ -500,6 +514,8 @@ function planoLivres(dia, porDia) {
 function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0, cabecalho = true, semana = '' } = {}) {
   const cfg = planoCfg(); const v = porDia[dia]; const util = planoDiaUtil(dia); const hoje = ymd(new Date());
   PL_ALT_AGORA = alt;
+  // largura aproximada da coluna (px), para a regra do texto dos to-dos: Dia = 1/3 da área (3 faixas); Semana = 1/7
+  try { const W = Math.max(600, (window.innerWidth || 1400) - 300); PL_COLW_AGORA = unico ? W / 3 : W / 7; } catch (e) { PL_COLW_AGORA = 160; }
   const itens = planoFaixas(planoJuntaAgenda(planoRegistro15(planoItensDoDia(dia, porDia))), unico, dia).map(x => {
     let h; try { h = planoItemHTML(x, dia, { alt, unico }); } catch (e) { console.error('Calendário: item com problema', x?.k, e); PLANO.itensRuins = (PLANO.itensRuins || 0) + 1; return ''; }
     if (x._choque) h = h.replace('class="', 'class="choque ').replace('data-tip="', 'data-tip="⚠ Bate no horário com outro item.&#10;');
