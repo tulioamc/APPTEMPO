@@ -2608,3 +2608,19 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .an-meta-b .an-mbar-t { margin-top: 5px; }
 /* sem listra lateral: o resumo fica só com o fundo suave */
 .an-resumo { border-left: 0 !important; }
+/* Subtarefas por programa (25/11) */
+.tk-op-grupos > .tk-op-prog { grid-column: 2 / -1; }
+.sp-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 600; }
+.sp-chip button { border: 0; background: none; color: inherit; cursor: pointer; padding: 0 4px; font-size: 13px; line-height: 1; opacity: .7; }
+.sp-chip button:hover { opacity: 1; }
+.sp-add { border: 1px dashed var(--line-strong); border-radius: 999px; background: transparent; font: inherit; font-size: 11px; color: var(--fg-2); padding: 2px 8px; cursor: pointer; max-width: 170px; }
+.sp-sug { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }
+.sp-sug-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.sp-sug-l { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; padding: 6px 0; }
+.sp-sug-l + .sp-sug-l { border-top: 1px solid color-mix(in srgb, var(--accent) 15%, transparent); }
+.sp-sug-t { display: flex; flex-direction: column; min-width: 0; }
+.sp-sug-t b { font-size: 12px; }
+.sp-sug-v { font-size: 12px; font-weight: 600; }
+.tk-acoes .tem-sug { position: relative; }
+.tk-acoes .tem-sug::after { content: ''; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
