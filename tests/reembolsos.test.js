@@ -149,3 +149,23 @@ test('reler nota já lançada: não avisa de novo, só põe o arquivo na coluna 
   t.nfseReport([{ ...item, id: 'sha10', arquivo: '/iCloud/Patrícia_2026_11_Nota.pdf'.normalize('NFC') }]);
   assert.equal(t.rows('2026-11')[0].files.length, 2, 'acento escrito de outro jeito não duplica');
 });
+
+test('comprovante de Pedro: liga sozinho à entrada de mesmo valor; Amanda sempre pergunta', () => {
+  const t = setup();
+  const { db } = t;
+  db.insert('tempo_expenses', { month: '2026-11', kind: 'in', name: 'Pedro (Nuvem Shop)', amount: 1500, due_date: '2026-11-10', status: 'Não recebido', note: '', order: 0 }, true);
+  db.insert('tempo_expenses', { month: '2026-11', kind: 'in', name: 'Amanda - Contas Rafa', amount: 2550, due_date: '2026-11-01', status: 'Não recebido', note: '', order: 1 }, true);
+  const texto = 'Comprovante Pix\nR$ 1.500,00\n31/10/2026\nLeko 2/9';
+  t.nfseReport([{ id: 'a1', contato: 'Pedro Melo', tipo: 'comprovante', texto, data: '2026-10-31', arquivo: '/icloud/_Pagamentos/Pedro_2026_10_Comprovante.png' }]);
+  const p = db.all('tempo_expenses')[0];
+  assert.equal(p.status, 'Recebido');
+  assert.equal(p.paid_on, '2026-10-31');
+  assert.match(p.note, /LINK COMPROVANTE: \/icloud\/_Pagamentos\/Pedro_2026_10_Comprovante\.png/);
+  t.nfseReport([{ id: 'a2', contato: 'Amanda Godoy', tipo: 'comprovante', texto: 'Pix R$ 2.550,00 01/11/2026', data: '2026-11-01', arquivo: '/icloud/_Pagamentos/Amanda_2026_11_Comprovante.png' }]);
+  const a = db.all('tempo_expenses')[1];
+  assert.equal(a.status, 'Não recebido', 'Amanda não liga sem perguntar');
+  const n = db.all('tempo_notices').find(x => x.key === 'comp-ent:a2');
+  assert.ok(n && n.data.linha === a.id);
+  t.ACTIONS['nfse-entrada-usar']({ dataset: { id: n.id } });
+  assert.equal(db.get('tempo_expenses', a.id).status, 'Recebido');
+});

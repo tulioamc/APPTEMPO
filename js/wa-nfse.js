@@ -93,6 +93,54 @@ ACTIONS['nfse-usar'] = (el) => {
   db.emit();
 };
 
+/* ---- COMPROVANTES DE ENTRADA (quem paga você: Pedro, Amanda) → linha de Entradas em Finanças (25/11) ----
+   Pedro: o comprovante liga sozinho à linha dele que tem o mesmo valor (marca Recebido e deixa o link na Anotação).
+   Amanda: manda outros comprovantes além da mensalidade do Rafa, então sempre pergunta antes de ligar. */
+const NFSE_ENTRADAS = [
+  { contato: 'pedro melo', nome: 'Pedro', linha: /pedro|leko|nuvem/i, pergunta: false },
+  { contato: 'amanda godoy', nome: 'Amanda', linha: /amanda/i, pergunta: true }
+];
+const nfseEntradaDoContato = (contato) => { const k = nfseChave(contato); return NFSE_ENTRADAS.find(e => k.includes(e.contato)) || null; };
+/* Linha de entrada em aberto do contato mais perto da data do comprovante. igual = só as que têm o mesmo valor. */
+function nfseEntradaLinha(ent, valor, dia, igual) {
+  const t0 = new Date((dia || ymd(new Date())) + 'T12:00').getTime();
+  const lista = db.all('tempo_expenses').filter(r => r.kind === 'in' && ent.linha.test(r.name || '') && r.status !== 'Recebido' && r.status !== 'Não teve'
+    && (!igual || nfseIgual(r.amount ?? r.amount_sug, valor)));
+  const dist = (r) => Math.abs(new Date((r.due_date || `${r.month}-10`) + 'T12:00').getTime() - t0);
+  return lista.sort((a, b) => dist(a) - dist(b))[0] || null;
+}
+function nfseEntradaAplicar(d) {
+  const r = db.get('tempo_expenses', d.linha); if (!r) return false;
+  const link = d.arquivo ? `LINK COMPROVANTE: ${String(d.arquivo).normalize('NFC')}` : '';
+  const nota = link && !String(r.note || '').includes(link) ? [String(r.note || '').trim(), link].filter(Boolean).join(' · ') : r.note;
+  const valor = d.valor ?? r.amount ?? r.amount_sug;
+  db.update('tempo_expenses', r.id, { status: 'Recebido', paid_on: d.pagoEm || ymd(new Date()), amount: valor, amount_sug: null, note: nota }, true);
+  return true;
+}
+function nfseEntradaReport(it, ent) {
+  if (it.tipo !== 'comprovante') return;
+  const chave = 'comp-ent:' + it.id;
+  if (db.all('tempo_notices').some(x => x.key === chave)) return;
+  const valor = nfseValorBR(it.texto), pagoEm = nfseIsoBR(it.texto) || it.data;
+  const d = { entrada: true, tipo: 'comprovante', nome: ent.nome, valor, pagoEm, arquivo: it.arquivo || null, linha: null };
+  const exata = valor ? nfseEntradaLinha(ent, valor, pagoEm, true) : null;
+  if (exata && !ent.pergunta) {
+    d.linha = exata.id; nfseEntradaAplicar(d);
+    addNotice({ kind: 'reembolso', key: chave, title: `Comprovante de ${ent.nome}: ${fmtMoney(valor)} · ligado à entrada`, body: `Linha "${exata.name}" marcada como Recebido em ${fmtDate(pagoEm)}. O link do arquivo está na Anotação.`, entity: 'expense', data: d });
+    return;
+  }
+  const alvo = exata || nfseEntradaLinha(ent, valor, pagoEm, false);
+  d.linha = alvo ? alvo.id : null;
+  const onde = alvo ? `Ligar à linha "${alvo.name}" (${typeof rbLabel === "function" ? rbLabel(alvo.month) : alvo.month})?` : 'Não achei linha de entrada em aberto para ligar.';
+  addNotice({ kind: 'nfse', key: chave, title: `Comprovante de ${ent.nome}: ${fmtMoney(valor) || 'valor não lido'}`, body: `${ent.pergunta ? 'Ela também manda outros comprovantes. ' : ''}${onde}${valor && alvo && !nfseIgual(alvo.amount ?? alvo.amount_sug, valor) ? ` A linha está com ${fmtMoney(alvo.amount ?? alvo.amount_sug) || 'valor vazio'}; ao ligar, vale o valor do comprovante.` : ''}`, entity: 'expense', data: d });
+}
+ACTIONS['nfse-entrada-usar'] = (el) => {
+  const n = db.get('tempo_notices', el.dataset.id); if (!n) return;
+  if (nfseEntradaAplicar(n.data || {})) { decideNotice(n, 'accepted', 'Ligado à entrada'); toast('Comprovante ligado: linha marcada como Recebido.'); }
+  else toast('Não achei a linha para ligar.');
+  db.emit();
+};
+
 /* Chamado pelo app do Mac: [{ id, contato, tipo: 'nota' | 'comprovante', texto, data, arquivo }].
    Devolve os ids recebidos, para o Mac não reenviar. Nada entra como valor real sem confirmação,
    exceto quando só confirma o que já está na linha (mesmo valor). */
@@ -101,6 +149,8 @@ function nfseReport(itens) {
   const recebidos = [];
   itens.forEach(it => {
     try {
+      const ent = nfseEntradaDoContato(it.contato);
+      if (ent) { nfseEntradaReport(it, ent); recebidos.push(it.id); return; }
       const nome = nfseLinhaDoContato(it.contato);
       const ym = nfseJanelaMes(it.data);
       if (!nome || !ym) { recebidos.push(it.id); return; }

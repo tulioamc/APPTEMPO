@@ -121,25 +121,34 @@ function focoMinAteHora(hhmm) {
 ACTIONS['foco-abrir'] = async () => {
   const f = focoAtual();
   if (f) { focoEditar(f); return; }
+  const rodando = db.all('tempo_time_entries').find(e => e.state === 'running');
   const l = openLayer({ html: `<div class="dh">${icon('target')}<h2>Modo foco</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db stack"><div class="small muted">Marque o que fica escondido durante o foco; mensagem de cliente ainda avisa.</div>
       ${focoSelecaoHTML(null)}
-      <div class="small muted">Por quanto tempo?</div>
-      <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap"><label for="foco-hora" class="small">Ou terminar às</label><input id="foco-hora" class="input sm" type="time" style="width:110px" title="Hora em que o foco termina hoje (se já passou, amanhã)"><button class="btn" data-x="hora" title="Liga o foco até essa hora">Ativar</button>
-        ${db.all('tempo_time_entries').some(e => e.state === 'running') ? `<label class="foco-chip" title="O foco termina sozinho quando você encerrar a sessão que está rodando (tarefa ou projeto)"><input type="checkbox" id="foco-fimtarefa"><i></i>Terminar quando acabar a tarefa</label>` : ''}</div>
-      <div class="row" style="gap:6px;flex-wrap:wrap">${FOCO_OPCOES.map(m => `<button class="btn ${m === FOCO_PADRAO ? 'primary' : ''}" data-x="min" data-min="${m}">${m} min</button>`).join('')}</div>
-      <div class="row" style="gap:6px;align-items:center"><label for="foco-outro" class="small">Outro</label><input id="foco-outro" class="input sm" type="number" min="5" max="480" step="5" placeholder="minutos" style="width:110px"><button class="btn" data-x="outro">Ativar</button></div></div>` });
-  l.box.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-x]'); if (!b) return;
-    const min = b.dataset.x === 'outro' ? Number(l.box.querySelector('#foco-outro').value) : b.dataset.x === 'hora' ? focoMinAteHora(l.box.querySelector('#foco-hora').value) : Number(b.dataset.min);
-    if (!(min >= 5)) { toast(b.dataset.x === 'hora' ? 'Escolha a hora de término.' : 'Digite os minutos (5 ou mais).'); return; }
+      <div class="small muted">Por quanto tempo? <span class="faint">(vale o que você escolheu ou digitou por último)</span></div>
+      <div class="row" style="gap:6px;flex-wrap:wrap" data-foco-chips>${FOCO_OPCOES.map(m => `<button type="button" class="btn ${m === FOCO_PADRAO ? 'primary' : ''}" data-min="${m}">${m} min</button>`).join('')}</div>
+      <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap"><label for="foco-outro" class="small">Outro</label><input id="foco-outro" class="input sm" type="number" min="5" max="480" step="5" placeholder="minutos" style="width:110px">
+        <label for="foco-hora" class="small">ou terminar às</label><input id="foco-hora" class="input sm" type="time" style="width:110px" title="Hora em que o foco termina hoje (se já passou, amanhã)"></div>
+      <label class="foco-chip" style="align-self:flex-start" title="${rodando ? 'O foco termina sozinho quando você encerrar a sessão que está rodando (tarefa ou projeto), valendo para qualquer tempo escolhido' : 'Precisa de uma sessão rodando'}"><input type="checkbox" id="foco-fimtarefa"${rodando ? '' : ' disabled'}><i></i>Terminar quando acabar a tarefa</label>
+      <div class="row" style="justify-content:flex-end"><button type="button" class="btn primary" data-x="ativar">Ativar</button></div></div>` });
+  // o que vale é o último que você mexeu: um botão de minutos, o campo "Outro" ou a hora
+  let modo = { t: 'chip', v: FOCO_PADRAO };
+  const chips = [...l.box.querySelectorAll('[data-min]')];
+  const marca = (min) => chips.forEach(c => c.classList.toggle('primary', Number(c.dataset.min) === min));
+  chips.forEach(c => c.addEventListener('click', () => { modo = { t: 'chip', v: Number(c.dataset.min) }; marca(modo.v); l.box.querySelector('#foco-outro').value = ''; l.box.querySelector('#foco-hora').value = ''; }));
+  const entrada = (id, t) => l.box.querySelector(id).addEventListener('input', (e) => { if (!e.target.value) return; modo = { t, v: e.target.value }; marca(-1); l.box.querySelector(t === 'min' ? '#foco-hora' : '#foco-outro').value = ''; });
+  entrada('#foco-outro', 'min'); entrada('#foco-hora', 'hora');
+  const ativar = () => {
+    const min = modo.t === 'chip' ? modo.v : modo.t === 'min' ? Number(modo.v) : focoMinAteHora(modo.v);
+    if (!(min >= 5)) { toast(modo.t === 'hora' ? 'A hora de término precisa ser daqui a 5 minutos ou mais.' : 'Digite os minutos (5 ou mais).'); return; }
     const todos = focoItens(); const sel = focoMarcados(l.box);
     db.setSetting('focoDesmarcados', { apps: todos.apps.filter(x => !sel.apps.includes(x)), sites: todos.sites.filter(x => !sel.sites.includes(x)) });   // lembra o que você desmarcou para a próxima vez
-    const fimTarefa = l.box.querySelector('#foco-fimtarefa')?.checked ? (db.all('tempo_time_entries').find(e => e.state === 'running') || {}).id : null;
+    const fimTarefa = l.box.querySelector('#foco-fimtarefa')?.checked && rodando ? rodando.id : null;
     l.close(); focoLigar(min, sel);
     if (fimTarefa) { const f = db.setting('foco', null); if (f) db.setSetting('foco', { ...f, sessao: fimTarefa }); }
-  });
-  l.box.querySelector('#foco-outro').addEventListener('keydown', (e) => { if (e.key === 'Enter') l.box.querySelector('[data-x="outro"]').click(); });
+  };
+  l.box.querySelector('[data-x="ativar"]').addEventListener('click', ativar);
+  l.box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('#foco-outro,#foco-hora')) { e.preventDefault(); ativar(); } });
 };
 
 /* Clicar no foco ativo: editar o que fica escondido, voltar a bloquear o que foi liberado, mudar o horário final ou encerrar. */

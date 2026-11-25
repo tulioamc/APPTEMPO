@@ -223,6 +223,13 @@ function exSyncPayment(antes, r) {
     if (meu) { db.remove('tempo_payments', meu.id); toast('Pagamento do projeto desfeito.'); }
   }
 }
+/* Anotação: "LINK COMPROVANTE: <arquivo>" vira botão que mostra o arquivo no Finder (no Mac). */
+function exNotaHTML(nota) {
+  const t = String(nota || ''); if (!t) return '<span class="faint">—</span>';
+  const m = t.match(/LINK COMPROVANTE: (\S+)/); if (!m) return esc(t);
+  const resto = t.replace(m[0], '').replace(/^\s*·\s*|\s*·\s*$/g, '').trim();
+  return `${resto ? esc(resto) + ' ' : ''}<span class="tag c-blue rb-file" role="button" tabindex="0" data-act="file-open" data-path="${esc(m[1])}" data-tip="${esc('Mostrar o comprovante no Finder\n' + m[1].split('/').pop())}">${icon('doc', 'ico')}Comprovante</span>`;
+}
 const EX_COLS = {
   cat: { label: 'Categoria', ico: 'layers', w: 170, cell: r => r.cat ? exCatTags(r.cat) : '<span class="faint">—</span>', edit: { type: 'combo', kind: 'ex_cat', allowEmpty: true, emptyLabel: 'Sem categoria', get: r => r.cat, set: (r, v) => db.update('tempo_expenses', r.id, { cat: v || null }) } },
   name: { label: 'Nome', ico: 'text', cls: 'name', sort: r => r.name || '', w: 220, cell: r => `<span class="cell-name"><span class="ct">${esc(r.name || '') || '<span class="faint">—</span>'}${r.kind === 'in' && r.project_id && db.get('tempo_projects', r.project_id) ? ` <a href="#" class="small muted ex-lig" data-act="proj-open" data-id="${r.project_id}" title="Abrir o projeto">↗ ${esc(db.get('tempo_projects', r.project_id).name)}</a>` : ''}</span>${typeof openBtn === 'function' ? openBtn('ex-open', r.id) : ''}</span>`, edit: { type: 'text', get: r => r.name, set: (r, v) => db.update('tempo_expenses', r.id, { name: (v || '').trim() }) } },
@@ -232,7 +239,7 @@ const EX_COLS = {
   status: { label: 'Status', ico: 'spin', w: 150, cell: r => { const c = exComboItems(r.kind === 'in' ? 'ex_in' : 'ex_out').find(x => x.id === r.status); return c ? c.html : esc(r.status || ''); }, edit: { type: 'combo', kind: r => r.kind === 'in' ? 'ex_in' : 'ex_out', get: r => r.status, set: (r, v) => exSetStatus(r, v) } },
   paid_on: { label: 'Paga em', ico: 'cal', w: 120, cell: r => r.paid_on ? fmtDate(r.paid_on) : '<span class="faint">—</span>', sort: r => r.paid_on || '', edit: { type: 'date', get: r => r.paid_on, set: (r, v) => db.update('tempo_expenses', r.id, { paid_on: v || null }) } },
   inst: { label: 'Parcela', ico: 'hash', w: 90, cell: r => exInstLabel(r) || '<span class="faint">—</span>', edit: { type: 'text', get: r => exInstLabel(r), set: (r, v) => { const m = String(v || '').match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/); db.update('tempo_expenses', r.id, m ? { inst_no: Number(m[1]), inst_total: Number(m[2]) } : { inst_no: null, inst_total: null }); } } },
-  note: { label: 'Anotação', ico: 'text', w: 240, cell: r => esc(r.note || '') || '<span class="faint">—</span>', edit: { type: 'text', get: r => r.note, set: (r, v) => db.update('tempo_expenses', r.id, { note: (v || '').trim() }) } },
+  note: { label: 'Anotação', ico: 'text', w: 240, cell: r => exNotaHTML(r.note), edit: { type: 'text', get: r => r.note, set: (r, v) => db.update('tempo_expenses', r.id, { note: (v || '').trim() }) } },
   del: { label: '', w: 44, cell: r => `<button class="icon-btn ghost" data-act="ex-del" data-id="${r.id}" title="Remover linha">×</button>` }
 };
 /* Categoria em etiquetas: [PF] [Renda]. PF roxo, PJ amarelo. Entradas em cores frias, saídas em cores quentes. Clique para mudar a cor. */

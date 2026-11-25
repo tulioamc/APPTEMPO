@@ -23,15 +23,15 @@ test('marcar etapa cria a subtarefa, marca o trecho e a sessão continua rodando
   assert.equal(m.etapasDeHoje(m.db.get('tempo_tasks', 'mae')).length, 1);
 });
 
-test('lista de etapas: trechos seguidos da mesma etapa viram uma linha, na ordem do dia', () => {
+test('lista de etapas: uma linha por subtarefa com o total do dia (trechos separados são somados)', () => {
   const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'], ['etapasAgrupa'],
     { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '' });
   const P = { id: 'p', name: 'Preparar Cartelas' }, A = { id: 'a', name: 'Animação 2D' };
   const x = (sub, a, b, min) => ({ sub, a: `2026-11-25T${a}:00Z`, b: `2026-11-25T${b}:00Z`, ms: min * 6e4 });
   const g = m.etapasAgrupa([x(P, '08:28', '08:31', 2), x(P, '08:32', '08:40', 7), x(P, '08:50', '08:51', 1), x(A, '10:01', '10:08', 3), x(A, '10:09', '10:10', 1), x(P, '10:24', '10:34', 10)]);
-  assert.equal(g.length, 3);
-  assert.deepEqual(g.map(r => r.sub.name), ['Preparar Cartelas', 'Animação 2D', 'Preparar Cartelas']);
-  assert.deepEqual(g.map(r => r.ms / 6e4), [10, 4, 10]);
-  assert.deepEqual(g.map(r => r.itens.length), [3, 2, 1]);
-  assert.equal(g[0].a, '2026-11-25T08:28:00Z'); assert.equal(g[0].b, '2026-11-25T08:51:00Z');
+  assert.equal(g.length, 2);
+  assert.deepEqual(g.map(r => r.sub.name), ['Preparar Cartelas', 'Animação 2D']);
+  assert.deepEqual(g.map(r => r.ms / 6e4), [20, 4]);
+  assert.deepEqual(g.map(r => r.itens.length), [4, 2]);
+  assert.equal(g[0].a, '2026-11-25T08:28:00Z'); assert.equal(g[0].b, '2026-11-25T10:34:00Z');
 });

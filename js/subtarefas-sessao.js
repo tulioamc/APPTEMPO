@@ -309,14 +309,19 @@ function sbSecaoHTML(e) {
   const msPor = {}; fatias.forEach(f => { msPor[f.key] = (msPor[f.key] || 0) + (f.b - f.a); });
   const pct = (t) => (Math.min(Math.max(t, J.a), J.b) - J.a) / J.span * 100;
   let barras = '';
-  pauseGapsOf([e]).forEach(g => { const a = SB_T(g.s), b = SB_T(g.e); if (b <= J.a || a >= J.b) return; barras += `<span class="seg-b pausa act-pause" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%" data-tip="${esc(`Pausa ${sbHM(a)}–${sbHM(b)} · ${fmtDur(b - a)}`)}"></span>`; });
-  sbForaDe(e, J).forEach(f => { barras += `<span class="seg-b sb-fora" style="left:${pct(f.a)}%;width:${Math.max(.3, pct(f.b) - pct(f.a))}%" data-tip="${esc(`Em outro projeto\n${sbHM(f.a)}–${sbHM(f.b)} · ${fmtDur(f.b - f.a)}`)}"></span>`; });
-  fatias.forEach(f => {
+  const juntar = typeof actAglomerar === 'function' && (actAglomerar() || actCorrido()), semPausa = typeof actHidePausas === 'function' && actHidePausas();
+  if (!juntar && !semPausa) pauseGapsOf([e]).forEach(g => { const a = SB_T(g.s), b = SB_T(g.e); if (b <= J.a || a >= J.b) return; barras += `<span class="seg-b pausa act-pause" style="--ph:${pauseHatch(g.why)};--pg:${pauseGapOf(pauseHatch(g.why))};left:${pct(a)}%;width:${Math.max(.3, pct(b) - pct(a))}%" data-tip="${esc(`Pausa ${sbHM(a)}–${sbHM(b)} · ${fmtDur(b - a)}`)}"></span>`; });
+  if (!juntar) sbForaDe(e, J).forEach(f => { barras += `<span class="seg-b sb-fora" style="left:${pct(f.a)}%;width:${Math.max(.3, pct(f.b) - pct(f.a))}%" data-tip="${esc(`Em outro projeto\n${sbHM(f.a)}–${sbHM(f.b)} · ${fmtDur(f.b - f.a)}`)}"></span>`; });
+  if (juntar) {   // Aglomerar / Corrido: sem os espaços parados; Aglomerar soma cada subtarefa num bloco só
+    const lista = typeof actAglomerar === 'function' && actAglomerar() ? Object.entries(msPor).sort((x, y) => y[1] - x[1]).map(([key, ms]) => ({ key, ms })) : fatias.map(f => ({ key: f.key, ms: f.b - f.a, a: f.a, b: f.b }));
+    const tot = Math.max(1, lista.reduce((t, x) => t + x.ms, 0)); let off = 0;
+    lista.forEach(x => { const w = x.ms / tot * 100; barras += `<span class="seg-b fill act-b sb-b" data-g="${esc(x.key)}" style="--tb:${sbCor(mae, x.key)};left:${off}%;width:${Math.max(.3, w)}%" data-tip="${esc([sbNome(mae, x.key), x.a ? `${sbHM(x.a)}–${sbHM(x.b)} · ${fmtDur(x.ms)}` : fmtDur(x.ms)].join('\n'))}"></span>`; off += w; });
+  } else fatias.forEach(f => {
     const apps = sbAppsDe(f.a, f.b);
     barras += `<span class="seg-b fill act-b sb-b" data-g="${esc(f.key)}" data-a="${Math.round(f.a)}" data-b="${Math.round(f.b)}" style="--tb:${sbCor(mae, f.key)};left:${pct(f.a)}%;width:${Math.max(.3, pct(f.b) - pct(f.a))}%" data-tip="${esc([`${sbNome(mae, f.key)}`, `${sbHM(f.a)}–${sbHM(f.b)} · ${fmtDur(f.b - f.a)}`, ...apps].join('\n'))}"></span>`;
   });
-  S.ranges.concat(S.drag ? [S.drag] : []).forEach(r => { const x = pct(r.a), y = pct(r.b); if (y > x) barras += `<span class="res-sel-range" style="left:${x}%;width:${Math.max(.3, y - x)}%"></span>`; });
-  const faixa = `<div class="act-strip sb-strip" data-mode="sub" data-ent="${esc(e.id)}" data-t0="${J.a}" data-span="${J.span}" style="position:relative" aria-label="Arraste para marcar um trecho">${barras}</div>`;
+  if (!juntar) S.ranges.concat(S.drag ? [S.drag] : []).forEach(r => { const x = pct(r.a), y = pct(r.b); if (y > x) barras += `<span class="res-sel-range" style="left:${x}%;width:${Math.max(.3, y - x)}%"></span>`; });
+ const faixa = !subs.length ? '' : `<div class="act-strip sb-strip" ${juntar ? '' : 'data-mode="sub" data-ent="' + esc(e.id) + '" data-t0="' + J.a + '" data-span="' + J.span + '"'} style="position:relative" aria-label="Subtarefas da sessão">${barras}</div>`;
 
   const linha = (key, nome, ms, sub) => `<div class="sb-item${S.dest === key ? ' is-pick' : ''}" style="--tb:${sbCor(mae, key)}">
       <div class="sb-item-l"><button type="button" class="sb-pick" data-g="${esc(key)}" data-x="sb-dest" data-k="${esc(key)}" title="Clique para escolher ${esc(nome)} para o trecho"><i></i><span class="sb-n">${esc(nome)}</span></button>${sub ? `<button type="button" class="btn sm sb-detbtn" data-x="sb-det" data-k="${esc(key)}" title="Abre a janela da subtarefa: tempo registrado, programas, renomear e apagar">Detalhes</button>` : ''}<span class="mono small sb-t" title="Tempo desta subtarefa marcado nesta sessão">${ms ? fmtDur(ms) : '—'}</span></div>

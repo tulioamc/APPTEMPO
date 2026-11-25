@@ -56,13 +56,14 @@ const colorKeyOf = (gid) => {
   }
   return gid;
 };
-const toolColor = (name) => corGraf(toolColorBruta(name));
+const actCorEscolhida = (c) => !!c && Object.values(actColorMap()).some(v => String(v).toUpperCase() === String(c).toUpperCase());   // cor que você escolheu à mão fica exatamente como escolheu
+const toolColor = (name) => { const c = toolColorBruta(name); return actCorEscolhida(c) ? c : corGraf(c); };
 const toolColorBruta = (name) => actColorMap()['n:' + name] || (name === WA_DISTRACAO ? PAUSE_HATCH.whatsapp : name === WA_CLIENTE ? faixaCor('waCli').a : null) || programFor(name)?.color || actDefaultColor(name);
 /* Cor de um grupo na faixa:
    - programa e site do Chrome: a cor da ferramenta (global, 'n:<nome>');
    - arquivo de um programa: herda a cor do programa (a não ser que a cor do próprio arquivo tenha sido escolhida);
    - sem nada disso: cor da lista, por posição. */
-function groupColor(gid, i) { return corGraf(groupColorBruta(gid, i)); }
+function groupColor(gid, i) { const c = groupColorBruta(gid, i); return actCorEscolhida(c) ? c : corGraf(c); }
 function groupColorBruta(gid, i) {
   const ck = colorKeyOf(gid);
   if (ck.startsWith('n:')) return toolColor(ck.slice(2));
@@ -743,7 +744,7 @@ function openActGroup(entryId, gid, onDone) {
         ${others.length ? `<div class="field"><label for="act-target">Agrupar com outro</label><select id="act-target" class="input">${others.map(o => `<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('')}</select></div><div class="row"><button class="btn" data-x="act-merge">Agrupar</button></div>` : ''}
         <div class="field"><label for="act-proj">Mover este tempo para o projeto</label><select id="act-proj" class="input"><option value="">Escolha um projeto</option>${tkProjectsSorted().map(p => `<option value="${esc(p.id)}">${esc(tkProjectLabel(p))}</option>`).join('')}</select></div>
         <div class="field"><label for="act-task">Tarefa (opcional)</label><select id="act-task" class="input" disabled><option value="">Sem tarefa</option></select></div>
-        <div class="field"><label>Cor</label>${actSwatches(gid)}</div>
+        <div class="field"><label>Cor</label><div><button class="btn" data-x="act-cor">Mudar cor…</button></div></div>
         <div class="row"><button class="btn" data-x="act-move">Mover</button><span class="small muted">Sai desta sessão e vai para o projeto escolhido.</span></div>
       </div>
       <div class="df"><button class="btn" data-act="close-layer">Fechar</button></div>`,
@@ -757,7 +758,7 @@ function openActGroup(entryId, gid, onDone) {
       ly.box.addEventListener('click', async (ev) => {
         const b = ev.target.closest('[data-x]'); if (!b) return;
         const x = b.dataset.x;
-        if (x === 'act-color') { actSetColor(g.id, b.dataset.c); ly.close(); onDone && onDone(); return; }
+        if (x === 'act-cor') { openActColor(g.id, g.label || '', () => { ly.close(); onDone && onDone(); }); return; }
         if (x === 'act-ungroup') { actUngroup(g); }
         else if (x === 'act-split') { const keys = [...ly.box.querySelectorAll('[data-sel]:checked')].flatMap(c => c.dataset.sel.split('\n')); if (!keys.length) return toast('Marque os arquivos que quer separar.'); actSplit(keys); }
         else if (x === 'act-merge') { actMerge(g, ly.box.querySelector('#act-target').value); }
@@ -910,28 +911,64 @@ function openProgChoice(entryIds, gid, label, opts = {}) {
   });
 }
 
-/* Janela de cor de um programa (e de qualquer grupo). */
-let ACT_COLOR_CTX = null;   // quem abriu o seletor: a tela é redesenhada depois de escolher a cor
+/* Janela de cor de um programa, site ou grupo: paleta de cores bem diferentes entre si, "recentes", hexadecimal, OK para aplicar. */
+const ACT_PALETA = ['#EF4444', '#F97316', '#F59E0B', '#EAB308', '#84CC16', '#22C55E', '#14B8A6', '#06B6D4', '#3B82F6', '#6366F1', '#8B5CF6', '#EC4899',
+  '#FCA5A5', '#FDBA74', '#FCD34D', '#BEF264', '#86EFAC', '#5EEAD4', '#7DD3FC', '#93C5FD', '#A5B4FC', '#C4B5FD', '#F9A8D4', '#94A3B8'];
+const actHex = (v) => { let h = String(v || '').trim().replace(/^#?/, '#'); if (/^#[0-9a-f]{3}$/i.test(h)) h = '#' + h.slice(1).split('').map(x => x + x).join(''); return /^#[0-9a-f]{6}$/i.test(h) ? h.toUpperCase() : ''; };
+/* Cor de hoje do grupo (a que aparece na faixa). */
+function actCorAtual(gid) {
+  const ck = colorKeyOf(gid); const m = actColorMap();
+  const c = ck.startsWith('n:') ? toolColor(ck.slice(2)) : (m[gid] || groupColor(gid, 0));
+  return actHex(c) || '';
+}
+/* Que programas e sites usam cada cor (só os que você pintou; arquivos não entram). */
+function actQuemUsa() {
+  const out = {}; const add = (c, n) => { const k = actHex(c); if (!k || !n) return; (out[k] = out[k] || []).includes(n) || out[k].push(n); };
+  Object.entries(actColorMap()).forEach(([k, c]) => { if (k.startsWith('n:')) add(c, k.slice(2)); else if (k.startsWith('app:')) add(c, shortProgram(k.slice(4))); });
+  (typeof programas === 'function' ? programas() : []).forEach(p => { if (!actColorMap()['n:' + p.name]) add(p.color, p.name); });
+  return out;
+}
+const actRecentes = () => (db.setting('actCoresRecentes', []) || []).map(actHex).filter(Boolean);
+let ACT_COLOR_CTX = null;
 function openActColor(gid, label, onDone) {
-  const l = openLayer({
-    render: () => `<div class="dh"><h2>${esc(label)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
-      <div class="db"><span class="lbl">Cor na linha do tempo</span>${actSwatches(gid)}</div>`,
-    onMount: (ly) => ly.box.addEventListener('click', (ev) => {
-      const b = ev.target.closest('[data-x="act-color"]'); if (!b) return;
-      actSetColor(gid, b.dataset.c); ly.close(); onDone && onDone();
-    }),
+  const atual = actCorAtual(gid); let pend = atual; let mudou = false;
+  const quem = actQuemUsa(); const rec = actRecentes();
+  const dica = (c) => { const n = (quem[c] || []).filter(x => x !== label); return `${c}${n.length ? ' · usada em ' + n.join(', ') : ''}`; };
+  const sw = (c) => `<button type="button" class="cp-sw" data-c="${c}" style="--c:${c}" title="${esc(dica(c))}" aria-label="Cor ${c}"></button>`;
+  const extra = atual && !ACT_PALETA.includes(atual) && !rec.includes(atual) ? [atual] : [];
+  const l = openLayer({ html: `<div class="dh"><h2>Cor de ${esc(label || 'grupo')}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db stack cp" style="gap:14px">
+      <div class="cp-grid">${ACT_PALETA.map(sw).join('')}</div>
+      ${rec.length || extra.length ? `<div class="field"><span class="lbl">Cores recentes</span><div class="cp-grid cp-rec">${[...extra, ...rec].map(sw).join('')}</div></div>` : ''}
+      <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap"><span class="cp-prev" data-cp="prev" title="Cor escolhida"></span>
+        <label class="small" for="cp-hex">Hexadecimal</label><input id="cp-hex" class="input sm mono" style="width:110px" maxlength="7" placeholder="#RRGGBB" autocomplete="off" title="Digite a cor em hexadecimal (ex.: #3B82F6)">
+        <label class="cp-nat" title="Abrir o seletor de cores do sistema"><input type="color" id="cp-nat" value="${atual || '#3B82F6'}"><span>Mais cores…</span></label></div>
+      <div class="small muted">Escolha a cor e confirme em OK. Passe o mouse numa cor para ver onde ela já é usada.</div>
+    </div>
+    <div class="df"><button class="btn ghost" data-cp="padrao" title="Volta para a cor padrão deste item">Cor padrão</button><span class="grow"></span><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-cp="ok" disabled>OK</button></div>` });
+  const q = (s) => l.box.querySelector(s);
+  const mostra = () => {
+    const prev = q('[data-cp="prev"]'); if (prev) prev.style.background = pend || 'transparent';
+    l.box.querySelectorAll('.cp-sw').forEach(b => b.classList.toggle('on', actHex(b.dataset.c) === pend));
+    q('#cp-hex').value = pend || ''; if (pend) q('#cp-nat').value = pend;
+    q('[data-cp="ok"]').disabled = !mudou;
+  };
+  const escolhe = (c) => { pend = c; mudou = true; mostra(); };
+  l.box.addEventListener('click', (ev) => {
+    const sb = ev.target.closest('.cp-sw'); if (sb) return escolhe(actHex(sb.dataset.c));
+    const b = ev.target.closest('[data-cp]'); if (!b) return;
+    if (b.dataset.cp === 'padrao') { pend = ''; mudou = true; mostra(); }
+    else if (b.dataset.cp === 'ok') {
+      actSetColor(gid, pend || '');
+      if (pend) db.setSetting('actCoresRecentes', [pend, ...actRecentes().filter(x => x !== pend)].slice(0, 12));
+      l.close(); toast('Cor aplicada'); onDone && onDone();
+    }
   });
+  q('#cp-hex').addEventListener('input', (ev) => { const h = actHex(ev.target.value); if (h && ev.target.value.replace('#', '').length >= 3) { pend = h; mudou = true; const prev = q('[data-cp="prev"]'); prev.style.background = h; l.box.querySelectorAll('.cp-sw').forEach(x => x.classList.toggle('on', actHex(x.dataset.c) === h)); q('#cp-nat').value = h; q('[data-cp="ok"]').disabled = false; } });
+  q('#cp-nat').addEventListener('input', (ev) => escolhe(actHex(ev.target.value)));
+  mostra();
   ACT_COLOR_CTX = { onDone, layer: l };
 }
-
-/* Cor personalizada: o seletor de cor do sistema grava a cor do grupo e redesenha a tela. */
-document.addEventListener('change', (ev) => {
-  const i = ev.target.closest?.('input[data-x="act-custom"]'); if (!i || !i.dataset.g) return;
-  actSetColor(i.dataset.g, i.value);
-  toast('Cor aplicada');
-  const ctx = ACT_COLOR_CTX; ACT_COLOR_CTX = null;
-  if (ctx) { if (ctx.layer && ctx.layer.close) ctx.layer.close(); ctx.onDone && ctx.onDone(); }
-});
 
 /* Balãozinho do chip "Outros": ao passar o mouse, lista os itens de dentro (cada um com a cor original). */
 let actOthPop = null;

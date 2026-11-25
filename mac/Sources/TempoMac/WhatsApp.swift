@@ -92,6 +92,33 @@ enum ICloudTerapias {
 
     static func pasta(_ anoMes: String) -> URL { terapias.appendingPathComponent(anoMes) }
 
+    /// Comprovantes de quem paga você (Pedro, Amanda): <iCloud>/_RAFAEL/_Pagamentos/<Ano_Mes>/Pedro_2026_10_Comprovante.png
+    static func pastaPagamentos(_ anoMes: String) -> URL {
+        root.appendingPathComponent("_RAFAEL").appendingPathComponent("_Pagamentos").appendingPathComponent(anoMes)
+    }
+    static func jaSalvoPagamento(anoMes: String, nome: String, sha: String) -> URL? {
+        let dir = pastaPagamentos(anoMes)
+        let base = (nome as NSString).deletingPathExtension, ext = (nome as NSString).pathExtension
+        guard let itens = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return nil }
+        for u in itens where u.lastPathComponent.hasPrefix(base) && u.pathExtension == ext {
+            if let d = try? Data(contentsOf: u), WhatsAppMonitor.sha256(d) == sha { return u }
+        }
+        return nil
+    }
+    static func salvarPagamento(anoMes: String, nome: String, dados: Data) throws -> URL {
+        let dir = pastaPagamentos(anoMes)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let base = (nome as NSString).deletingPathExtension, ext = (nome as NSString).pathExtension
+        var destino = dir.appendingPathComponent(nome)
+        var n = 2
+        while FileManager.default.fileExists(atPath: destino.path) {
+            destino = dir.appendingPathComponent("\(base) (\(n)).\(ext)")
+            n += 1
+        }
+        try dados.write(to: destino)
+        return destino
+    }
+
     /// O mesmo arquivo já está na pasta do mês (de uma leitura anterior)? Evita cópias "(2)".
     static func jaSalvo(anoMes: String, nome: String, sha: String) -> URL? {
         let dir = pasta(anoMes)
@@ -163,6 +190,12 @@ final class WhatsAppMonitor {
         let limpo = s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "pt_BR"))
             .unicodeScalars.filter { !(0x200E...0x200F).contains($0.value) && !(0x202A...0x202E).contains($0.value) && !(0x2066...0x2069).contains($0.value) }
         return String(String.UnicodeScalarView(limpo)).split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
+    /// Quem paga você: o comprovante vai para _Pagamentos e o site liga à linha de Entradas (Amanda sempre pergunta antes).
+    private static let entradasContatos: [(trecho: String, nome: String)] = [("pedro melo", "Pedro"), ("amanda godoy", "Amanda")]
+    private static func entradaDoContato(_ nome: String) -> String? {
+        let k = chave(nome)
+        return entradasContatos.first(where: { k.contains($0.trecho) })?.nome
     }
     private static let notasPorChave: [String: String] = Dictionary(uniqueKeysWithValues: notasContatos.map { (chave($0.key), $0.value) })
 
@@ -557,6 +590,34 @@ final class WhatsAppMonitor {
         for (nome, caminho, coreData) in linhas {
             let candidatos = [WhatsAppMonitor.midia.appendingPathComponent(caminho),
                               WhatsAppMonitor.shared.appendingPathComponent(caminho)]
+            // Pedro / Amanda: só comprovantes (foto ou PDF com Pix/transferência); salva em _Pagamentos
+            if WhatsAppMonitor.notasPorChave[WhatsAppMonitor.chave(nome)] == nil, let quem = WhatsAppMonitor.entradaDoContato(nome) {
+                guard let arquivo = candidatos.first(where: { fm.fileExists(atPath: $0.path) }),
+                      let dados = try? Data(contentsOf: arquivo) else { continue }
+                let sha = WhatsAppMonitor.sha256(dados)
+                if let r = reg[sha] as? [String: Any] {
+                    if !reler || (r["enviado"] as? Bool) != true { continue }
+                }
+                guard let texto = textoDoArquivo(arquivo, dados) else { continue }
+                guard tipoDoDocumento(texto) == "comprovante" else {
+                    reg[sha] = ["enviado": true]; mudou = true; continue
+                }
+                let data = Date(timeIntervalSince1970: coreData + WhatsAppMonitor.epocaCoreData)
+                let anoMes = String(diaFmt.string(from: data).prefix(7)).replacingOccurrences(of: "-", with: "_")
+                var salvo: String?
+                let ext = arquivo.pathExtension.lowercased()
+                if ICloudTerapias.disponivel, ["pdf", "png", "jpg", "jpeg"].contains(ext) {
+                    let nomeFinal = "\(quem)_\(anoMes)_Comprovante.\(ext)"
+                    if let existente = ICloudTerapias.jaSalvoPagamento(anoMes: anoMes, nome: nomeFinal, sha: sha) { salvo = existente.path }
+                    else { salvo = (try? ICloudTerapias.salvarPagamento(anoMes: anoMes, nome: nomeFinal, dados: dados))?.path }
+                }
+                let item: [String: Any] = ["id": sha, "contato": nome, "tipo": "comprovante", "texto": texto,
+                                           "data": diaFmt.string(from: data), "arquivo": salvo ?? NSNull()]
+                reg[sha] = ["enviado": false, "item": item]
+                mudou = true
+                lidos += 1
+                continue
+            }
             guard let linha = WhatsAppMonitor.notasPorChave[WhatsAppMonitor.chave(nome)] else {
                 // outras conversas (ex.: contabilidade): PDF pode ser nota fiscal emitida por você -> pasta de notas
                 if caminho.lowercased().hasSuffix(".pdf"), let notaEmitida = onPdf,

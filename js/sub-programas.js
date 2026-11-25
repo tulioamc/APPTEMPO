@@ -188,11 +188,12 @@ function etapasDeHoje(mae) {
 }
 /* Trechos seguidos da mesma etapa viram uma linha só (começo do primeiro até o fim do último, tempo somado, nº de trechos na dica). */
 function etapasAgrupa(xs) {
-  const out = [];
+  // uma linha por subtarefa, com o total do dia (trechos separados são somados); a ordem é a do primeiro trecho de cada uma
+  const out = []; const por = new Map();
   xs.forEach(x => {
-    const u = out[out.length - 1];
-    if (u && u.sub && x.sub && u.sub.id === x.sub.id) { u.itens.push(x); u.ms += x.ms; if (!u.b || (x.b && new Date(x.b) > new Date(u.b))) u.b = x.b; if (!x.b) u.b = null; }
-    else out.push({ sub: x.sub, a: x.a, b: x.b, ms: x.ms, itens: [x] });
+    const k = x.sub ? x.sub.id : null; const u = k ? por.get(k) : null;
+    if (u) { u.itens.push(x); u.ms += x.ms; if (!x.b || !u.b) u.b = null; else if (new Date(x.b) > new Date(u.b)) u.b = x.b; if (new Date(x.a) < new Date(u.a)) u.a = x.a; }
+    else { const n = { sub: x.sub, a: x.a, b: x.b, ms: x.ms, itens: [x] }; out.push(n); if (k) por.set(k, n); }
   });
   return out;
 }
