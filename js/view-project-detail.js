@@ -80,7 +80,7 @@ function pdTasks(p) {
     if (!isSub && t.tipo === 'reuniao') {   // tarefa fixa de reuniões: sem prazo, sem status, fora do planejamento; só soma o tempo
       const ms = taskMs(t.id);
       return `<div class="tk tk-reuniao"><div class="tk-l">
-        <div class="tk-nome"><span class="tk-nome-l"><span class="tk-reu-ico" data-tip="Tarefa fixa de reuniões: todo registro de reunião deste projeto sem tarefa entra aqui sozinho. Sem prazo e fora do planejamento.">${icon('users')}</span><input class="tk-in n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome"></span><span class="tk-dep">Tarefa fixa · só soma o tempo</span></div>
+        <div class="tk-nome"><span class="tk-nome-l"><input class="tk-in n tk-reu-n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome" style="--w:${Math.max(4, String(t.name).length + 1)}ch"><span class="tk-reu-ico" data-tip="Tarefa fixa de reuniões: todo registro de reunião deste projeto sem tarefa entra aqui sozinho. Sem prazo e fora do planejamento.">${icon('users')}</span></span><span class="tk-dep">Tarefa fixa · só soma o tempo</span></div>
         <span class="tk-resp"></span>
         <div class="tk-st"><span class="tk-reu-tag" data-tip="Não tem prazo nem entra no planejamento; só vai somando o tempo das reuniões">Fixa</span></div>
         <div class="tk-tempo"><span class="tk-t1"><b>${tkHHMM(ms / 60e3)}</b><i>(trabalhado)</i></span></div>
@@ -103,10 +103,11 @@ function pdTasks(p) {
       <label class="tk-hora"${t.deadline_time ? ` data-tip="${esc(`Hora da entrega\n${horaTxt(t.deadline_time)}${t.deadline ? ' de ' + fmtDate(t.deadline) : ''}\nDigite para mudar (18h, 18:30…)`)}"` : ''}${!t.deadline_time && fila[t.id]?.fim && fila[t.id].resto > 0 ? ` data-tip="${esc(`Hora da entrega\nSem hora de entrega. Pelo planejamento fica pronta ${fmtDate(ymd(fila[t.id].fim))} às ${planoHora(fila[t.id].fim.getHours() + fila[t.id].fim.getMinutes() / 60)}.\nClique para definir a hora da entrega.`)}"` : ''}><input class="tk-hin" data-pd="thora" data-id="${t.id}" value="${horaTxt(t.deadline_time)}" placeholder="${fila[t.id]?.fim && fila[t.id].resto > 0 ? `≈${planoHora(fila[t.id].fim.getHours() + fila[t.id].fim.getMinutes() / 60).replace(':', 'h')}`.replace(/h00$/, 'h') : '--h--'}" aria-label="Hora do prazo (digite 18h, 18:30…)" autocomplete="off"></label>
       <span class="tk-acoes">${souEu(t.owner) ? `<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` : ''}<button class="btn sm icon ghost" data-x="tk-abrir" data-id="${t.id}" aria-label="${aberto ? 'Fechar' : 'Mais opções'}" aria-expanded="${aberto}">${icon(aberto ? 'chevU' : 'chevD')}</button></span>
     </div>
-    ${aberto ? `<div class="tk-mais-p">
+    ${aberto ? `<div class="tk-mais-p"><div class="tk-op-grupos">
       <div class="tk-op"><span class="tk-op-l">Status</span><label class="check small tk-op-c" data-tip="Ligado: mudar o status do projeto muda o desta tarefa também. Desligado: a tarefa tem o status dela e não acompanha o projeto"><input type="checkbox" data-x-chk="tk-herda" data-id="${t.id}" ${t.status_inherited !== false ? 'checked' : ''}> Segue o projeto</label></div>
       ${!isSub ? `<div class="tk-op"><span class="tk-op-l">Tipo de trabalho</span><span class="tk-op-c">${comboBtn('wt', t.work_type_id, 'task-wt', t.id)}</span></div>` : ''}
       ${!isSub ? `<div class="tk-op tk-op-dep"><span class="tk-op-l">Depende de</span><span class="tk-op-c">${depsHTML(t)}</span></div>` : ''}
+      </div><hr class="tk-op-div">
       <div class="tk-op-acoes">
         ${!isSub ? `<button class="btn sm ${t.sem_pressa ? 'on' : ''}" data-x="tk-sempressa" data-id="${t.id}" data-tip="${t.sem_pressa ? 'Sem pressa (ligado): vai depois de todas as outras tarefas no planejamento e anda conforme entram novas. Se tiver entrega, volta ao normal 2 dias úteis antes. Clique para desligar' : 'Sem pressa: a tarefa vai depois de todas as outras no planejamento e anda conforme entram novas; com entrega, volta ao normal 2 dias úteis antes para não passar do prazo'}">${t.sem_pressa ? '✓ ' : ''}Sem pressa</button>` : ''}
         ${!isSub ? `<button class="btn sm" data-x="add-sub" data-id="${t.id}" data-tip="Criar uma subtarefa dentro desta">${icon('plus')} Subtarefa</button>` : ''}

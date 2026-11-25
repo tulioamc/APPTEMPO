@@ -2226,3 +2226,26 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .tk-op-acoes .btn.sm { height: 28px; white-space: nowrap; }
 .tk-op-acoes .btn.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
 .tk-op-del:hover { color: var(--danger, #B91C1C); }
+/* Desenho do Tulio (25/11) — lista de tarefas do projeto */
+.tk-reu-n { width: var(--w) !important; flex: none !important; font-weight: 600 !important; }
+.tk-reu-ico { margin: 0 0 0 4px !important; }
+.tk-reu-tag { background: #fff !important; color: var(--accent) !important; }
+.tk-rel.amanha { color: #FFAA16; }
+/* opções da tarefa aberta: linha fina separando da tarefa; grupos espalhados na largura; divisória; ações embaixo, à esquerda */
+.tk-mais-p { position: relative; flex-direction: column; align-items: stretch !important; gap: 10px !important; padding: 13px 12px 16px 22px !important; }
+.tk-mais-p::before { content: ''; position: absolute; left: 22px; right: 12px; top: 0; height: 1px; background: var(--line-strong, #D5D9E3); }
+.tk-op-grupos { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 18px; }
+.tk-op-div { border: 0; height: 1px; background: var(--line-strong, #D5D9E3); margin: 2px 0; }
+.tk-op-acoes { margin-left: 0 !important; gap: 9px !important; flex-wrap: wrap; }
+.tk-op-del { border: 1px solid var(--line, #D5D9E3) !important; background: var(--surface, #fff) !important; color: var(--fg) !important; }
+/* Entrega: uma pílula só, arredondada, recuada, com um fio e um losango em cada ponta até a borda da lista */
+.tk-entrega { display: flex !important; align-items: stretch; position: relative; margin: 8px 30px 8px 22px !important; padding: 0 !important; color: #fff; }
+.tk-entrega::before, .tk-entrega::after { content: ''; position: absolute; top: 50%; height: 1px; background: var(--accent); }
+.tk-entrega::before { left: -22px; width: 22px; } .tk-entrega::after { right: -30px; width: 30px; }
+.tk-ent-a, .tk-ent-b, .tk-ent-linha { background: var(--accent); border: 0 !important; margin: 0 !important; }
+.tk-ent-a { border-radius: 9px 0 0 9px !important; width: auto !important; flex: 0 1 auto; padding: 6px 8px 6px 12px !important; position: relative; }
+.tk-ent-linha { flex: 1 1 auto; align-self: stretch !important; }
+.tk-ent-b { border-radius: 0 9px 9px 0 !important; width: auto !important; display: flex !important; gap: 14px; padding: 6px 12px 6px 8px !important; position: relative; }
+.tk-ent-a::before, .tk-ent-b::after { content: ''; position: absolute; top: 50%; width: 8px; height: 8px; margin-top: -4px; background: var(--accent); transform: rotate(45deg); }
+.tk-ent-a::before { left: -4px; } .tk-ent-b::after { right: -4px; }
+.tk-ent-nome { text-transform: none; }
