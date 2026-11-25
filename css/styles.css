@@ -2209,3 +2209,9 @@ body.pl-arrastando, body.pl-arrastando * { user-select: none !important; -webkit
 /* Passar o mouse num trabalho planejado: o resto esmaece; ficam normais só os blocos da mesma tarefa */
 body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade > .pl-feito:not(.pl-mesma), body.pl-foco-on .pl-grade > .pl-evento, body.pl-foco-on .pl-grade > .pl-fixo, body.pl-foco-on .pl-grade > .pl-fantasma:not(.pl-mesma) { opacity: .28; transition: opacity .15s; }
 .pl-grade > .pl-bloco, .pl-grade > .pl-feito, .pl-grade > .pl-evento, .pl-grade > .pl-fixo { transition: opacity .15s; }
+/* Correções do bloco com "Cor do cliente" (24/11): a linha de cima ocupa a largura toda (o projeto vai para a direita) e o ×
+   fica no canto, só ao passar o mouse */
+.pl-grade > .pl-bloco.cc > .pl-cc-top, .pl-grade > .pl-bloco.cc > .pl-cc-l2, .pl-grade > .pl-bloco.cc > .pl-cc-l3 { align-self: stretch; width: 100%; box-sizing: border-box; }
+.pl-bloco.cc .pl-cc-top .pl-tx { flex: 1 1 auto; }
+.pl-bloco.cc .pl-cc-x { position: absolute !important; top: 4px; right: 4px; opacity: 0 !important; transition: opacity .12s; z-index: 3; }
+.pl-bloco.cc:hover .pl-cc-x { opacity: 1 !important; }

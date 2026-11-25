@@ -255,7 +255,7 @@ function openProjectForm(id, clientId, onCreated) {
         <div class="field"><label for="pf-st">Status</label><select id="pf-st" class="input" name="status_id">${options(statuses('work'), p?.status_id || statusByCat('work', 'todo')?.id)}</select></div>
         <div class="field"><label for="pf-pay">Pagamento</label><select id="pf-pay" class="input" name="payment_status_id">${options(statuses('payment'), p?.payment_status_id || statuses('payment')[0]?.id)}</select></div>
         <div class="field" id="pf-fee-wrap">${feeFieldInner(p, p?.client_id || clientId)}</div>
-        <div class="field" data-dias-wrap><label for="pf-dl">Prazo <span class="faint small" data-tip="Projeto pode não ter prazo final (diferente das tarefas). Em branco = sem prazo; o app usa os prazos das tarefas e entregas">(opcional)</span></label><div class="row" style="flex-wrap:nowrap;gap:6px"><input id="pf-dl" type="date" class="input" name="deadline" value="${p?.deadline || ''}"><input class="input" name="deadline_time" style="width:84px" placeholder="19h" value="${horaTxt(p?.deadline_time || '')}" aria-label="Hora da entrega (digite 18h, 18:30…)" data-tip="Hora da entrega do projeto. Digite 18h, 18:30… Sem hora, vale o fim do expediente (19h)" autocomplete="off"></div>${emDiasHTML(false)}</div>
+        <div class="field" data-dias-wrap><label for="pf-dl">Prazo <span class="faint small" data-tip="Projeto pode não ter prazo final (diferente das tarefas). Em branco = sem prazo; o app usa os prazos das tarefas e entregas">(opcional)</span></label><label class="check small" style="margin:2px 0 6px" data-tip="Projeto sem prazo final (diferente das tarefas): apaga a data e a hora do prazo"><input type="checkbox" data-x="sem-prazo" ${p && !p.deadline ? 'checked' : ''}> Sem prazo final</label><div class="row" data-prazo-campos style="flex-wrap:nowrap;gap:6px;${p && !p.deadline ? 'display:none' : ''}"><input id="pf-dl" type="date" class="input" name="deadline" value="${p?.deadline || ''}"><input class="input" name="deadline_time" style="width:84px" placeholder="19h" value="${horaTxt(p?.deadline_time || '')}" aria-label="Hora da entrega (digite 18h, 18:30…)" data-tip="Hora da entrega do projeto. Digite 18h, 18:30… Sem hora, vale o fim do expediente (19h)" autocomplete="off"></div>${emDiasHTML(false)}</div>
         <div class="field"><label for="pf-est">Horas estimadas</label><input id="pf-est" type="number" min="0" step="0.25" class="input" name="estimated_hours" value="${p?.estimated_hours ?? ''}"></div>
         <div class="field"><label for="pf-bud">Orçamento</label><input id="pf-bud" class="input mono" name="budget" ${moneyAttrs(p?.budget)}></div>
         <div class="field"><label for="pf-rev">Rodadas de ajuste incluídas</label><input id="pf-rev" type="number" min="0" step="1" class="input" name="revisions_included" value="${p?.revisions_included ?? 2}"></div>
@@ -266,6 +266,9 @@ function openProjectForm(id, clientId, onCreated) {
     <div class="df"><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="save">${p ? 'Salvar' : 'Criar projeto'}</button></div>`
   });
   l.box.addEventListener('submit', (e) => e.preventDefault());
+  // "Sem prazo final": esconde e apaga a data e a hora do prazo; desmarcado, volta a pedir
+  l.box.addEventListener('change', (e) => { if (!e.target.matches('[data-x="sem-prazo"]')) return; const w = $('[data-prazo-campos]', l.box); const sem = e.target.checked;
+    if (w) w.style.display = sem ? 'none' : ''; if (sem) { const d = $('#pf-dl', l.box); if (d) d.value = ''; const h = $('[name="deadline_time"]', l.box); if (h) h.value = ''; } });
   l.box.addEventListener('change', (e) => { if (e.target.id === 'pf-client') $('#pf-fee-wrap', l.box).innerHTML = feeFieldInner(null, e.target.value); });
   l.box.addEventListener('change', (e) => { if (e.target.id === 'pf-client' || e.target.id === 'pf-fee' || e.target.id === 'pf-pay') syncFee(l.box); });
   syncFee(l.box);
@@ -285,7 +288,8 @@ function openProjectForm(id, clientId, onCreated) {
       if ((f.work_type_id || null) !== wtAntes) projSetWorkType(p, f.work_type_id || null, wtAntes);
       if (f.status_id !== p.status_id) setProjectStatus(p, f.status_id);
       if (payId !== p.payment_status_id) setPaymentStatus(p, payId);
-      if ((f.deadline || '') !== (p.deadline || '')) changeDeadline(p, f.deadline, 'Editado no formulário');
+      if ((f.deadline || '') !== (p.deadline || '')) changeDeadline(p, f.deadline, $('[data-x="sem-prazo"]', l.box)?.checked ? 'Sem prazo final' : 'Editado no formulário');
+      if ($('[data-x="sem-prazo"]', l.box)?.checked) db.update('tempo_projects', p.id, { deadline: null, deadline_original: null, deadline_time: null }, true);   // some também o prazo original
       db.emit(); toast('Projeto atualizado');
     } else {
       const np = db.insert('tempo_projects', { ...data, status_id: f.status_id, payment_status_id: payId, deadline: f.deadline || null, deadline_original: f.deadline || null, remaining_override: null, archived: false }, true);
