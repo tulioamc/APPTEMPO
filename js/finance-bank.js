@@ -51,7 +51,7 @@ const bankFamily = (name) => {
   if (/^aloma/.test(n)) return 'aloma';
   if (/^raquel/.test(n)) return 'raquel';
   if (/^homero/.test(n)) return 'homero';
-  if (/^dentista/.test(n)) return 'dentista';
+  // dentista não tem reembolso: não é terapia, o pagamento fica como gasto normal (Saúde)
   return null;
 };
 async function bankAutoTherapy() {
@@ -435,7 +435,7 @@ function bankInReportHTML(entity, ym, base, excl) {
   const rows = V === 'cli' ? cliRows : mesRows;
   const mx = Math.max(1, ...rows.map(r => r[1]));
   const nMeses = Object.keys(byMes).length;
-  const bars = rows.length ? `<div style="display:flex;flex-direction:column;gap:10px">${rows.map(([k, v]) => `<div style="display:flex;align-items:center;gap:12px"><span class="small" style="flex:0 0 200px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(k)}">${esc(V === 'mes' ? rbLabel(k) : k)}${V === 'cli' && agOf[k] ? ` <span class="faint">· ${esc(agOf[k])}</span>` : ''}</span><div style="flex:1;min-width:0;height:16px;border-radius:8px;background:var(--surface-2);overflow:hidden;margin-right:14px"><div style="height:100%;width:${v / mx * 100}%;border-radius:8px;background:var(--accent,#22a06b)"></div></div><span class="mono small" style="flex:0 0 150px;text-align:right;white-space:nowrap">${fmtMoney0(v)} <span class="faint">${total ? Math.round(v / total * 100) : 0}%</span></span></div>`).join('')}</div>` : '<div class="empty small">Nenhuma entrada no período.</div>';
+  const bars = rows.length ? `<div style="display:flex;flex-direction:column;gap:10px">${rows.map(([k, v]) => `<div style="display:flex;align-items:center;gap:12px"><span class="small" style="flex:0 0 150px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(k)}">${esc(V === 'mes' ? rbLabel(k) : k)}${V === 'cli' && agOf[k] ? ` <span class="faint">· ${esc(agOf[k])}</span>` : ''}</span><div style="flex:1;min-width:0;height:16px;border-radius:8px;background:var(--surface-2);overflow:hidden"><div style="height:100%;width:${v / mx * 100}%;border-radius:8px;background:var(--accent,#22a06b)"></div></div><span class="mono small" style="flex:0 0 112px;text-align:right;white-space:nowrap">${fmtMoney0(v)} <span class="faint" style="display:inline-block;min-width:3ch;text-align:right">${total ? Math.round(v / total * 100) : 0}%</span></span></div>`).join('')}</div>` : '<div class="empty small">Nenhuma entrada no período.</div>';
   const segP = [['mes', 'Mês'], ['q3', 'Últimos 3 meses'], ['mx', 'Últimos ' + X + ' meses'], ['ano', 'Ano'], ['sel', 'Meses escolhidos'], ['tudo', 'Tudo']];
   const monthChips = P === 'sel' ? `<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">${allMonths.map(m => `<button class="btn sm ${selM[m] ? '' : 'ghost'}" data-act="bank-insel" data-v="${m}">${rbLabel(m)}</button>`).join('')}</div>` : '';
   const yearSel = P === 'ano' ? `<select data-on="bank-iny" class="input" style="width:auto;padding:4px 8px">${years.map(y => `<option value="${y}" ${y === Y ? 'selected' : ''}>${y}</option>`).join('')}</select>` : '';
@@ -448,6 +448,74 @@ function bankInReportHTML(entity, ym, base, excl) {
     ${bars}
   </div></div>`;
 }
+
+/* Gráfico de linhas ao lado das Entradas: Entrada, Saída, Saldo, Terapia, Reembolso e Interno mês a mês (mesmas regras da linha do mês). */
+const TR_SERIES = [['ent', 'Entrada', 'Dinheiro que entrou na PF ou na PJ (sem reembolso de terapia)'], ['sai', 'Saída', 'Tudo que saiu, menos terapias'], ['sal', 'Saldo', 'Entrada − Saída, sem terapias e sem interno'],
+  ['ter', 'Terapia', 'Terapias pagas'], ['rei', 'Reembolso', 'Reembolso de terapia recebido'], ['int', 'Interno', 'Resgates, aplicações e transferências entre as suas contas']];
+function bankSeriesMes(entity) {
+  const every = BANK.every || [];
+  const catBy = {}, cnt = {}; const cbk = (t) => (t.counterpart || '—') + '|' + (t.flow || '');
+  every.forEach(x => { if (x.category) { const c = (cnt[cbk(x)] ||= {}); c[x.category] = (c[x.category] || 0) + 1; } });
+  Object.entries(cnt).forEach(([k, c]) => { catBy[k] = Object.entries(c).sort((a, b) => b[1] - a[1])[0][0]; });
+  const isTher = (t) => t.flow === 'out' && (!!t.reimb_row_id || (t.category || catBy[cbk(t)]) === 'Terapia');
+  const pool = entity === 'pf' ? every : (BANK.all[entity] || []);
+  const mine = (t) => (t.biz_entity || t.entity) === entity;
+  const out = {};
+  const m0 = (m) => (out[m] ||= { ent: 0, sai: 0, est: 0, ter: 0, rei: 0, int: 0 });
+  pool.forEach(t => {
+    if (!t.posted_on) return;
+    const m = t.posted_on.slice(0, 7), a = Math.abs(Number(t.amount)), r = m0(m);
+    if (t.scope === 'interna') { if (mine(t)) r.int += a; return; }
+    if (t.scope !== 'externa') return;
+    if (t.flow === 'in') { if (isReembTer(t.category)) r.rei += a; else if (/^Estorno/.test(t.category || '')) r.est += a; else r.ent += a; }
+    else if (isTher(t)) r.ter += a; else r.sai += a;
+  });
+  Object.values(out).forEach(r => { r.sai -= r.est; r.sal = Math.round(r.ent) - Math.round(r.sai); });
+  return out;
+}
+const trAbbr = (n) => { const a = Math.abs(n), sg = n < 0 ? '−' : ''; return a >= 1000 ? `${sg}${(a / 1000).toFixed(a >= 10000 ? 0 : 1).replace('.', ',')} mil` : `${sg}${Math.round(a)}`; };
+function bankTrendChartHTML(entity, ym) {
+  const P = BANK.trP || 'm6', off = BANK.trOff || {};
+  const data = bankSeriesMes(entity);
+  const cur = ymd(new Date()).slice(0, 7);
+  const all = []; for (let m = FIN_INICIO_YM; m <= cur; m = inAddM(m, 1)) all.push(m);
+  const Y = ym.slice(0, 4);
+  let months = P === 'tudo' ? all : P === 'ano' ? all.filter(m => m.startsWith(Y)) : all.filter(m => m >= inAddM(ym, P === 'm3' ? -2 : -5) && m <= ym);
+  months = months.filter(m => m >= FIN_INICIO_YM);
+  if (!months.length) months = [ym];
+  const val = (m, k) => (data[m] || {})[k] || 0;
+  const shown = TR_SERIES.filter(([k]) => off[k] !== true);
+  const W = 560, H = 250, L = 52, R = 30, T = 14, B = 28;
+  const vs = shown.flatMap(([k]) => months.map(m => val(m, k)));
+  let lo = Math.min(0, ...(vs.length ? vs : [0])), hi = Math.max(0, ...(vs.length ? vs : [0]));
+  if (hi === lo) hi = lo + 1;
+  const raw = (hi - lo) / 4, mag = Math.pow(10, Math.floor(Math.log10(raw))), step = [1, 2, 2.5, 5, 10].map(f => f * mag).find(x => x >= raw) || raw;
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const x = (i) => L + (months.length === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (months.length - 1));
+  const y = (v) => T + (hi - v) / (hi - lo) * (H - T - B);
+  const ticks = []; for (let v = lo; v <= hi + step / 2; v += step) ticks.push(v);
+  const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="tr-grid${v === 0 ? ' zero' : ''}"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" class="tr-t">${trAbbr(v)}</text>`).join('');
+  const xl = months.map((m, i) => `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" class="tr-t">${pfMonthLabel(m)}</text>`).join('');
+  const lines = shown.map(([k]) => {
+    const pts = months.map((m, i) => `${x(i).toFixed(1)},${y(val(m, k)).toFixed(1)}`);
+    return `<g class="tr-s tr-s-${k}">${months.length > 1 ? `<polyline points="${pts.join(' ')}" fill="none" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` : ''}${months.map((m, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(val(m, k)).toFixed(1)}" r="4" class="tr-pt"/>`).join('')}</g>`;
+  }).join('');
+  const colW = months.length === 1 ? W - L - R : (W - L - R) / (months.length - 1);
+  const cols = months.map((m, i) => {
+    const tip = `${rbLabel(m)}\n` + shown.map(([k, lab]) => `${lab}: ${fmtMoney0(val(m, k))}`).join('\n');
+    return `<g class="tr-col"><line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${H - B}" class="tr-guide"/><rect x="${(x(i) - colW / 2).toFixed(1)}" y="${T}" width="${colW.toFixed(1)}" height="${H - T - B}" class="tr-hit" data-tip="${esc(tip)}"/></g>`;
+  }).join('');
+  const tot = (k) => months.reduce((a, m) => a + val(m, k), 0);
+  const chips = TR_SERIES.map(([k, lab, tip]) => `<button class="tr-chip ${off[k] === true ? 'off' : ''}" data-act="bank-trs" data-v="${k}" aria-pressed="${off[k] !== true}" data-tip="${esc(tip)}. Total no período: ${fmtMoney0(tot(k))}. Clique para ${off[k] === true ? 'mostrar' : 'esconder'} a linha"><span class="tr-dot tr-s-${k}"></span>${lab} <b class="mono">${fmtMoney0(tot(k))}</b></button>`).join('');
+  const seg = [['m3', '3 meses'], ['m6', '6 meses'], ['ano', 'Ano'], ['tudo', 'Tudo']].map(([k, l]) => `<button class="${P === k ? 'on' : ''}" data-act="bank-trp" data-v="${k}">${l}</button>`).join('');
+  return `<div class="panel bank-trend"><div class="panel-h"><h3>Mês a mês</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · ${months.length === 1 ? rbLabel(months[0]) : `${pfMonthLabel(months[0])} a ${pfMonthLabel(months[months.length - 1])}`}</span></div><div class="panel-b">
+    <div class="seg" style="margin-bottom:12px">${seg}</div>
+    <div class="tr-legend">${chips}</div>
+    <svg class="tr-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Entrada, saída, saldo, terapia, reembolso e interno por mês">${grid}${xl}${lines}${cols}</svg>
+  </div></div>`;
+}
+ACTIONS['bank-trp'] = (el) => { BANK.trP = el.dataset.v; render(); };
+ACTIONS['bank-trs'] = (el) => { BANK.trOff = { ...(BANK.trOff || {}) }; const k = el.dataset.v; BANK.trOff[k] = BANK.trOff[k] !== true; render(); };
 ACTIONS['bank-inp'] = (el) => { BANK.inP = el.dataset.v; if (BANK.inP === 'sel' && !Object.keys(BANK.inSel || {}).length) BANK.inSel = { [bankMonthNow()]: true }; render(); };
 ACTIONS['bank-insel'] = (el) => { const sel = { ...(BANK.inSel || {}) }; const m = el.dataset.v; if (sel[m]) delete sel[m]; else sel[m] = true; BANK.inSel = sel; render(); };
 const bankMonthNow = () => (BANK.month || ymd(new Date()).slice(0, 7));
@@ -598,7 +666,7 @@ function bankSummaryHTML(entity) {
       <div class="panel-b"><div style="display:flex;flex-wrap:wrap;gap:28px;align-items:center;margin-bottom:10px">${entity === 'pf' ? `<div class="seg">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${`<div class="seg">${[['entrada', 'Entrada', 'Dinheiro que entrou'], ['saida', 'Saída', 'Tudo que saiu, menos terapias'], ['terapia', 'Terapia', 'Pagamentos de terapia'], ['reembolso', 'Reembolso', 'Reembolso de terapia recebido'], ['interno', 'Interno', 'Resgates, aplicações e transferências entre as suas contas']].map(([k, l, tip]) => `<button class="${BANK.tipos[k] !== false ? 'on' : ''}" data-act="bank-tipo" data-v="${k}" data-tip="${tip}. Clique para ${BANK.tipos[k] !== false ? 'esconder' : 'mostrar'} na lista" aria-pressed="${BANK.tipos[k] !== false}">${l}</button>`).join('')}</div>`}</div><div style="max-height:65vh;overflow:auto">${groups || '<div class="empty small">Nenhum lançamento.</div>'}</div></div></div>
     ${report}
   </div>
-  ${inRep}${closeRow}`;
+  <div class="bank-layout bank-below">${inRep}${bankTrendChartHTML(entity, ym)}</div>${closeRow}`;
 }
 CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
 ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };

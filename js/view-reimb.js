@@ -145,7 +145,7 @@ VIEWS.reimb = () => {
 
   /* Média mensal dos últimos 6 meses fechados (o mês atual ainda não conta) */
   const closed = months.filter(m => m < now).slice(0, 6);
-  const monthPaid = (m) => rbSum(rbRows(m).filter(r => payOf(r) === 'Pago'));
+  const monthPaid = (m) => rbSum(rbRows(m).filter(r => payOf(r) === 'Pago' && !isNA(r)));   // linha "Não se aplica" (ex.: dentista) não tem reembolso: não entra
   const monthRef = (m) => rbSum(rbRows(m).filter(r => refOf(r) === 'Feito!'));
   const avgPaid = closed.length ? closed.reduce((t, m) => t + monthPaid(m), 0) / closed.length : 0;
   const avgNet = closed.length ? closed.reduce((t, m) => t + monthPaid(m) - monthRef(m), 0) / closed.length : 0;
@@ -173,11 +173,11 @@ VIEWS.reimb = () => {
   const monthBlock = (ym) => {
     const all_rows = rbRows(ym); const rows = all_rows.filter(FILTERS[f].test);
     if (f !== 'all' && !rows.length) return '';
-    const total = rbSum(all_rows), p = rbSum(all_rows.filter(r => payOf(r) === 'Pago')), rf = rbSum(all_rows.filter(r => refOf(r) === 'Feito!'));
-    const pend = rbSum(all_rows.filter(r => payOf(r) === 'Pago' && !['Feito!', 'Negado'].includes(refOf(r))));
+    const total = rbSum(all_rows.filter(r => !isNA(r))), p = rbSum(all_rows.filter(r => payOf(r) === 'Pago' && !isNA(r))), rf = rbSum(all_rows.filter(r => refOf(r) === 'Feito!'));
+    const pend = rbSum(all_rows.filter(r => payOf(r) === 'Pago' && !isNA(r) && !['Feito!', 'Negado'].includes(refOf(r))));
     return `<details class="rb-month" open>
       <summary><span class="rb-mt">${rbLabel(ym)}</span><span class="rb-mtot">${money(total)}</span><span class="small muted">pago ${money(p)} · reembolsado ${money(rf)} · pendente ${money(pend)}</span></summary>
-      <div class="panel-b tight">${rows.length ? gridTable({ id: 'reimb', cols: RB_COLS, rows, rowById: (rid) => db.get('tempo_reimb_rows', rid) }) : '<div class="faint small" style="padding:10px">Sem linhas neste mês.</div>'}</div>
+      <div class="panel-b tight">${rows.length ? gridTable({ id: 'reimb', group: 'reimb', widthRows: all, cols: RB_COLS, rows, rowById: (rid) => db.get('tempo_reimb_rows', rid) }) : '<div class="faint small" style="padding:10px">Sem linhas neste mês.</div>'}</div>
       <div class="row" style="padding:8px 2px"><button class="btn sm ghost" data-act="rb-add" data-m="${ym}">${icon('plus')} Linha</button></div>
     </details>`;
   };
