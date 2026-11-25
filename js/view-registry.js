@@ -207,7 +207,7 @@ function feeHTML(kind, id, ps) {
     <div>Pagamento do mês: <b>${val ? fmtMoney(val) : 'não definido'}</b></div>
     ${val && usedH > 0.1 ? (() => { const hb = Number(precoBase().hora) || 0; const vale = usedH * hb; return `<div data-tip="${esc(`Fee ÷ horas usadas no mês\nPela sua hora base (${fmtMoney0(hb)}), essas horas valeriam ${fmtMoney0(vale)}`)}">Sua hora no fee: <b style="${val / usedH < hb ? 'color:var(--warn)' : ''}">${fmtMoney0(val / usedH)}/h</b> · ${vale > val ? `o fee <b>não cobre</b> as horas (faltam ${fmtMoney0(vale - val)})` : `o fee cobre as horas (sobra ${fmtMoney0(val - vale)})`}</div>`; })() : ''}
     <div class="row between"><span>Horas usadas no mês: <b class="${warn ? 'late' : ''}">${fmtH(usedMs)}</b>${lim ? ` de ${String(lim).replace('.', ',')} h` : ''}</span>${warn ? '<span class="late">Perto do limite</span>' : ''}</div>
-    ${lim ? `<div class="bar-track"><div class="bar-fill fill" style="--tb:${warn ? '#d64545' : '#2563eb'};width:${pct.toFixed(1)}%"></div></div>` : ''}</div>` : '<div class="panel-b muted small">Marque “Tem fee mensal” para cadastrar o valor e o limite de horas.</div>'}</div>`;
+    ${lim ? `<div class="bar-track"><div class="bar-fill fill" style="--tb:${warn ? GRAF_CORES[7] : GRAF_CORES[0]};width:${pct.toFixed(1)}%"></div></div>` : ''}</div>` : '<div class="panel-b muted small">Marque “Tem fee mensal” para cadastrar o valor e o limite de horas.</div>'}</div>`;
 }
 CHANGES['fee-flag'] = (el) => { const m = { ...feeFlags() }; if (el.checked) m[el.dataset.k] = true; else delete m[el.dataset.k]; db.setSetting('feeParties', m); db.emit(); };
 CHANGES['fee-month'] = (el) => { S.feeYm = el.value; render(); };

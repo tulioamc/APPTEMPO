@@ -2449,3 +2449,7 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .pf-report .pf-bar.now { background: color-mix(in srgb, var(--g1) 55%, var(--surface)); box-shadow: none; }
 .pf-report .pf-col-l { font-size: .7em; color: var(--fg-3); font-weight: 400; letter-spacing: 0; }
 .pf-report .pf-col-v { font-size: .72em; }
+/* destaque ao passar o mouse nos gráficos: contorno cinza do app (antes azul-marinho quase preto) */
+.seg-b.act-hl, .usage-seg.act-hl, .prod-seg.act-hl, .hk-hl, .hk-pick { box-shadow: inset 0 0 0 2px var(--fg-2); }
+.usage-rest.act-hl { outline-color: var(--fg-2); }
+.prod-col:hover .prod-stack { box-shadow: 0 0 0 2px var(--fg-2); }

@@ -22,7 +22,7 @@ VIEWS.finance = () => {
     <div class="kpi"><span class="k">Atrasado</span><span class="v" style="color:var(--danger)">${fmtMoney0(late)}</span><span class="s">status “Atrasado”</span></div>
   </div>
   <div class="grid2" style="align-items:start">
-    <div class="panel"><div class="panel-h"><h3>Em aberto por agência</h3></div><div class="panel-b">${ags.length ? `<div class="bars">${ags.map(x => `<div class="bar-row"><span class="lab">${x.a ? esc(x.a.name) : 'Clientes diretos'} <span class="faint small">· ${x.n}</span></span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf(x.a?.color || 'gray')};width:${x.v / maxAg * 100}%"></div></div><span class="val">${fmtMoney0(x.v)}</span></div>`).join('')}</div>` : '<div class="muted small">Nada em aberto com esses filtros.</div>'}</div></div>
+    <div class="panel"><div class="panel-h"><h3>Em aberto por agência</h3></div><div class="panel-b">${ags.length ? `<div class="bars">${ags.map(x => `<div class="bar-row"><span class="lab">${x.a ? esc(x.a.name) : 'Clientes diretos'} <span class="faint small">· ${x.n}</span></span><div class="bar-track"><div class="bar-fill fill" style="--tb:${corGraf(hexOf(x.a?.color || 'gray'))};width:${x.v / maxAg * 100}%"></div></div><span class="val">${fmtMoney0(x.v)}</span></div>`).join('')}</div>` : '<div class="muted small">Nada em aberto com esses filtros.</div>'}</div></div>
     <div class="panel"><div class="panel-h"><h3>Pagamentos recebidos</h3><span class="grow"></span><span class="mono small">${fmtMoney0(pays.reduce((s, x) => s + Number(x.amount), 0))}</span></div><div class="panel-b tight" style="max-height:260px;overflow:auto">${pays.length ? gridTable({ id: 'finpays', cls: 'fin', cols: PAYCOLS, rows: pays, defSort: null, sortable: false, footer: false, rowAttrs: x => `data-act="fin-open" data-id="${x.project_id}"`, rowById: (id) => db.get('tempo_payments', id) }) : '<div class="empty small">Nenhum pagamento no período.</div>'}</div></div>
   </div>
   ${finFlowHTML()}
@@ -63,7 +63,7 @@ function finFlowHTML() {
   pays.filter(x => ymOf(x.date) >= desde).forEach(x => { const p = db.get('tempo_projects', x.project_id); const c = p ? clientOf(p) : null; const k = c?.name || 'Sem cliente'; porCli[k] = (porCli[k] || 0) + Number(x.amount); tot += Number(x.amount); });
   const ranking = Object.entries(porCli).sort((a, b) => b[1] - a[1]);
   const topPct = tot ? ranking[0][1] / tot * 100 : 0;
-  const conc = ranking.slice(0, 6).map(([n, v]) => `<div class="bar-row"><span class="lab">${esc(n)}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf('blue')};width:${(v / tot * 100).toFixed(1)}%"></div></div><span class="val">${Math.round(v / tot * 100)}%</span></div>`).join('');
+  const conc = ranking.slice(0, 6).map(([n, v]) => `<div class="bar-row"><span class="lab">${esc(n)}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${corGraf(hexOf('blue'))};width:${(v / tot * 100).toFixed(1)}%"></div></div><span class="val">${Math.round(v / tot * 100)}%</span></div>`).join('');
   const bruto6 = Object.values(porMes).reduce((a, b) => a + b, 0);
   return `<div class="grid2" style="align-items:start">
     <div class="panel"><div class="panel-h"><h3>Entradas e previsão</h3><span class="grow"></span><span class="small muted">imposto ${taxa}%</span></div><div class="panel-b">
@@ -171,7 +171,7 @@ VIEWS.reports = () => {
   </div>
 
   <div class="panel"><div class="panel-h"><h3>Onde o tempo foi</h3><span class="grow"></span><div class="seg">${Object.entries(GROUPS).map(([k, [l]]) => `<button class="${r.group === k ? 'on' : ''}" data-act="rep-set" data-k="group" data-v="${k}">${l}</button>`).join('')}</div></div>
-    <div class="panel-b">${rows.length ? `<div class="bars">${rows.map(x => `<div class="bar-row"><span class="lab" title="${esc(x.n)}">${esc(x.n)}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf(x.c || 'gray')};width:${x.ms / maxG * 100}%"></div></div><span class="val">${fmtDur(x.ms)} <span class="faint">· ${Math.round(x.ms / tot * 100)}%</span></span></div>`).join('')}</div>` : '<div class="muted small">Sem dados no período.</div>'}</div></div>
+    <div class="panel-b">${rows.length ? `<div class="bars">${rows.map(x => `<div class="bar-row"><span class="lab" title="${esc(x.n)}">${esc(x.n)}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${corGraf(hexOf(x.c || 'gray'))};width:${x.ms / maxG * 100}%"></div></div><span class="val">${fmtDur(x.ms)} <span class="faint">· ${Math.round(x.ms / tot * 100)}%</span></span></div>`).join('')}</div>` : '<div class="muted small">Sem dados no período.</div>'}</div></div>
 
   <div class="panel"><div class="panel-h"><h3>Rentabilidade por projeto</h3><span class="small muted">horas totais do projeto (todas as datas)</span><span class="grow"></span>${colsBtn('profit')}<button class="btn sm" data-act="csv-copy" data-kind="profit">${icon('copy')} Copiar CSV</button></div><div class="panel-b tight">
     ${prof.length ? gridTable({ id: 'profit', cols: profitCols(med), rows: prof.map(x => ({ ...x, id: x.p.id })), footer: false, defSort: { key: 'rate', dir: -1 }, rowAttrs: x => `data-act="proj-open" data-id="${x.p.id}"` }) + `
@@ -188,7 +188,7 @@ VIEWS.reports = () => {
       ${cycle.map(([lab, v, n]) => `<div class="row between small"><span class="muted">${lab}</span><span class="mono">${v === null ? '—' : v.toFixed(1).replace('.', ',') + ' dias'} <span class="faint">(${n})</span></span></div>`).join('')}
     </div></div>
   </div>
-  <div class="panel"><div class="panel-h"><h3>Clientes com mais revisões</h3></div><div class="panel-b">${revRows.length ? `<div class="bars">${revRows.map(x => `<div class="bar-row"><span class="lab">${esc(x.c.name)}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${hexOf('orange')};width:${x.n / revRows[0].n * 100}%"></div></div><span class="val">${x.n} rodada(s) · ${fmtDur(x.ms)}</span></div>`).join('')}</div>` : '<div class="muted small">Nenhuma rodada de revisão registrada.</div>'}</div></div>`;
+  <div class="panel"><div class="panel-h"><h3>Clientes com mais revisões</h3></div><div class="panel-b">${revRows.length ? `<div class="bars">${revRows.map(x => `<div class="bar-row"><span class="lab">${esc(x.c.name)}</span><div class="bar-track"><div class="bar-fill fill" style="--tb:${corGraf(hexOf('orange'))};width:${x.n / revRows[0].n * 100}%"></div></div><span class="val">${x.n} rodada(s) · ${fmtDur(x.ms)}</span></div>`).join('')}</div>` : '<div class="muted small">Nenhuma rodada de revisão registrada.</div>'}</div></div>`;
   return { title: 'Relatórios', actions: `<button class="btn" data-act="csv-copy" data-kind="entries">${icon('copy')} Copiar sessões (CSV)</button>`, html };
 };
 function profitCols(med) {
