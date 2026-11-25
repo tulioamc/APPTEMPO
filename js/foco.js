@@ -159,7 +159,7 @@ function focoEditar(f) {
     <div class="db stack"><div class="small muted">Até ${hh}${ab ? ` · ${ab} ${ab === 1 ? 'abertura' : 'aberturas'} de distração` : ''}${f.sessao ? ' · termina quando a sessão acabar' : ''}. Marcado = fica escondido.</div>
       ${focoSelecaoHTML({ apps: f.apps || focoItens().apps, sites: f.sites || focoItens().sites })}
       <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap"><label for="foco-hora2" class="small">Terminar às</label><input id="foco-hora2" class="input sm" type="time" value="${esc(hh)}" style="width:110px" title="Muda a hora em que o foco termina"></div>
-      <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" data-x="rebloquear" title="Tudo que você liberou (10 minutos ou por hoje) volta a ser escondido e a perguntar">Bloquear de novo o que liberei</button><span class="grow"></span><button class="btn danger" data-x="encerrar">Encerrar foco</button><button class="btn primary" data-x="salvar">Salvar</button></div></div>` });
+      <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" data-x="rebloquear" title="Tudo que você liberou (3 minutos ou por hoje) volta a ser escondido e a perguntar">Bloquear de novo o que liberei</button><span class="grow"></span><button class="btn danger" data-x="encerrar">Encerrar foco</button><button class="btn primary" data-x="salvar">Salvar</button></div></div>` });
   l.box.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-x]'); if (!b) return;
     if (b.dataset.x === 'rebloquear') { try { window.webkit.messageHandlers.tempo.postMessage({ type: 'focoRevogar' }); } catch (er) {} toast('O que estava liberado voltou a ser bloqueado.'); return; }

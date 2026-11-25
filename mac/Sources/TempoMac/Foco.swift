@@ -6,8 +6,8 @@ import ApplicationServices
 /// - apps de distração (WhatsApp, Telegram, Mensagens…) ficam escondidos; ao abrir um, pergunta antes;
 /// - navegador com aba de distração (Instagram, YouTube…) em primeiro plano também pergunta;
 /// - liga o "Não perturbe" pelo atalho "Tempo Foco" do app Atalhos (e desliga com "Tempo Fim do Foco"), se existirem.
-/// Nada é bloqueado: "Abrir por 10 min" libera aquele app por 10 minutos e fica registrado no foco. Passados os
-/// 10 minutos ele volta a ser escondido (mesmo que continue aberto na frente) e pergunta de novo; da segunda vez no
+/// Nada é bloqueado: "Abrir por 3 min" libera aquele app por 3 minutos e fica registrado no foco. Passados os
+/// 3 minutos ele volta a ser escondido (mesmo que continue aberto na frente) e pergunta de novo; da segunda vez no
 /// mesmo dia aparece também "Liberar por hoje", que deixa aquele app/site livre até a meia-noite.
 final class FocoController {
     private(set) var ate: Date?
@@ -46,7 +46,7 @@ final class FocoController {
         }
     }
 
-    /// Clicou em "Bloquear de novo" no foco ativo: o que estava liberado (10 min ou por hoje) volta a ser escondido e a perguntar.
+    /// Clicou em "Bloquear de novo" no foco ativo: o que estava liberado (3 min ou por hoje) volta a ser escondido e a perguntar.
     func revogar() {
         liberado = [:]; livresHoje = []; ignorarTempoAte = Date.distantPast
         if ativo { esconderDistracoes() }
@@ -107,13 +107,13 @@ final class FocoController {
     }
 
     private func conferirNavegador() {
-        // o Tempo ficou na frente depois que os 10 minutos liberados acabaram: pergunta de novo (só se você já o tinha liberado antes)
+        // o Tempo ficou na frente depois que os 3 minutos liberados acabaram: pergunta de novo (só se você já o tinha liberado antes)
         if ativo, tempoNaLista, !perguntando, Date() > ignorarTempoAte, liberado["tempo"] != nil, !livre("tempo"),
            NSWorkspace.shared.frontmostApplication?.bundleIdentifier == selfBundle {
             perguntarTempo()
             return
         }
-        // app de distração que ficou na frente depois que os 10 minutos acabaram: esconde e pergunta de novo
+        // app de distração que ficou na frente depois que os 3 minutos acabaram: esconde e pergunta de novo
         if ativo, !perguntando, let frente = NSWorkspace.shared.frontmostApplication, frente.bundleIdentifier != selfBundle, ehDistracao(frente) {
             let chave = (frente.localizedName ?? "app").lowercased()
             if !livre(chave) { frente.hide(); perguntar(nome: frente.localizedName ?? "esse app", chave: chave, app: frente, site: false) }
@@ -147,17 +147,17 @@ final class FocoController {
         let alerta = NSAlert()
         alerta.messageText = "Você está no foco até \(hora)"
         alerta.informativeText = vezes > 0
-            ? "Você já abriu \(site ? nome : "o " + nome) \(vezes == 1 ? "1 vez" : "\(vezes) vezes") hoje no foco. Liberar por hoje ou só por mais 10 minutos?"
-            : (site ? "Abrir \(nome) mesmo assim? (fica liberado por 10 minutos)" : "Abrir o \(nome) mesmo assim? (fica liberado por 10 minutos)")
+            ? "Você já abriu \(site ? nome : "o " + nome) \(vezes == 1 ? "1 vez" : "\(vezes) vezes") hoje no foco. Liberar por hoje ou só por mais 3 minutos?"
+            : (site ? "Abrir \(nome) mesmo assim? (fica liberado por 3 minutos)" : "Abrir o \(nome) mesmo assim? (fica liberado por 3 minutos)")
         alerta.addButton(withTitle: "Continuar no foco")
-        alerta.addButton(withTitle: "Abrir por 10 min")
+        alerta.addButton(withTitle: "Abrir por 3 min")
         if vezes > 0 { alerta.addButton(withTitle: "Liberar por hoje") }
         let r = alerta.runModal()
         perguntando = false
         ignorarTempoAte = Date().addingTimeInterval(2)
         if r == .alertSecondButtonReturn || r == .alertThirdButtonReturn {
             if r == .alertThirdButtonReturn { livresHoje = livresHoje + [chave] }
-            else { liberado[chave] = Date().addingTimeInterval(600) }
+            else { liberado[chave] = Date().addingTimeInterval(180) }
             var v = vezesHoje; v[chave] = vezes + 1; vezesHoje = v
             app.unhide()
             app.activate(options: [.activateIgnoringOtherApps])
@@ -178,17 +178,17 @@ final class FocoController {
         let alerta = NSAlert()
         alerta.messageText = "Você está no foco até \(hora)"
         alerta.informativeText = vezes > 0
-            ? "Você já abriu o Tempo \(vezes == 1 ? "1 vez" : "\(vezes) vezes") hoje no foco. Liberar por hoje ou só por mais 10 minutos?"
-            : "Abrir o Tempo mesmo assim? (fica liberado por 10 minutos)"
+            ? "Você já abriu o Tempo \(vezes == 1 ? "1 vez" : "\(vezes) vezes") hoje no foco. Liberar por hoje ou só por mais 3 minutos?"
+            : "Abrir o Tempo mesmo assim? (fica liberado por 3 minutos)"
         alerta.addButton(withTitle: "Continuar no foco")
-        alerta.addButton(withTitle: "Abrir por 10 min")
+        alerta.addButton(withTitle: "Abrir por 3 min")
         if vezes > 0 { alerta.addButton(withTitle: "Liberar por hoje") }
         let r = alerta.runModal()
         perguntando = false
         ignorarTempoAte = Date().addingTimeInterval(2)
         if r == .alertSecondButtonReturn || r == .alertThirdButtonReturn {
             if r == .alertThirdButtonReturn { livresHoje = livresHoje + ["tempo"] }
-            else { liberado["tempo"] = Date().addingTimeInterval(600) }
+            else { liberado["tempo"] = Date().addingTimeInterval(180) }
             var v = vezesHoje; v["tempo"] = vezes + 1; vezesHoje = v
             onAbriu?("Tempo")
         } else {
