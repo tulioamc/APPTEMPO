@@ -51,9 +51,11 @@ const bankFamily = (name) => {
   if (/^aloma/.test(n)) return 'aloma';
   if (/^raquel/.test(n)) return 'raquel';
   if (/^homero/.test(n)) return 'homero';
-  // dentista não tem reembolso: não é terapia, o pagamento fica como gasto normal (Saúde)
+  if (/^dentista/.test(n)) return 'dentista';   // fica na tabela das terapias, mas a linha é "Não se aplica": não cobra reembolso
   return null;
 };
+// Pagamento ligado a uma linha de Reembolsos marcada "Não se aplica" (ex.: dentista): aparece na tabela, mas não é terapia reembolsável.
+const bankSemReemb = (t) => { if (!t.reimb_row_id) return false; const r = db.get('tempo_reimb_rows', t.reimb_row_id); return !!r && rbName('reimb_refund', r.refund_id) === 'Não se aplica'; };
 async function bankAutoTherapy() {
   const every = BANK.every || [];
   const taken = new Set(every.map(x => x.reimb_row_id).filter(Boolean));
@@ -87,7 +89,7 @@ async function bankAutoTherapy() {
   const cl = db.adapter.client;
   for (let i = 0; i < todo.length; i++) {
     const x = todo[i];
-    const { error } = await cl.from('tempo_bank_txns').update({ reimb_row_id: x.rowId, category: 'Terapia', updated_at: new Date().toISOString() }).eq('id', x.id);
+    const { error } = await cl.from('tempo_bank_txns').update({ reimb_row_id: x.rowId, category: bankSemReemb({ reimb_row_id: x.rowId }) ? 'Saúde' : 'Terapia', updated_at: new Date().toISOString() }).eq('id', x.id);
     if (error) { toast('Erro: ' + error.message); todo.slice(i).forEach(y => { if (y.created) db.remove('tempo_reimb_rows', y.created, true); }); break; }
   }
   return true;
@@ -457,7 +459,7 @@ function bankSeriesMes(entity) {
   const catBy = {}, cnt = {}; const cbk = (t) => (t.counterpart || '—') + '|' + (t.flow || '');
   every.forEach(x => { if (x.category) { const c = (cnt[cbk(x)] ||= {}); c[x.category] = (c[x.category] || 0) + 1; } });
   Object.entries(cnt).forEach(([k, c]) => { catBy[k] = Object.entries(c).sort((a, b) => b[1] - a[1])[0][0]; });
-  const isTher = (t) => t.flow === 'out' && (!!t.reimb_row_id || (t.category || catBy[cbk(t)]) === 'Terapia');
+  const isTher = (t) => t.flow === 'out' && !bankSemReemb(t) && (!!t.reimb_row_id || (t.category || catBy[cbk(t)]) === 'Terapia');
   const pool = entity === 'pf' ? every : (BANK.all[entity] || []);
   const mine = (t) => (t.biz_entity || t.entity) === entity;
   const out = {};
@@ -538,7 +540,7 @@ function bankSummaryHTML(entity) {
   (BANK.every || []).forEach(x => { if (x.category) { const c = (catCount[cbk(x)] ||= {}); c[x.category] = (c[x.category] || 0) + 1; } });
   Object.entries(catCount).forEach(([k, c]) => { catBy[k] = Object.entries(c).sort((a, b) => b[1] - a[1])[0][0]; });
   // terapia ligada à tabela, ou ainda sem ligar mas já com a categoria Terapia: nos dois casos é reembolsável
-  const isTher = (t) => t.flow === 'out' && (!!t.reimb_row_id || (t.category || catBy[cbk(t)]) === 'Terapia');
+  const isTher = (t) => t.flow === 'out' && !bankSemReemb(t) && (!!t.reimb_row_id || (t.category || catBy[cbk(t)]) === 'Terapia');
   const isReimb = (t) => t.flow === 'in' && isReembCat(t.category);
   const isExt = (t) => t.flow === 'in' && /^Estorno/.test(t.category || '');
   const extSum = inBase.filter(t => isExt(t) && (t.posted_on || '').slice(0, 7) === ym).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
@@ -974,7 +976,7 @@ function monthSnap(entity, ym) {
   (BANK.all[entity] || []).forEach(t => {
     if (t.scope === 'interna' || t.scope === 'cartao' || !t.posted_on || t.posted_on.slice(0, 7) !== ym) return;   // pagamento de fatura não é gasto: as compras do cartão já entram
     const v = Math.abs(Number(t.amount)), c = cm[(t.counterpart || '—') + '|' + (t.flow || '')] || t.category || 'Sem categoria';
-    if (t.flow === 'out' && (t.reimb_row_id || c === 'Terapia')) return;   // terapias ficam fora da comparação
+    if (t.flow === 'out' && !bankSemReemb(t) && (t.reimb_row_id || c === 'Terapia')) return;   // terapias ficam fora da comparação
     if (!withRe && isReembCat(c)) return;
     if (t.flow === 'in') {
       if (abatesCat(c)) { const tg = c.split('→')[1]; cats[tg] = (cats[tg] || 0) - v; return; }   // estorno abate a categoria

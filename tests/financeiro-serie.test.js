@@ -38,8 +38,7 @@ test('gráfico: desenha as seis linhas e as dicas por mês', () => {
   assert.ok(html.includes('data-tip'));
 });
 
-test('dentista não é terapia (não tem reembolso)', () => {
+test('dentista continua na família das terapias (tabela), mas sem cobrar reembolso', () => {
   const m = setup([]);
-  assert.equal(m.bankFamily('Cristiana Abrantes da Fonte (Dentista)'), null);
-  assert.equal(m.bankFamily('Dentista'), null);
+  assert.equal(m.bankFamily('Dentista'), 'dentista');
 });
