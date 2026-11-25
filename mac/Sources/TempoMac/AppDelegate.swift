@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var web: WKWebView!
     private var statusItem: NSStatusItem!
     private var quickTodoKey: EventHotKeyRef?
+    private var ajusteKey: EventHotKeyRef?
+    private var ajustePasteCount = -1
     private var timerRunning = false
     private var timerPaused = false
     private var timerMs: Double = 0
@@ -449,6 +451,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         let m = NSMenu()
         m.addItem(withTitle: "Mostrar Tempo", action: #selector(showWindow), keyEquivalent: "")
+        m.addItem(withTitle: "Ajuste no app… (⌃⌥F)", action: #selector(abrirAjuste), keyEquivalent: "")
         let fi = NSMenuItem(title: "Ativar foco", action: nil, keyEquivalent: "")
         m.addItem(fi)
         focoItem = fi
@@ -474,6 +477,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         appMenu.addItem(withTitle: "Recarregar", action: #selector(reload), keyEquivalent: "r")
         appMenu.addItem(withTitle: "Atualizar app", action: #selector(updateNow), keyEquivalent: "u")
         appMenu.addItem(withTitle: "Nova to-do… (⌃⌥T de qualquer tela)", action: #selector(quickTodo), keyEquivalent: "")
+        appMenu.addItem(withTitle: "Ajuste no app… (⌃⌥F de qualquer tela)", action: #selector(abrirAjuste), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Sair", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
@@ -515,14 +519,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     /* ⌃⌥T em qualquer app: abre a caixinha de to-do (Carbon: atalho global sem permissão extra). */
     private func registerQuickTodoHotKey() {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, userData -> OSStatus in
+        InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
             guard let userData = userData else { return noErr }
+            var hk = EventHotKeyID()
+            if let event = event {
+                GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hk)
+            }
             let app = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
-            DispatchQueue.main.async { app.quickTodo() }
+            DispatchQueue.main.async { if hk.id == 2 { app.abrirAjuste() } else { app.quickTodo() } }
             return noErr
         }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), nil)
         let id = EventHotKeyID(signature: OSType(0x54445430), id: 1)   // 'TDT0'
         RegisterEventHotKey(UInt32(kVK_ANSI_T), UInt32(controlKey | optionKey), id, GetApplicationEventTarget(), 0, &quickTodoKey)
+        // ⌃⌥F: janelinha de ajuste do app (F de feedback); não choca com atalhos do sistema
+        let idF = EventHotKeyID(signature: OSType(0x54445430), id: 2)
+        RegisterEventHotKey(UInt32(kVK_ANSI_F), UInt32(controlKey | optionKey), idF, GetApplicationEventTarget(), 0, &ajusteKey)
+    }
+    /* ⌃⌥F: traz o Tempo para a frente e abre a janelinha de ajuste. Se tiver uma imagem copiada nova (print com
+       ⌃⇧⌘4), ela já entra anexada; a mesma imagem não entra duas vezes. */
+    @objc func abrirAjuste() {
+        showWindow()
+        var img = "null"
+        let pb = NSPasteboard.general
+        if pb.changeCount != ajustePasteCount, pb.types?.contains(where: { $0 == .png || $0 == .tiff }) == true,
+           let im = NSImage(pasteboard: pb), let tiff = im.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+           let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.85]) {
+            img = "\"data:image/jpeg;base64,\(jpg.base64EncodedString())\""
+        }
+        ajustePasteCount = pb.changeCount
+        web.evaluateJavaScript("window.TempoAjuste && window.TempoAjuste(\(img)); true", completionHandler: nil)
     }
     /* ⌃⌥T: caixinha para anotar uma to-do sem trocar de tela; o texto vai para o To-do do app. */
     @objc private func quickTodo() {

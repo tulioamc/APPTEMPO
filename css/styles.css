@@ -2624,3 +2624,26 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .sp-sug-v { font-size: 12px; font-weight: 600; }
 .tk-acoes .tem-sug { position: relative; }
 .tk-acoes .tem-sug::after { content: ''; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+/* Fila de ajustes (25/11) */
+.aj-db { display: flex; flex-direction: column; gap: 10px; }
+.aj-txt { width: 100%; min-height: 120px; resize: vertical; font: inherit; line-height: 1.5; }
+.aj-imgs { display: flex; flex-wrap: wrap; gap: 8px; }
+.aj-img { position: relative; width: 120px; height: 84px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--surface-2); }
+.aj-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.aj-img-x { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; border: 0; background: rgba(21,23,28,.65); color: #fff; cursor: pointer; line-height: 20px; padding: 0; font-size: 13px; }
+.aj-add { width: 120px; height: 84px; border-radius: 8px; border: 1px dashed var(--line-strong); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--fg-3); font-size: 12px; cursor: pointer; }
+.aj-add:hover { border-color: var(--accent); color: var(--accent); }
+.aj-add svg { width: 16px; height: 16px; }
+.aj-it { padding: 12px 0; }
+.aj-it + .aj-it { border-top: 1px solid var(--line); }
+.aj-it-h { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.aj-n { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: .78em; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.aj-ok { width: 22px; height: 22px; border-radius: 50%; background: var(--ok); color: var(--ok-on); font-size: .78em; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.aj-fv { color: var(--ok-ink); font-weight: 600; }
+.aj-it-t { line-height: 1.55; padding-left: 30px; }
+.aj-it .aj-imgs { padding-left: 30px; margin-top: 8px; }
+.aj-thumb { width: 140px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; }
+.aj-it.feito .aj-it-t { color: var(--fg-2); }
+.aj-nota { padding-left: 30px; margin-top: 6px; }
+.aj-feitos > summary { cursor: pointer; list-style: none; }
+.aj-feitos > summary::-webkit-details-marker { display: none; }

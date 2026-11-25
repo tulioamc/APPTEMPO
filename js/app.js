@@ -64,6 +64,7 @@ const NAV = [
   { id: 'metas', label: 'Metas', icon: 'flag', tip: 'Metas e estrelas conquistadas' },
   { group: 'Geral' },
   { id: 'notices', label: 'Avisos', icon: 'bell', pend: true },
+  { id: 'ajustes', label: 'Fila de ajustes', icon: 'layers', tip: 'Ajustes e ideias para o app, com prints (⌃⌥F de qualquer tela)' },
   { id: 'lixeira', label: 'Lixeira de log', icon: 'trash' },
   { id: 'prefs', label: 'Configurações', icon: 'gear' }
 ];

@@ -442,3 +442,21 @@ begin
 end $$;
 revoke execute on function public.tempo_sync_state() from public, anon;
 grant execute on function public.tempo_sync_state() to authenticated;
+
+-- Fila de ajustes do app (25/11): texto + prints (JPEG em data URL), fora da sincronização geral (lida sob demanda).
+create table if not exists public.tempo_ajustes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  texto text not null default '',
+  imagens jsonb not null default '[]'::jsonb,
+  tela text, versao text,
+  status text not null default 'aberto',      -- 'aberto' | 'feito'
+  feito_em timestamptz, feito_versao text, nota text,
+  created_at timestamptz not null default now(), updated_at timestamptz
+);
+alter table public.tempo_ajustes enable row level security;
+drop policy if exists own_rows on public.tempo_ajustes;
+create policy own_rows on public.tempo_ajustes for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create index if not exists tempo_ajustes_user_idx on public.tempo_ajustes(user_id, status, created_at);
+drop trigger if exists tempo_touch on public.tempo_ajustes;
+create trigger tempo_touch before update on public.tempo_ajustes for each row execute function public.tempo_touch();
