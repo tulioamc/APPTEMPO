@@ -29,11 +29,10 @@ async function bankLoadRaw() {
   const cl = db.adapter.client;
   const sorted = (q) => q.order('posted_on', { ascending: false }).order('id');
   for (const entity of ['pf', 'pj']) {
-    BANK.txns[entity] = await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*').eq('entity', entity).eq('review_status', BANK.mode[entity]).gte('posted_on', FIN_INICIO)));
+    BANK.txns[entity] = await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*').eq('entity', entity).eq('review_status', BANK.mode[entity])));
   }
   // resumo: lançamento conta para PJ se marcado como PJ, senão para a conta de origem
-  // só há extrato completo a partir de jan/2026: o que for anterior fica guardado, mas não entra em listas nem análises
-  const every = (await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*')))).filter(t => (t.posted_on || '') >= FIN_INICIO);
+  const every = await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*')));   // meses antes de jan/2026 aparecem na tabela (incompletos), mas ficam fora das análises e gráficos
   for (const e of ['pf', 'pj']) BANK.all[e] = every.filter(t => (t.biz_entity || t.entity) === e);
   BANK.every = every;
   BANK.learned = bankBuildLearned(every);
@@ -403,7 +402,7 @@ function bankInReportHTML(entity, ym, base, excl) {
   const Y = BANK.inY || ym.slice(0, 4);
   const range = P === 'mes' ? [ym, ym] : P === 'q3' ? [inAddM(ym, -2), ym] : P === 'mx' ? [inAddM(ym, -(X - 1)), ym] : P === 'ano' ? [Y + '-01', Y + '-12'] : ['0000-00', '9999-12'];
   const selM = BANK.inSel || {};
-  const inRange = (t) => { const m = (t.posted_on || '').slice(0, 7); return P === 'sel' ? !!selM[m] : (m >= range[0] && m <= range[1]); };
+  const inRange = (t) => { const m = (t.posted_on || '').slice(0, 7); return P === 'sel' ? !!selM[m] : (m >= range[0] && m <= range[1] && (P === 'mes' || m >= FIN_INICIO_YM)); };
   const allMonths = [...new Set(base.filter(t => t.flow === 'in' && t.scope === 'externa' && t.posted_on && !excl(t)).map(t => t.posted_on.slice(0, 7)))].sort().reverse();
   const ins = base.filter(t => t.flow === 'in' && t.scope === 'externa' && !excl(t) && inRange(t));
   const total = ins.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
@@ -619,7 +618,7 @@ function bankSummaryHTML(entity) {
     const saldo = Math.round(totIn) - Math.round(tot), sOk = true;   // arredondado como as colunas, para a conta fechar na tela
     const col = (cls, tip, lab, val) => `<span class="bg-c ${cls}" data-tip="${tip}"><span class="bg-l">${lab}</span><span class="bg-v">${val}</span></span>`;
     return `<div class="bank-group">
-      <button class="bank-ghead bank-gcols" data-act="bank-mtoggle" data-k="${entity}:${m}" aria-expanded="${open}"><span class="bg-m">${icon(open ? 'chevD' : 'chevR')}${rbLabel(m)}</span>${
+      <button class="bank-ghead bank-gcols" data-act="bank-mtoggle" data-k="${entity}:${m}" aria-expanded="${open}"><span class="bg-m">${icon(open ? 'chevD' : 'chevR')}${rbLabel(m)}${m < FIN_INICIO_YM ? ' <span class="tag tg" style="background:var(--warn-soft);color:var(--warn)" data-tip="Antes de jan/2026 não há extrato nem cartão completos. Este mês aparece aqui, mas fica fora das análises e dos gráficos.">Incompleto</span>' : ''}</span>${
         col('', 'Quantidade de lançamentos do mês (sem as transferências internas)', 'Lançamentos', real.length)}${
         col('in', 'Tudo que entrou na PF ou na PJ (o repasse PJ → PF não conta de novo). Só o reembolso de terapia fica de fora', 'Entradas', fmtMoney0(totIn))}${
         col('out', 'Tudo que saiu, menos terapias; estornos abatem', 'Saídas', fmtMoney0(tot))}${
@@ -1047,7 +1046,7 @@ CHANGES['bank-reemb'] = (el) => { BANK.reemb = el.checked; render(); };
 function trendHTML(entity) {
   const withRe = BANK.reemb === true;
   const txns = (BANK.all[entity] || []).filter(t => t.scope !== 'interna' && t.posted_on);
-  const months = [...new Set(txns.map(t => t.posted_on.slice(0, 7)))].sort().slice(-12);
+  const months = [...new Set(txns.map(t => t.posted_on.slice(0, 7)))].filter(m => m >= FIN_INICIO_YM).sort().slice(-12);
   const cats = {}; const ent = {}; const sai = {};
   const add = (bag, k, ym, v) => { bag[k] = bag[k] || {}; bag[k][ym] = (bag[k][ym] || 0) + v; };
   txns.forEach(t => {
