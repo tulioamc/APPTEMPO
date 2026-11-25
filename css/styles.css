@@ -2289,3 +2289,16 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 /* as tarefas vizinhas ganham um respiro para as etiquetas não encostarem no texto */
 .tk:has(+ .tk-entrega) > .tk-l { padding-bottom: 15px; }
 .tk-entrega + .tk > .tk-l { padding-top: 15px; }
+/* Entrega (desenho final do Tulio, 25/11): as etiquetas seguem as COLUNAS das tarefas de cima/baixo.
+   Nome (pílula cheia, maiúsculas) com o texto na linha do nome das tarefas; pílula de contorno começando na coluna do tempo:
+   DEADLINE alinhado com "00:00 (trabalhado)", data na coluna da data, hora na coluna da hora, × na última. */
+.tk-entrega { display: grid !important; grid-template-columns: minmax(110px, 1fr) 40px 100px 124px 72px 40px 44px; grid-template-rows: 0; column-gap: 8px; padding: 0 10px 0 22px !important; height: 0; }
+.tk-ent-a, .tk-ent-b { position: relative !important; top: auto !important; left: auto !important; right: auto !important; align-self: start; transform: translateY(-50%); height: 20px; }
+.tk-ent-a { grid-column: 1 / 4; justify-self: start; margin-left: -10px !important; padding: 0 13px 0 10px !important; font-size: 10px; max-width: calc(100% + 10px); }
+.tk-ent-a .tk-ent-grip { margin-left: -6px; }
+.tk-ent-nome { text-transform: uppercase !important; font-size: 10px; font-weight: 700; padding: 0 !important; border: 0 !important; }
+.tk-ent-b { grid-column: 4 / -1; display: grid !important; grid-template-columns: 124px 72px 40px 44px !important; column-gap: 8px !important; align-items: center; margin: 0 -8px 0 -10px !important; padding: 0 8px 0 8px !important; font-size: 10px; }
+.tk-ent-b .tk-ent-dl { justify-self: start; letter-spacing: .02em; }
+.tk-ent-b .tk-ent-v { justify-self: start; padding: 0 !important; }
+.tk-ent-b .tk-ent-x { justify-self: end; }
+@container (max-width: 560px) { .tk-entrega { display: flex !important; } .tk-ent-b { display: flex !important; margin-left: auto !important; } }
