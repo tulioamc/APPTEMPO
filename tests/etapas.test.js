@@ -3,7 +3,7 @@ const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 test('marcar etapa cria a subtarefa, move o trecho e a sessão continua rodando', () => {
   let layer = null;
-  const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js'], ['db', 'ACTIONS', 'etapasDeHoje', 'etapaInicio'],
+  const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'], ['db', 'ACTIONS', 'etapasDeHoje', 'etapaInicio'],
     { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '', $: () => null, $$: () => [], tkProjectLabel: (p) => p.name,
       openLayer: (o) => { const nome = { value: 'Preparar cartelas' }; layer = { close() {}, box: { querySelector: (q) => (q === '#et-nome' ? nome : null), addEventListener: (ev, fn) => { if (ev === 'click') layer.click = fn; } } }; return layer; } });
   m.db.data = m.db.empty();

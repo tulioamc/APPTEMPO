@@ -626,18 +626,24 @@ function actChipsHTML(A, mode) {
 }
 
 /* Tempo "fora" da sessão (trechos movidos para outro projeto ou troca de projeto): só para mostrar. */
-function actForaMs(e) {
-  const sg = e.segments || []; let t = 0;
-  for (let i = 0; i < sg.length - 1; i++) if (isForaWhy(sg[i].why) && sg[i].e && sg[i + 1].s) t += Math.max(0, new Date(sg[i + 1].s) - new Date(sg[i].e));
-  return t;
+function actForaMs(e) { const f = actForaSplit(e); return f.sub + f.outro; }
+/* Separa o tempo "fora": o que foi para subtarefas do mesmo projeto (sub) e o que foi para outro projeto (outro). */
+function actForaSplit(e) {
+  const sg = e.segments || []; const r = { sub: 0, outro: 0 };
+  for (let i = 0; i < sg.length - 1; i++) if (isForaWhy(sg[i].why) && sg[i].e && sg[i + 1].s) {
+    const ms = Math.max(0, new Date(sg[i + 1].s) - new Date(sg[i].e));
+    if (sg[i].movedTo && sg[i].movedTo === e.project_id && !sg[i].troca) r.sub += ms; else r.outro += ms;
+  }
+  return r;
 }
 /* Pausas da sessão em caixinhas: o total, e dentro dele ócio, bloqueada, WhatsApp, Telegram e manual, com o tempo de cada um. */
 function pauseChipsHTML(e) {
   const items = pauseGapsOf([e]).map(g => ({ key: g.why || 'manual', label: pauseLabel(g.why || 'manual'), ms: new Date(g.e) - new Date(g.s) })).filter(x => x.ms > 0);
   if (!items.length && !actForaMs(e)) return '';
   const total = items.reduce((t, x) => t + x.ms, 0);
-  const fora = actForaMs(e);
-  const foraChip = fora > 0 ? `<span class="act-chip act-chip-fora" style="--tb:#94A3B8" data-tip="${esc('Tempo desta sessão que foi registrado em outro projeto (movido ou troca de projeto).\nSó aparece aqui: não conta como pausa, nem como trabalho, nem no bruto desta sessão.')}"><i></i>Outro projeto <span class="faint">${fmtDur(fora)}</span></span>` : '';
+  const fora = actForaSplit(e);
+  const foraChip = (fora.outro > 0 ? `<span class="act-chip act-chip-fora" style="--tb:#94A3B8" data-tip="${esc('Tempo desta sessão que foi registrado em outro projeto (movido ou troca de projeto).\nSó aparece aqui: não conta como pausa, nem como trabalho, nem no bruto desta sessão.')}"><i></i>Outro projeto <span class="faint">${fmtDur(fora.outro)}</span></span>` : '')
+    + (fora.sub > 0 ? `<span class="act-chip act-chip-fora" style="--tb:#94A3B8" data-tip="${esc('Tempo desta sessão que você levou para subtarefas (etapas) do mesmo projeto.\nNão é pausa: está nas sessões das subtarefas, na seção Subtarefas.')}"><i></i>Em subtarefas <span class="faint">${fmtDur(fora.sub)}</span></span>` : '');
   return `<div class="act-chips"><span class="act-chip act-chip-total" style="--tb:#A9B0BE">Pausas <span class="faint">${fmtDur(total)}</span></span>${foraChip}${pauseBucketsOf(items).map(b => b.kind === 'whatsapp' ? { ...b, detail: waDistracaoTop([e]) } : b).map(pauseBucketChip).join('')}</div>`;
 }
 /* Conversas de WhatsApp (não de trabalho) que mais tomaram tempo nas sessões: para o balãozinho do chip. */

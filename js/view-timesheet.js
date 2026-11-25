@@ -75,7 +75,7 @@ VIEWS.timesheet = () => {
       <div class="timer-actions">
         ${a.state === 'running' ? `<button class="btn" data-act="ts-pause">${icon('pause')} Pausar</button>` : `<button class="btn primary" data-act="ts-resume">${icon('play')} Retomar</button>`}
         <button class="btn" data-act="ts-switch">Trocar de projeto</button>
-        ${typeof etapaMae === 'function' && etapaMae(a) ? `<button class="btn" data-act="etapa-fim" title="Marca o fim de uma parte do trabalho: o tempo desde a última marca vira uma subtarefa com o nome que você der; o cronômetro continua">${icon('flag')} Terminei uma etapa</button>` : ''}
+        ${typeof etapaMae === 'function' && etapaMae(a) ? `<button class="btn" data-act="etapa-fim" data-id="${a.id}" title="Marca o fim de uma etapa: diz qual terminou e qual é a próxima. O tempo desde a última marca vai para a etapa que terminou; o cronômetro continua">${icon('flag')} Terminei uma etapa</button>` : ''}
         <button class="btn danger" data-act="ts-stop">${icon('stop')} Encerrar</button>
         ${focoBtnHTML()}
         <button class="btn" data-act="corte-sessao" data-id="${a.id}" title="Cortar, mover e trocar a tarefa dos trechos da sessão">${icon('scissors')} Ajustar tempo</button>
@@ -259,7 +259,7 @@ ACTIONS['ts-resume'] = async () => {
 ACTIONS['ts-stop'] = async () => { let a = activeEntry(); if (!a) return; const todas = openEntries();
   const ps = pausesOf(a.id);
   if (ps.length) { const n = ps.length; const ok = await confirmBox({ title: `${n} pausa(s) sugerida(s)`, body: `Antes de encerrar: inserir ${n === 1 ? 'a pausa sugerida' : 'as ' + n + ' pausas sugeridas'} na sessão? <br><span class="small muted">Se não, as sugestões ficam registradas como ignoradas na aba Avisos.</span>`, ok: 'Inserir e encerrar' }); if (ok) ps.forEach(n => applyPause(db.get('tempo_time_entries', a.id), n)); else ps.forEach(n => decideNotice(n, 'ignored', 'Ignorada ao encerrar a sessão')); a = db.get('tempo_time_entries', a.id); }
-  for (const x of todas) await stopEntryAsk(x); toast(todas.length > 1 ? `${todas.length} sessões encerradas` : `Sessão encerrada · ${fmtDur(entryMs(a))}`, { actions: [{ label: 'Revisar', run: () => openEntryModal(a.id) }] }); };
+  for (const x of todas) { await stopEntryAsk(x); if (typeof etapaFechaAoEncerrar === 'function') etapaFechaAoEncerrar(x.id); } toast(todas.length > 1 ? `${todas.length} sessões encerradas` : `Sessão encerrada · ${fmtDur(entryMs(a))}`, { actions: [{ label: 'Revisar', run: () => openEntryModal(a.id) }] }); };
 /* Troca de projeto sem pausar: a sessão atual fica aberta, mas parada, e o tempo enquanto a outra roda vira "Trabalho em …". */
 function switchTo(proj, taskId) {
   const cur = db.all('tempo_time_entries').find(e => e.state === 'running') || null;
@@ -793,6 +793,7 @@ function openEntryModal(id, startIso = null, endIso = null) {
       </div>
       ${e ? `<div class="act-sec"><div class="lbl">Produtividade</div>${prodMiniHTML([e])}</div>` : ''}
       ${e ? actSectionHTML(e) : ''}
+      ${e && typeof sbSecaoHTML === 'function' ? sbSecaoHTML(e) : ''}
       <div class="field"><label for="em-notes">Notas</label><textarea id="em-notes" class="input" name="notes">${esc(userNotes)}</textarea></div>
       <div class="grid2" style="align-items:start">
         <div class="stack" style="gap:8px">
@@ -813,10 +814,18 @@ function openEntryModal(id, startIso = null, endIso = null) {
     r.disabled = !revs.length; r.innerHTML = options(revs, '', { empty: true, emptyLabel: revs.length ? 'Não é revisão' : 'Projeto sem rodadas', label: x => `Rodada ${x.number} — ${x.description.slice(0, 40)}` });
     const d = defaultWorkType(sel); if (d && w) w.value = d;
   };
-  const l = openLayer({ wide: true, render: render_, onClose: () => { ACT_SEL = null; }, onMount: (ly) => { if (showPicker) bindPicker(ly, sel, () => syncRev(ly)); } });
+  const l = openLayer({ wide: true, render: render_, onClose: () => { ACT_SEL = null; if (typeof sbReset === 'function') sbReset(); if (window.actRedrawHook === hook) window.actRedrawHook = null; }, onMount: (ly) => { if (showPicker) bindPicker(ly, sel, () => syncRev(ly)); } });
   const keepForm = () => { const f = formData(l.box); return f; };
-  window.actRedrawHook = () => redraw();   // a faixa de atividade chama isto depois de mover um intervalo
-  const redraw = () => { const f = keepForm(); l.refresh(); ['work_type_id', 'revision_id', 'notes', 'reason'].forEach(k => { const el = l.box.querySelector(`[name="${k}"]`); if (el && f[k] !== undefined) el.value = f[k]; }); };
+  // Mover tempo (faixas, subtarefas, etapas) muda os intervalos da sessão no banco: a lista do formulário acompanha, senão o "Salvar" devolveria o que saiu.
+  let snap = e ? JSON.stringify(e.segments) : null;
+  const resync = () => { if (!e) return; const live = db.get('tempo_time_entries', e.id); if (!live) return; const agora = JSON.stringify(live.segments); if (agora !== snap) { snap = agora; segs.splice(0, segs.length, ...clone(live.segments)); } };
+  const hook = () => { if (!layers.includes(l)) return; if (e && !db.get('tempo_time_entries', e.id)) return l.close(); redraw(); };
+  window.actRedrawHook = hook;   // a faixa de atividade chama isto depois de mover um intervalo
+  const redraw = () => { resync(); const f = keepForm(); l.refresh(); ['work_type_id', 'revision_id', 'notes', 'reason'].forEach(k => { const el = l.box.querySelector(`[name="${k}"]`); if (el && f[k] !== undefined) el.value = f[k]; }); };
+  const sbCtx = { get e() { return db.get('tempo_time_entries', e.id) || e; }, refresh: () => hook() };
+  l.box.addEventListener('change', (ev) => { if (e && typeof sbChange === 'function') sbChange(ev, sbCtx); });
+  l.box.addEventListener('input', (ev) => { if (e && typeof sbInput === 'function') sbInput(ev, sbCtx); });
+  l.box.addEventListener('keydown', (ev) => { if (e && typeof sbTecla === 'function') sbTecla(ev, sbCtx); });
   l.box.addEventListener('change', (ev) => {
     const i = ev.target.dataset.seg; if (i === undefined) return;
     const k = ev.target.dataset.k;
@@ -828,6 +837,7 @@ function openEntryModal(id, startIso = null, endIso = null) {
     segs[i][k] = new Date(`${dia}T${hora}`).toISOString(); redraw();
   });
   l.box.addEventListener('click', async (ev) => {
+    if (e && typeof sbClick === 'function' && sbClick(ev, sbCtx)) return;
     // trecho movido: clicar abre o projeto de destino
     const mv = ev.target.closest('.act-moved[data-pid]');
     if (mv && mv.dataset.pid) { l.close(); return openProject(mv.dataset.pid); }
