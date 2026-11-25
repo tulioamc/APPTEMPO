@@ -576,8 +576,8 @@ function openTodoModal(id) {
         <div class="stack" style="gap:6px" data-dias-wrap>
         <div class="row gap-s" style="flex-wrap:wrap;align-items:flex-end">
           <div class="field"><label for="td-d">Dia</label><input id="td-d" type="date" class="input" value="${dia}"></div>
-          <div class="field"><label for="td-h">Hora</label><input id="td-h" type="time" class="input" value="${hora || ''}"></div>
-          <div class="field"><label for="td-f">Até (fim)</label><input id="td-f" type="time" class="input" value="${d.end || ''}"></div>
+          <div class="field"><label for="td-h">Hora</label><input id="td-h" type="text" inputmode="numeric" maxlength="5" placeholder="hh:mm" class="input td-hora" style="width:96px" value="${hora || ''}" data-tip="Digite só os números: 1300 vira 13:00, 930 vira 09:30"></div>
+          <div class="field"><label for="td-f">Até (fim)</label><input id="td-f" type="text" inputmode="numeric" maxlength="5" placeholder="hh:mm" class="input td-hora" style="width:96px" value="${d.end || ''}" data-tip="Digite só os números: 1730 vira 17:30"></div>
           <label class="check small" style="margin-bottom:8px" data-tip="Aparece como &quot;até hoje 18h&quot;: é um limite, não um horário marcado"><input type="checkbox" id="td-prazo" ${d.deadline ? 'checked' : ''}> É prazo</label>
         </div>
         ${emDiasHTML(true)}
@@ -595,6 +595,12 @@ function openTodoModal(id) {
       <div class="df"><button class="btn danger" data-x="del">Excluir</button><span class="grow"></span><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-x="ok">Salvar</button></div>`,
     onMount: (ly) => {
       const t = ly.box.querySelector('#td-t'); t.focus(); t.setSelectionRange(t.value.length, t.value.length);
+      ly.box.addEventListener('input', (ev) => {
+        const i = ev.target; if (!i.matches?.('.td-hora')) return;
+        const dg = i.value.replace(/\D/g, '').slice(0, 4);
+        if (dg.length >= 3) i.value = dg.length === 3 ? `${dg[0]}:${dg.slice(1)}` : `${dg.slice(0, 2)}:${dg.slice(2)}`; else i.value = dg;
+      });
+      ly.box.addEventListener('focusout', (ev) => { const i = ev.target; if (i.matches?.('.td-hora') && i.value) { const h = todoHoraNorm(i.value); i.value = h; } });
       ly.box.addEventListener('click', (ev) => {
         if (ev.target.closest('[data-x="ok"]')) { salvar(ly.box); ly.close(); }
         else if (ev.target.closest('[data-x="del"]')) { ly.close(); ACTIONS['todo-del']({ dataset: { id: n.id } }); }
@@ -603,13 +609,27 @@ function openTodoModal(id) {
     },
   });
 }
+/* "1300" → 13:00, "930" → 09:30, "13" → 13:00, "13h30" → 13:30; inválido → '' */
+function todoHoraNorm(x) {
+  const m = String(x || '').trim().toLowerCase().match(/^(\d{1,2})\s*(?:[:h]\s*(\d{1,2})?)?$/) || String(x || '').trim().match(/^(\d{1,2})(\d{2})$/);
+  if (!m) return '';
+  const h = Number(m[1]), mi = Number(m[2] || 0);
+  return h <= 23 && mi <= 59 ? `${pad(h)}:${pad(mi)}` : '';
+}
 function todoSalvarModal(id, box) {
   const n = db.get('tempo_notices', id); if (!n) return;
   const v = (s) => box.querySelector(s);
   const old = n.data || {}; const data = { ...old };
-  const dia = v('#td-d').value, hora = v('#td-h').value, fim = v('#td-f').value;
+  let dia = v('#td-d').value, hora = todoHoraNorm(v('#td-h').value), fim = todoHoraNorm(v('#td-f').value);
+  let prazo = v('#td-prazo').checked, titulo = v('#td-t').value.trim() || n.title, estTxt = Number(v('#td-e').value);
+  // o que está escrito na tarefa vale como no "adicionar": "reunião sexta 15h" define dia e hora e sai do título
+  const p = parseTodoText(titulo);
+  if (p.due) {
+    const [pd, ph] = p.due.split('T'); dia = pd; hora = p.semHora ? hora : ph; if (p.end) fim = p.end; prazo = p.deadline; titulo = p.title;
+    if (!(estTxt > 0) && p.dur) estTxt = p.dur;
+  }
   const due = dia ? `${dia}T${hora || '20:00'}` : null;
-  if (due) { data.due = due; data.end = fim || null; data.deadline = v('#td-prazo').checked && !fim; data.semHora = !hora; }
+  if (due) { data.due = due; data.end = fim || null; data.deadline = prazo && !fim; data.semHora = !hora; }
   else { delete data.due; delete data.end; delete data.deadline; delete data.semHora; }
   // adiado: a data foi trocada para um dia depois do que estava
   if (todoAdiou(old.due, due)) data.adiou = (old.adiou || 0) + 1;
@@ -617,10 +637,10 @@ function todoSalvarModal(id, box) {
   delete data.project_id; delete data.client_id;
   if (lig.startsWith('p:')) data.project_id = lig.slice(2); else if (lig.startsWith('c:')) data.client_id = lig.slice(2);
   data.link_manual = true;
-  const est = Number(v('#td-e').value); if (est > 0) data.est = est; else delete data.est;
+  const est = estTxt; if (est > 0) data.est = est; else delete data.est;
   if (v('#td-a').checked && due) { if (!old.alarm || old.due !== due) data.alarm_criado = false; data.alarm = true; }
   else { delete data.alarm; delete data.alarm_criado; }
-  db.update('tempo_notices', id, { title: v('#td-t').value.trim() || n.title, body: v('#td-n').value.trim(), data }, true);
+  db.update('tempo_notices', id, { title: titulo, body: v('#td-n').value.trim(), data }, true);
   db.emit(); todoAlarmSync(); toast('To-do salvo');
 }
 ACTIONS['todo-modal'] = (el) => openTodoModal(el.dataset.id);
