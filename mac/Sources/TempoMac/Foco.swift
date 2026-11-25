@@ -6,12 +6,25 @@ import ApplicationServices
 /// - apps de distração (WhatsApp, Telegram, Mensagens…) ficam escondidos; ao abrir um, pergunta antes;
 /// - navegador com aba de distração (Instagram, YouTube…) em primeiro plano também pergunta;
 /// - liga o "Não perturbe" pelo atalho "Tempo Foco" do app Atalhos (e desliga com "Tempo Fim do Foco"), se existirem.
-/// Nada é bloqueado: "Abrir mesmo assim" libera aquele app por 10 minutos e fica registrado no foco.
+/// Nada é bloqueado: "Abrir por 10 min" libera aquele app por 10 minutos e fica registrado no foco. Passados os
+/// 10 minutos ele volta a ser escondido (mesmo que continue aberto na frente) e pergunta de novo; da segunda vez no
+/// mesmo dia aparece também "Liberar por hoje", que deixa aquele app/site livre até a meia-noite.
 final class FocoController {
     private(set) var ate: Date?
     private var apps: [String] = []
     private var sites: [String] = []
     private var liberado: [String: Date] = [:]
+    /// Quantas vezes cada app/site foi aberto no foco hoje e quais foram liberados até o fim do dia (sobrevive a reabrir o app).
+    private var vezesHoje: [String: Int] {
+        get { (UserDefaults.standard.dictionary(forKey: "focoVezes.\(FocoController.hoje())") as? [String: Int]) ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: "focoVezes.\(FocoController.hoje())") }
+    }
+    private var livresHoje: [String] {
+        get { UserDefaults.standard.stringArray(forKey: "focoLivre.\(FocoController.hoje())") ?? [] }
+        set { UserDefaults.standard.set(newValue, forKey: "focoLivre.\(FocoController.hoje())") }
+    }
+    private static func hoje() -> String { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }
+    private func livre(_ chave: String) -> Bool { livresHoje.contains(chave) || (liberado[chave] ?? .distantPast) > Date() }
     private var perguntando = false
     private var ultimoAppTrabalho: NSRunningApplication?
     private var vigia: Timer?
@@ -64,7 +77,7 @@ final class FocoController {
         guard ativo else { ultimoAppTrabalho = app; return }
         if ehDistracao(app) {
             let chave = (app.localizedName ?? "app").lowercased()
-            if (liberado[chave] ?? .distantPast) > Date() { return }
+            if livre(chave) { return }
             app.hide()
             perguntar(nome: app.localizedName ?? "esse app", chave: chave, app: app, site: false)
         } else if !navegador(app) {
@@ -78,10 +91,16 @@ final class FocoController {
     }
 
     private func conferirNavegador() {
+        // app de distração que ficou na frente depois que os 10 minutos acabaram: esconde e pergunta de novo
+        if ativo, !perguntando, let frente = NSWorkspace.shared.frontmostApplication, frente.bundleIdentifier != selfBundle, ehDistracao(frente) {
+            let chave = (frente.localizedName ?? "app").lowercased()
+            if !livre(chave) { frente.hide(); perguntar(nome: frente.localizedName ?? "esse app", chave: chave, app: frente, site: false) }
+            return
+        }
         guard ativo, !perguntando, let app = NSWorkspace.shared.frontmostApplication, navegador(app), AXIsProcessTrusted() else { return }
         guard let titulo = FocoController.tituloJanela(app.processIdentifier)?.lowercased(),
               let site = sites.first(where: { !$0.isEmpty && titulo.contains($0) }) else { return }
-        if (liberado[site] ?? .distantPast) > Date() { return }
+        if livre(site) { return }
         perguntar(nome: site.capitalized, chave: site, app: app, site: true)
     }
 
@@ -101,15 +120,21 @@ final class FocoController {
         perguntando = true
         let hora = DateFormatter.localizedString(from: ate ?? Date(), dateStyle: .none, timeStyle: .short)
         NSApp.activate(ignoringOtherApps: true)
+        let vezes = vezesHoje[chave] ?? 0
         let alerta = NSAlert()
         alerta.messageText = "Você está no foco até \(hora)"
-        alerta.informativeText = site ? "Abrir \(nome) mesmo assim?" : "Abrir o \(nome) mesmo assim? (fica liberado por 10 minutos)"
+        alerta.informativeText = vezes > 0
+            ? "Você já abriu \(site ? nome : "o " + nome) \(vezes == 1 ? "1 vez" : "\(vezes) vezes") hoje no foco. Liberar por hoje ou só por mais 10 minutos?"
+            : (site ? "Abrir \(nome) mesmo assim? (fica liberado por 10 minutos)" : "Abrir o \(nome) mesmo assim? (fica liberado por 10 minutos)")
         alerta.addButton(withTitle: "Continuar no foco")
-        alerta.addButton(withTitle: "Abrir mesmo assim")
+        alerta.addButton(withTitle: "Abrir por 10 min")
+        if vezes > 0 { alerta.addButton(withTitle: "Liberar por hoje") }
         let r = alerta.runModal()
         perguntando = false
-        if r == .alertSecondButtonReturn {
-            liberado[chave] = Date().addingTimeInterval(600)
+        if r == .alertSecondButtonReturn || r == .alertThirdButtonReturn {
+            if r == .alertThirdButtonReturn { livresHoje = livresHoje + [chave] }
+            else { liberado[chave] = Date().addingTimeInterval(600) }
+            var v = vezesHoje; v[chave] = vezes + 1; vezesHoje = v
             app.unhide()
             app.activate(options: [.activateIgnoringOtherApps])
             onAbriu?(nome)
