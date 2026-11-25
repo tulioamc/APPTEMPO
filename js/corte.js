@@ -43,7 +43,10 @@ function corteTirarOciosos(segs, trabalho, idle, novoId) {
   });
   return { segs: out, prox: id };
 }
-const corteCor = (app) => { const k = (typeof shortProgram === 'function' ? shortProgram(app) : app) || app || ''; let h = 0; for (const c of k) h = (h * 31 + c.charCodeAt(0)) >>> 0; return CORTE_CORES[h % CORTE_CORES.length]; };
+/* Cor do programa: a MESMA do resto do app (Sessão atual, relatórios: toolColor); só sem ela cai na paleta própria (25/11). */
+const corteCor = (app, doc = null) => {
+  try { if (typeof toolColor === 'function' && typeof toolName === 'function') { const c = toolColor(toolName({ app, doc })); if (c) return hexOf ? hexOf(c) : c; } } catch (_) { /* cai na paleta */ }
+  const k = (typeof shortProgram === 'function' ? shortProgram(app) : app) || app || ''; let h = 0; for (const c of k) h = (h * 31 + c.charCodeAt(0)) >>> 0; return CORTE_CORES[h % CORTE_CORES.length]; };
 const corteHora = (ms) => { const d = new Date(ms); return d.getHours() + 'h' + String(d.getMinutes()).padStart(2, '0'); };
 
 /* Tarefa sugerida pelo arquivo/pasta: a que mais usou o mesmo arquivo em outras sessões. */
@@ -173,7 +176,7 @@ function openCorte({ from, to, origemId = null, titulo = 'Tempo não computado',
       function draw() {
         segs.sort((x, y) => x.a - y.a);
         let h = '';
-        blocos.forEach(b => { h += `<div class="cr-blk${b.pausa ? ' pausa' : ''}" style="left:${pct(Math.max(0, b.a))};width:${pct(Math.min(W, b.b) - Math.max(0, b.a))};background:${b.pausa || /loginwindow/i.test(b.app) ? 'var(--border-strong)' : corteCor(b.app)}"></div>`; });
+        blocos.forEach(b => { h += `<div class="cr-blk${b.pausa ? ' pausa' : ''}" style="left:${pct(Math.max(0, b.a))};width:${pct(Math.min(W, b.b) - Math.max(0, b.a))};background:${b.pausa || /loginwindow/i.test(b.app) ? 'var(--border-strong)' : corteCor(b.app, b.doc)}"></div>`; });
         segs.forEach(s => { h += `<div class="cr-seg${s.id === sel ? ' on' : ''}${s.task ? '' : ' off'}" data-k="m" data-id="${s.id}" style="left:${pct(s.a)};width:${pct(s.b - s.a)}"><span class="n">${s.b - s.a} min</span><div class="cr-h" data-k="a" data-id="${s.id}" style="left:0"></div><div class="cr-h" data-k="b" data-id="${s.id}" style="right:0"></div></div>`; });
         h += `<div class="cr-ph" style="left:${pct(cur)}"></div>`;
         band.innerHTML = h;
