@@ -525,7 +525,10 @@ function bankSummaryHTML(entity) {
   BANK.openM = BANK.openM || {};
   const lst = BANK.lst || 'tudo';
   const outList = lst === 'in' ? [] : outsAll;
-  const inList = lst === 'out' ? [] : (BANK.all[entity] || []).filter(t => t.flow === 'in' && passes(t));
+  // PF financeiro = PF + PJ como uma conta só (igual às saídas e ao resumo do mês): o que entra na PJ conta como entrada do mês;
+  // o repasse PJ → PF é interno e não conta de novo. Resgate, aplicação e caixinha também ficam em Interno.
+  const inPool = entity === 'pf' ? (BANK.every || []).filter(t => t.scope !== 'interna' || (t.biz_entity || t.entity) === 'pf') : (BANK.all[entity] || []);
+  const inList = lst === 'out' ? [] : inPool.filter(t => t.flow === 'in' && passes(t));
   const listAll = outList.concat(inList).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
   const months = [...new Set(listAll.map(t => (t.posted_on || '').slice(0, 7)))];
   const groups = months.map(m => {
