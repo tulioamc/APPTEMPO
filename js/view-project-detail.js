@@ -93,7 +93,7 @@ function pdTasks(p) {
     const est = estimadoDaTarefa(t); const aberto = TK_ABERTAS.has(t.id);
     const deps = (Array.isArray(t.depends_on) ? t.depends_on : []).map(d => db.get('tempo_tasks', d)?.name).filter(Boolean);
     const rel = tkPrazoRel(t);
-    return `<div class="tk ${isSub ? 'sub' : ''}${aberto ? ' aberta' : ''}">
+    return `<div class="tk ${isSub ? 'sub' : ''}${aberto ? ' aberta' : ''}${souEu(t.owner) ? '' : ' outro'}"${souEu(t.owner) ? '' : ` data-tip="${esc('Tarefa de outra pessoa\nResponsável: ' + (t.owner || '—'))}"`}>
     <div class="tk-l">
       <div class="tk-nome"><span class="tk-nome-l">${!isSub ? `<span class="tk-grip" draggable="true" data-tk-grip data-tip="Arraste para mudar a ordem da tarefa na lista"><svg viewBox="0 0 8 12" aria-hidden="true"><circle cx="2" cy="2" r="1.1"/><circle cx="6" cy="2" r="1.1"/><circle cx="2" cy="6" r="1.1"/><circle cx="6" cy="6" r="1.1"/><circle cx="2" cy="10" r="1.1"/><circle cx="6" cy="10" r="1.1"/></svg></span>` : ''}<input class="tk-in n" value="${esc(t.name)}" data-pd="tname" data-id="${t.id}" aria-label="Nome"${liq || est ? ` data-tip="${esc(`Líquido ${fmtDur(liq)} · bruto ${fmtDur(bruto)}${est ? ' · estimado ' + fmtH(est * 36e5) : ''}`)}"` : ''}></span>${deps.length ? `<span class="tk-dep">(Depende de ${deps.length > 1 ? deps.length + ' tarefas' : esc(deps[0])})</span>` : ''}</div>
       <input class="tk-in tk-resp" value="${esc(t.owner || '')}" placeholder="—" data-pd="owner" data-id="${t.id}" aria-label="Responsável">
@@ -104,7 +104,8 @@ function pdTasks(p) {
       <span class="tk-acoes">${souEu(t.owner) ? `<button class="btn sm icon ghost" data-x="track-task" data-id="${t.id}" aria-label="Registrar tempo">${icon('play')}</button>` : ''}<button class="btn sm icon ghost" data-x="tk-abrir" data-id="${t.id}" aria-label="${aberto ? 'Fechar' : 'Mais opções'}" aria-expanded="${aberto}">${icon(aberto ? 'chevU' : 'chevD')}</button></span>
     </div>
     ${aberto ? `<div class="tk-mais-p"><div class="tk-op-grupos">
-      <div class="tk-op"><span class="tk-op-l">Status</span><label class="check small tk-op-c" data-tip="Ligado: mudar o status do projeto muda o desta tarefa também. Desligado: a tarefa tem o status dela e não acompanha o projeto"><input type="checkbox" data-x-chk="tk-herda" data-id="${t.id}" ${t.status_inherited !== false ? 'checked' : ''}> Segue o projeto</label></div>
+      <div class="tk-op"><span class="tk-op-l">Status</span><label class="check small tk-op-c" data-tip="Ligado: mudar o status do projeto muda o desta tarefa também. Desligado: a tarefa tem o status dela e não acompanha o projeto"><input type="checkbox" data-x-chk="tk-herda" data-id="${t.id}" ${t.status_inherited !== false ? 'checked' : ''}> Segue o projeto</label>
+        <span class="tk-op-l tk-op-l2">Responsável</span><input class="tk-in tk-op-resp" value="${esc(t.owner || '')}" placeholder="Você" data-pd="owner" data-id="${t.id}" aria-label="Responsável (vazio = você; outra pessoa deixa a linha cinza)"></div>
       ${!isSub ? `<div class="tk-op"><span class="tk-op-l">Tipo de trabalho</span><span class="tk-op-c">${comboBtn('wt', t.work_type_id, 'task-wt', t.id)}</span></div>` : ''}
       ${!isSub ? `<div class="tk-op tk-op-dep"><span class="tk-op-l">Depende de</span><span class="tk-op-c">${depsHTML(t)}</span></div>` : ''}
       </div><hr class="tk-op-div">
