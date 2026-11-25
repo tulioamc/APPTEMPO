@@ -328,10 +328,33 @@ function planoFk(x, dia) {
    Os que começam juntos (até 20 min de diferença) dividem a largura lado a lado. */
 function planoCascata(itens) {
   // 24/11: o que cai no mesmo horário divide a largura lado a lado (como no Dia), em vez de entrar em cascata por cima.
-  const fundo = itens.filter(x => x.k === 'fixo'); fundo.forEach(x => { x._left = 0; x._w = 100; x._fundo = true; x._z = 0; });
-  const ord = planoFaixasLivre(itens.filter(x => x.k !== 'fixo'));
+  // 25/11: to-dos e rotina maleável ficam POR CIMA (fundo translúcido), ocupando parte do bloco de baixo (planoSobrepor).
+  const fundo = itens.filter(x => x.k === 'fixo' && !planoSobreTipo(x)); fundo.forEach(x => { x._left = 0; x._w = 100; x._fundo = true; x._z = 0; });
+  const ord = planoFaixasLivre(itens.filter(x => x.k !== 'fixo' && !planoSobreTipo(x)));
   ord.forEach((x, k) => { x._left = x._l * (100 / x._n); x._w = 100 / x._n; x._nivel = 0; x._z = k + 1; });
-  return [...fundo, ...ord];
+  return [...fundo, ...ord, ...planoSobrepor(itens.filter(planoSobreTipo), ord)];
+}
+/* Itens que ficam por cima dos outros, com fundo translúcido e contorno inteiro: to-dos e rotina maleável
+   (a fixada, inegociável, continua de fundo). */
+const planoSobreTipo = (x) => x.k === 'todo' || x.k === 'todos' || (x.k === 'fixo' && x.m && x.m.pin === false);
+let PL_ALT_AGORA = null;   // altura de 1 h na grade que está sendo desenhada (para saber quanto ocupa o texto de um bloco)
+/* Regra (25/11): o item de cima entra um pouco recuado (o bloco de baixo continua aparecendo na esquerda) e pode cobrir
+   o corpo do bloco de baixo; se ele cair em cima do TEXTO de outro (título e linhas do topo, ~44 px), encolhe para a
+   metade da direita desse bloco; se mesmo assim não couber, divide a largura no meio. */
+function planoSobrepor(over, base) {
+  const tH = 44 / (PL_ALT_AGORA || (typeof PL_ALT !== 'undefined' ? PL_ALT : 48)), INSET = 8;
+  const postos = [...base];
+  over.slice().sort((x, y) => x.a - y.a || (y.b - y.a) - (x.b - x.a)).forEach((x, i) => {
+    const fimX = planoFimVisual(x);
+    const viz = postos.filter(p => p.a < fimX - 1e-9 && planoFimVisual(p) > x.a + 1e-9);
+    let left = viz.length ? INSET : 0;
+    viz.forEach(p => { if (x.a < p.a + tH - 1e-9 && fimX > p.a + 1e-9) left = Math.max(left, (p._left ?? 0) + (p._w ?? 100) * 0.5); });
+    let w = 100 - left;
+    if (w < 30) { left = 50; w = 50; }
+    x._left = left; x._w = w; x._sobre = true; x._z = 60 + i; x._n = 1;
+    postos.push(x);
+  });
+  return over;
 }
 function planoFaixas(itens0, unico = true, dia = '') {
   const prazos = itens0.filter(x => x.k === 'prazo'); prazos.forEach(x => { x._left = 0; x._w = 100; x._z = 90; });
@@ -344,11 +367,16 @@ function planoFaixas(itens0, unico = true, dia = '') {
     x._fk = k; x._lane = l; lanes[l].push(x);
   });
   const W = 100 / 3; const out = [];
-  lanes.forEach((ls, li) => planoFaixasLivre(ls).forEach(x => {
-    x._left = li * W + x._l * (W / x._n); x._w = W / x._n;
-    if (li === 1 && x._n > 1 && ['plano', 'todo', 'todos'].includes(x.k)) x._choque = true;
-    out.push(x);
-  }));
+  lanes.forEach((ls, li) => {
+    const base = planoFaixasLivre(ls.filter(x => !planoSobreTipo(x)));
+    base.forEach(x => { x._left = x._l * (100 / x._n); x._w = 100 / x._n; });
+    const over = planoSobrepor(ls.filter(planoSobreTipo), base);
+    [...base, ...over].forEach(x => {
+      x._left = li * W + (x._left ?? 0) * W / 100; x._w = (x._w ?? 100) * W / 100;
+      if (li === 1 && x._n > 1 && ['plano', 'todo', 'todos'].includes(x.k)) x._choque = true;
+      out.push(x);
+    });
+  });
   return [...out, ...prazos];
 }
 /* Como no Google Agenda: o que se sobrepõe na tela divide a largura. Item curto (to-do sem duração, compromisso de
@@ -471,10 +499,12 @@ function planoLivres(dia, porDia) {
 }
 function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0, cabecalho = true, semana = '' } = {}) {
   const cfg = planoCfg(); const v = porDia[dia]; const util = planoDiaUtil(dia); const hoje = ymd(new Date());
+  PL_ALT_AGORA = alt;
   const itens = planoFaixas(planoJuntaAgenda(planoRegistro15(planoItensDoDia(dia, porDia))), unico, dia).map(x => {
     let h; try { h = planoItemHTML(x, dia, { alt, unico }); } catch (e) { console.error('Calendário: item com problema', x?.k, e); PLANO.itensRuins = (PLANO.itensRuins || 0) + 1; return ''; }
     if (x._choque) h = h.replace('class="', 'class="choque ').replace('data-tip="', 'data-tip="⚠ Bate no horário com outro item.&#10;');
     if (x._z) h = h.replace('style="', `style="z-index:${2 + x._z};`);
+    if (x._sobre) h = h.replace('class="', 'class="pl-sobre ');
     const sk = x.k === 'plano' ? `p:${dia}:${x.bl.tid || x.bl.pid}:${x.bl.ini.toFixed(2)}` : x.k === 'todo' ? 't:' + x.e.id : '';
     if (sk && PLANO.sel.has(sk)) h = h.replace('class="', 'class="pl-sel ');
     return h.replace(/^<div /, `<div data-fk="${esc(x._fk || '')}" data-lane="${x._lane ?? ''}" data-sk="${esc(sk)}" `);

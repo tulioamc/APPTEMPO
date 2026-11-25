@@ -2659,3 +2659,7 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .et-l + .et-l { border-top: 1px solid color-mix(in srgb, var(--fg) 6%, transparent); }
 .et-l b { text-align: right; }
 .et-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .92em; }
+/* Calendário (25/11): to-dos e rotina maleável por cima dos outros blocos, fundo translúcido e contorno 100% */
+.pl-grade > .pl-sobre.pl-evento.todo, .pl-grade > .pl-sobre.pl-evento { background: color-mix(in srgb, var(--surface) 62%, transparent) !important; border: 1.5px solid var(--accent) !important; }
+.pl-grade > .pl-sobre.pl-fixo { background: color-mix(in oklab, var(--accent-soft) 60%, transparent) !important; border: 1.5px solid color-mix(in oklab, var(--accent) 45%, transparent) !important; color: var(--accent); }
+.pl-grade > .pl-sobre { box-shadow: 0 1px 4px rgba(20,24,40,.08); }
