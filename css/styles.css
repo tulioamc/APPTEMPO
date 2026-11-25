@@ -2317,3 +2317,7 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .tk-op-meio > [data-x="add-sub"] { margin-left: 0 !important; }
 .tk-op-acoes > .tk-op-del { grid-column: 7 / 8; justify-self: end; margin-left: 0 !important; }
 @container (max-width: 560px) { .tk-op-acoes { display: flex !important; flex-wrap: wrap; } .tk-op-acoes > .tk-op-del { margin-left: auto !important; } }
+/* Opções da tarefa mais baixas (25/11): grupos mais perto da linha de cima, divisória e botões mais perto */
+.tk-mais-p { padding: 7px 10px 9px 22px !important; gap: 6px !important; }
+.tk-op { gap: 2px !important; }
+.tk-op-div { margin: 0 !important; }
