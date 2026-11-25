@@ -26,6 +26,8 @@ final class FocoController {
     private static func hoje() -> String { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }
     private func livre(_ chave: String) -> Bool { livresHoje.contains(chave) || (liberado[chave] ?? .distantPast) > Date() }
     private var perguntando = false
+    /// Ao perguntar, o Tempo vem para a frente e o macOS avisa que ele ficou ativo: essa ativação não conta como "abrir o Tempo".
+    private var ignorarTempoAte = Date.distantPast
     private var ultimoAppTrabalho: NSRunningApplication?
     private var vigia: Timer?
     private let selfBundle = Bundle.main.bundleIdentifier ?? "TempoMac"
@@ -68,12 +70,20 @@ final class FocoController {
         return apps.contains(nome) || (bundle.contains("whatsapp") && apps.contains("whatsapp"))
     }
 
+    /// "Tempo" marcado na lista do foco: abrir o próprio Tempo também pergunta (é onde dá vontade de criar funcionalidade em vez de trabalhar).
+    private var tempoNaLista: Bool { apps.contains("tempo") }
+
     private func esconderDistracoes() {
-        for app in NSWorkspace.shared.runningApplications where ehDistracao(app) { app.hide() }
+        // o Tempo não se esconde ao ligar o foco: é por ele que você liga e encerra
+        for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier != selfBundle && ehDistracao(app) { app.hide() }
     }
 
     private func ativou(_ app: NSRunningApplication) {
-        if app.bundleIdentifier == selfBundle { return }
+        if app.bundleIdentifier == selfBundle {
+            guard ativo, tempoNaLista, !perguntando, Date() > ignorarTempoAte, !livre("tempo") else { return }
+            perguntarTempo()
+            return
+        }
         guard ativo else { ultimoAppTrabalho = app; return }
         if ehDistracao(app) {
             let chave = (app.localizedName ?? "app").lowercased()
@@ -91,6 +101,12 @@ final class FocoController {
     }
 
     private func conferirNavegador() {
+        // o Tempo ficou na frente depois que os 10 minutos liberados acabaram: pergunta de novo (só se você já o tinha liberado antes)
+        if ativo, tempoNaLista, !perguntando, Date() > ignorarTempoAte, liberado["tempo"] != nil, !livre("tempo"),
+           NSWorkspace.shared.frontmostApplication?.bundleIdentifier == selfBundle {
+            perguntarTempo()
+            return
+        }
         // app de distração que ficou na frente depois que os 10 minutos acabaram: esconde e pergunta de novo
         if ativo, !perguntando, let frente = NSWorkspace.shared.frontmostApplication, frente.bundleIdentifier != selfBundle, ehDistracao(frente) {
             let chave = (frente.localizedName ?? "app").lowercased()
@@ -118,6 +134,7 @@ final class FocoController {
     private func perguntar(nome: String, chave: String, app: NSRunningApplication, site: Bool) {
         guard !perguntando else { return }
         perguntando = true
+        ignorarTempoAte = Date().addingTimeInterval(3600)
         let hora = DateFormatter.localizedString(from: ate ?? Date(), dateStyle: .none, timeStyle: .short)
         NSApp.activate(ignoringOtherApps: true)
         let vezes = vezesHoje[chave] ?? 0
@@ -131,6 +148,7 @@ final class FocoController {
         if vezes > 0 { alerta.addButton(withTitle: "Liberar por hoje") }
         let r = alerta.runModal()
         perguntando = false
+        ignorarTempoAte = Date().addingTimeInterval(2)
         if r == .alertSecondButtonReturn || r == .alertThirdButtonReturn {
             if r == .alertThirdButtonReturn { livresHoje = livresHoje + [chave] }
             else { liberado[chave] = Date().addingTimeInterval(600) }
@@ -139,6 +157,36 @@ final class FocoController {
             app.activate(options: [.activateIgnoringOtherApps])
             onAbriu?(nome)
         } else {
+            ultimoAppTrabalho?.activate(options: [.activateIgnoringOtherApps])   // volta para o que estava fazendo
+        }
+    }
+
+    /// Abriu o Tempo no foco. "Continuar no foco" esconde o Tempo e volta ao que você estava fazendo.
+    private func perguntarTempo() {
+        guard !perguntando else { return }
+        perguntando = true
+        ignorarTempoAte = Date().addingTimeInterval(3600)   // enquanto o painel está aberto, ativações do próprio Tempo não contam
+        let hora = DateFormatter.localizedString(from: ate ?? Date(), dateStyle: .none, timeStyle: .short)
+        NSApp.activate(ignoringOtherApps: true)
+        let vezes = vezesHoje["tempo"] ?? 0
+        let alerta = NSAlert()
+        alerta.messageText = "Você está no foco até \(hora)"
+        alerta.informativeText = vezes > 0
+            ? "Você já abriu o Tempo \(vezes == 1 ? "1 vez" : "\(vezes) vezes") hoje no foco. Liberar por hoje ou só por mais 10 minutos?"
+            : "Abrir o Tempo mesmo assim? (fica liberado por 10 minutos)"
+        alerta.addButton(withTitle: "Continuar no foco")
+        alerta.addButton(withTitle: "Abrir por 10 min")
+        if vezes > 0 { alerta.addButton(withTitle: "Liberar por hoje") }
+        let r = alerta.runModal()
+        perguntando = false
+        ignorarTempoAte = Date().addingTimeInterval(2)
+        if r == .alertSecondButtonReturn || r == .alertThirdButtonReturn {
+            if r == .alertThirdButtonReturn { livresHoje = livresHoje + ["tempo"] }
+            else { liberado["tempo"] = Date().addingTimeInterval(600) }
+            var v = vezesHoje; v["tempo"] = vezes + 1; vezesHoje = v
+            onAbriu?("Tempo")
+        } else {
+            NSApp.hide(nil)
             ultimoAppTrabalho?.activate(options: [.activateIgnoringOtherApps])   // volta para o que estava fazendo
         }
     }

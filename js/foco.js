@@ -7,11 +7,14 @@ const FOCO_OPCOES = [30, 60, 90, 120];
 const FOCO_PADRAO = 90;
 /* Escondidos só durante o foco (não pausam a sessão, porque também são ferramenta de trabalho): o Claude, no app e no site. Editáveis em 'focoApps' e 'focoSites'. */
 const FOCO_APPS_EXTRA = ['Claude'], FOCO_SITES_EXTRA = ['claude.ai'];
-const focoLista = (a, b) => [...new Set([...(a || []), ...(b || [])].map(x => String(x).trim()).filter(Boolean))];
+/* O próprio Tempo também entra na lista (desmarcável na janela do foco): durante o foco, abrir o Tempo pergunta antes, como qualquer distração. */
+const FOCO_APPS_FIXOS = ['Tempo'];
+const FOCO_DICAS = { Tempo: 'Durante o foco, abrir o próprio Tempo também pergunta antes (o Tempo não se esconde ao ligar o foco)' };
+const focoLista = (...listas) => [...new Set(listas.flatMap(l => l || []).map(x => String(x).trim()).filter(Boolean))];
 const FOCO_TIPOS_AVISAM = ['Cliente', 'Misto (mais cliente)', 'Agência'];
 
-/* Tudo o que o foco pode esconder: apps e sites de distração (os mesmos que pausam a sessão) mais o Claude. */
-const focoItens = () => ({ apps: focoLista(db.setting('pauseApps', DEFAULT_PAUSE_APPS), db.setting('focoApps', FOCO_APPS_EXTRA)), sites: focoLista(db.setting('pauseSites', DEFAULT_PAUSE_SITES), db.setting('focoSites', FOCO_SITES_EXTRA)) });
+/* Tudo o que o foco pode esconder: apps e sites de distração (os mesmos que pausam a sessão), o Claude e o próprio Tempo. */
+const focoItens = () => ({ apps: focoLista(db.setting('pauseApps', DEFAULT_PAUSE_APPS), db.setting('focoApps', FOCO_APPS_EXTRA), FOCO_APPS_FIXOS), sites: focoLista(db.setting('pauseSites', DEFAULT_PAUSE_SITES), db.setting('focoSites', FOCO_SITES_EXTRA)) });
 function focoAtual() {
   const f = db.setting('foco', null);
   return f && f.ate && new Date(f.ate).getTime() > Date.now() ? f : null;
@@ -109,7 +112,7 @@ ACTIONS['foco-abrir'] = async () => {
   }
   const l = openLayer({ html: `<div class="dh">${icon('target')}<h2>Modo foco</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db stack"><div class="small muted">Marque o que fica escondido durante o foco; mensagem de cliente ainda avisa.</div>
-      ${(() => { const it = focoItens(); const off = db.setting('focoDesmarcados', { apps: [], sites: [] }) || {}; const grupo = (tit, k, lista) => lista.length ? `<div class="field"><span class="lbl">${tit}</span><div class="row" style="gap:4px 14px;flex-wrap:wrap">${lista.map(x => `<label class="row small" style="gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-foco-${k}="${esc(x)}"${(off[k] || []).includes(x) ? '' : ' checked'}> ${esc(x)}</label>`).join('')}</div></div>` : ''; return grupo('Apps', 'apps', it.apps) + grupo('Sites', 'sites', it.sites); })()}
+      ${(() => { const it = focoItens(); const off = db.setting('focoDesmarcados', { apps: [], sites: [] }) || {}; const grupo = (tit, k, lista) => lista.length ? `<div class="field"><span class="lbl">${tit}</span><div class="row" style="gap:4px 14px;flex-wrap:wrap">${lista.map(x => `<label class="row small" style="gap:6px;align-items:center;cursor:pointer"${FOCO_DICAS[x] ? ` title="${esc(FOCO_DICAS[x])}"` : ''}><input type="checkbox" data-foco-${k}="${esc(x)}"${(off[k] || []).includes(x) ? '' : ' checked'}> ${esc(x)}</label>`).join('')}</div></div>` : ''; return grupo('Apps', 'apps', it.apps) + grupo('Sites', 'sites', it.sites); })()}
       <div class="small muted">Por quanto tempo?</div>
       <div class="row" style="gap:6px;flex-wrap:wrap">${FOCO_OPCOES.map(m => `<button class="btn ${m === FOCO_PADRAO ? 'primary' : ''}" data-x="min" data-min="${m}">${m} min</button>`).join('')}</div>
       <div class="row" style="gap:6px;align-items:center"><label for="foco-outro" class="small">Outro</label><input id="foco-outro" class="input sm" type="number" min="5" max="480" step="5" placeholder="minutos" style="width:110px"><button class="btn" data-x="outro">Ativar</button></div></div>` });

@@ -384,6 +384,7 @@ const UNSAVED_NEW_MS = 15 * 60e3, UNSAVED_DIRTY_MS = 30 * 60e3;
 const UNSAVED_RE = /untitled|sem t[ií]tulo|sem nome|novo arquivo|novo documento|arquivo sem nome|unnamed|unsaved|^documento ?\d*$/i;
 const UNSAVED_STATE = {};
 function trackUnsaved(seg, ms) {
+  if (window.TempoMacSalvar) return;   // o app do Mac avisa na hora (js/salvar-aviso.js); este aqui só vê o registro depois
   if (!DESIGN_APP_RE.test(seg.app) || !seg.doc) return;
   const doc = String(seg.doc);
   const fam = appFamily(seg.app);

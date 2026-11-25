@@ -17,7 +17,7 @@ test('ligar e encerrar: estado, aviso ao Mac e registro do foco', () => {
   t.focoLigar(90);
   const f = t.focoAtual();
   assert.ok(f); assert.equal(f.minutos, 90);
-  assert.equal(t.msgs.at(-1).type, 'foco'); assert.ok(t.msgs.at(-1).ate); assert.deepEqual([...t.msgs.at(-1).apps], ['WhatsApp', 'Claude']);
+  assert.equal(t.msgs.at(-1).type, 'foco'); assert.ok(t.msgs.at(-1).ate); assert.deepEqual([...t.msgs.at(-1).apps], ['WhatsApp', 'Claude', 'Tempo']);
   t.focoAbriu('WhatsApp');
   assert.equal(t.focoAtual().aberturas.length, 1);
   assert.match(t.focoBtnHTML(), /Foco · \d+ min/);
@@ -53,4 +53,13 @@ test('janela do foco: só vai para o Mac o que foi marcado', () => {
   const t = setup(); t.focoLigar(30, { apps: ['Claude'], sites: [] });
   const m = t.msgs.at(-1); assert.deepEqual([...m.apps], ['Claude']); assert.deepEqual([...m.sites], []);
   assert.deepEqual([...t.focoAtual().apps], ['Claude']);
+});
+
+test('o Tempo aparece na lista do foco (mesmo com lista própria salva) e pode ser desmarcado', () => {
+  const t = setup();
+  t.db.setSetting('focoApps', ['Claude']);   // lista antiga salva sem o Tempo
+  t.focoLigar(30);
+  assert.ok([...t.msgs.at(-1).apps].includes('Tempo'), 'sem seleção, o Mac recebe o Tempo');
+  t.focoLigar(30, { apps: ['WhatsApp', 'Claude'], sites: [] });   // desmarcou o Tempo na janela
+  assert.deepEqual([...t.msgs.at(-1).apps], ['WhatsApp', 'Claude']);
 });

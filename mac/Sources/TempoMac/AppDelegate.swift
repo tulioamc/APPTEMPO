@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private let monitor = ActivityMonitor()
     private let whatsapp = WhatsAppMonitor()
     private let foco = FocoController()
+    private let salvar = SalvarLembrete()
     private let notas = NotasEmitidas()
     private let agenda = AgendaApple()
     private var focoItem: NSMenuItem?
@@ -101,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         foco.onAbriu = { [weak self] nome in self?.enqueue("focoAbriu", [nome]) }
         foco.aviso = { [weak self] t, b in self?.showNotice(t, b) }
         foco.start()
+        salvar.start()
     }
 
     // MARK: - WhatsApp, notas, lembretes e iCloud (antes ficavam no app em Python)
@@ -316,6 +318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         case "pdf": handlePDF(d); return
         case "pdfRenomear": handlePDFRenomear(d); return
         case "foco": handleFoco(d); return
+        case "salvar": salvar.pasta = d["pasta"] as? String; return   // pasta do projeto atual, para o Salvar como
         case "nfReler": notas.reler(); return
         default: break
         }
@@ -436,7 +439,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { flush() }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // avisa o site que o aviso de salvar é feito aqui no Mac (o site deixa de fazer o dele, que só via o registro depois)
+        web.evaluateJavaScript("window.TempoMacSalvar = true; true", completionHandler: nil)
+        flush()
+    }
 
     // MARK: - Menu da barra
 
@@ -464,6 +471,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         m.addItem(.separator())
         m.addItem(toggleItem("Guardar pasta da janela ativa", key: "captureFolders", defaultOn: true, action: #selector(toggleFolders)))
         m.addItem(toggleItem("Guardar nome do arquivo", key: "captureFileNames", defaultOn: true, action: #selector(toggleFiles)))
+        m.addItem(.separator())
+        let avisoSalvar = toggleItem("Avisar para salvar (20 min sem salvar)", key: "salvarAviso", defaultOn: true, action: #selector(toggleSalvar))
+        avisoSalvar.toolTip = "Avisa quando você trabalha 20 min no mesmo arquivo sem salvar (Photoshop sempre; Illustrator, After e Cinema 4D só em arquivo novo)"
+        m.addItem(avisoSalvar)
+        m.addItem(withTitle: "Aviso de salvar: ver o que o Tempo lê…", action: #selector(salvarDiagnostico), keyEquivalent: "").toolTip = "Mostra o que o Tempo consegue ler da janela do programa em primeiro plano (para conferir se o aviso vai funcionar)"
+        m.addItem(withTitle: "Voltar a avisar nos arquivos ignorados", action: #selector(salvarReativar), keyEquivalent: "").toolTip = "Desfaz todos os \"Não avisar deste arquivo\""
         m.addItem(.separator())
         m.addItem(withTitle: "Sair", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = m
@@ -507,6 +520,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     @objc private func toggleFolders(_ sender: NSMenuItem) { flip(sender, "captureFolders", defaultOn: true) }
     @objc private func toggleFiles(_ sender: NSMenuItem) { flip(sender, "captureFileNames", defaultOn: true) }
+    @objc private func toggleSalvar(_ sender: NSMenuItem) { flip(sender, "salvarAviso", defaultOn: true) }
+    @objc private func salvarReativar() {
+        salvar.limparIgnorados()
+        showNotice("Tempo", "Voltei a avisar para salvar em todos os arquivos.")
+    }
+    /// Troque para o Photoshop (ou outro) e, em 4 segundos, mostra o que o Tempo lê da janela dele.
+    @objc private func salvarDiagnostico() {
+        showNotice("Tempo: aviso de salvar", "Troque agora para o programa de criação. Em 4 segundos mostro o que leio da janela dele.")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            guard let self = self else { return }
+            let texto = self.salvar.diagnostico()
+            NSApp.activate(ignoringOtherApps: true)
+            let alerta = NSAlert()
+            alerta.messageText = "O que o Tempo lê da janela"
+            alerta.informativeText = texto
+            alerta.addButton(withTitle: "OK")
+            alerta.runModal()
+        }
+    }
 
     private func flip(_ sender: NSMenuItem, _ key: String, defaultOn: Bool) {
         let now = !(defaults.object(forKey: key) as? Bool ?? defaultOn)

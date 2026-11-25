@@ -21,6 +21,9 @@ Se estiver rodando pelo Terminal, a permissão vai para o Terminal. Para um app 
 - Cópia das notas e comprovantes em iCloud Drive → Terapias → Ano_Mes.
 - Alarme de to-do vira lembrete no app Lembretes (lista "Tempo"). Na primeira vez o macOS pede permissão.
 
+## Aviso para salvar
+Quando você trabalha 20 min no mesmo arquivo sem salvar (programa na frente e mouse/teclado em uso), aparece um painel com **Salvar**, **Daqui a 5 min** e **Não avisar deste arquivo**; volta a cada 5 min de trabalho enquanto não salvar. Photoshop avisa em qualquer arquivo; Illustrator, After Effects e Cinema 4D só em arquivo novo/sem título (depois têm salvamento automático). **Salvar** manda ⌘S e, em arquivo novo, tenta abrir o Salvar como na pasta do projeto. No menu da barra: ligar/desligar, "ver o que o Tempo lê" (diagnóstico da janela do programa) e "Voltar a avisar nos arquivos ignorados". Precisa da permissão de Acessibilidade.
+
 ## Privacidade
 - Nome do arquivo: **desligado por padrão**. Ative no menu da barra (⏱) só se quiser.
 - Pasta: ligada por padrão, desligável no menu.
