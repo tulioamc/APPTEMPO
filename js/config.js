@@ -6,5 +6,8 @@ window.TEMPO_CFG = {
   // JSON serializado de colunas por tabela (gerado pelo build.py a partir de db/schema.sql)
 };
 
+/* Financeiro pessoal: só há extratos e cartão completos a partir daqui; análises e listas ignoram o que for anterior. */
+const FIN_INICIO = '2026-01-01', FIN_INICIO_YM = '2026-01';
+
 /* versão exibida no rodapé da barra lateral; aumentar a cada publicação */
-const APP_VERSION = 'V2.06.183';
+const APP_VERSION = 'V2.06.184';

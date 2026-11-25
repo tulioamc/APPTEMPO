@@ -10,7 +10,7 @@ CHANGES['pf-range'] = (el) => { db.setSetting('pfRange', Number(el.value) || 6);
 function pfMonths(n, shift = 0) {
   const out = []; const d = new Date(); d.setDate(1);
   for (let i = n - 1; i >= 0; i--) { const x = new Date(d.getFullYear(), d.getMonth() - i + shift, 1); out.push(`${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`); }
-  return out;
+  return out.filter(m => m >= FIN_INICIO_YM);   // antes de jan/2026 não há extrato completo
 }
 const pfMonthLabel = (ym) => { const [y, m] = ym.split('-'); return ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][Number(m) - 1] + '/' + y.slice(2); };
 /* cat no banco = "ESCOPO/Categoria" (ex.: "PESSOAL/Saúde", "EMPRESA/Impostos"). Escopo = Pessoal ou Empresa; categoria = Saúde, Impostos… */

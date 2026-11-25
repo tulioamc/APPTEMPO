@@ -29,10 +29,11 @@ async function bankLoadRaw() {
   const cl = db.adapter.client;
   const sorted = (q) => q.order('posted_on', { ascending: false }).order('id');
   for (const entity of ['pf', 'pj']) {
-    BANK.txns[entity] = await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*').eq('entity', entity).eq('review_status', BANK.mode[entity])));
+    BANK.txns[entity] = await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*').eq('entity', entity).eq('review_status', BANK.mode[entity]).gte('posted_on', FIN_INICIO)));
   }
   // resumo: lançamento conta para PJ se marcado como PJ, senão para a conta de origem
-  const every = await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*')));
+  // só há extrato completo a partir de jan/2026: o que for anterior fica guardado, mas não entra em listas nem análises
+  const every = (await bankFetchAll(() => sorted(cl.from('tempo_bank_txns').select('*')))).filter(t => (t.posted_on || '') >= FIN_INICIO);
   for (const e of ['pf', 'pj']) BANK.all[e] = every.filter(t => (t.biz_entity || t.entity) === e);
   BANK.every = every;
   BANK.learned = bankBuildLearned(every);
@@ -523,13 +524,15 @@ function bankSummaryHTML(entity) {
       <span class="small muted bm">${bankRowExtra(t)}</span></div>`;
   };
   BANK.openM = BANK.openM || {};
-  const lst = BANK.lst || 'tudo';
-  const outList = lst === 'in' ? [] : outsAll;
+  // Filtro da lista: cinco tipos que você liga e desliga (todos ligados no começo).
+  BANK.tipos = BANK.tipos || { entrada: true, saida: true, terapia: true, reembolso: true, interno: true };
+  const tipoDe = (t) => (t.scope === 'interna' ? 'interno' : t.flow === 'in' ? (isReembTer(t.category) ? 'reembolso' : 'entrada') : (isTher(t) ? 'terapia' : 'saida'));
   // PF financeiro = PF + PJ como uma conta só (igual às saídas e ao resumo do mês): o que entra na PJ conta como entrada do mês;
   // o repasse PJ → PF é interno e não conta de novo. Resgate, aplicação e caixinha também ficam em Interno.
   const inPool = entity === 'pf' ? (BANK.every || []).filter(t => t.scope !== 'interna' || (t.biz_entity || t.entity) === 'pf') : (BANK.all[entity] || []);
-  const inList = lst === 'out' ? [] : inPool.filter(t => t.flow === 'in' && passes(t));
-  const listAll = outList.concat(inList).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
+  const inList = inPool.filter(t => t.flow === 'in' && passes(t));
+  const internasOut = entity === 'pf' ? (BANK.all.pf || []).filter(t => t.flow === 'out' && t.scope === 'interna' && passes(t)) : [];
+  const listAll = outsAll.concat(inList, internasOut).filter(t => BANK.tipos[tipoDe(t)] !== false).sort((a, b) => (b.posted_on || '').localeCompare(a.posted_on || ''));
   const months = [...new Set(listAll.map(t => (t.posted_on || '').slice(0, 7)))];
   const groups = months.map(m => {
     const open = BANK.openM[entity + ':' + m] ?? (m === ym);
@@ -543,13 +546,13 @@ function bankSummaryHTML(entity) {
     const tot = somar(real.filter(t => t.flow === 'out' && !isTher(t))) - estM;
     const totIn = somar(real.filter(t => t.flow === 'in' && !isReembTer(t.category) && !isExt(t)));
     const trf = items.filter(t => t.scope === 'interna').reduce((s, t) => s + absT(t), 0);
-    const saldo = Math.round(totIn) - Math.round(tot), sOk = lst === 'tudo';   // arredondado como as colunas, para a conta fechar na tela
+    const saldo = Math.round(totIn) - Math.round(tot), sOk = true;   // arredondado como as colunas, para a conta fechar na tela
     const col = (cls, tip, lab, val) => `<span class="bg-c ${cls}" data-tip="${tip}"><span class="bg-l">${lab}</span><span class="bg-v">${val}</span></span>`;
     return `<div class="bank-group">
       <button class="bank-ghead bank-gcols" data-act="bank-mtoggle" data-k="${entity}:${m}" aria-expanded="${open}"><span class="bg-m">${icon(open ? 'chevD' : 'chevR')}${rbLabel(m)}</span>${
         col('', 'Quantidade de lançamentos do mês (sem as transferências internas)', 'Lançamentos', real.length)}${
-        col('in', 'Tudo que entrou na PF ou na PJ (o repasse PJ → PF não conta de novo). Só o reembolso de terapia fica de fora', 'Entradas', lst === 'out' ? '—' : fmtMoney0(totIn))}${
-        col('out', 'Tudo que saiu, menos terapias; estornos abatem', 'Saídas', lst === 'in' ? '—' : fmtMoney0(tot))}${
+        col('in', 'Tudo que entrou na PF ou na PJ (o repasse PJ → PF não conta de novo). Só o reembolso de terapia fica de fora', 'Entradas', fmtMoney0(totIn))}${
+        col('out', 'Tudo que saiu, menos terapias; estornos abatem', 'Saídas', fmtMoney0(tot))}${
         col(sOk && saldo < 0 ? 'out' : sOk && saldo > 0 ? 'in' : '', 'Saldo = Entradas − Saídas, sem terapias e sem interno. Verde se sobrou, vermelho se faltou', 'Saldo', sOk ? fmtMoney0(saldo) : '—')}${
         col('', 'Terapias pagas no mês (o plano devolve depois)', 'Terapias', therM ? fmtMoney0(therM) : '—')}${
         col('', 'Reembolso de terapia recebido no mês. Outros reembolsos contam como entrada normal', 'Reembolso', reimbM ? fmtMoney0(reimbM) : '—')}${
@@ -592,14 +595,14 @@ function bankSummaryHTML(entity) {
   <div class="bank-layout">
     <div class="panel bank-list"><div class="panel-h"><h3>Saídas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · por mês</span><span class="grow"></span><span class="row" style="gap:4px;align-items:center"><button class="btn sm ghost" data-act="bank-mprev" title="Mês anterior">‹</button><button class="btn sm" data-act="bank-mnow" style="min-width:150px">${rbLabel(ym)}</button><button class="btn sm ghost" data-act="bank-mnext" title="Próximo mês">›</button></span><button class="btn sm ${BANK.cmp ? 'on' : ''}" data-act="bank-cmp" style="margin-left:6px">${BANK.cmp ? 'Voltar ao mês' : 'Comparar meses'}</button><button class="btn sm ${fOn ? 'on' : ''}" data-act="bank-f-toggle" style="margin-left:6px">${icon('search')} Filtrar${bankFilterOn() ? ' · ativo' : ''}</button></div>
       ${fOn ? bankFilterHTML(catBy) : ''}
-      <div class="panel-b"><div style="display:flex;flex-wrap:wrap;gap:28px;align-items:center;margin-bottom:10px">${entity === 'pf' ? `<div class="seg">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${`<div class="seg">${[['tudo', 'Tudo'], ['in', 'Entradas'], ['out', 'Saídas']].map(([k, l]) => `<button class="${lst === k ? 'on' : ''}" data-act="bank-lst" data-v="${k}">${l}</button>`).join('')}</div>`}</div><div style="max-height:65vh;overflow:auto">${groups || '<div class="empty small">Nenhum lançamento.</div>'}</div></div></div>
+      <div class="panel-b"><div style="display:flex;flex-wrap:wrap;gap:28px;align-items:center;margin-bottom:10px">${entity === 'pf' ? `<div class="seg">${[['all', 'Tudo'], ['conta', 'Conta'], ['cartao', 'Cartão']].map(([k, l]) => `<button class="${origin === k ? 'on' : ''}" data-act="bank-origin" data-v="${k}">${l}</button>`).join('')}</div>` : ''}${`<div class="seg">${[['entrada', 'Entrada', 'Dinheiro que entrou'], ['saida', 'Saída', 'Tudo que saiu, menos terapias'], ['terapia', 'Terapia', 'Pagamentos de terapia'], ['reembolso', 'Reembolso', 'Reembolso de terapia recebido'], ['interno', 'Interno', 'Resgates, aplicações e transferências entre as suas contas']].map(([k, l, tip]) => `<button class="${BANK.tipos[k] !== false ? 'on' : ''}" data-act="bank-tipo" data-v="${k}" data-tip="${tip}. Clique para ${BANK.tipos[k] !== false ? 'esconder' : 'mostrar'} na lista" aria-pressed="${BANK.tipos[k] !== false}">${l}</button>`).join('')}</div>`}</div><div style="max-height:65vh;overflow:auto">${groups || '<div class="empty small">Nenhum lançamento.</div>'}</div></div></div>
     ${report}
   </div>
   ${inRep}${closeRow}`;
 }
 CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
 ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };
-ACTIONS['bank-lst'] = (el) => { BANK.lst = el.dataset.v; render(); };
+ACTIONS['bank-tipo'] = (el) => { BANK.tipos = BANK.tipos || { entrada: true, saida: true, terapia: true, reembolso: true, interno: true }; const k = el.dataset.v; BANK.tipos[k] = BANK.tipos[k] === false; render(); };
 ACTIONS['bank-showt'] = () => { BANK.showT = BANK.showT === false; render(); };
 ACTIONS['bank-rep'] = (el) => { BANK.rep = el.dataset.v; render(); };
 ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.dataset.k; const [ent, m] = k.split(':'); const cur = BANK.openM[k] ?? (m === (BANK.month || ymd(new Date()).slice(0, 7)) && ent); BANK.openM[k] = !cur; render(); };
