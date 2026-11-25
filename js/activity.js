@@ -48,6 +48,7 @@ const actDefaultColor = (name) => {
   let h = 0; for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ACT_COLORS[h % ACT_COLORS.length];
 };
 const colorKeyOf = (gid) => {
+  if (gid.startsWith('site:')) return 'n:' + gid.slice(5);   // site do Chrome: cor global da ferramenta, igual em todas as faixas
   if (gid.startsWith('p:')) return 'n:' + gid.slice(2);
   if (gid.startsWith('a:')) {
     const parts = gid.slice(2).split('|');
@@ -107,6 +108,7 @@ function actLimparCoresArquivos(m, nome) {
 function actSetColor(gid, color) {
   const key = colorKeyOf(gid); const m = { ...actColorMap() };
   if (key.startsWith('n:')) actLimparCoresArquivos(m, key.slice(2));
+  delete m[gid];   // cor antiga guardada só para este grupo não pode esconder a nova
   if (color) m[key] = color; else delete m[key];
   db.setSetting('actColors', m); db.emit();
 }

@@ -45,7 +45,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window.delegate = self
         window.contentView = web
         // abre sempre ocupando a tela inteira (menos a barra de menus e o Dock), sem virar outra "mesa" do macOS
-        if let tela = NSScreen.main ?? NSScreen.screens.first { window.setFrame(tela.visibleFrame, display: true) } else { window.center() }
+        // janela de 1920x1080 contando a barra de título (ou o máximo que cabe na tela), colada no topo e centralizada
+        if let tela = NSScreen.main ?? NSScreen.screens.first {
+            let v = tela.visibleFrame
+            let w = min(1920, v.width), h = min(1080, v.height)
+            window.setFrame(NSRect(x: v.minX + (v.width - w) / 2, y: v.maxY - h, width: w, height: h), display: true)
+        } else { window.center() }
+        window.minSize = NSSize(width: 1280, height: 720)
         window.makeKeyAndOrderFront(nil)
         web.load(URLRequest(url: siteURL))
 
@@ -325,6 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         case "pdf": handlePDF(d); return
         case "pdfRenomear": handlePDFRenomear(d); return
         case "foco": handleFoco(d); return
+        case "focoRevogar": foco.revogar(); return
         case "salvar": salvar.pasta = d["pasta"] as? String; return   // pasta do projeto atual, para o Salvar como
         case "nfReler": notas.reler(); return
         case "aliceProcurar": handleAlice(d); return

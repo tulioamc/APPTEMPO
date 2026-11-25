@@ -264,6 +264,14 @@ function sbDestinoId(e, mae, S) {
 }
 /* Prévia do que o botão "Mover" vai fazer. */
 function sbPrevia(e, mae, S, A) {
+  // programa/site escolhido e nenhum trecho marcado: é uma associação (vale para tudo e para os próximos registros), não uma marcação
+  if (S.app && !S.ranges.length) {
+    const g = A.todos.find(x => x.id === S.app); const dest0 = sbDestinoId(e, mae, S);
+    if (!dest0) return { ok: false, assoc: true, txt: S.dest === '__novo' ? 'Dê um nome para a nova subtarefa.' : 'Escolha a subtarefa.' };
+    if (dest0 === mae.id) return { ok: false, assoc: true, txt: 'Escolha uma subtarefa para associar.' };
+    const nm = S.dest === '__novo' ? (S.novo || '').trim() : sbNome(mae, S.dest);
+    return { ok: true, assoc: true, ms: 0, txt: `Vai associar ${S.arq || (g ? g.label : 'o programa')} a ${nm}: tudo dele nesta tarefa passa a contar lá, também nos próximos registros. Dá para mudar depois.` };
+  }
   const cuts = sbCortes(S, A);
   const app = S.app ? A.todos.find(g => g.id === S.app) : null;
   if (!cuts.length) return { ok: false, txt: S.app ? 'Esse programa não tem tempo nos trechos marcados.' : 'Arraste um trecho na barra ou escolha um programa.' };
@@ -321,6 +329,7 @@ function sbSecaoHTML(e) {
   const opArq = `<option value="">Todo o programa</option>${arqs.map(x => `<option value="${esc(x.doc)}"${S.arq === x.doc ? ' selected' : ''}>${esc(x.doc)} · ${fmtDur(x.ms)}</option>`).join('')}`;
   const opDest = `<option value="">Escolha…</option><option value="sem"${S.dest === 'sem' ? ' selected' : ''}>Sem subtarefa</option>${subs.map(s => `<option value="${esc(s.id)}"${S.dest === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="__novo"${S.dest === '__novo' ? ' selected' : ''}>+ Nova subtarefa…</option>`;
   const prev = sbPrevia(e, mae, S, A);
+  const rotuloBtn = prev.assoc ? 'Associar' : 'Marcar';
   const rangeChips = S.ranges.length
     ? `<div class="sb-sel">${S.ranges.map((r, i) => `<span class="sp-chip">${sbHM(r.a)}–${sbHM(r.b)} · ${fmtDur(r.b - r.a)}<button type="button" data-x="sb-rm" data-i="${i}" aria-label="Tirar este trecho" title="Tirar este trecho da marcação">×</button></span>`).join('')}<button type="button" class="btn sm ghost" data-x="sb-limpar" title="Desmarcar todos os trechos">Limpar</button></div>`
     : `<div class="small muted sb-dica">Arraste na barra para marcar um trecho (clicar num pedaço marca ele inteiro; Shift soma outro trecho).</div>`;
@@ -338,7 +347,7 @@ function sbSecaoHTML(e) {
       <span class="sb-seta" aria-hidden="true">›</span>
       <label class="sb-f"><span class="small muted">Subtarefa</span><select class="input sm" data-sb="dest" aria-label="Subtarefa de destino" title="Para onde vai o tempo">${opDest}</select></label>
       ${S.dest === '__novo' ? `<label class="sb-f"><span class="small muted">Nome</span><input type="text" class="input sm" data-sb="novo" value="${esc(S.novo)}" placeholder="Ex.: Animar Cena 01" autocomplete="off" aria-label="Nome da nova subtarefa"></label>` : ''}
-      <button type="button" class="btn sm primary sb-mover" data-x="sb-mover" ${prev.ok ? '' : 'disabled'} title="Marca o trecho com a subtarefa escolhida. O tempo continua na sessão. Dá para desfazer logo abaixo.">Marcar</button>
+      <button type="button" class="btn sm primary sb-mover" data-x="sb-mover" ${prev.ok ? '' : 'disabled'} title="${prev.assoc ? 'Associa o programa ou site à subtarefa: tudo dele passa a contar lá, inclusive nos próximos registros' : 'Marca o trecho com a subtarefa escolhida. O tempo continua na sessão. Dá para desfazer logo abaixo.'}">${rotuloBtn}</button>
     </div>${lembrar}<div class="small sb-previa ${prev.ok ? '' : 'muted'}">${esc(prev.txt)}</div></div>`;
   const ult = SB_ULT && SB_ULT.key === e.id ? `<div class="sb-ultimo"><span class="small">${esc(SB_ULT.txt)}</span><button type="button" class="btn sm" data-x="sb-desfaz" title="Volta a marcação como estava antes dessa última ação. O tempo da sessão não muda.">Desfazer</button></div>` : '';
   return `<div class="act-sec sb-sec">${cab(btns)}${criar}${agora}${faixa}<div class="sb-cols">${chips}${form}</div>${ult}</div>`;
@@ -576,6 +585,13 @@ function sbMover(ctx) {
   if (dest === '__criar') dest = sbSubDe(mae, S.novo).id;
   const app = S.app ? A.todos.find(g => g.id === S.app) : null;
   const nome = dest === mae.id ? 'Sem subtarefa' : db.get('tempo_tasks', dest)?.name;
+  if (p.assoc) {
+    const nome1 = S.arq || (app && app.label); if (!nome1) return;
+    const conflito = subtasksOf(mae.id).some(x => x.id !== dest && subProgsDe(x.id).some(n => subMesmo(n, app.label)));
+    if (!(conflito && S.conf === 'dividir')) subAssocia(dest, conflito && S.conf === 'arquivo' && S.arq ? S.arq : (S.conf === 'tudo' || !conflito ? (S.arq || app.label) : nome1));
+    S.app = ''; S.arq = ''; S.conf = 'tudo'; S.novo = ''; S.lembrar = false; S.dest = dest;
+    db.emit(); ctx.refresh(); toast(`${nome1} associado a ${nome}. Tudo dele nesta tarefa conta lá.`, { ms: 7000 }); return;
+  }
   const cuts = sbCortes(S, A);
   const r = sbPintar(e, cuts, dest, '');
   if (!r) { toast('Nada para marcar'); return; }

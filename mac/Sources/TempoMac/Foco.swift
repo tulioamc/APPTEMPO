@@ -46,6 +46,12 @@ final class FocoController {
         }
     }
 
+    /// Clicou em "Bloquear de novo" no foco ativo: o que estava liberado (10 min ou por hoje) volta a ser escondido e a perguntar.
+    func revogar() {
+        liberado = [:]; livresHoje = []; ignorarTempoAte = Date.distantPast
+        if ativo { esconderDistracoes() }
+    }
+
     /// Estado vindo do site. ate = nil desliga.
     func atualizar(ate novo: Date?, apps: [String], sites: [String]) {
         let estava = ativo

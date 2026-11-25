@@ -2739,3 +2739,11 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .sb-item { padding: 3px 8px; gap: 0; border-width: 1px; }
 .sb-item-l { gap: 6px; }
 .sb-detbtn { padding: 1px 8px; min-height: 22px; font-size: .8em; }
+
+/* Foco: escolha de apps/sites em bolinhas (ligada = escondido) */
+.foco-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.foco-chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px 4px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; cursor: pointer; user-select: none; background: transparent; }
+.foco-chip input { position: absolute; opacity: 0; pointer-events: none; }
+.foco-chip i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--line-strong); box-sizing: border-box; flex: none; }
+.foco-chip:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.foco-chip:has(input:checked) i { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 38%, transparent 42%); }

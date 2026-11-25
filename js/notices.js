@@ -54,12 +54,12 @@ const noticeBtnsBase = (n) => {
   if (n.kind === 'todo') return '';
   if (n.kind === 'nfse') return `<div class="row gap-s"><button class="btn sm primary" data-act="nfse-usar" data-id="${n.id}">${n.data?.tipo === 'comprovante' ? 'Marcar como Pago' : 'Usar valor da nota'}</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
   if (n.kind === 'alice') return `<div class="row gap-s"><button class="btn sm primary" data-act="alice-sim" data-id="${n.id}">Sim</button><button class="btn sm" data-act="alice-nao" data-id="${n.id}">Não</button></div>`;
-  if (n.kind === 'wa') return `<div class="row gap-s"><button class="btn sm primary" data-act="wa-abrir">Classificar agora</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button></div>`;
+  if (n.kind === 'wa') return `<div class="row gap-s"><button class="btn sm primary" data-act="wa-abrir">Classificar agora</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}" title="Escolher em quantos dias ou em que data o aviso volta">Adiar…</button></div>`;
   if (n.kind === 'sessao') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Manter aberta</button></div>`;
   if (n.kind === 'longo') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}" title="Encerra a sessão no último sinal de atividade do Mac">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ack" data-id="${n.id}" title="Trabalhou longe do Mac: mantém o tempo">Estava trabalhando</button></div>`;
   if (n.kind === 'semreg') return `<div class="row gap-s"><button class="btn sm primary" data-act="ts-manual" data-a="${n.data?.a || ''}" data-b="${n.data?.b || ''}" title="Abre uma sessão manual de hoje para lançar as horas">Lançar horas</button><button class="btn sm ghost" data-act="notice-ack" data-id="${n.id}" title="Hoje não teve trabalho fora do app">Não trabalhei</button></div>`;
   if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button>${noticeJuntarOk(n) ? `<button class="btn sm" data-act="notice-join" data-id="${n.id}" title="Puxa o início da sessão atual para ${fmtTime(entryStart(db.get('tempo_time_entries', n.data.entry_id)))}, a hora em que esta atividade começou, e tira este aviso">Juntar à sessão atual</button>` : ''}<button class="btn sm" data-act="notice-pick" data-id="${n.id}">Escolher projeto, tarefa ou subtarefa</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
-  return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Virar to-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
+  return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}" title="Já vi. Tira o aviso da lista (vale também para ignorar)">Ok, visto</button><button class="btn sm" data-act="notice-resolvido" data-id="${n.id}" title="Eu resolvi: o app confere se foi mesmo e, se não foi, o aviso continua">Resolvido</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}" title="Escolher em quantos dias ou em que data o aviso volta">Adiar…</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Virar to-do</button></div>`;
 };
 /* "Juntar à sessão atual": há uma sessão rodando que começou DEPOIS da atividade do aviso (e não é a provisória do aviso). */
 function noticeJuntarOk(n) {
@@ -118,9 +118,30 @@ ACTIONS['notice-todo'] = async (el) => {
 };
 ACTIONS['notice-ignore'] = (el) => { decideNotice(db.get('tempo_notices', el.dataset.id), 'ignored', 'Ignorado'); db.emit(); };
 ACTIONS['notice-ack'] = (el) => { decideNotice(db.get('tempo_notices', el.dataset.id), 'accepted', 'Visto'); db.emit(); };
+/* Adiar: abre uma janela para escolher quantos dias ou uma data; o aviso volta nesse dia. */
 ACTIONS['notice-snooze'] = (el) => {
-  const d = new Date(); d.setDate(d.getDate() + 1);
-  db.update('tempo_notices', el.dataset.id, { status: 'snoozed', snooze_until: ymd(d), decision: `Adiado para ${fmtDate(ymd(d))}` }, true); db.emit();
+  const id = el.dataset.id; const amanha = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return ymd(d); })();
+  const l = openLayer({ html: `<div class="dh"><h2>Adiar aviso</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
+    <div class="db stack"><div class="row" style="gap:6px;flex-wrap:wrap">${[1, 2, 3, 7, 14].map(n => `<button class="btn sm" data-d="${n}">${n === 1 ? 'Amanhã' : n + ' dias'}</button>`).join('')}</div>
+      <div class="row" style="gap:8px;align-items:center"><label class="small" for="nt-dias">Ou em</label><input id="nt-dias" class="input sm" type="number" min="1" max="365" style="width:80px" placeholder="dias"><label class="small" for="nt-data">ou na data</label><input id="nt-data" class="input sm" type="date" min="${amanha}" style="width:150px"><button class="btn primary sm" data-x="ok">Adiar</button></div></div>` });
+  const adia = (dias, data) => {
+    let alvo = data; if (!alvo) { const d = new Date(); d.setDate(d.getDate() + dias); alvo = ymd(d); }
+    if (!alvo || alvo < amanha) { toast('Escolha uma data a partir de amanhã.'); return; }
+    db.update('tempo_notices', id, { status: 'snoozed', snooze_until: alvo, decision: `Adiado para ${fmtDate(alvo)}` }, true); db.emit(); l.close();
+  };
+  l.box.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.d) adia(Number(b.dataset.d));
+    else if (b.dataset.x === 'ok') { const data = l.box.querySelector('#nt-data').value, dias = Number(l.box.querySelector('#nt-dias').value); if (!data && !(dias >= 1)) return toast('Digite os dias ou escolha a data.'); adia(dias, data); }
+  });
+};
+/* Resolvido: o app confere se foi mesmo (as regras de resolvidos sozinhos); se não achar a prova, o aviso continua. */
+ACTIONS['notice-resolvido'] = (el) => {
+  const id = el.dataset.id;
+  try { avisosResolvidosSozinhos(); } catch (e) { /* segue */ }
+  const n = db.get('tempo_notices', id);
+  if (n && ['pending', 'snoozed'].includes(n.status)) { toast('Conferi e ainda não vi isso resolvido. O aviso continua.', { ms: 6000 }); return; }
+  db.emit(); toast('Conferido: já estava resolvido.');
 };
 ACTIONS['notice-reopen'] = (el) => {
   const n0 = db.get('tempo_notices', el.dataset.id);
