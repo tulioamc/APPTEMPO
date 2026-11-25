@@ -1615,16 +1615,16 @@ td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
 .ex-mc.out .ex-mv, .ex-mc.neg .ex-mv { color: var(--danger); }
 @media (max-width: 1100px) { .ex-month-h { grid-template-columns: 1fr 1fr; gap: 4px 16px; } .ex-mt { grid-column: 1 / -1; margin-bottom: 4px; } }
 /* Financeiro: cabeçalho do mês em colunas fixas, alinhado entre os meses */
-.bank-gcols { display: grid; grid-template-columns: minmax(170px, 1.2fr) minmax(110px, .6fr) repeat(5, minmax(128px, 1fr)); gap: 0 22px; align-items: baseline; padding: 9px 14px; }
-.bank-gcols .bg-m { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.bank-gcols { display: grid; grid-template-columns: minmax(150px, 1.25fr) repeat(7, minmax(78px, 1fr)); gap: 0 12px; align-items: end; padding: 8px 14px; }
+.bank-gcols .bg-m { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; align-self: center; }
 .bank-gcols .bg-m svg { width: 14px; height: 14px; color: var(--fg-3); }
-.bank-gcols .bg-c { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; white-space: nowrap; font-weight: 500; }
-.bank-gcols .bg-l { font-size: 12.5px; color: var(--fg-3); }
-.bank-gcols .bg-v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13.5px; font-weight: 600; text-align: right; }
+.bank-gcols .bg-c { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; white-space: nowrap; font-weight: 500; min-width: 0; }
+.bank-gcols .bg-l { font-size: 10.5px; letter-spacing: .02em; color: var(--fg-3); }
+.bank-gcols .bg-v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 600; text-align: right; }
 .bank-gcols .in .bg-v { color: var(--ok-ink); }
 .bank-gcols .out .bg-v { color: var(--danger); }
 .bank-gcols .int .bg-v { color: var(--accent); }
-@media (max-width: 1000px) { .bank-gcols { grid-template-columns: 1fr 1fr; gap: 4px 16px; } .bank-gcols .bg-m { grid-column: 1 / -1; } }
+@media (max-width: 1000px) { .bank-gcols { grid-template-columns: repeat(4, 1fr); gap: 6px 12px; } .bank-gcols .bg-m { grid-column: 1 / -1; } }
 /* Calendário (Mês) repaginado: número grande, chips à direita, etiquetas do dia, tempo por projeto e horários com rolagem */
 .pl-mc { min-height: 168px; padding: 8px; container-type: inline-size; }
 .pl-mc-in { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; height: 100%; }

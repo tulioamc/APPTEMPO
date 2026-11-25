@@ -535,16 +535,25 @@ function bankSummaryHTML(entity) {
     const open = BANK.openM[entity + ':' + m] ?? (m === ym);
     const items = listAll.filter(t => (t.posted_on || '').slice(0, 7) === m);
     const real = items.filter(t => t.scope !== 'interna');
-    // mesmas regras do resumo do mês: terapia (reembolsável) e reembolso do plano ficam fora de Saídas/Entradas e aparecem em Reembolso; estorno abate a saída
+    // Entradas: tudo que entra na PF ou na PJ (o repasse PJ → PF é interno e não conta de novo); só o reembolso de terapia sai daqui.
+    // Saídas: tudo menos terapias; estorno abate. Saldo = Entradas − Saídas (sem terapias e sem interno).
     const absT = (t) => Math.abs(Number(t.amount));
     const somar = (arr) => arr.reduce((a, t) => a + absT(t), 0);
-    const estM = somar(real.filter(isExt)), reimbM = somar(real.filter(isReimb)), therM = somar(real.filter(isTher));
+    const estM = somar(real.filter(isExt)), reimbM = somar(real.filter(t => t.flow === 'in' && isReembTer(t.category))), therM = somar(real.filter(isTher));
     const tot = somar(real.filter(t => t.flow === 'out' && !isTher(t))) - estM;
-    const totIn = somar(real.filter(t => t.flow === 'in' && !isReimb(t) && !isExt(t)));
+    const totIn = somar(real.filter(t => t.flow === 'in' && !isReembTer(t.category) && !isExt(t)));
     const trf = items.filter(t => t.scope === 'interna').reduce((s, t) => s + absT(t), 0);
-    const saldo = totIn - tot, sOk = lst === 'tudo';
+    const saldo = Math.round(totIn) - Math.round(tot), sOk = lst === 'tudo';   // arredondado como as colunas, para a conta fechar na tela
+    const col = (cls, tip, lab, val) => `<span class="bg-c ${cls}" data-tip="${tip}"><span class="bg-l">${lab}</span><span class="bg-v">${val}</span></span>`;
     return `<div class="bank-group">
-      <button class="bank-ghead bank-gcols" data-act="bank-mtoggle" data-k="${entity}:${m}" aria-expanded="${open}"><span class="bg-m">${icon(open ? 'chevD' : 'chevR')}${rbLabel(m)}</span><span class="bg-c" data-tip="Quantidade de lançamentos do mês (sem as transferências internas)"><span class="bg-l">Lançamentos</span><span class="bg-v">${real.length}</span></span><span class="bg-c in" data-tip="Dinheiro que entrou de fora, sem reembolsos do plano e sem estornos"><span class="bg-l">Entradas</span><span class="bg-v">${lst === 'out' ? '—' : fmtMoney0(totIn)}</span></span><span class="bg-c out" data-tip="Tudo que saiu, sem as terapias (reembolsáveis); estornos abatem"><span class="bg-l">Saídas</span><span class="bg-v">${lst === 'in' ? '—' : fmtMoney0(tot)}</span></span><span class="bg-c ${sOk && saldo < 0 ? 'out' : sOk && saldo > 0 ? 'in' : ''}" data-tip="Saldo do mês = Entradas − Saídas. Verde se sobrou, vermelho se faltou"><span class="bg-l">Saldo</span><span class="bg-v">${sOk ? fmtMoney0(saldo) : '—'}</span></span><span class="bg-c int" data-tip="Transferências entre as suas contas (PF ↔ PJ): não entram nos totais"><span class="bg-l">Interno</span><span class="bg-v">${trf ? fmtMoney0(trf) : '—'}</span></span><span class="bg-c" data-tip="Reembolsos do plano de saúde recebidos no mês${therM ? ` · terapias pagas: ${fmtMoney0(therM)}` : ''}"><span class="bg-l">Reembolso</span><span class="bg-v">${reimbM ? fmtMoney0(reimbM) : '—'}</span></span></button>
+      <button class="bank-ghead bank-gcols" data-act="bank-mtoggle" data-k="${entity}:${m}" aria-expanded="${open}"><span class="bg-m">${icon(open ? 'chevD' : 'chevR')}${rbLabel(m)}</span>${
+        col('', 'Quantidade de lançamentos do mês (sem as transferências internas)', 'Lançamentos', real.length)}${
+        col('in', 'Tudo que entrou na PF ou na PJ (o repasse PJ → PF não conta de novo). Só o reembolso de terapia fica de fora', 'Entradas', lst === 'out' ? '—' : fmtMoney0(totIn))}${
+        col('out', 'Tudo que saiu, menos terapias; estornos abatem', 'Saídas', lst === 'in' ? '—' : fmtMoney0(tot))}${
+        col(sOk && saldo < 0 ? 'out' : sOk && saldo > 0 ? 'in' : '', 'Saldo = Entradas − Saídas, sem terapias e sem interno. Verde se sobrou, vermelho se faltou', 'Saldo', sOk ? fmtMoney0(saldo) : '—')}${
+        col('', 'Terapias pagas no mês (o plano devolve depois)', 'Terapias', therM ? fmtMoney0(therM) : '—')}${
+        col('', 'Reembolso de terapia recebido no mês. Outros reembolsos contam como entrada normal', 'Reembolso', reimbM ? fmtMoney0(reimbM) : '—')}${
+        col('int', 'Resgates e aplicações (RDB, caixinha, investimentos) e transferências entre as suas contas: não entram nos totais', 'Interno', trf ? fmtMoney0(trf) : '—')}</button>
       ${open ? `<div class="bank-rows bank-head"><span></span><span>Data</span><span>Descrição</span><span>Valor</span><span>Meio</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div>${items.map(rowHTML).join('')}` : ''}
     </div>`;
   }).join('');
