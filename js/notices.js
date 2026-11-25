@@ -56,7 +56,7 @@ const noticeBtnsBase = (n) => {
   if (n.kind === 'alice') return `<div class="row gap-s"><button class="btn sm primary" data-act="alice-sim" data-id="${n.id}">Sim</button><button class="btn sm" data-act="alice-nao" data-id="${n.id}">Não</button></div>`;
   if (n.kind === 'wa') return `<div class="row gap-s"><button class="btn sm primary" data-act="wa-abrir">Classificar agora</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button></div>`;
   if (n.kind === 'sessao') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Manter aberta</button></div>`;
-  if (n.kind === 'longo') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}" title="Encerra a sessão no começo do trecho sem troca de programa">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ack" data-id="${n.id}" title="Estava trabalhando de verdade: mantém o tempo">Estava trabalhando</button></div>`;
+  if (n.kind === 'longo') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-cut" data-id="${n.id}" title="Encerra a sessão no último sinal de atividade do Mac">Cortar às ${fmtTime(n.data?.cut)}</button><button class="btn sm ghost" data-act="notice-ack" data-id="${n.id}" title="Trabalhou longe do Mac: mantém o tempo">Estava trabalhando</button></div>`;
   if (n.kind === 'semreg') return `<div class="row gap-s"><button class="btn sm primary" data-act="ts-manual" data-a="${n.data?.a || ''}" data-b="${n.data?.b || ''}" title="Abre uma sessão manual de hoje para lançar as horas">Lançar horas</button><button class="btn sm ghost" data-act="notice-ack" data-id="${n.id}" title="Hoje não teve trabalho fora do app">Não trabalhei</button></div>`;
   if (n.kind === 'start') return `<div class="row gap-s"><button class="btn sm primary" data-act="notice-accept" data-id="${n.id}">Confirmar no bruto</button><button class="btn sm" data-act="notice-pick" data-id="${n.id}">Escolher projeto, tarefa ou subtarefa</button><button class="btn sm ghost" data-act="notice-deny" data-id="${n.id}">Negar</button></div>`;
   return `<div class="row gap-s"><button class="btn sm" data-act="notice-ack" data-id="${n.id}">Ok, visto</button><button class="btn sm ghost" data-act="notice-snooze" data-id="${n.id}">Adiar 1 dia</button><button class="btn sm ghost" data-act="notice-todo" data-id="${n.id}">Virar to-do</button><button class="btn sm ghost" data-act="notice-ignore" data-id="${n.id}">Ignorar</button></div>`;
@@ -379,24 +379,24 @@ function scanAlerts() {
   if (SCAN_CHANGED) db.emit(); // só avisa a tela se algo mudou (evita laço)
 }
 
-/* Cronômetro esquecido (25/11): sessão rodando há 3 h ou mais no mesmo programa e arquivo, sem nenhuma pausa nem troca.
-   Pergunta uma vez por trecho; corta no começo do trecho ou mantém. Some sozinho quando você troca de programa ou pausa. */
+/* Cronômetro esquecido (25/11): sessão rodando há 3 h ou mais SEM NENHUM SINAL do Mac (mouse, teclado ou troca de
+   programa). Mexendo o mouse é trabalho: o Mac registra atividade e a ociosidade já vira pausa sozinha, então trabalho
+   contínuo num programa só nunca gera este aviso. Ele aparece quando o Mac ficou mudo (dormindo, desligado, ou o
+   cronômetro foi ligado pelo celular e esquecido). Pergunta uma vez; corta no último sinal ou mantém. */
 const LONGO_MS = 3 * 36e5;
 function longoInicio(e) {
   const segs = e.segments || []; const last = segs[segs.length - 1];
   if (!last || !last.s || last.e || e.state !== 'running') return null;
   const s0 = new Date(last.s).getTime();
-  const recs = (typeof actList === 'function' ? actList(e.id) : []).filter(r => new Date(r.to).getTime() > s0).sort((a, b) => new Date(a.from) - new Date(b.from));
-  if (!recs.length) return null;
-  const k = (r) => `${r.app || ''}|${r.doc || ''}`; const ult = recs[recs.length - 1]; let ini = new Date(ult.from).getTime();
-  for (let i = recs.length - 2; i >= 0 && k(recs[i]) === k(ult); i--) ini = new Date(recs[i].from).getTime();
-  return { ini: Math.max(ini, s0), app: ult.app || 'o mesmo programa', doc: ult.doc || '' };
+  let sinal = s0;
+  (typeof actList === 'function' ? actList(e.id) : []).forEach(r => { const t = new Date(r.to).getTime(); if (t > sinal) sinal = t; });
+  return { ini: sinal };
 }
 function scanTrechoLongo() {
   openEntries().forEach(e => {
     const L = longoInicio(e); if (!L || Date.now() - L.ini < LONGO_MS) return;
     const cut = new Date(L.ini).toISOString();
-    addNotice({ kind: 'longo', key: `longo:${e.id}:${cut}`, title: `${fmtDur(Date.now() - L.ini)} no ${typeof shortProgram === 'function' ? shortProgram(L.app) : L.app} sem nenhuma pausa`, body: `Desde ${fmtTime(cut)} sem trocar de programa${L.doc ? ' nem de arquivo' : ''}. Se o cronômetro ficou esquecido, corte; se estava trabalhando, mantenha.`, entity: 'entry', entity_id: e.id, data: { entry_id: e.id, cut } }, true);
+    addNotice({ kind: 'longo', key: `longo:${e.id}:${cut}`, title: `Cronômetro rodando há ${fmtDur(Date.now() - L.ini)} sem sinal do Mac`, body: `Nenhum movimento de mouse, teclado ou troca de programa desde ${fmtTime(cut)}. Se o cronômetro ficou esquecido, corte; se trabalhou longe do Mac, mantenha.`, entity: 'entry', entity_id: e.id, data: { entry_id: e.id, cut } }, true);
   });
 }
 /* Dia útil sem registro (25/11): depois das 19h, se hoje (dia útil, fora de férias e feriado) tem menos de 1 h de trabalho
@@ -448,7 +448,7 @@ function avisosResolvidosSozinhos() {
       if (n.kind === 'longo' && temSessoes && d.entry_id) {
         const e = db.get('tempo_time_entries', d.entry_id);
         if (!e || e.state !== 'running') return fecha(n, 'a sessão foi pausada ou encerrada');
-        const L = longoInicio(e); if (!L || new Date(L.ini).toISOString() !== d.cut) return fecha(n, 'você trocou de programa ou pausou');
+        const L = longoInicio(e); if (!L || new Date(L.ini).toISOString() !== d.cut) return fecha(n, 'o Mac voltou a registrar atividade');
       }
       if (n.kind === 'semreg' && temSessoes && d.dia && trabalhoDoDiaMs(d.dia) >= 36e5) return fecha(n, 'as horas do dia foram lançadas');
       if (n.kind === 'alice' && d.dia && typeof alDias === 'function' && (alDias()[d.dia] || []).includes(d.tipo)) return fecha(n, 'já está marcado no calendário');
