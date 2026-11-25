@@ -619,6 +619,10 @@ ACTIONS["act-fview"] = (el) => {
   if (!on.file && !on.site) return;
   db.setSetting("actFileView2", on.file && on.site ? 'both' : on.file ? 'file' : 'site'); db.emit();
 };
+/* Setinha de esconder/mostrar a barra e os chips de "Por programa" e "Por arquivo / site" (igual à de Subtarefas). Fica salvo. */
+const actFechado = (k) => !!(db.setting('actFechado', {}) || {})[k];
+ACTIONS["act-fold"] = (el) => { const m = { ...(db.setting('actFechado', {}) || {}) }; m[el.dataset.k] = !m[el.dataset.k]; db.setSetting('actFechado', m); db.emit(); };
+const actFoldBtn = (k) => `<button type="button" class="btn sm icon ghost sb-fold" data-act="act-fold" data-k="${k}" aria-expanded="${!actFechado(k)}" aria-label="${actFechado(k) ? 'Mostrar' : 'Esconder'} a barra e os menus" data-tip="${actFechado(k) ? 'Mostrar' : 'Esconder'} a barra e os menus">${icon(actFechado(k) ? 'chevR' : 'chevD')}</button>`;
 /* Itens que estão dentro do chip "Outros" (para o balãozinho do hover). */
 function actOthMembersAttr(A) {
   const m = A.groups.filter(x => x.parent === 'outros').map(x => ({ l: x.label, ms: x.ms, c: x.color }));
@@ -673,9 +677,9 @@ function actSectionHTML(e) {
   const fv = actFileView();
   const file = actAnalyze(e.id, fv);
   const fvBtns = ['file', 'site'].map(v => `<button class="btn sm ${fv === v || fv === 'both' ? 'primary' : ''}" data-act="act-fview" data-v="${v}" aria-pressed="${fv === v || fv === 'both'}">${ACT_FV_LBL[v]}</button>`).join('');
-  const fileSec = `<div class="act-sec"><div class="row between"><span class="lbl">${ACT_FV_LBL[fv]}</span><span class="row" style="gap:4px">${fvBtns}</span></div>${actStripHTML(e, file, fv)}${actChipsHTML(file, fv)}</div>`;
+  const fileSec = `<div class="act-sec"><div class="row between"><span class="row" style="gap:4px;min-width:0">${actFoldBtn('arq')}<span class="lbl">${ACT_FV_LBL[fv]}</span></span><span class="row" style="gap:4px">${fvBtns}</span></div>${actFechado('arq') ? '' : `${actStripHTML(e, file, fv)}${actChipsHTML(file, fv)}`}</div>`;
   const toggle = actForaToggleHTML([e], true);
-  const secP = `<div class="act-sec"><div class="row between"><span class="lbl">Por programa</span></div>${actStripHTML(e, prog, 'program')}${actChipsHTML(prog, 'program').replace(/<\/div>$/, (actHidePausas() ? '' : actUnspecChipHTML(actUnspecMs([e]), [e])) + '</div>')}</div>`;
+  const secP = `<div class="act-sec"><div class="row between"><span class="row" style="gap:4px;min-width:0">${actFoldBtn('prog')}<span class="lbl">Por programa</span></span></div>${actFechado('prog') ? '' : `${actStripHTML(e, prog, 'program')}${actChipsHTML(prog, 'program').replace(/<\/div>$/, (actHidePausas() ? '' : actUnspecChipHTML(actUnspecMs([e]), [e])) + '</div>')}`}</div>`;
   return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${secP}${fileSec}${actSemParado() ? '' : `<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div>`}<span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
 }
 
@@ -1026,7 +1030,8 @@ function actProjectHTML(entries) {
     const chip = (g) => g.id === 'outros'
       ? `<span class="act-chip" data-g="outros" data-hl="outros"${actOthMembersAttr(A)} style="--tb:${g.color}"><i></i>Outros <span class="faint">${fmtH(g.ms)}</span></span>`
       : `<span class="act-chip" data-g="${esc(g.id)}" style="--tb:${g.color}" data-tip="${esc(actTip(g) + '\n' + usePctTxt(g.ms / total * 100) + ' do trabalho do projeto')}"><i></i>${esc(g.label)} <span class="faint">${fmtH(g.ms)}</span></span>`;
-    return `<div class="act-sec"><div class="row between"><span class="lbl">${title}</span></div><div class="act-strip">${bars}</div><div class="act-chips">${vis.map(chip).join('')}${mode === 'program' ? actUnspecChipHTML(un) : ''}</div></div>`;
+    const k = mode === 'program' ? 'prog' : 'arq';
+    return `<div class="act-sec"><div class="row between"><span class="row" style="gap:4px;min-width:0">${actFoldBtn(k)}<span class="lbl">${title}</span></span></div>${actFechado(k) ? '' : `<div class="act-strip">${bars}</div><div class="act-chips">${vis.map(chip).join('')}${mode === 'program' ? actUnspecChipHTML(un) : ''}</div>`}</div>`;
   };
   return `<div class="stack" style="gap:10px;margin-bottom:14px">${sec('Por programa', 'program')}${sec('Por arquivo / página', 'both')}</div>`;
 }

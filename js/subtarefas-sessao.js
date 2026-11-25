@@ -249,8 +249,12 @@ const sbAppsTxt = (by, max) => Object.entries(by).sort((p, q) => q[1] - p[1]).sl
 function sbAppsDe(a, b) { return sbAppsTxt(sbAppsAcum(a, b, {}), 3); }
 /* Programas (e quanto tempo de cada um) nos trechos de uma subtarefa ou de "Sem subtarefa", para a dica da lista. */
 function sbAppsDaChave(fatias, key) {
-  const by = {}; fatias.filter(f => f.key === key).forEach(f => sbAppsAcum(f.a, f.b, by));
-  return sbAppsTxt(by, 12);
+  const by = {}, fs = fatias.filter(f => f.key === key); fs.forEach(f => sbAppsAcum(f.a, f.b, by));
+  const total = fs.reduce((t, f) => t + (f.b - f.a), 0), lidos = Object.values(by).reduce((t, v) => t + v, 0);
+  const l = sbAppsTxt(by, 12);
+  // o tempo que sobra não tem leitura de programa (Mac sem registrar, ou "em uso agora"): aparece à parte para a conta fechar
+  if (total - lidos >= 30000) l.push(`Sem leitura de programa: ${fmtDur(total - lidos)}`);
+  return l;
 }
 
 /* Cortes que valem agora: o programa escolhido (dentro dos trechos marcados, se houver) ou só os trechos marcados. */
