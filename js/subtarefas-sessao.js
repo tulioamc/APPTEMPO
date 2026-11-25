@@ -16,7 +16,7 @@ const sbReset = () => { SB = null; SB_ULT = null; };
 let SB_ULT = null;   // { key, txt, run }
 function sbLembraDesfazer(key, txt, run) { SB_ULT = { key, txt, run }; }
 function sbEstado(key) {
-  if (!SB || SB.key !== key) SB = { key, ranges: [], drag: null, dragging: false, start: 0, moveu: false, app: '', dest: '', novo: '', criando: false, lembrar: false };
+  if (!SB || SB.key !== key) SB = { key, ranges: [], drag: null, dragging: false, start: 0, moveu: false, app: '', dest: '', novo: '', criando: false, lembrar: false, det: '' };
   return SB;
 }
 
@@ -112,8 +112,8 @@ function sbReintegra(e) {
     cand.filter(x => !feitos.has(x.id)).forEach(x => {
       const xs = sbWork(x, now); if (!xs.length) return;
       const xa = Math.min(...xs.map(z => z.a)), xb = Math.max(...xs.map(z => z.b));
-      const naLacuna = gaps.some(g => sbLen(sbInter(xs, [g])) >= 0.5 * sbLen(xs));
-      const encosta = Math.abs(xb - ini) <= 2000 || Math.abs(xa - fim) <= 2000;
+      const dentro = xa >= ini - 2000 && xb <= fim + 2000;   // o trecho levado está dentro da janela desta sessão
+      const encosta = Math.abs(xb - ini) <= 2000 || Math.abs(xa - fim) <= 2000, naLacuna = dentro;
       if (!naLacuna && !encosta) return;
       const cur = db.get('tempo_time_entries', e.id);
       db.update('tempo_time_entries', e.id, { segments: sbNormaliza([...(cur.segments || []), ...x.segments.map(z => ({ s: z.s, e: z.e }))]), edits: auditEdit(cur, cur.segments, `Trecho de “${db.get('tempo_tasks', x.task_id)?.name || 'subtarefa'}” voltou para a sessão (a subtarefa agora só marca o trecho)`) }, true);
@@ -217,7 +217,8 @@ function sbSecaoHTML(e) {
   if (!e) return '';
   const S = sbEstado(e.id);
   const mae = etapaMae(e);
-  const cab = (btns) => `<div class="row between sb-head"><span class="lbl">Subtarefas${mae ? ` <span class="faint">de ${esc(mae.name)}</span>` : ''}</span><span class="row" style="gap:6px">${btns || ''}</span></div>`;
+  const fechado = !!db.setting('sbFechado', false);
+  const cab = (btns) => `<div class="row between sb-head"><span class="row" style="gap:4px;min-width:0"><button type="button" class="btn sm icon ghost sb-fold" data-x="sb-fold" aria-expanded="${!fechado}" aria-label="${fechado ? 'Mostrar' : 'Esconder'} subtarefas" title="${fechado ? 'Mostrar' : 'Esconder'} a barra e os menus de subtarefas">${icon(fechado ? 'chevR' : 'chevD')}</button><span class="lbl">Subtarefas${mae ? ` <span class="faint">de ${esc(mae.name)}</span>` : ''}</span></span><span class="row" style="gap:6px">${btns || ''}</span></div>`;
   if (!mae) return `<div class="act-sec sb-sec">${cab('')}<div class="small muted">Escolha uma tarefa para esta sessão (botão Alterar, lá em cima) e as subtarefas dela aparecem aqui.</div></div>`;
   const J = sbJanela(e);
   const subs = subtasksOf(mae.id);
@@ -228,6 +229,7 @@ function sbSecaoHTML(e) {
   const criar = S.criando ? `<div class="sb-criar"><input type="text" class="input sm" data-sb="nome" placeholder="Nome da subtarefa" autocomplete="off" aria-label="Nome da nova subtarefa"><button type="button" class="btn sm primary" data-x="sb-criar" title="Criar a subtarefa (Enter)">Criar</button><button type="button" class="btn sm ghost" data-x="sb-nova" title="Cancelar">Cancelar</button></div>` : '';
   const agora = atual && aberta ? `<div class="sb-atual"><span class="small muted">Etapa atual</span><b>${esc(atual.name)}</b><span class="small muted">desde ${fmtTime(etapaInicio(e))}</span></div>` : '';
   if (!J) return `<div class="act-sec sb-sec">${cab(btns)}${criar}${agora}<div class="small muted">A sessão ainda não tem tempo registrado.</div></div>`;
+  if (fechado) { const marc = sbDivs(e.id).filter(d => subs.some(x => x.id === d.sub)); const t = sbLen(sbInter(sbWork(e), marc)); return `<div class="act-sec sb-sec is-fechado">${cab(btns)}<div class="small muted">${subs.length} ${subs.length === 1 ? 'subtarefa' : 'subtarefas'}${t ? ` · ${fmtDur(t)} marcados nesta sessão` : ''}</div></div>`; }
 
   const fatias = sbFatias(e, mae, J);
   const msPor = {}; fatias.forEach(f => { msPor[f.key] = (msPor[f.key] || 0) + (f.b - f.a); });
@@ -242,8 +244,14 @@ function sbSecaoHTML(e) {
   S.ranges.concat(S.drag ? [S.drag] : []).forEach(r => { const x = pct(r.a), y = pct(r.b); if (y > x) barras += `<span class="res-sel-range" style="left:${x}%;width:${Math.max(.3, y - x)}%"></span>`; });
   const faixa = `<div class="act-strip sb-strip" data-mode="sub" data-ent="${esc(e.id)}" data-t0="${J.a}" data-span="${J.span}" style="position:relative" aria-label="Arraste para marcar um trecho">${barras}</div>`;
 
-  const chip = (key, nome, ms) => `<button type="button" class="act-chip sb-chip${S.dest === key ? ' is-pick' : ''}" data-g="${esc(key)}" data-x="sb-dest" data-k="${esc(key)}" style="--tb:${sbCor(mae, key)}" title="Clique para escolher ${esc(nome)} para o trecho"><i></i>${esc(nome)} <span class="faint">${ms ? fmtDur(ms) : '—'}</span></button>`;
-  const chips = `<div class="act-chips">${chip('sem', 'Sem subtarefa', msPor.sem || 0)}${subs.map(s => chip(s.id, s.name, msPor[s.id] || 0)).join('')}</div>`;
+  const linha = (key, nome, ms, sub) => {
+    const edit = sub && S.det === key;
+    return `<div class="sb-item${S.dest === key ? ' is-pick' : ''}${edit ? ' is-det' : ''}" style="--tb:${sbCor(mae, key)}">
+      <div class="sb-item-l"><button type="button" class="sb-pick" data-g="${esc(key)}" data-x="sb-dest" data-k="${esc(key)}" title="Clique para escolher ${esc(nome)} para o trecho"><i></i><span class="sb-n">${esc(nome)}</span></button>${sub ? `<button type="button" class="btn sm sb-detbtn" data-x="sb-det" data-k="${esc(key)}" aria-expanded="${!!edit}" title="Editar o nome ou apagar esta subtarefa">Detalhes</button>` : ''}<span class="mono small sb-t" title="Tempo desta subtarefa marcado nesta sessão">${ms ? fmtDur(ms) : '—'}</span></div>
+      ${edit ? `<div class="sb-edit"><input type="text" class="input sm" data-sb="ren" value="${esc(nome)}" autocomplete="off" aria-label="Nome da subtarefa"><button type="button" class="btn sm primary" data-x="sb-ren" data-k="${esc(key)}" title="Salvar o novo nome (Enter)">Salvar</button><button type="button" class="btn sm danger" data-x="sb-del" data-k="${esc(key)}" title="Apaga a subtarefa. As marcações dela somem e o tempo continua na sessão. Dá para desfazer logo depois.">Apagar</button></div>` : ''}
+    </div>`;
+  };
+  const chips = `<div class="sb-lista"><div class="sb-lista-h lbl">Subtarefas</div>${linha('sem', 'Sem subtarefa', msPor.sem || 0, false)}${subs.map(x => linha(x.id, x.name, msPor[x.id] || 0, true)).join('')}</div>`;
 
   const A = sbApps(e, mae, J);
   const opApp = A.groups.map(g => `<option value="${esc(g.id)}"${S.app === g.id ? ' selected' : ''}>${esc(g.label)} · ${fmtDur(g.ms)}</option>`).join('');
@@ -264,7 +272,7 @@ function sbSecaoHTML(e) {
       <button type="button" class="btn sm primary sb-mover" data-x="sb-mover" ${prev.ok ? '' : 'disabled'} title="Marca o trecho com a subtarefa escolhida. O tempo continua na sessão. Dá para desfazer logo abaixo.">Marcar</button>
     </div>${lembrar}<div class="small sb-previa ${prev.ok ? '' : 'muted'}">${esc(prev.txt)}</div></div>`;
   const ult = SB_ULT && SB_ULT.key === e.id ? `<div class="sb-ultimo"><span class="small">${esc(SB_ULT.txt)}</span><button type="button" class="btn sm" data-x="sb-desfaz" title="Volta a marcação como estava antes dessa última ação. O tempo da sessão não muda.">Desfazer</button></div>` : '';
-  return `<div class="act-sec sb-sec">${cab(btns)}${criar}${agora}${faixa}${chips}${form}${ult}</div>`;
+  return `<div class="act-sec sb-sec">${cab(btns)}${criar}${agora}${faixa}<div class="sb-cols">${chips}${form}</div>${ult}</div>`;
 }
 
 /* Redesenha só a seção (arrastar, escolher): o resto do formulário não se mexe. */
@@ -273,7 +281,7 @@ function sbRefresh() {
   const e = db.get('tempo_time_entries', SB.key); if (!e) return;
   const foco = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.sb : null;
   sec.outerHTML = sbSecaoHTML(e);
-  if (foco === 'novo' || foco === 'nome') { const el = document.querySelector(`.sb-sec [data-sb="${foco}"]`); if (el) { el.focus(); const v = el.value; el.value = ''; el.value = v; } }
+  if (foco === 'novo' || foco === 'nome' || foco === 'ren') { const el = document.querySelector(`.sb-sec [data-sb="${foco}"]`); if (el) { el.focus(); const v = el.value; el.value = ''; el.value = v; } }
 }
 /* Só a prévia e o botão (digitando o nome da subtarefa nova): não mexe nos campos. */
 function sbPreviaDom() {
@@ -329,6 +337,10 @@ document.addEventListener('mouseup', (ev) => {
 function sbClick(ev, ctx) {
   const b = ev.target.closest?.('[data-x^="sb-"]'); if (!b) return false;
   const x = b.dataset.x, e = ctx.e, S = sbEstado(e.id), mae = etapaMae(e);
+  if (x === 'sb-fold') { db.setSetting('sbFechado', !db.setting('sbFechado', false)); sbRefresh(); return true; }
+  if (x === 'sb-det') { S.det = S.det === b.dataset.k ? '' : b.dataset.k; sbRefresh(); const i = document.querySelector('.sb-sec [data-sb="ren"]'); if (i) i.focus(); return true; }
+  if (x === 'sb-ren') { sbRenomeia(ctx, b.dataset.k); return true; }
+  if (x === 'sb-del') { sbApaga(ctx, b.dataset.k); return true; }
   if (x === 'sb-etapa') { ACTIONS['etapa-fim']({ dataset: { id: e.id } }); return true; }
   if (x === 'sb-dest') { S.dest = S.dest === b.dataset.k ? '' : b.dataset.k; sbRefresh(); return true; }
   if (x === 'sb-rm') { S.ranges.splice(Number(b.dataset.i), 1); sbRefresh(); return true; }
@@ -338,6 +350,41 @@ function sbClick(ev, ctx) {
   if (x === 'sb-mover') { sbMover(ctx); return true; }
   if (x === 'sb-desfaz') { const u = SB_ULT; SB_ULT = null; if (u && u.key === e.id) u.run(); ctx.refresh(); toast('Marcação desfeita'); return true; }
   return false;
+}
+function sbRenomeia(ctx, id) {
+  const t = db.get('tempo_tasks', id), S = sbEstado(ctx.e.id); if (!t) return;
+  const nome = (document.querySelector('.sb-sec [data-sb="ren"]')?.value || '').trim();
+  if (!nome) { toast('Dê um nome para a subtarefa'); return; }
+  const mae = etapaMae(ctx.e);
+  if (mae && subtasksOf(mae.id).some(x => x.id !== id && x.name.trim().toLowerCase() === nome.toLowerCase())) { toast('Já existe uma subtarefa com esse nome'); return; }
+  const antes = t.name; S.det = '';
+  if (nome !== antes) db.update('tempo_tasks', id, { name: nome }, true);
+  db.emit(); sbRefresh();
+  sbLembraDesfazer(ctx.e.id, `Subtarefa renomeada para “${nome}”.`, () => { db.update('tempo_tasks', id, { name: antes }, true); db.emit(); });
+  sbRefresh();
+}
+/* Apagar: a subtarefa e as marcações dela somem; sessões que eram dela passam para a tarefa mãe (nenhum tempo se perde). */
+async function sbApaga(ctx, id) {
+  const t = db.get('tempo_tasks', id), S = sbEstado(ctx.e.id); if (!t) return;
+  const mae = db.get('tempo_tasks', t.parent_id); if (!mae) return;
+  if (!await confirmBox({ title: 'Apagar subtarefa?', body: `“${esc(t.name)}” sai da lista e das marcações. O tempo continua nas sessões, na tarefa ${esc(mae.name)}.`, ok: 'Apagar', danger: true })) return;
+  const copia = { ...t };
+  const ents = db.all('tempo_time_entries').filter(x => x.task_id === id).map(x => x.id);
+  const mapa = db.setting('sbDiv', {}) || {}; const divsAntes = JSON.parse(JSON.stringify(mapa)); const atualAntes = JSON.parse(JSON.stringify(db.setting('etapaAtual', {}) || {}));
+  const novo = {}; Object.keys(mapa).forEach(k => { const l = (mapa[k] || []).filter(d => d.sub !== id); if (l.length) novo[k] = l; });
+  db.setSetting('sbDiv', novo);
+  const at = { ...atualAntes }; Object.keys(at).forEach(k => { if (at[k] === id) delete at[k]; }); db.setSetting('etapaAtual', at);
+  ents.forEach(x => db.update('tempo_time_entries', x, { task_id: mae.id }, true));
+  db.remove('tempo_tasks', id, true);
+  S.det = ''; if (S.dest === id) S.dest = '';
+  db.emit(); sbRefresh();
+  sbLembraDesfazer(ctx.e.id, `Subtarefa “${t.name}” apagada.`, () => {
+    db.insert('tempo_tasks', copia, true);
+    ents.forEach(x => db.update('tempo_time_entries', x, { task_id: id }, true));
+    db.setSetting('sbDiv', divsAntes); db.setSetting('etapaAtual', atualAntes); db.emit();
+  });
+  sbRefresh();
+  toast(`Subtarefa “${esc(t.name)}” apagada`, { ms: 9000, actions: [{ label: 'Desfazer', run: () => { const u = SB_ULT; SB_ULT = null; if (u) u.run(); sbRefresh(); toast('Desfeito'); } }] });
 }
 function sbCriar(e) {
   const S = sbEstado(e.id), mae = etapaMae(e); if (!mae) return;
@@ -364,6 +411,7 @@ function sbInput(ev, ctx) {
 function sbTecla(ev, ctx) {
   if (ev.key !== 'Enter') return false;
   const el = ev.target; if (!el.dataset) return false;
+  if (el.dataset.sb === 'ren') { ev.preventDefault(); sbRenomeia(ctx, sbEstado(ctx.e.id).det); return true; }
   if (el.dataset.sb === 'nome') { ev.preventDefault(); sbCriar(ctx.e); return true; }
   if (el.dataset.sb === 'novo') { ev.preventDefault(); sbMover(ctx); return true; }
   return false;

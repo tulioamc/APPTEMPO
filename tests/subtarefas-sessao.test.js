@@ -144,3 +144,19 @@ test('normalizar: trechos que se encostam viram um só e o motivo vale o do últ
   const out = m.sbNormaliza([{ s: b, e: c }, { s: a, e: b, why: 'moved', movedTo: 'p' }]);
   assert.equal(out.length, 1); assert.equal(out[0].s, a); assert.equal(out[0].e, c); assert.equal(out[0].why, undefined);
 });
+test('reintegra também quando o buraco ficou como pausa comum e quando o trecho levado era o começo da sessão', () => {
+  const m = setup(); const t0 = Date.now() - 180 * MIN; const iso = (x) => new Date(x).toISOString();
+  m.db.insert('tempo_time_entries', { id: 'run', project_id: 'p', task_id: 'mae', state: 'done', segments: [{ s: iso(t0 + 18 * MIN), e: iso(t0 + 60 * MIN) }, { s: iso(t0 + 70 * MIN), e: iso(t0 + 100 * MIN), why: 'pause' }] }, true);
+  m.db.insert('tempo_time_entries', { id: 'mv', project_id: 'p', task_id: 'ps', state: 'done', notes: 'Movido de outra sessão', segments: [{ s: iso(t0), e: iso(t0 + 18 * MIN) }] }, true);
+  assert.equal(m.sbReintegra(m.db.get('tempo_time_entries', 'run')), 1);
+  assert.equal(Math.round(m.sbSubMs('ps') / MIN), 18);
+  assert.equal(Math.round(ms(m.db.get('tempo_time_entries', 'run')) / MIN), 90);
+});
+test('seção: chevron esconde a barra e os menus; Detalhes abre editar/apagar', () => {
+  const m = setup(); const t0 = Date.now() - 120 * MIN; const e = sessao(m, t0, t0 + 100 * MIN);
+  let h = m.sbSecaoHTML(e);
+  assert.match(h, /data-x="sb-fold"/); assert.match(h, /sb-strip/); assert.match(h, /data-x="sb-det"/); assert.doesNotMatch(h, /data-x="sb-del"/);
+  m.sbEstado('run').det = 'ps'; h = m.sbSecaoHTML(e); assert.match(h, /data-x="sb-del"/); assert.match(h, /data-x="sb-ren"/);
+  m.db.setSetting('sbFechado', true); h = m.sbSecaoHTML(e);
+  assert.doesNotMatch(h, /sb-strip/); assert.match(h, /is-fechado/);
+});
