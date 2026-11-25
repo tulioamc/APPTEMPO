@@ -2599,3 +2599,12 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .an-mbar-t b { color: var(--fg); font-variant-numeric: tabular-nums; }
 .an-vivo { font-style: normal; font-weight: 600; color: var(--ok-ink); }
 .an-vivo::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); margin-right: 4px; vertical-align: 1px; }
+/* Metas da análise (25/11): ícone em coluna estreita, título e meta corridos (sem quebrar cada número em linha) */
+.an-meta { display: grid !important; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start; }
+.an-meta > span.an-meta-i { flex: none; width: 20px; display: block; text-align: center; font-size: 1em; line-height: 1.35; }
+.an-meta-b > b { display: block; font-size: .95em; line-height: 1.35; }
+.an-meta-b b.an-n, .an-meta-b .an-mbar-t b { display: inline; font-size: inherit; }
+.an-meta-b > .an-meta-s { display: block; font-size: .85em; color: var(--fg-2); line-height: 1.5; margin-top: 2px; flex: none; }
+.an-meta-b .an-mbar-t { margin-top: 5px; }
+/* sem listra lateral: o resumo fica só com o fundo suave */
+.an-resumo { border-left: 0 !important; }
