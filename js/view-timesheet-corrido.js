@@ -57,8 +57,8 @@ function corridoProjHTML(p) {
   const tags = [...new Set(p.list.map(e => e.work_type_id || ''))].map(id => wtTag(id || null)).join('');
   return `<details class="grp-det cor-proj" data-pid="${p.pid}" ${COR_OPEN.has(p.pid) ? 'open' : ''}>
     <summary class="entry grp-sum" ${pr.id ? `data-act="proj-open" data-id="${p.pid}"` : `data-act="ts-resumo" data-title="${esc(pr.name)}" data-ids="${ids}"`}>
-      <span class="when">${when}</span>
-      <div class="what"><div class="t">${esc(pr.name)} <span class="tag pill small">${p.list.length} ${p.list.length === 1 ? 'sessão' : 'sessões'}</span></div><div class="p">${esc(cl?.name || 'Sem cliente')}${pr.name ? '' : ''}</div></div>
+      <span class="when" data-tip="Primeira e última sessão do projeto">${when}</span>
+      <div class="what cor-what"><div class="t">${esc(pr.name)}</div><div class="p">${cl ? clientTag(cl) : '<span class="faint">Sem cliente</span>'}<span class="cor-n" data-tip="Sessões registradas neste projeto no período">${p.list.length} ${p.list.length === 1 ? 'sessão' : 'sessões'}</span></div></div>
       <span class="ent-tag">${tags}</span><span class="dur">${fmtDur(total)}</span><button type="button" class="grp-caret" data-act="grp-caret" aria-label="Ver tarefas" title="Ver tarefas">▾</button>
     </summary>
     <div class="cor-body">${modeBtns}${taskHTML}</div>

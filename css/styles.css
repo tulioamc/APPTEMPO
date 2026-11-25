@@ -2340,3 +2340,18 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .cor-sub { margin: 2px 0 !important; }
 .cor-subh { padding: 4px 14px 2px 126px !important; font-size: 12px !important; }
 .cor-body .inh { border-style: solid !important; }
+/* Recentes no padrão do app (tabela de Projetos): nome em negrito, cliente como etiqueta colorida, contagem discreta,
+   controles compactos, cartões limpos */
+.cor-ctrl { padding: 8px 14px !important; }
+.cor-ctrl-l { font-size: 12px !important; }
+.cor-ctrl select { min-height: 28px !important; padding: 3px 8px !important; font-size: 12px !important; border-radius: 7px !important; }
+.cor-proj { border-radius: 10px !important; transition: box-shadow .15s; }
+.cor-proj:hover { box-shadow: 0 2px 10px rgba(20,24,40,.06); }
+.cor-proj[open] { box-shadow: 0 2px 12px rgba(20,24,40,.07); }
+.cor-proj > summary.entry:hover { background: transparent; }
+.cor-what .t { font-weight: 700 !important; font-size: .95em; }
+.cor-what .p { display: flex; align-items: center; gap: 8px; margin-top: 3px !important; overflow: visible !important; }
+.cor-what .p .tag { font-size: .82em; }
+.cor-n { font-size: .82em; color: var(--fg-3); }
+.cor-proj .grp-caret { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--fg-2); }
+.cor-group { margin: 12px 2px 4px !important; font-size: 11px !important; }
