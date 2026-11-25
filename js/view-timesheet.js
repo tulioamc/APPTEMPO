@@ -75,12 +75,14 @@ VIEWS.timesheet = () => {
       <div class="timer-actions">
         ${a.state === 'running' ? `<button class="btn" data-act="ts-pause">${icon('pause')} Pausar</button>` : `<button class="btn primary" data-act="ts-resume">${icon('play')} Retomar</button>`}
         <button class="btn" data-act="ts-switch">Trocar de projeto</button>
+        ${typeof etapaMae === 'function' && etapaMae(a) ? `<button class="btn" data-act="etapa-fim" title="Marca o fim de uma parte do trabalho: o tempo desde a última marca vira uma subtarefa com o nome que você der; o cronômetro continua">${icon('flag')} Terminei uma etapa</button>` : ''}
         <button class="btn danger" data-act="ts-stop">${icon('stop')} Encerrar</button>
         ${focoBtnHTML()}
         <button class="btn" data-act="corte-sessao" data-id="${a.id}" title="Cortar, mover e trocar a tarefa dos trechos da sessão">${icon('scissors')} Ajustar tempo</button>
         <button class="btn" data-act="ts-log-start" data-id="${a.id}">Início pelo log</button>
         <button class="btn" data-act="ts-edit" data-id="${a.id}">${icon('edit')} Abrir sessão atual</button>
       </div>
+      ${typeof etapasHTML === 'function' ? etapasHTML(a) : ''}
       ${sessionSumHTML(a)}
       ${pauseSuggestionsHTML(a)}
     </div>`;

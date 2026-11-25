@@ -3,7 +3,7 @@
    O app do Mac já traz a imagem que estiver copiada (print com ⌃⇧⌘4). Vai para a tabela tempo_ajustes (fora da
    sincronização geral, por causa das imagens); a tela "Fila de ajustes" (menu Geral) lista o que está aberto e o feito.
    O Claude lê dali quando você pede "faça a fila de ajustes" e marca como feito com a versão. */
-const AJ = { imgs: [], texto: '', lista: null, carregando: false, erro: '' };
+const AJ = { imgs: [], texto: '', lista: null, carregando: false, erro: '', editId: null };
 const ajCli = () => db.adapter && db.adapter.client;
 const AJ_MAX = 1600;   // lado maior das imagens (px), em JPEG 0,82: um print fica com uns 150–300 KB
 
@@ -29,18 +29,18 @@ async function ajAddImgs(srcs, ly) {
 
 function ajJanelaHTML() {
   const tela = (NAV.find(n => n.id === S.route) || {}).label || S.route;
-  return `<div class="dh"><h2>Ajuste no app</h2><span class="small muted">na tela ${esc(tela)} · ${esc(APP_VERSION)}</span><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar" title="Fechar (Esc)">${icon('x')}</button></div>
+  return `<div class="dh"><h2>${AJ.editId ? 'Editar ajuste' : 'Ajuste no app'}</h2><span class="small muted">na tela ${esc(tela)} · ${esc(APP_VERSION)}</span><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar" title="Fechar (Esc)">${icon('x')}</button></div>
   <div class="db aj-db">
     <textarea class="input aj-txt" rows="6" placeholder="O que ajustar? Escreva como quiser e cole prints aqui (⌘V)." autofocus>${esc(AJ.texto)}</textarea>
     <div class="aj-imgs">${AJ.imgs.map((d, i) => `<div class="aj-img"><img src="${d}" alt="Print ${i + 1}"><button type="button" class="aj-img-x" data-aj-tira="${i}" aria-label="Tirar este print" title="Tirar este print">×</button></div>`).join('')}
       <label class="aj-add" title="Anexar imagem do computador">${icon('plus')}<span>Print</span><input type="file" accept="image/*" multiple hidden data-aj-arq></label></div>
     <div class="small muted">Dica: tire o print com ⌃⇧⌘4 (vai para a área de transferência) e aperte ⌃⌥F; o print já entra aqui.</div>
   </div>
-  <div class="df"><button class="btn ghost left" data-act="go" data-route="ajustes" title="Ver a fila inteira">Ver a fila</button><button class="btn primary" data-aj-envia title="Enviar para a fila (⌘Enter)">Enviar para a fila</button></div>`;
+  <div class="df"><button class="btn ghost left" data-act="go" data-route="ajustes" title="Ver a fila inteira">Ver a fila</button><button class="btn primary" data-aj-envia title="${AJ.editId ? 'Salvar a alteração (⌘Enter)' : 'Enviar para a fila (⌘Enter)'}">${AJ.editId ? 'Salvar' : 'Enviar para a fila'}</button></div>`;
 }
 function ajAbrir(imgClip) {
   if (layers.some(l => l.box.classList.contains('aj-modal'))) { if (imgClip) ajAddImgs([imgClip], layers.find(l => l.box.classList.contains('aj-modal'))); return; }
-  const ly = openLayer({ render: ajJanelaHTML, onClose: () => { AJ.texto = ''; AJ.imgs = []; } });
+  const ly = openLayer({ render: ajJanelaHTML, onClose: () => { AJ.texto = ''; AJ.imgs = []; AJ.editId = null; } });
   ly.box.classList.add('aj-modal');
   const sync = () => { const t = ly.box.querySelector('.aj-txt'); if (t) AJ.texto = t.value; };
   ly.box.addEventListener('input', sync);
@@ -63,10 +63,12 @@ async function ajEnviar() {
   if (!texto && !AJ.imgs.length) { toast('Escreva o ajuste ou cole um print'); return false; }
   const cli = ajCli(); if (!cli) { toast('Sem conexão com o banco agora'); return false; }
   const tela = (NAV.find(n => n.id === S.route) || {}).label || S.route;
-  const { error } = await cli.from('tempo_ajustes').insert({ texto, imagens: AJ.imgs, tela, versao: APP_VERSION });
+  const { error } = AJ.editId
+    ? await cli.from('tempo_ajustes').update({ texto, imagens: AJ.imgs }).eq('id', AJ.editId)
+    : await cli.from('tempo_ajustes').insert({ texto, imagens: AJ.imgs, tela, versao: APP_VERSION });
   if (error) { toast(/relation|does not exist|schema cache/i.test(error.message || '') ? 'A fila de ajustes ainda não foi criada no banco' : 'Não consegui enviar: ' + (error.message || 'erro')); return false; }
-  AJ.texto = ''; AJ.imgs = []; AJ.lista = null;
-  toast('Ajuste na fila');
+  toast(AJ.editId ? 'Ajuste salvo' : 'Ajuste na fila');
+  AJ.texto = ''; AJ.imgs = []; AJ.lista = null; AJ.editId = null;
   if (S.route === 'ajustes') ajCarregar();
   return true;
 }
@@ -85,6 +87,13 @@ async function ajCarregar() {
   } finally { AJ.carregando = false; if (S.route === 'ajustes') render(); }
 }
 ACTIONS['aj-novo'] = () => ajAbrir(null);
+/* Editar um ajuste já enviado: abre a mesma janelinha com o texto e os prints dele (dá para tirar e colar mais). */
+ACTIONS['aj-edita'] = (el) => {
+  const a = (AJ.lista || []).find(x => x.id === el.dataset.id); if (!a) return;
+  AJ.editId = a.id; AJ.texto = a.texto || ''; AJ.imgs = [...(a.imagens || [])];
+  const imgs = AJ.imgs; ajAbrir(null); AJ.imgs = imgs; AJ.editId = a.id; AJ.texto = a.texto || '';
+  const ly = layers.find(l => l.box.classList.contains('aj-modal')); ly && ly.refresh();
+};
 ACTIONS['aj-feito'] = async (el) => {
   const cli = ajCli(); if (!cli) return; const feito = el.dataset.v === '1';
   await cli.from('tempo_ajustes').update(feito ? { status: 'feito', feito_em: new Date().toISOString(), feito_versao: APP_VERSION } : { status: 'aberto', feito_em: null, feito_versao: null }).eq('id', el.dataset.id);
@@ -100,7 +109,7 @@ function ajItemHTML(a, n) {
   const feito = a.status === 'feito';
   return `<div class="aj-it${feito ? ' feito' : ''}">
     <div class="aj-it-h">${feito ? '<span class="aj-ok">✓</span>' : `<span class="aj-n">${n}</span>`}<span class="small muted" data-tip="${esc(`Enviado em ${ajData(a.created_at)}${a.versao ? '\nVersão ' + a.versao : ''}${a.tela ? '\nTela ' + a.tela : ''}`)}">${ajData(a.created_at)}${a.tela ? ' · ' + esc(a.tela) : ''}</span>${feito ? `<span class="small aj-fv">feito${a.feito_versao ? ' na ' + esc(a.feito_versao) : ''}${a.feito_em ? ' · ' + ajData(a.feito_em) : ''}</span>` : ''}<span class="grow"></span>
-      <button class="btn sm ghost" data-act="aj-feito" data-id="${a.id}" data-v="${feito ? 0 : 1}" title="${feito ? 'Voltar para a fila' : 'Marcar como feito'}">${feito ? 'Reabrir' : '✓ Feito'}</button><button class="btn sm icon ghost" data-act="aj-apaga" data-id="${a.id}" aria-label="Apagar ajuste" title="Apagar este ajuste">${icon('trash')}</button></div>
+      <button class="btn sm ghost" data-act="aj-feito" data-id="${a.id}" data-v="${feito ? 0 : 1}" title="${feito ? 'Voltar para a fila' : 'Marcar como feito'}">${feito ? 'Reabrir' : '✓ Feito'}</button><button class="btn sm ghost" data-act="aj-edita" data-id="${a.id}" title="Editar o texto e os prints deste ajuste">${icon('edit')} Editar</button><button class="btn sm icon ghost" data-act="aj-apaga" data-id="${a.id}" aria-label="Apagar ajuste" title="Apagar este ajuste">${icon('trash')}</button></div>
     ${a.texto ? `<div class="aj-it-t">${esc(a.texto).replace(/\n/g, '<br>')}</div>` : ''}
     ${(a.imagens || []).length ? `<div class="aj-imgs">${a.imagens.map((d, i) => `<img class="aj-thumb" src="${d}" alt="Print ${i + 1}" data-act="aj-img" title="Ver o print grande">`).join('')}</div>` : ''}
     ${a.nota ? `<div class="small muted aj-nota">${esc(a.nota)}</div>` : ''}</div>`;

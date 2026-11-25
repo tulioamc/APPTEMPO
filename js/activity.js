@@ -33,7 +33,9 @@ const PROG_DEFAULTS = [
 const programas = () => { const v = db.setting('programas', null); return Array.isArray(v) ? v : PROG_DEFAULTS; };
 const programFor = (app) => { const a = String(app || '').toLowerCase(); return programas().find(p => p.match && a.includes(String(p.match).toLowerCase())) || null; };
 const shortProgram = (app) => { const p = programFor(app); return p ? p.name : toolAlias(app); };
-const isChromeSite = (app, doc) => !!doc && /chrome/i.test(String(app || '')) && CHROME_SITE_NAMES.includes(doc);
+/* Site do Chrome: os da lista e os que você aceitou registrar no Mac (o Mac só manda nome de site no Chrome).
+   "Outros sites" não é site: fica como item do próprio Chrome. */
+const isChromeSite = (app, doc) => !!doc && /chrome/i.test(String(app || '')) && doc !== 'Outros sites';
 /* WhatsApp se divide pela conversa: contato de trabalho = "WhatsApp Cliente" (verde pastel, liso);
    o resto = "WhatsApp Distração" (verde claro, a mesma cor da listra de pausa). */
 const WA_CLIENTE = 'WhatsApp Cliente', WA_DISTRACAO = 'WhatsApp Distração';

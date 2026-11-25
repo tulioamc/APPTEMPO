@@ -164,9 +164,15 @@ final class ActivityMonitor {
         // o Finder só conta como app: não guarda pasta nem nome de arquivo
         if bundle == "com.apple.finder" { return Context(app: name, bundle: bundle, doc: nil, folder: nil) }
         if bundle == "com.google.Chrome" {
-            // Chrome só conta quando a aba ativa é um dos sites da lista; outros sites não são registrados.
-            guard AXIsProcessTrusted(), let site = chromeSite(app.processIdentifier) else { return nil }
-            return Context(app: name, bundle: bundle, doc: site, folder: nil)
+            // Chrome: site da lista (ou aceito por você) vai com o nome dele; qualquer outro conta como "Outros sites"
+            // (o título da aba não é guardado; só serve para sugerir sites novos, contando aqui no Mac).
+            guard AXIsProcessTrusted() else { return Context(app: name, bundle: bundle, doc: SiteSugestao.outros, folder: nil) }
+            if let site = chromeSite(app.processIdentifier) { return Context(app: name, bundle: bundle, doc: site, folder: nil) }
+            if let titulo = chromeTitle(app.processIdentifier) {
+                if let aceito = SiteSugestao.shared.siteAceito(titulo) { return Context(app: name, bundle: bundle, doc: aceito, folder: nil) }
+                SiteSugestao.shared.contar(titulo)
+            }
+            return Context(app: name, bundle: bundle, doc: SiteSugestao.outros, folder: nil)
         }
         var doc: String?
         var folder: String?
@@ -242,6 +248,17 @@ final class ActivityMonitor {
             return first
         }
         return nil
+    }
+
+    /// Título da aba ativa do Chrome (só para reconhecer o site; não é guardado).
+    private func chromeTitle(_ pid: pid_t) -> String? {
+        let axApp = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.5)
+        var winRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &winRef) == .success, let winRef = winRef else { return nil }
+        var titleRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(winRef as! AXUIElement, kAXTitleAttribute as CFString, &titleRef) == .success else { return nil }
+        return titleRef as? String
     }
 
     /// Nome do site da lista se o título da janela do Chrome mencionar um deles; senão nil.

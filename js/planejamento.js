@@ -351,15 +351,19 @@ function planoFaixas(itens0, unico = true, dia = '') {
   }));
   return [...out, ...prazos];
 }
+/* Como no Google Agenda: o que se sobrepõe na tela divide a largura. Item curto (to-do sem duração, compromisso de
+   poucos minutos) ocupa na tela pelo menos ~20 min de altura, então conta com esse tamanho para não ficar um por cima do outro. */
+const PL_MIN_VISUAL = 0.34;
+const planoFimVisual = (x) => Math.max(x.b, x.a + (['todo', 'todos', 'evento', 'plano'].includes(x.k) ? PL_MIN_VISUAL : 0));
 function planoFaixasLivre(itens) {
   const ord = itens.slice().sort((x, y) => x.a - y.a || (y.b - y.a) - (x.b - x.a));
   let grupo = [], fimG = -1;
   const fecha = () => { const n = Math.max(1, ...grupo.map(x => x._l + 1)); grupo.forEach(x => { x._n = n; }); grupo = []; };
   ord.forEach(x => {
     if (grupo.length && x.a >= fimG - 1e-9) { fecha(); fimG = -1; }
-    const usados = new Set(grupo.filter(g => g.b > x.a + 1e-9).map(g => g._l));
+    const usados = new Set(grupo.filter(g => planoFimVisual(g) > x.a + 1e-9).map(g => g._l));
     let l = 0; while (usados.has(l)) l++;
-    x._l = l; grupo.push(x); fimG = Math.max(fimG, x.b);
+    x._l = l; grupo.push(x); fimG = Math.max(fimG, planoFimVisual(x));
   });
   if (grupo.length) fecha();
   return ord;
