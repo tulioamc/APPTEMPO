@@ -237,14 +237,20 @@ function sbArquivosDe(A, gid) {
   A.records.filter(r => r.gid === gid && r.doc && r.doc !== 'Outros sites').forEach(r => { const d = String(r.doc).trim(); por[d] = (por[d] || 0) + (SB_T(r.to) - SB_T(r.from)); });
   return Object.entries(por).filter(([, ms]) => ms > 0).sort((x, y) => y[1] - x[1]).map(([doc, ms]) => ({ doc, ms }));
 }
-function sbAppsDe(a, b) {
-  const by = {};
+function sbAppsAcum(a, b, by) {
   actPoolBetween(a, b).forEach(r => {
     if (typeof pausaRec === 'function' && pausaRec(r) && !actWaTrabalho(r)) return;
     const x = Math.max(a, SB_T(r.from)), y = Math.min(b, SB_T(r.to)); if (y <= x) return;
     const k = shortProgram(r.app) || r.app; by[k] = (by[k] || 0) + (y - x);
   });
-  return Object.entries(by).sort((p, q) => q[1] - p[1]).slice(0, 3).map(([k, ms]) => `${k}: ${fmtDur(ms)}`);
+  return by;
+}
+const sbAppsTxt = (by, max) => Object.entries(by).sort((p, q) => q[1] - p[1]).slice(0, max).map(([k, ms]) => `${k}: ${fmtDur(ms)}`);
+function sbAppsDe(a, b) { return sbAppsTxt(sbAppsAcum(a, b, {}), 3); }
+/* Programas (e quanto tempo de cada um) nos trechos de uma subtarefa ou de "Sem subtarefa", para a dica da lista. */
+function sbAppsDaChave(fatias, key) {
+  const by = {}; fatias.filter(f => f.key === key).forEach(f => sbAppsAcum(f.a, f.b, by));
+  return sbAppsTxt(by, 12);
 }
 
 /* Cortes que valem agora: o programa escolhido (dentro dos trechos marcados, se houver) ou só os trechos marcados. */
@@ -324,7 +330,7 @@ function sbSecaoHTML(e) {
  const faixa = !subs.length ? '' : `<div class="act-strip sb-strip" ${juntar ? '' : 'data-mode="sub" data-ent="' + esc(e.id) + '" data-t0="' + J.a + '" data-span="' + J.span + '"'} style="position:relative" aria-label="Subtarefas da sessão">${barras}</div>`;
 
   const linha = (key, nome, ms, sub) => `<div class="sb-item${S.dest === key ? ' is-pick' : ''}" style="--tb:${sbCor(mae, key)}">
-      <div class="sb-item-l"><button type="button" class="sb-pick" data-g="${esc(key)}" data-x="sb-dest" data-k="${esc(key)}" title="Clique para escolher ${esc(nome)} para o trecho"><i></i><span class="sb-n">${esc(nome)}</span></button>${sub ? `<button type="button" class="btn sm sb-detbtn" data-x="sb-det" data-k="${esc(key)}" title="Abre a janela da subtarefa: tempo registrado, programas, renomear e apagar">Detalhes</button>` : ''}<span class="mono small sb-t" title="Tempo desta subtarefa marcado nesta sessão">${ms ? fmtDur(ms) : '—'}</span></div>
+      <div class="sb-item-l"><button type="button" class="sb-pick" data-g="${esc(key)}" data-x="sb-dest" data-k="${esc(key)}" data-tip="${esc([`Clique para escolher ${nome} para o trecho`, ...(() => { const l = sbAppsDaChave(fatias, key); return l.length ? [key === 'sem' ? 'Programas sem subtarefa:' : 'Programas nesta subtarefa:', ...l] : [key === 'sem' ? 'Nenhum programa sem subtarefa nesta sessão.' : '']; })()].filter(Boolean).join('\n'))}"><i></i><span class="sb-n">${esc(nome)}</span></button>${sub ? `<button type="button" class="btn sm sb-detbtn" data-x="sb-det" data-k="${esc(key)}" title="Abre a janela da subtarefa: tempo registrado, programas, renomear e apagar">Detalhes</button>` : ''}<span class="mono small sb-t" title="Tempo desta subtarefa marcado nesta sessão">${ms ? fmtDur(ms) : '—'}</span></div>
     </div>`;
   const chips = `<div class="sb-lista"><div class="sb-lista-h lbl">Subtarefas</div>${linha('sem', 'Sem subtarefa', msPor.sem || 0, false)}${subs.map(x => linha(x.id, x.name, msPor[x.id] || 0, true)).join('')}</div>`;
 
