@@ -706,6 +706,7 @@ function bankSummaryHTML(entity) {
         col('', 'Terapias pagas no mês (o plano devolve depois)', 'Terapias', therM ? fmtMoney0(therM) : '—')}${
         col('', 'Reembolso de terapia recebido no mês. Outros reembolsos contam como entrada normal', 'Reembolso', reimbM ? fmtMoney0(reimbM) : '—')}${
         col('int', 'Resgates e aplicações (RDB, caixinha, investimentos) e transferências entre as suas contas: não entram nos totais', 'Interno', trf ? fmtMoney0(trf) : '—')}</button>
+      ${open && entity === 'pf' ? bankNotasMesHTML(m, real) : ''}
       ${open ? `<div class="bank-rows bank-head"><span></span><span>Data</span><span>Descrição</span><span>Valor</span><span>Meio</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div>${items.map(rowHTML).join('')}` : ''}
     </div>`;
   }).join('');
@@ -761,6 +762,29 @@ ACTIONS['bank-showt'] = () => { BANK.showT = BANK.showT === false; render(); };
 ACTIONS['bank-repp'] = (el) => { BANK.repP = el.dataset.v; render(); };
 ACTIONS['bank-repm'] = (el) => { BANK.repMedia = el.dataset.v === 'true'; render(); };
 ACTIONS['bank-rep'] = (el) => { BANK.rep = el.dataset.v; render(); };
+/* Notas do mês e grandes gastos (V2.06.194): texto curto sob a data do mês e lista dos gastos acima de R$ 300 com a explicação guardada. */
+const GRANDE_MIN = 300;
+const grandesNotas = () => db.setting('grandesNotas', {}) || {};
+const grandesMercado = () => db.setting('grandesMercado', []) || [];
+function bankGrandesDoMes(real) {
+  const merc = new Set(grandesMercado());
+  return real.filter(t => t.flow === 'out' && !(t.reimb_row_id || t.category === 'Terapia') && Math.abs(Number(t.amount)) >= GRANDE_MIN && !merc.has(t.counterpart || '')).sort((a, b) => Math.abs(Number(b.amount)) - Math.abs(Number(a.amount)));
+}
+function bankNotasMesHTML(m, real) {
+  const txt = (db.setting('monthNotes', {}) || {})[m] || '';
+  const notas = grandesNotas(), lista = bankGrandesDoMes(real);
+  const porClasse = {};
+  lista.forEach(t => { const n = notas[t.id]; const c = n ? n.classe : 'Sem explicação'; porClasse[c] = (porClasse[c] || 0) + Math.abs(Number(t.amount)); });
+  const resumo = Object.entries(porClasse).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<span class="tag tg" style="${cssTb(c === 'Sem explicação' ? '#C9D1DC' : palColor(c))}">${esc(c)} <span class="mono">${fmtMoney0(v)}</span></span>`).join(' ');
+  const rows = lista.map(t => { const n = notas[t.id]; const cp = t.counterpart || '—';
+    return `<div class="gg-row"><span class="mono small">${fmtDateShort(t.posted_on)}</span><span class="gg-n" title="${esc(cp)}">${esc(cp)}</span><span class="mono small">${fmtMoney0(Math.abs(Number(t.amount)))}</span><span class="small ${n ? '' : 'faint'}">${n ? `${esc(n.nota)} <span class="faint">· ${esc(n.classe)}</span>` : 'Sem explicação ainda'}</span><button class="btn sm ghost" data-act="bank-mercado" data-cp="${esc(t.counterpart || '')}" data-tip="Tira este nome da lista de grandes gastos (ex.: supermercado). Vale para todos os meses.">mercado</button></div>`; }).join('');
+  return `<div class="bank-notas" onclick="event.stopPropagation()">
+    <input class="input bn-txt" value="${esc(txt)}" placeholder="Notas do mês: o que explica os gastos (ex.: mês da viagem, material escolar…)" data-on="bank-mnota" data-m="${m}" data-tip="Texto curto sobre este mês. Salva ao sair do campo.">
+    ${lista.length ? `<div class="gg-head small muted" data-tip="Saídas acima de R$ 300 no mês, sem terapias. O botão mercado tira o nome da lista.">Grandes gastos (acima de ${fmtMoney0(GRANDE_MIN)}) · ${resumo}</div>${rows}` : ''}
+  </div>`;
+}
+CHANGES['bank-mnota'] = (el) => { const all = { ...(db.setting('monthNotes', {}) || {}) }; const v = el.value.trim(); if (v) all[el.dataset.m] = v; else delete all[el.dataset.m]; db.setSetting('monthNotes', all); };
+ACTIONS['bank-mercado'] = (el) => { const cp = el.dataset.cp; if (!cp) return; db.setSetting('grandesMercado', [...new Set([...grandesMercado(), cp])]); toast('“' + cp + '” saiu dos grandes gastos.'); render(); };
 ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.dataset.k; const [ent, m] = k.split(':'); const cur = BANK.openM[k] ?? (m === (BANK.month || ymd(new Date()).slice(0, 7)) && ent); BANK.openM[k] = !cur; render(); };
 // Categorias de gasto: as padrão mais as que o Tulio criar.
 // Mesmas categorias e cores da tela de Despesas (PF/PJ), mais as de extrato.

@@ -2784,3 +2784,9 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 
 /* Financeiro PF (V2.06.193): em telas largas o Relatório fica ao lado da tabela de meses, não embaixo dela */
 @media (min-width: 1100px) { .bank-layout:not(.bank-below) { flex-wrap: nowrap; } .bank-layout:not(.bank-below) .bank-list { flex: 1 1 0; width: auto; min-width: 0; } .bank-layout:not(.bank-below) .bank-list .panel-b { overflow-x: auto; } }
+
+.bank-notas{padding:8px 12px 10px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--line,#e3e6ea)}
+.bank-notas .bn-txt{width:100%;font-size:.9em}
+.bank-notas .gg-head{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px}
+.bank-notas .gg-row{display:grid;grid-template-columns:52px minmax(120px,1.2fr) 80px 2fr auto;gap:10px;align-items:center}
+.bank-notas .gg-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
