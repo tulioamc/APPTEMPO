@@ -583,6 +583,8 @@ tr:hover .open-btn, .open-btn:focus-visible { opacity: 1; }
 .home-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(260px, 320px); gap: 16px; align-items: start; }
 .home-main { min-width: 0; display: grid; gap: 16px; }
 .side-panel { display: grid; gap: 16px; position: sticky; top: 12px; padding-right: 16px; box-sizing: border-box; min-width: 0; max-width: 100%; }
+/* painel da direita mais alto que a tela: rola sozinho (a rolagem dele não passa para a página) */
+@media (min-width: 1101px) { .side-panel { top: 76px; max-height: calc(100vh - 88px); max-height: calc(100dvh - 88px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-bottom: 12px; } }
 .side-panel > * { min-width: 0; }
 .side-panel .row { flex-wrap: wrap; min-width: 0; }
 .side-panel .input { min-width: 0; }
@@ -2835,3 +2837,10 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .pr-rec-l:hover { background: var(--surface-2); }
 .pr-rec-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .pr-rec-l > span:last-child { text-align: right; }
+
+/* Tarefas do projeto: setinha antes do nome para esconder/mostrar as subtarefas (largura fixa, nomes alinhados) */
+.tk-subtg { flex: none; width: 18px; height: 20px; display: inline-flex; align-items: center; justify-content: center; gap: 1px; border: 0; background: none; padding: 0; color: var(--fg-3); cursor: pointer; border-radius: 4px; position: relative; }
+.tk-subtg:hover { color: var(--fg); background: var(--surface-2); }
+.tk-subtg svg { width: 13px; height: 13px; }
+.tk-subtg.vazio { cursor: default; pointer-events: none; }
+.tk-subtg .tk-subn { position: absolute; top: -3px; right: -5px; font-size: 9px; line-height: 12px; min-width: 12px; padding: 0 2px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-family: var(--font-mono); }

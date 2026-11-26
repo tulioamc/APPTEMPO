@@ -182,7 +182,7 @@ function render() {
   v.after && v.after();
   if (fid) { const el = document.getElementById(fid); if (el) { if (fval != null && el.value !== fval) el.value = fval; el.focus(); if (sel && el.setSelectionRange) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
 }
-db.subscribe(() => { render(); layers.forEach(l => l.live && l.refresh()); });
+db.subscribe(() => { render(); layers.forEach(l => l.live && l.refresh(true)); });
 
 ACTIONS['demo-clear'] = async () => {
   if (!await confirmBox({ title: 'Começar vazio?', body: 'Remove todos os clientes, projetos, sessões e valores de exemplo. Tipos de trabalho, status e lembretes padrão continuam.', ok: 'Limpar dados', danger: true })) return;

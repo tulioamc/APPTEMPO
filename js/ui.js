@@ -2,6 +2,7 @@
    INFRA DE INTERFACE — ícones, modais, toasts, confirmação, ações
    ===================================================================== */
 const ICONS = {
+  dots: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
   camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
@@ -91,7 +92,10 @@ function openLayer({ kind = 'modal', wide = false, html, onMount, onClose, rende
   ov.appendChild(box); document.body.appendChild(ov);
   const layer = { ov, box, onClose, render, close: () => closeLayer(layer) };
   layers.push(layer);
-  layer.refresh = () => { if (layer.render) { const st = box.querySelector('.db')?.scrollTop; box.innerHTML = layer.render(layer); const b = box.querySelector('.db'); if (b && st) b.scrollTop = st; onMount && onMount(layer); } };
+  layer.refresh = (suave) => { if (layer.render) {
+    // atualização em segundo plano (janela "ao vivo"): mexe só no que mudou, para a rolagem continuar na janela e não passar para a página de baixo
+    if (suave === true && typeof paint === 'function' && !window.TEMPO_NO_MORPH) { paint(box, layer.render(layer)); onMount && onMount(layer); return; }
+    const st = box.querySelector('.db')?.scrollTop; box.innerHTML = layer.render(layer); const b = box.querySelector('.db'); if (b && st) b.scrollTop = st; onMount && onMount(layer); } };
   box.innerHTML = html || (render ? render(layer) : '');
   ov.addEventListener('mousedown', (e) => { if (e.target === ov) layer.close(); });
   onMount && onMount(layer);
