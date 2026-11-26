@@ -958,3 +958,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V2.06.200 — Grandes gastos: Dropbox (e outros nomes com código variável) sai como recorrente. Despesas Rafa: transferências extras da Amanda somadas (janeiro R$ 1.867, fevereiro R$ 330, março R$ 300).
 - V2.06.201 — Grandes gastos: a classe de cada gasto já vem preenchida com a categoria do lançamento (troque se quiser); o resumo agrupa por essa classe.
 - V2.06.202 — Grandes gastos: SulAmérica (plano de saúde) sempre fora da lista.
+- V2.06.203 — Grandes gastos: os botões fixo, mercado e recolher não respondiam (o bloco impedia o clique de chegar ao app); corrigido.
