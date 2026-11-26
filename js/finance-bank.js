@@ -792,12 +792,12 @@ function bankNotasMesHTML(m, real) {
   const classes = [...new Set(Object.values(notas).map(n => n.classe).filter(Boolean))].sort();
   const open = (BANK.ggOpen || {})[m] !== false;
   const porClasse = {};
-  lista.forEach(t => { const n = notas[t.id]; const c = n ? n.classe : 'Sem explicação'; porClasse[c] = (porClasse[c] || 0) + Math.abs(Number(t.amount)); });
-  const resumo = Object.entries(porClasse).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<span class="tag tg" style="${cssTb(c === 'Sem explicação' ? '#C9D1DC' : palColor(c))}">${esc(c)} <span class="mono">${fmtMoney0(v)}</span></span>`).join(' ');
+  lista.forEach(t => { const n = notas[t.id]; const c = (n && n.classe) || catLabel(t.category) || 'Sem categoria'; porClasse[c] = (porClasse[c] || 0) + Math.abs(Number(t.amount)); });
+  const resumo = Object.entries(porClasse).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<span class="tag tg" style="${cssTb(c === 'Sem categoria' ? '#C9D1DC' : palColor(c))}">${esc(c)} <span class="mono">${fmtMoney0(v)}</span></span>`).join(' ');
   const rows = lista.map(t => { const n = notas[t.id] || {}; const cp = t.counterpart || '—'; const pess = t.tag || '';
     return `<div class="gg-row"><span class="mono">${fmtDateShort(t.posted_on)}</span><span class="gg-n" title="${esc(cp)}">${esc(cp)}</span><span class="mono">${fmtMoney0(Math.abs(Number(t.amount)))}</span>
       <input class="input gg-in" value="${esc(n.nota || '')}" placeholder="O que foi" data-on="gg-nota" data-id="${t.id}" data-tip="Explicação deste gasto. Salva ao sair do campo.">
-      <input class="input gg-in gg-cl" list="gg-classes" value="${esc(n.classe || '')}" placeholder="Classe" data-on="gg-classe" data-id="${t.id}" data-tip="Classe do gasto (Viagem, Saúde, Presente…). Escreva uma nova ou escolha uma já usada.">
+      <input class="input gg-in gg-cl" list="gg-classes" value="${esc(n.classe || catLabel(t.category) || '')}" placeholder="Classe" data-on="gg-classe" data-id="${t.id}" data-tip="Classe do gasto. Começa com a categoria que o lançamento já tem; troque por outra (Viagem, Presente, Carnaval…) se quiser separar melhor.">
       <select class="input gg-in gg-pe" data-on="gg-pessoa" data-id="${t.id}" data-tip="De quem é o gasto. Rafa entra na divisão com a Amanda; Alice fica separado."><option value="">Eu</option><option value="Rafa" ${pess === 'Rafa' ? 'selected' : ''}>Rafa</option><option value="Alice" ${pess === 'Alice' ? 'selected' : ''}>Alice</option></select>
       <button class="btn sm ghost gg-bt" data-act="bank-mercado" data-cp="${esc(t.counterpart || '')}" data-tip="Mercado: tira este nome da lista de grandes gastos, em todos os meses.">mercado</button>
       <button class="btn sm ghost gg-bt" data-act="bank-mercado" data-cp="${esc(t.counterpart || '')}" data-tip="Fixo (aluguel, escola, imposto…): tira este nome da lista, em todos os meses.">fixo</button></div>`; }).join('');

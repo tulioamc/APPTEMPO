@@ -956,3 +956,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V2.06.198 — Grandes gastos: nomes recorrentes (4+ meses) saem da lista mesmo quando o código no nome muda (ex.: Dropbox); Pagar.me de R$ 1.757,70 anotado como aliança da Alice. (3 testes de relógio falham depois da meia-noite; não vêm desta mudança.)
 - V2.06.199 — Despesas Rafa: sem lançamento em Despesas nem valor digitado, o recebido da Amanda vem das transferências dela no extrato (junho R$ 2.360). Julho/setembro acertados para bater com as transferências de R$ 5.633 (28/07) e R$ 4.720 (13/10), que cobriam dois meses cada.
 - V2.06.200 — Grandes gastos: Dropbox (e outros nomes com código variável) sai como recorrente. Despesas Rafa: transferências extras da Amanda somadas (janeiro R$ 1.867, fevereiro R$ 330, março R$ 300).
+- V2.06.201 — Grandes gastos: a classe de cada gasto já vem preenchida com a categoria do lançamento (troque se quiser); o resumo agrupa por essa classe.
