@@ -37,3 +37,8 @@ test('plano: Rafa todo mês (dividido) e Amanda integral, acompanhando a cobran�
   assert.equal(Math.round(fev.total * 100), Math.round(566.32 * 2370.94 / 2651.41 * 100));
   assert.ok(fev.planEla > 900 && fev.planEla < 1042);
 });
+test('sem lançamento em Despesas, vale a transferência da Amanda no extrato', () => {
+  const m = setup([{ id: 'a', posted_on: '2026-06-11', amount: 2360, flow: 'in', scope: 'externa', counterpart: 'Amanda Cabral de Godoy e Vasconcelos', category: 'Renda' }]);
+  assert.equal(m.skCalc({ months: {}, plan: {} }, '2026-06', true).received, 2360);
+  assert.equal(m.skCalc({ months: { '2026-06': { received: 1000, extras: [] } }, plan: {} }, '2026-06', true).received, 1000);
+});
