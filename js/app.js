@@ -24,7 +24,8 @@ function pendingOf(id) {
     return exRows(ym).filter(r => !['Não teve', 'Pago', 'Recebido'].includes(r.status)).map(r => ({ label: r.name || '(sem nome)', why: `${ym} · ${r.status}${r.due_date ? ' · vence ' + fmtDate(r.due_date) : ''}`, route: 'expenses' }));
   }
   if (id === 'reimb') {
-    return db.all('tempo_reimb_rows').filter(r => r.refund_id !== rbStatusId('reimb_refund', 'Feito!')).map(r => ({ label: r.name || '(sem nome)', why: `${r.month} · ${fmtMoney(r.amount) || 'sem valor'} · reembolso ainda não feito`, route: 'reimb' }));
+    const nomeDe = (k, r) => rbName(k, r[k === 'reimb_req' ? 'req_id' : 'refund_id']);   // "Não se aplica" (ex.: Dentista) não tem reembolso: não é pendência
+    return db.all('tempo_reimb_rows').filter(r => (Number(r.amount) || 0) > 0 && r.refund_id !== rbStatusId('reimb_refund', 'Feito!') && nomeDe('reimb_req', r) !== 'Não se aplica' && nomeDe('reimb_refund', r) !== 'Não se aplica').map(r => ({ label: r.name || '(sem nome)', why: `${r.month} · ${fmtMoney(r.amount) || 'sem valor'} · reembolso ainda não feito`, route: 'reimb' }));
   }
   if (id === 'notas') {
     if (typeof nfFaltando !== 'function' || !db.data?.tempo_invoices) return [];

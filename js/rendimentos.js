@@ -158,7 +158,7 @@ VIEWS.rendimentos = () => {
       <td class="num">${fmtMoney0(s)}</td>
       <td class="num" data-tip="Estimativa de um mês com 21 dias úteis, já sem IR, sem contar movimentos">${fmtMoney0(rm)}</td>
       <td class="num"><select class="input sm" data-on="rend-set" data-id="${c.id}" data-k="idade" data-tip="Há quanto tempo o dinheiro dessa caixinha está parado. Define o IR: até 180 dias 22,5%, até 360 20%, até 720 17,5%, depois 15%.">${[[30, 'até 6 meses'], [200, '6 a 12 meses'], [400, '1 a 2 anos'], [800, 'mais de 2 anos']].map(([v, l]) => `<option value="${v}" ${(c.idade <= 180 && v === 30) || (c.idade > 180 && c.idade <= 360 && v === 200) || (c.idade > 360 && c.idade <= 720 && v === 400) || (c.idade > 720 && v === 800) ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
-      <td class="num">${c.meta > 0 ? `<input class="input sm" style="width:92px;text-align:right" value="${String(c.meta).replace('.', ',')}" data-on="rend-set" data-id="${c.id}" data-k="meta" data-tip="Quanto você quer manter nessa caixinha">${gap > 0 ? `<div class="small" style="color:var(--warn)" data-tip="Quanto falta para chegar na meta">faltam ${fmtMoney0(gap)}</div>` : ''}` : `<span class="muted">—</span>`}</td></tr>`;
+      <td class="num">${c.id === 'giro' ? `<span class="small muted" data-tip="O Giro fica perto de vazio uns 15 dias por mês enquanto os reembolsos voltam. Isso é normal: os ${fmtMoney0(c.meta)} vão e voltam, não é falta.">vai e volta · ~${fmtMoney0(c.meta)}</span>` : c.meta > 0 ? `<input class="input sm" style="width:92px;text-align:right" value="${String(c.meta).replace('.', ',')}" data-on="rend-set" data-id="${c.id}" data-k="meta" data-tip="Quanto você quer manter nessa caixinha">${gap > 0 ? `<div class="small" style="color:var(--warn)" data-tip="Quanto falta para chegar na meta">faltam ${fmtMoney0(gap)}</div>` : ''}` : `<span class="muted">—</span>`}</td></tr>`;
   }).join('');
   const painelCx = `<div class="panel"><div class="panel-h"><h3>Caixinhas hoje</h3><span class="grow"></span><button class="btn sm primary" data-act="rend-print" data-tip="Digite os saldos do print mais recente. O app compara com o que tinha previsto e recomeça a previsão daqui.">Atualizar com o print</button></div>
     <div class="panel-b tight"><table class="grid compact fin"><thead><tr><th>Caixinha</th><th class="num">% do CDI</th><th class="num">Saldo</th><th class="num">Rende/mês</th><th class="num">Tempo parado</th><th class="num">Meta</th></tr></thead><tbody>${linhas}
@@ -193,10 +193,10 @@ VIEWS.rendimentos = () => {
 
   /* Alertas */
   const al = [];
-  cxs.filter(c => c.meta > 0).forEach(c => { const s = sn.saldos[c.id] || 0; if (s < c.meta - 1) al.push(`<b>${esc(c.nome)}</b> está com ${fmtMoney0(s)} e a meta é ${fmtMoney0(c.meta)}. Faltam ${fmtMoney0(c.meta - s)}; enquanto isso, o que falta está saindo da reserva (${esc(nomeDe('apto'))}). Quando os reembolsos entrarem, devolva.`); });
+  cxs.filter(c => c.meta > 0 && c.id !== 'giro').forEach(c => { const s = sn.saldos[c.id] || 0; if (s < c.meta - 1) al.push(`<b>${esc(c.nome)}</b> está com ${fmtMoney0(s)} e a meta é ${fmtMoney0(c.meta)}. Faltam ${fmtMoney0(c.meta - s)}; enquanto isso, o que falta está saindo da reserva (${esc(nomeDe('apto'))}). Quando os reembolsos entrarem, devolva.`); });
   const painelAl = al.length ? `<div class="banner warn"><span class="grow small">${al.join('<br>')}</span></div>` : '';
 
-  return { title: 'Rendimentos', html: `<div class="stack" style="gap:16px">${painelAl}${kpis}${painelCx}${painelPrev}${painelFl}${conf}${painelRegras}</div>` };
+  return { title: 'Rendimentos', html: `<div class="stack" style="gap:16px">${painelAl}${kpis}${painelCx}${typeof rendGraficosHTML === 'function' ? rendGraficosHTML(o, sim, sn) : conf}${painelPrev}${painelFl}${painelRegras}</div>` };
 };
 
 CHANGES['rend-set'] = (el) => {
