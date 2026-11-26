@@ -780,7 +780,7 @@ function bankFixos() {
   _fixosSet = new Set(Object.entries(meses).filter(([, v]) => v.size >= 4).map(([k]) => k)); _fixosKey = key;
   return _fixosSet;
 }
-const grandeOculto = (t) => t.category === 'Moradia' || bankFixos().has(ggKey(t.counterpart)) || new Set(grandesMercado().map(ggKey)).has(ggKey(t.counterpart));
+const grandeOculto = (t) => t.category === 'Moradia' || /sul ?am[eé]rica/i.test(t.counterpart || '') || bankFixos().has(ggKey(t.counterpart)) || new Set(grandesMercado().map(ggKey)).has(ggKey(t.counterpart));
 function bankGrandesDoMes(real) {
   return real.filter(t => t.flow === 'out' && !(t.reimb_row_id || t.category === 'Terapia') && Math.abs(Number(t.amount)) >= GRANDE_MIN && !grandeOculto(t)).sort((a, b) => Math.abs(Number(b.amount)) - Math.abs(Number(a.amount)));
 }
