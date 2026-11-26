@@ -2,7 +2,9 @@
    EXTRATOS BANCÁRIOS (Gmail → Nubank). Lançamentos vêm de tempo_bank_txns,
    separados por entidade (pf / pj) e marcados "novo" até você revisar.
    ===================================================================== */
-const BANK = { status: null, txns: { pf: [], pj: [] }, all: { pf: [], pj: [] }, month: null, mode: { pf: 'novo', pj: 'novo' }, busy: false, checkedAt: 0, msg: '' };
+const bankUiLoad = () => { try { return JSON.parse(localStorage.getItem('tempo.bankUi') || '{}'); } catch (e) { return {}; } };
+const bankUiSave = () => { try { localStorage.setItem('tempo.bankUi', JSON.stringify({ gg: BANK.ggOpen, ex: BANK.exOpen })); } catch (e) { /* sem armazenamento: vale só nesta sessão */ } };
+const BANK = { status: null, txns: { pf: [], pj: [] }, all: { pf: [], pj: [] }, month: null, mode: { pf: 'novo', pj: 'novo' }, busy: false, checkedAt: 0, msg: '', ggOpen: bankUiLoad().gg || {}, exOpen: bankUiLoad().ex || {} };
 async function bankToken() {
   const { data } = await db.adapter.client.auth.getSession();
   return data && data.session ? data.session.access_token : null;
@@ -707,7 +709,7 @@ function bankSummaryHTML(entity) {
         col('', 'Reembolso de terapia recebido no mês. Outros reembolsos contam como entrada normal', 'Reembolso', reimbM ? fmtMoney0(reimbM) : '—')}${
         col('int', 'Resgates e aplicações (RDB, caixinha, investimentos) e transferências entre as suas contas: não entram nos totais', 'Interno', trf ? fmtMoney0(trf) : '—')}</button>
       ${open && entity === 'pf' ? bankNotasMesHTML(m, real) : ''}
-      ${open ? `<div class="bank-rows bank-head"><span></span><span>Data</span><span>Descrição</span><span>Valor</span><span>Meio</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div>${items.map(rowHTML).join('')}` : ''}
+      ${open ? (() => { const exo = (BANK.exOpen || {})[m] === true; return `<div class="gg-head ex-head small muted" data-act="bank-extoggle" data-m="${m}" data-tip="${exo ? 'Recolher' : 'Abrir'} o extrato do mês (todos os lançamentos)"><button class="btn sm ghost gg-tg" data-act="bank-extoggle" data-m="${m}" aria-expanded="${exo}" data-tip="${exo ? 'Recolher' : 'Abrir'} o extrato do mês">${icon(exo ? 'chevD' : 'chevR')}</button><span class="ex-t">Extrato do mês</span><span data-tip="Lançamentos do mês, sem as transferências internas">(${real.length})</span></div>${exo ? `<div class="bank-rows bank-head"><span></span><span>Data</span><span>Descrição</span><span>Valor</span><span>Meio</span><span>Conta</span><span>Categoria</span><span>Onde foi</span></div>${items.map(rowHTML).join('')}` : ''}`; })() : ''}
     </div>`;
   }).join('');
   const sum = (arr, fn) => arr.reduce((acc, x) => { const k = fn(x); acc[k] = (acc[k] || 0) + Math.abs(Number(x.amount)); return acc; }, {});
@@ -797,7 +799,7 @@ function bankNotasMesHTML(m, real) {
   const ocultos = real.filter(t => t.flow === 'out' && !(t.reimb_row_id || t.category === 'Terapia') && Math.abs(Number(t.amount)) >= GRANDE_MIN && grandeOculto(t));
   const ocNomes = [...new Set(ocultos.map(t => t.counterpart || '—'))].join(', ');
   const classes = [...new Set(Object.values(notas).map(n => n.classe).filter(Boolean))].sort();
-  const open = (BANK.ggOpen || {})[m] !== false;
+  const open = (BANK.ggOpen || {})[m] === true;
   const porClasse = {};
   lista.forEach(t => { const n = notas[t.id]; const c = (n && n.classe) || catLabel(t.category) || 'Sem categoria'; porClasse[c] = (porClasse[c] || 0) + Math.abs(Number(t.amount)); });
   const classeTag = (c, extra = '') => `<span class="tag tg" style="${cssTb(exColor(exKeyOf(c)))}">${esc(catLabel(c))}${extra}</span>`;
@@ -823,7 +825,8 @@ CHANGES['gg-pessoa'] = async (el) => {
   if (error) return toast('Erro: ' + error.message);
   await bankLoadTxns(); render();
 };
-ACTIONS['bank-ggtoggle'] = (el) => { BANK.ggOpen = BANK.ggOpen || {}; BANK.ggOpen[el.dataset.m] = BANK.ggOpen[el.dataset.m] === false; render(); };
+ACTIONS['bank-ggtoggle'] = (el) => { BANK.ggOpen = BANK.ggOpen || {}; BANK.ggOpen[el.dataset.m] = BANK.ggOpen[el.dataset.m] !== true; bankUiSave(); render(); };
+ACTIONS['bank-extoggle'] = (el) => { BANK.exOpen = BANK.exOpen || {}; BANK.exOpen[el.dataset.m] = BANK.exOpen[el.dataset.m] !== true; bankUiSave(); render(); };
 CHANGES['bank-mnota'] = (el) => { const box = el.closest('.mn-edit'); const h = box.querySelector('.mn-hi').value.trim(), sb = box.querySelector('.mn-si').value.trim(); const all = { ...(db.setting('monthNotes', {}) || {}) }; const v = [h, sb].filter(Boolean).join('\n'); if (v) all[el.dataset.m] = v; else delete all[el.dataset.m]; db.setSetting('monthNotes', all); };
 ACTIONS['bank-medit'] = (el) => { BANK.mnEdit = BANK.mnEdit || {}; BANK.mnEdit[el.dataset.m] = !BANK.mnEdit[el.dataset.m]; render(); };
 ACTIONS['bank-mercado'] = (el) => { const cp = el.dataset.cp; if (!cp) return; db.setSetting('grandesMercado', [...new Set([...grandesMercado(), cp])]); toast('“' + cp + '” saiu dos grandes gastos.'); render(); };

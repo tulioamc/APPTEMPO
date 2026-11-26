@@ -2798,3 +2798,14 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 .bank-notas .gg-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bank-notas .gg-in{font-size:.95em;padding:2px 6px;min-height:0;height:26px}
 .bank-notas .gg-bt{font-size:.9em;padding:0 8px;min-height:0;height:24px}
+
+/* Mês financeiro: chevrons e textos alinhados à coluna do nome do mês */
+.bank-notas .gg-head,.bank-group .ex-head{display:flex;align-items:center;gap:6px;padding:8px 12px;cursor:pointer;flex-wrap:wrap}
+.bank-notas .gg-head{border-top:.5px solid var(--border)}
+.bank-group .ex-head{border-top:.5px solid var(--border)}
+.bank-notas .gg-tg,.bank-group .ex-head .gg-tg{width:14px;min-height:0;padding:0;border:0;background:none}
+.bank-notas .gg-tg svg,.bank-group .ex-head .gg-tg svg{width:14px;height:14px}
+.bank-notas .mn-view,.bank-notas .mn-edit{padding-left:32px;padding-right:12px}
+.bank-notas .mn-h{font-size:1.45em}
+.bank-notas .gg-row{padding-left:32px}
+.bank-group .ex-head .ex-t{font-weight:600;color:var(--fg-1)}
