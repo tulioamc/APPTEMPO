@@ -269,7 +269,8 @@ test('bandeja lista só tarefas suas, abertas e com tempo a fazer', () => {
   const l = m.planoBandejaLista(); assert.deepEqual(l.map(x => x.tid), ['t1']); assert.equal(l[0].h, 1.5);
 });
 test('dia quase cheio (80%) e estourado (100%+) avisam na barra do dia', () => {
-  const m = setup(); const dia = '2026-11-25'; const cap = m.planoJanelas(dia).jan.reduce((t, [a, b]) => t + (b - a), 0);
+  const m = setup(); const dia = '2030-11-26';   // data futura fixa: dias passados não têm capacidade
+  const cap = m.planoJanelas(dia).jan.reduce((t, [a, b]) => t + (b - a), 0);
   const com = (h) => m.planoCapHTML(dia, { [dia]: { blocos: [{ ini: 9, fim: 9 + h, pid: 'a' }] } });
   assert.doesNotMatch(com(cap * 0.5), /pl-cap-pct/);
   assert.match(com(cap * 0.85), /pl-cap-pct quase/);

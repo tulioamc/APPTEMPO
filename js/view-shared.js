@@ -38,7 +38,7 @@ const skElaIn = (plan, ym) => !plan.elaSaiEm || ym < plan.elaSaiEm;
 const skYmAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number); const x = new Date(y, m - 1 + n, 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`; };
 const skRecRaw = (d, ym) => {
   const m = skMonth(d, ym);
-  const lancado = Number(m.received) || db.all('tempo_expenses').filter(r => r.month === ym && r.kind === 'in' && /amanda/i.test(r.name || '') && r.status !== 'Não teve').reduce((t, r) => t + (Number(r.amount) || 0), 0);
+  const lancado = Number(m.received) || db.all('tempo_expenses').filter(r => r.month === ym && r.kind === 'in' && /amanda/i.test(r.name || '') && r.status === 'Recebido').reduce((t, r) => t + (Number(r.amount) || 0), 0);
   if (lancado) return lancado;
   /* Sem valor digitado nem lançamento em Despesas: vale o que a Amanda transferiu no extrato naquele mês (V2.06.199). */
   return (typeof BANK !== 'undefined' && BANK.every || []).filter(t => t.flow === 'in' && t.scope !== 'interna' && /amanda/i.test(t.counterpart || '') && (t.posted_on || '').slice(0, 7) === ym && ym >= SK_MIN_YM)

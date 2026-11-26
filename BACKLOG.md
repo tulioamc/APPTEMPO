@@ -961,3 +961,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V2.06.203 — Grandes gastos: os botões fixo, mercado e recolher não respondiam (o bloco impedia o clique de chegar ao app); corrigido.
 - V2.06.204 — Grandes gastos: Dropbox, energia (Celpe/Neoenergia) e SulAmérica sempre fora da lista.
 - V2.06.205 — Grandes gastos: Dropbox/assinaturas e DAS/Receita Federal/impostos (contabilidade) sempre fora da lista, por serem fixos.
+- V2.06.206 — Grandes gastos: DAS volta à lista (aumenta a saída), Dropbox/assinaturas continuam fora. Nota do mês virou introdução (manchete + submanchete, lápis para editar). Chips e campo de classe usam as mesmas cores das categorias em todo o app (gráficos incluídos). Despesas Rafa: só conta como recebido da Amanda o que está marcado "Recebido" (novembro aparecia como recebido sem ter chegado). Testes de relógio não quebram mais depois da meia-noite.

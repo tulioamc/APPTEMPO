@@ -780,9 +780,16 @@ function bankFixos() {
   _fixosSet = new Set(Object.entries(meses).filter(([, v]) => v.size >= 4).map(([k]) => k)); _fixosKey = key;
   return _fixosSet;
 }
-const grandeOculto = (t) => ['Moradia', 'Assinaturas', 'Contabilidade', 'Impostos'].includes(t.category) || /sul ?am[eé]rica|dropbox|energ|celpe|neoenergia|\bdas\b|simples nacional|receita federal|munic[ií]pio do recife/i.test(t.counterpart || '') || bankFixos().has(ggKey(t.counterpart)) || new Set(grandesMercado().map(ggKey)).has(ggKey(t.counterpart));
+const grandeOculto = (t) => ['Moradia', 'Assinaturas'].includes(t.category) || /sul ?am[eé]rica|dropbox|energ|celpe|neoenergia/i.test(t.counterpart || '') || bankFixos().has(ggKey(t.counterpart)) || new Set(grandesMercado().map(ggKey)).has(ggKey(t.counterpart));
 function bankGrandesDoMes(real) {
   return real.filter(t => t.flow === 'out' && !(t.reimb_row_id || t.category === 'Terapia') && Math.abs(Number(t.amount)) >= GRANDE_MIN && !grandeOculto(t)).sort((a, b) => Math.abs(Number(b.amount)) - Math.abs(Number(a.amount)));
+}
+// Introdução do mês: 1ª linha = manchete, o resto = submanchete (texto corrido). Lápis abre o editor.
+const mnParts = (txt) => { const [h, ...r] = String(txt || '').split('\n'); return { h: h.trim(), s: r.join('\n').trim() }; };
+function mnotaHTML(m, txt) {
+  const { h, s } = mnParts(txt);
+  if ((BANK.mnEdit || {})[m]) return `<div class="mn-edit"><input class="input mn-hi" value="${esc(h)}" placeholder="Manchete do mês (ex.: Mês da viagem e da saúde cara)" data-on="bank-mnota" data-m="${m}" data-tip="Frase curta que resume o mês. Salva ao sair do campo."><textarea class="input mn-si" rows="3" placeholder="Submanchete: o que explica os valores e o que teve de diferente além dos grandes gastos…" data-on="bank-mnota" data-m="${m}" data-tip="Explicação corrida do mês. Salva ao sair do campo.">${esc(s)}</textarea><button class="btn sm ghost" data-act="bank-medit" data-m="${m}" data-tip="Terminar a edição">${icon('check')} Pronto</button></div>`;
+  return `<div class="mn-view"><div class="grow">${h ? `<div class="mn-h">${esc(h)}</div>` : ''}${s ? `<div class="mn-s">${esc(s)}</div>` : ''}${!h && !s ? '<div class="mn-s faint">Sem introdução neste mês. Clique no lápis para escrever.</div>' : ''}</div><button class="btn sm icon ghost" data-act="bank-medit" data-m="${m}" aria-label="Editar a introdução do mês" data-tip="Editar a introdução do mês (manchete e explicação)">${icon('edit')}</button></div>`;
 }
 function bankNotasMesHTML(m, real) {
   const txt = (db.setting('monthNotes', {}) || {})[m] || '';
@@ -793,17 +800,18 @@ function bankNotasMesHTML(m, real) {
   const open = (BANK.ggOpen || {})[m] !== false;
   const porClasse = {};
   lista.forEach(t => { const n = notas[t.id]; const c = (n && n.classe) || catLabel(t.category) || 'Sem categoria'; porClasse[c] = (porClasse[c] || 0) + Math.abs(Number(t.amount)); });
-  const resumo = Object.entries(porClasse).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<span class="tag tg" style="${cssTb(c === 'Sem categoria' ? '#C9D1DC' : palColor(c))}">${esc(c)} <span class="mono">${fmtMoney0(v)}</span></span>`).join(' ');
+  const classeTag = (c, extra = '') => `<span class="tag tg" style="${cssTb(exColor(exKeyOf(c)))}">${esc(catLabel(c))}${extra}</span>`;
+  const resumo = Object.entries(porClasse).sort((a, b) => b[1] - a[1]).map(([c, v]) => c === 'Sem categoria' ? `<span class="tag tg" style="${cssTb('#C9D1DC')}">${esc(c)} <span class="mono">${fmtMoney0(v)}</span></span>` : classeTag(c, ` <span class="mono">${fmtMoney0(v)}</span>`)).join(' ');
   const rows = lista.map(t => { const n = notas[t.id] || {}; const cp = t.counterpart || '—'; const pess = t.tag || '';
     return `<div class="gg-row"><span class="mono">${fmtDateShort(t.posted_on)}</span><span class="gg-n" title="${esc(cp)}">${esc(cp)}</span><span class="mono">${fmtMoney0(Math.abs(Number(t.amount)))}</span>
       <input class="input gg-in" value="${esc(n.nota || '')}" placeholder="O que foi" data-on="gg-nota" data-id="${t.id}" data-tip="Explicação deste gasto. Salva ao sair do campo.">
-      <input class="input gg-in gg-cl" list="gg-classes" value="${esc(n.classe || catLabel(t.category) || '')}" placeholder="Classe" data-on="gg-classe" data-id="${t.id}" data-tip="Classe do gasto. Começa com a categoria que o lançamento já tem; troque por outra (Viagem, Presente, Carnaval…) se quiser separar melhor.">
+      <input class="input gg-in gg-cl" style="${cssTb(exColor(exKeyOf(n.classe || t.category || 'Outros')))};background:var(--tb);color:var(--tt);border-color:transparent;border-radius:999px;font-weight:600;text-align:center" list="gg-classes" value="${esc(n.classe || catLabel(t.category) || '')}" placeholder="Classe" data-on="gg-classe" data-id="${t.id}" data-tip="Classe do gasto. Começa com a categoria que o lançamento já tem; troque por outra (Viagem, Presente, Carnaval…) se quiser separar melhor.">
       <select class="input gg-in gg-pe" data-on="gg-pessoa" data-id="${t.id}" data-tip="De quem é o gasto. Rafa entra na divisão com a Amanda; Alice fica separado."><option value="">Eu</option><option value="Rafa" ${pess === 'Rafa' ? 'selected' : ''}>Rafa</option><option value="Alice" ${pess === 'Alice' ? 'selected' : ''}>Alice</option></select>
       <button class="btn sm ghost gg-bt" data-act="bank-mercado" data-cp="${esc(t.counterpart || '')}" data-tip="Mercado: tira este nome da lista de grandes gastos, em todos os meses.">mercado</button>
       <button class="btn sm ghost gg-bt" data-act="bank-mercado" data-cp="${esc(t.counterpart || '')}" data-tip="Fixo (aluguel, escola, imposto…): tira este nome da lista, em todos os meses.">fixo</button></div>`; }).join('');
   return `<div class="bank-notas">
-    <input class="input bn-txt" value="${esc(txt)}" placeholder="Notas do mês: o que explica os gastos (ex.: mês da viagem, material escolar…)" data-on="bank-mnota" data-m="${m}" data-tip="Texto curto sobre este mês. Salva ao sair do campo.">
-    ${lista.length || ocultos.length ? `<div class="gg-head small muted"><button class="btn sm ghost gg-tg" data-act="bank-ggtoggle" data-m="${m}" data-tip="${open ? 'Recolher' : 'Abrir'} a lista de grandes gastos">${icon(open ? 'chevD' : 'chevR')}</button><span data-tip="Saídas acima de R$ 300 no mês, sem terapias e sem os fixos.">Grandes gastos (${lista.length})</span>${resumo}${ocultos.length ? `<span class="faint" data-tip="Ocultos por serem fixos ou mercado: ${esc(ocNomes)}">· ${ocultos.length} ocultos</span>` : ''}</div>` : ''}
+    ${mnotaHTML(m, txt)}
+    ${lista.length || ocultos.length ? `<div class="gg-head small muted" data-act="bank-ggtoggle" data-m="${m}" style="cursor:pointer" data-tip="${open ? 'Recolher' : 'Abrir'} a lista de grandes gastos"><button class="btn sm ghost gg-tg" data-act="bank-ggtoggle" data-m="${m}" aria-expanded="${open}" data-tip="${open ? 'Recolher' : 'Abrir'} a lista de grandes gastos">${icon(open ? 'chevD' : 'chevR')}</button><span data-tip="Saídas acima de R$ 300 no mês, sem terapias e sem os fixos.">Grandes gastos (${lista.length})</span>${resumo}${ocultos.length ? `<span class="faint" data-tip="Ocultos por serem fixos ou mercado: ${esc(ocNomes)}">· ${ocultos.length} ocultos</span>` : ''}</div>` : ''}
     ${open && lista.length ? `<datalist id="gg-classes">${classes.map(c => `<option value="${esc(c)}">`).join('')}</datalist>${rows}` : ''}
   </div>`;
 }
@@ -816,7 +824,8 @@ CHANGES['gg-pessoa'] = async (el) => {
   await bankLoadTxns(); render();
 };
 ACTIONS['bank-ggtoggle'] = (el) => { BANK.ggOpen = BANK.ggOpen || {}; BANK.ggOpen[el.dataset.m] = BANK.ggOpen[el.dataset.m] === false; render(); };
-CHANGES['bank-mnota'] = (el) => { const all = { ...(db.setting('monthNotes', {}) || {}) }; const v = el.value.trim(); if (v) all[el.dataset.m] = v; else delete all[el.dataset.m]; db.setSetting('monthNotes', all); };
+CHANGES['bank-mnota'] = (el) => { const box = el.closest('.mn-edit'); const h = box.querySelector('.mn-hi').value.trim(), sb = box.querySelector('.mn-si').value.trim(); const all = { ...(db.setting('monthNotes', {}) || {}) }; const v = [h, sb].filter(Boolean).join('\n'); if (v) all[el.dataset.m] = v; else delete all[el.dataset.m]; db.setSetting('monthNotes', all); };
+ACTIONS['bank-medit'] = (el) => { BANK.mnEdit = BANK.mnEdit || {}; BANK.mnEdit[el.dataset.m] = !BANK.mnEdit[el.dataset.m]; render(); };
 ACTIONS['bank-mercado'] = (el) => { const cp = el.dataset.cp; if (!cp) return; db.setSetting('grandesMercado', [...new Set([...grandesMercado(), cp])]); toast('“' + cp + '” saiu dos grandes gastos.'); render(); };
 ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.dataset.k; const [ent, m] = k.split(':'); const cur = BANK.openM[k] ?? (m === (BANK.month || ymd(new Date()).slice(0, 7)) && ent); BANK.openM[k] = !cur; render(); };
 // Categorias de gasto: as padrão mais as que o Tulio criar.
@@ -888,7 +897,7 @@ const GREEN = COR_OK, RED = GRAF_CORES[7], PF_C = GRAF_CORES[0], PJ_C = GRAF_COR
 const CHART_PAL = GRAF_CORES;
 const CAT_COLORS = ['#B9C8F5', '#A8DCC4', '#F5B5B5', '#F2D39B', '#D2BEF5', '#A6E3E1', '#F7C2DA', '#C9D1DC', '#D7EFA6', '#F8E08E', '#B7D9F7', '#E8C79B', '#C7CBFA', '#B6E2C6', '#F1B3C0', '#A7E6DC', '#E3B8F5', '#F2D27A', '#A5EDEF', '#FBC7A4', '#C3CAD6', '#CFE7A0'];
 const chartCat = (k) => exColor(exKeyOf(k));   // mesma cor que o tipo tem em Despesas
-const palColor = (name) => { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return CHART_PAL[h % CHART_PAL.length]; };
+const palColor = (name) => { if (bankCats().includes(String(name))) return exColor(exKeyOf(String(name))); let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return CHART_PAL[h % CHART_PAL.length]; };
 const dotHTML = (c, title = '') => `<span title="${esc(title)}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle;flex:none"></span>`;
 // Rosca centralizada com chips claros na legenda (mesmas cores das categorias)
 const chipHTML = (c, label, val, pct, hex) => `<span class="tag tg" style="${cssTb(hex)}">${esc(label)} <span class="mono">${fmtMoney0(val)}</span>${pct !== undefined ? ` <span style="opacity:.7">${pct}%</span>` : ''}</span>`;

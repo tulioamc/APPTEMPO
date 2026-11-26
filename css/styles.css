@@ -2786,7 +2786,12 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 @media (min-width: 1100px) { .bank-layout:not(.bank-below) { flex-wrap: nowrap; } .bank-layout:not(.bank-below) .bank-list { flex: 1 1 0; width: auto; min-width: 0; } .bank-layout:not(.bank-below) .bank-list .panel-b { overflow-x: auto; } }
 
 .bank-notas{padding:6px 12px 8px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--line,#e3e6ea);font-size:.84em}
-.bank-notas .bn-txt{width:100%;font-size:.95em;padding:4px 8px}
+.bank-notas .mn-view{display:flex;gap:8px;align-items:flex-start;padding:6px 4px 2px}
+.bank-notas .mn-h{font-size:1.25em;font-weight:700;line-height:1.25;letter-spacing:-.01em}
+.bank-notas .mn-s{font-size:.98em;line-height:1.45;color:var(--muted);margin-top:3px;white-space:pre-line}
+.bank-notas .mn-edit{display:grid;gap:6px;padding:4px 0}
+.bank-notas .mn-hi{font-weight:700;font-size:1.1em}
+.bank-notas .mn-si{resize:vertical;line-height:1.4}
 .bank-notas .gg-head{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .bank-notas .gg-tg{padding:0 4px;min-height:0}
 .bank-notas .gg-row{display:grid;grid-template-columns:44px minmax(110px,1fr) 78px minmax(140px,1.6fr) 110px 70px auto auto;gap:6px;align-items:center}

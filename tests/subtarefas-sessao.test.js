@@ -2,6 +2,7 @@
 const test = require('node:test'), assert = require('node:assert');
 const { load } = require('./helpers');
 const MIN = 6e4;
+const CEDO = { skip: new Date().getHours() < 3 && 'precisa de 3h do dia já decorridas (sessão "de hoje" começa à meia-noite)' };
 function setup() {
   const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'],
     ['db', 'ACTIONS', 'sbPintar', 'sbJanela', 'sbFatias', 'sbPrevia', 'sbCortes', 'sbApps', 'sbNormaliza', 'etapaFechaAoEncerrar', 'sbEtapaAtual', 'etapaMae', 'actForaSplit', 'sbEstado', 'sbSecaoHTML', 'sbSubMs', 'sbDivs', 'sbReintegra', 'sbLembraDesfazer', 'etapasDeHoje', 'sbDetalheDados', 'sbDetalheHTML', 'sbAuto', 'sbDivsEf', 'subAssocia', 'sbSugestoesDe', 'subMesmo', 'subProgsDe', 'subTira', 'subOpcoesHTML'],
@@ -81,7 +82,7 @@ test('sessão antiga com trecho "levado" para a subtarefa volta para a sessão e
   assert.equal(Math.round(ms(m.db.get('tempo_time_entries', 'run')) / MIN), 100);
   assert.equal(Math.round(m.sbSubMs('ps') / MIN), 18);
 });
-test('etapas de hoje listam as marcações', () => {
+test('etapas de hoje listam as marcações', CEDO, () => {
   const m = setup(); const t0 = Date.now() - 60 * MIN; const e = sessao(m, t0, t0 + 50 * MIN);
   m.sbPintar(e, [{ a: t0, b: t0 + 20 * MIN }], 'ps', '');
   const l = m.etapasDeHoje(m.db.get('tasks'.replace('tasks', 'tempo_tasks'), 'mae'));
@@ -117,7 +118,7 @@ test('terminei uma etapa: diz a terminada e a próxima; encerrar fecha a próxim
   assert.equal(m.sbEtapaAtual('run'), null);
   assert.ok(Math.abs(m.db.all('tempo_time_entries').reduce((t, e) => t + ms(e), 0) - antesTotal) < 1000);   // o total da tarefa não mudou
 });
-test('terminei às hh:mm (antes de agora): a sessão continua inteira e só a parte até a hora fica marcada', () => {
+test('terminei às hh:mm (antes de agora): a sessão continua inteira e só a parte até a hora fica marcada', CEDO, () => {
   let ly = null; const t0 = new Date(); t0.setHours(9, 0, 0, 0);
   const agora = new Date(); const horaFim = `${String(Math.max(0, agora.getHours() - 1)).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
   const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'], ['db', 'ACTIONS', 'sbSubMs'],
