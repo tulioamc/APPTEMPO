@@ -2,8 +2,9 @@ import AppKit
 import ApplicationServices
 import WebKit
 import Carbon.HIToolbox
+import UserNotifications
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
     private var window: NSWindow!
     private var web: WKWebView!
     private var statusItem: NSStatusItem!
@@ -56,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         web.load(URLRequest(url: siteURL))
 
         setupMenu()
+        prepararAvisos()
 
         if !AXIsProcessTrusted() {
             let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -341,11 +343,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         showNotice(title, body)
     }
 
+    /// Avisos saem pelo próprio macOS em nome do Tempo (ícone do Tempo; clicar traz o app para frente).
+    /// Só usa o osascript se o app estiver rodando fora do Tempo.app ou se os avisos do Tempo estiverem bloqueados,
+    /// porque por esse caminho o macOS atribui o aviso ao Editor de Script.
+    private var avisosNativos = false
+
+    private func prepararAvisos() {
+        guard Bundle.main.bundleIdentifier != nil, Bundle.main.bundlePath.hasSuffix(".app") else { return }
+        let c = UNUserNotificationCenter.current()
+        c.delegate = self
+        c.requestAuthorization(options: [.alert, .sound]) { ok, _ in
+            DispatchQueue.main.async { self.avisosNativos = ok }
+        }
+    }
+
     func showNotice(_ title: String, _ body: String) {
+        if avisosNativos {
+            let conteudo = UNMutableNotificationContent()
+            conteudo.title = title
+            conteudo.body = body
+            conteudo.sound = .default
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: conteudo, trigger: nil))
+            return
+        }
         func q(_ x: String) -> String { x.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") }
         let script = "display notification \"\(q(body))\" with title \"\(q(title))\""
         let p = Process(); p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript"); p.arguments = ["-e", script]
         try? p.run()
+    }
+
+    // mostra o aviso mesmo com o Tempo na frente
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .list])
+    }
+
+    // clicar no aviso traz a janela do Tempo para frente
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            self.window.makeKeyAndOrderFront(nil)
+        }
+        completionHandler()
     }
 
     /// Atualiza pelo ~/APPTEMPO/mac/update.sh (git pull + build). Se mudou, reabre a versão nova.
