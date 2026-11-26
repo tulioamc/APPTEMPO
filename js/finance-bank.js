@@ -453,7 +453,7 @@ function bankInReportHTML(entity, ym, base, excl) {
 /* Gráfico de linhas ao lado das Entradas: Entrada, Saída, Saldo, Terapia, Reembolso e Interno mês a mês (mesmas regras da linha do mês). */
 const TR_SERIES = [['ent', 'Entrada', 'Dinheiro que entrou na PF ou na PJ (sem reembolso de terapia)'], ['sai', 'Saída', 'Tudo que saiu, menos terapias'], ['sal', 'Saldo', 'Entrada − Saída, sem terapias e sem interno'],
   ['ter', 'Terapia', 'Terapias pagas'], ['rei', 'Reembolso', 'Reembolso de terapia recebido'], ['int', 'Interno', 'Resgates, aplicações e transferências entre as suas contas']];
-function bankSeriesMes(entity) {
+function bankSeriesMes(entity, dias) {
   const every = BANK.every || [];
   const catBy = {}, cnt = {}; const cbk = (t) => (t.counterpart || '—') + '|' + (t.flow || '');
   every.forEach(x => { if (x.category) { const c = (cnt[cbk(x)] ||= {}); c[x.category] = (c[x.category] || 0) + 1; } });
@@ -470,12 +470,19 @@ function bankSeriesMes(entity) {
     if (t.scope !== 'externa') return;
     if (t.flow === 'in') { if (isReembTer(t.category)) r.rei += a; else if (/^Estorno/.test(t.category || '')) r.est += a; else r.ent += a; }
     else if (isTher(t)) r.ter += a; else r.sai += a;
+    if (dias) {   // mesmas regras, lançamento a lançamento (para o Saldo detalhado)
+      const ev = (dias.ev ||= []), nome = t.counterpart || t.memo || '';
+      if (t.flow === 'in') { if (isReembTer(t.category)) return; ev.push({ dt: t.posted_on, v: /^Estorno/.test(t.category || '') ? a : a, nome }); }
+      else if (!isTher(t)) ev.push({ dt: t.posted_on, v: -a, nome });
+    }
   });
   Object.values(out).forEach(r => { r.sai -= r.est; r.sal = Math.round(r.ent) - Math.round(r.sai); });
   return out;
 }
 const trAbbr = (n) => { const a = Math.abs(n), sg = n < 0 ? '−' : ''; return a >= 1000 ? `${sg}${(a / 1000).toFixed(a >= 10000 ? 0 : 1).replace('.', ',')} mil` : `${sg}${Math.round(a)}`; };
 function bankTrendChartHTML(entity, ym) {
+  const MODO = BANK.trM || 'normal';
+  if (MODO !== 'normal') return bankTrendSaldoHTML(entity, ym, MODO);
   const P = BANK.trP || 'm6', off = BANK.trOff || {};
   const data = bankSeriesMes(entity);
   const cur = ymd(new Date()).slice(0, 7);
@@ -499,7 +506,7 @@ function bankTrendChartHTML(entity, ym) {
   const xl = months.map((m, i) => `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" class="tr-t">${pfMonthLabel(m)}</text>`).join('');
   const lines = shown.map(([k]) => {
     const pts = months.map((m, i) => `${x(i).toFixed(1)},${y(val(m, k)).toFixed(1)}`);
-    return `<g class="tr-s tr-s-${k}">${months.length > 1 ? `<polyline points="${pts.join(' ')}" fill="none" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` : ''}${months.map((m, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(val(m, k)).toFixed(1)}" r="4" class="tr-pt"/>`).join('')}</g>`;
+    return `<g class="tr-s tr-s-${k}">${months.length > 1 ? `<polyline points="${pts.join(' ')}" fill="none" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` : ''}${months.map((m, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(val(m, k)).toFixed(1)}" r="3" class="tr-pt"/>`).join('')}</g>`;
   }).join('');
   const colW = months.length === 1 ? W - L - R : (W - L - R) / (months.length - 1);
   const cols = months.map((m, i) => {
@@ -510,11 +517,84 @@ function bankTrendChartHTML(entity, ym) {
   const chips = TR_SERIES.map(([k, lab, tip]) => `<button class="tr-chip ${off[k] === true ? 'off' : ''}" data-act="bank-trs" data-v="${k}" aria-pressed="${off[k] !== true}" data-tip="${esc(tip)}. Total no período: ${fmtMoney0(tot(k))}. Clique para ${off[k] === true ? 'mostrar' : 'esconder'} a linha"><span class="tr-dot tr-s-${k}"></span>${lab} <b class="mono">${fmtMoney0(tot(k))}</b></button>`).join('');
   const seg = [['m3', '3 meses'], ['m6', '6 meses'], ['ano', 'Ano'], ['tudo', 'Tudo']].map(([k, l]) => `<button class="${P === k ? 'on' : ''}" data-act="bank-trp" data-v="${k}">${l}</button>`).join('');
   return `<div class="panel bank-trend"><div class="panel-h"><h3>Mês a mês</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · ${months.length === 1 ? rbLabel(months[0]) : `${pfMonthLabel(months[0])} a ${pfMonthLabel(months[months.length - 1])}`}</span></div><div class="panel-b">
-    <div class="seg" style="margin-bottom:12px">${seg}</div>
+    <div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:12px"><div class="seg">${seg}</div>${trModoSeg('normal')}</div>
     <div class="tr-legend">${chips}</div>
     <svg class="tr-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Entrada, saída, saldo, terapia, reembolso e interno por mês">${grid}${xl}${lines}${cols}</svg>
   </div></div>`;
 }
+const trModoSeg = (cur) => `<div class="seg" data-tip="Normal: todas as linhas. Saldo: só entrada e saída, com o espaço entre elas pintado (verde = sobrou, vermelho = faltou). Saldo detalhado: a linha segue o saldo de cada mês entrada por entrada e saída por saída.">${[['normal', 'Normal'], ['saldo', 'Saldo'], ['dia', 'Saldo detalhado']].map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" data-act="bank-trm" data-v="${k}">${l}</button>`).join('')}</div>`;
+/* Faixas entre duas curvas (ou entre uma curva e o zero): verde clarinho onde a primeira fica acima, vermelho clarinho onde fica abaixo. */
+function trBandas(xs, A, B, y) {
+  const out = [];
+  for (let i = 0; i < xs.length - 1; i++) {
+    const d0 = A[i] - B[i], d1 = A[i + 1] - B[i + 1], seg = (x0, x1, a0, a1, b0, b1, pos) => out.push({ pos, d: `M${x0.toFixed(1)},${y(a0).toFixed(1)}L${x1.toFixed(1)},${y(a1).toFixed(1)}L${x1.toFixed(1)},${y(b1).toFixed(1)}L${x0.toFixed(1)},${y(b0).toFixed(1)}Z` });
+    if (d0 === 0 && d1 === 0) continue;
+    if (d0 * d1 >= 0) { seg(xs[i], xs[i + 1], A[i], A[i + 1], B[i], B[i + 1], (d0 + d1) >= 0); continue; }
+    const f = d0 / (d0 - d1), xc = xs[i] + (xs[i + 1] - xs[i]) * f, vc = A[i] + (A[i + 1] - A[i]) * f;
+    seg(xs[i], xc, A[i], vc, B[i], vc, d0 > 0); seg(xc, xs[i + 1], vc, A[i + 1], vc, B[i + 1], d1 > 0);
+  }
+  return out.map(b => `<path d="${b.d}" fill="${b.pos ? 'var(--tr-ent)' : 'var(--tr-sai)'}" fill-opacity=".16" stroke="none"/>`).join('');
+}
+const trDot = (cx, cy, c) => `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3" fill="color-mix(in srgb, ${c} 28%, var(--surface))" stroke="${c}" stroke-width="1.5"/>`;
+function bankTrendSaldoHTML(entity, ym, MODO) {
+  const P = BANK.trP || 'm6', cur = ymd(new Date()).slice(0, 7), dias = {};
+  const data = bankSeriesMes(entity, MODO === 'dia' ? dias : null);
+  const all = []; for (let m = FIN_INICIO_YM; m <= cur; m = inAddM(m, 1)) all.push(m);
+  const Y = ym.slice(0, 4);
+  let months = P === 'tudo' ? all : P === 'ano' ? all.filter(m => m.startsWith(Y)) : all.filter(m => m >= inAddM(ym, P === 'm3' ? -2 : -5) && m <= ym);
+  months = months.filter(m => m >= FIN_INICIO_YM); if (!months.length) months = [ym];
+  const val = (m, k) => (data[m] || {})[k] || 0;
+  const W = 560, H = 250, L = 52, R = 30, T = 14, B = 28;
+  const seg = [['m3', '3 meses'], ['m6', '6 meses'], ['ano', 'Ano'], ['tudo', 'Tudo']].map(([k, l]) => `<button class="${P === k ? 'on' : ''}" data-act="bank-trp" data-v="${k}">${l}</button>`).join('');
+  const topo = `<div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:12px"><div class="seg">${seg}</div>${trModoSeg(MODO)}</div>`;
+  let xs, A, Bv, labels, pts = null;
+  if (MODO === 'dia') {   // saldo acumulado dentro de cada mês, um ponto por entrada ou saída (a linha segue o saldo lançamento a lançamento)
+    pts = []; const hoje = ymd(new Date()), t0 = new Date(months[0] + '-01T12:00:00'), dIdx = (dt) => (new Date(dt + 'T12:00:00') - t0) / 864e5;
+    const evs = (dias.ev || []).slice().reverse().sort((a, b) => a.dt < b.dt ? -1 : a.dt > b.dt ? 1 : 0);
+    months.forEach(m => {
+      let acc = 0; const [yy, mm] = m.split('-').map(Number), ult = new Date(yy, mm, 0).getDate(), doMes = evs.filter(e => e.dt.slice(0, 7) === m);
+      pts.push({ m, dt: `${m}-01`, v: 0, x: dIdx(`${m}-01`), ini: true });
+      const porDia = {}; doMes.forEach(e => { (porDia[e.dt] ||= []).push(e); });
+      Object.entries(porDia).forEach(([dt, l]) => l.forEach((e, k) => { acc += e.v; pts.push({ m, dt, v: acc, x: dIdx(dt) + (k + 1) / (l.length + 1) * 0.9, e }); }));
+      const fimDt = `${m}-${String(ult).padStart(2, '0')}`, ultDt = fimDt > hoje ? hoje : fimDt;
+      pts.push({ m, dt: ultDt, v: acc, x: dIdx(ultDt) + 0.95, fim: true });
+    });
+    if (pts.length < 3) return `<div class="panel bank-trend"><div class="panel-h"><h3>Mês a mês</h3></div><div class="panel-b">${topo}<div class="empty small">Sem lançamentos neste período.</div></div></div>`;
+    const x0 = pts[0].x, xN = pts[pts.length - 1].x || 1;
+    xs = pts.map(p => L + (p.x - x0) / Math.max(1, xN - x0) * (W - L - R)); A = pts.map(p => p.v); Bv = pts.map(() => 0);
+    labels = months.map(m => { const i = pts.findIndex(p => p.m === m); return `<text x="${xs[i]}" y="${H - 8}" text-anchor="start" class="tr-t">${pfMonthLabel(m)}</text>`; }).join('');
+  } else {
+    xs = months.map((_, i) => L + (months.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (months.length - 1)));
+    A = months.map(m => val(m, 'ent')); Bv = months.map(m => val(m, 'sai'));
+    labels = months.map((m, i) => `<text x="${xs[i]}" y="${H - 8}" text-anchor="middle" class="tr-t">${pfMonthLabel(m)}</text>`).join('');
+  }
+  const vs = [...A, ...Bv, 0]; let lo = Math.min(...vs), hi = Math.max(...vs); if (hi === lo) hi = lo + 1;
+  const raw = (hi - lo) / 4, mag = Math.pow(10, Math.floor(Math.log10(raw))), step = [1, 2, 2.5, 5, 10].map(f => f * mag).find(x => x >= raw) || raw;
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const y = (v) => T + (hi - v) / (hi - lo) * (H - T - B);
+  const ticks = []; for (let v = lo; v <= hi + step / 2; v += step) ticks.push(v);
+  const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="tr-grid${v === 0 ? ' zero' : ''}"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" class="tr-t">${trAbbr(v)}</text>`).join('');
+  const path = (arr) => arr.map((v, i) => `${i ? 'L' : 'M'}${xs[i].toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  let corpo, dots, cols;
+  const n = xs.length, cw = n === 1 ? W - L - R : (W - L - R) / (n - 1);
+  if (MODO === 'dia') {
+    corpo = trBandas(xs, A, Bv, y) + `<path d="${path(A)}" fill="none" stroke="var(--tr-sal)" stroke-width="1.5" stroke-linejoin="round"/>`;
+    dots = pts.map((p, i) => p.fim ? trDot(xs[i], y(p.v), 'var(--tr-sal)') : '').join('');
+    cols = pts.map((p, i) => { const w = Math.max(3, ((xs[i + 1] ?? xs[i] + 6) - (xs[i - 1] ?? xs[i] - 6)) / 2); return `<rect x="${(xs[i] - w / 2).toFixed(1)}" y="${T}" width="${w.toFixed(1)}" height="${H - T - B}" class="tr-hit" data-tip="${esc(p.e ? `${fmtDate(p.dt)} · ${p.e.nome}\n${p.e.v >= 0 ? 'Entrou' : 'Saiu'} ${fmtMoney0(Math.abs(p.e.v))}\nSaldo do mês até aqui: ${fmtMoney0(p.v)}` : `${fmtDate(p.dt)}\nSaldo do mês: ${fmtMoney0(p.v)}`)}"/>`; }).join('');
+  } else {
+    corpo = trBandas(xs, A, Bv, y) + `<path d="${path(A)}" fill="none" stroke="var(--tr-ent)" stroke-width="1.5" stroke-linejoin="round"/><path d="${path(Bv)}" fill="none" stroke="var(--tr-sai)" stroke-width="1.5" stroke-linejoin="round"/>`;
+    dots = months.map((m, i) => trDot(xs[i], y(A[i]), 'var(--tr-ent)') + trDot(xs[i], y(Bv[i]), 'var(--tr-sai)')).join('');
+    cols = months.map((m, i) => `<rect x="${(xs[i] - cw / 2).toFixed(1)}" y="${T}" width="${cw.toFixed(1)}" height="${H - T - B}" class="tr-hit" data-tip="${esc(`${rbLabel(m)}\nEntrada: ${fmtMoney0(A[i])}\nSaída: ${fmtMoney0(Bv[i])}\nSaldo: ${fmtMoney0(A[i] - Bv[i])}`)}"/>`).join('');
+  }
+  const chip = (c, t, tip) => `<span class="tr-chip"${tip ? ` data-tip="${esc(tip)}"` : ''}><i class="tr-dot" style="--c:${c}"></i>${t}</span>`;
+  const leg = MODO === 'dia' ? chip('var(--tr-sal)', 'Saldo do mês, lançamento a lançamento', 'Cada entrada sobe a linha e cada saída desce, desde o dia 1 do mês. Passe o mouse para ver qual foi. A bolinha marca o fim do mês (ou hoje).') + chip('var(--tr-ent)', 'Sobrando / faltando', 'Verde clarinho: o mês está sobrando. Vermelho clarinho: está faltando.')
+    : chip('var(--tr-ent)', 'Entrada') + chip('var(--tr-sai)', 'Saída') + chip('var(--tr-sal)', 'Saldo = espaço entre as linhas', 'Verde clarinho quando a entrada é maior (sobrou), vermelho clarinho quando a saída é maior (faltou).');
+  return `<div class="panel bank-trend"><div class="panel-h"><h3>Mês a mês</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'}</span></div><div class="panel-b">${topo}
+    <div class="tr-legend">${leg}</div>
+    <svg class="tr-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${MODO === 'dia' ? 'Saldo do mês dia a dia' : 'Entrada e saída por mês com o saldo entre elas'}">${grid}${labels}${corpo}${dots}${cols}</svg>
+  </div></div>`;
+}
+ACTIONS['bank-trm'] = (el) => { BANK.trM = el.dataset.v; render(); };
 ACTIONS['bank-trp'] = (el) => { BANK.trP = el.dataset.v; render(); };
 ACTIONS['bank-trs'] = (el) => { BANK.trOff = { ...(BANK.trOff || {}) }; const k = el.dataset.v; BANK.trOff[k] = BANK.trOff[k] !== true; render(); };
 ACTIONS['bank-inp'] = (el) => { BANK.inP = el.dataset.v; if (BANK.inP === 'sel' && !Object.keys(BANK.inSel || {}).length) BANK.inSel = { [bankMonthNow()]: true }; render(); };
@@ -630,22 +710,27 @@ function bankSummaryHTML(entity) {
     </div>`;
   }).join('');
   const sum = (arr, fn) => arr.reduce((acc, x) => { const k = fn(x); acc[k] = (acc[k] || 0) + Math.abs(Number(x.amount)); return acc; }, {});
-  const monthOuts = outMonth.filter(passes);
+  /* Relatório por período (V2.06.193): mês, 3 meses, 6 meses, 1 ano ou desde jan/2026; total somado ou média por mês. Termina no mês escolhido. */
+  const repP = BANK.repP || 'm1', repMedia = BANK.repMedia === true;
+  const repMeses = (() => { const a = []; const n = repP === 'm3' ? 3 : repP === 'm6' ? 6 : repP === 'ano' ? 12 : repP === 'tudo' ? 999 : 1; for (let i = 0, m = ym; i < n && m >= FIN_INICIO_YM; i++, m = inAddM(m, -1)) a.push(m); return a.length ? a : [ym]; })();
+  const repSet = new Set(repMeses), repDiv = repMedia ? repMeses.length : 1;
+  const monthOuts = poolOut.filter(t => repSet.has((t.posted_on || '').slice(0, 7))).filter(passes);
   // Terapia reembolsável fica separada e sempre no fim da lista, mesmo sendo o maior valor
   const catKey = (t) => (isTher(t) ? THER_LABEL : (catOf(t) || 'Sem categoria'));
   const catSums = sum(monthOuts, catKey);
   // Estorno "Estorno→Categoria" abate essa categoria
-  (BANK.all[entity] || []).filter(t => t.flow === 'in' && abatesCat(t.category) && (t.posted_on || '').slice(0, 7) === ym).forEach(t => { const tg = t.category.split('→')[1]; catSums[tg] = (catSums[tg] || 0) - Math.abs(Number(t.amount)); });
+  (BANK.all[entity] || []).filter(t => t.flow === 'in' && abatesCat(t.category) && repSet.has((t.posted_on || '').slice(0, 7))).forEach(t => { const tg = t.category.split('→')[1]; catSums[tg] = (catSums[tg] || 0) - Math.abs(Number(t.amount)); });
   const byCat = Object.entries(catSums).filter(([k, v]) => k !== THER_LABEL && v > 0 && (BANK.reemb === true || !isReembCat(k))).sort((a, b) => b[1] - a[1]);
   if (catSums[THER_LABEL] && BANK.reemb === true) byCat.push([THER_LABEL, catSums[THER_LABEL]]);
   const byMeth = Object.entries(sum(monthOuts, bankMethod)).sort((a, b) => b[1] - a[1]);
   const byCp = Object.entries(sum(monthOuts, t => t.counterpart || '—')).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const bars = (arr) => (arr.length ? stdBarsHTML(arr.map(([k, v]) => ({ key: k, label: k, v })), fmtMoney0) : '<div class="empty small">Sem saídas neste mês.</div>');
   const byAcc = Object.entries(sum(monthOuts, t => (t.biz_entity || t.entity).toUpperCase())).sort((a, b) => b[1] - a[1]);
+  if (repDiv > 1) [byCat, byMeth, byCp, byAcc].forEach(l => l.forEach(x => { x[1] = x[1] / repDiv; }));
   const views = { cat: ['Categoria', () => donutHTML(byCat, 'Por categoria', chartCat, true)], meio: ['Meio', () => donutHTML(byMeth, 'Por meio')], conta: ['PF / PJ', () => donutHTML(byAcc, 'PF e PJ', (k) => exColor(k === 'PJ' ? 'EMPRESA' : 'PESSOAL'))], onde: ['Onde foi', () => bars(byCp)] };
   const cur = views[BANK.rep] ? BANK.rep : 'cat';
   const tabs = `<div class="seg" style="margin-bottom:12px;flex-wrap:wrap">${Object.entries(views).map(([k, [l]]) => `<button class="${cur === k ? 'on' : ''}" data-act="bank-rep" data-v="${k}">${l}</button>`).join('')}</div>`;
-  const report = `<div class="panel bank-report"><div class="panel-h"><h3 class="row" style="gap:6px;align-items:center;flex-wrap:wrap">Relatório de <select data-on="bank-rmonth" class="input" style="width:auto;font:inherit;font-weight:600;padding:4px 8px">${[...new Set([ym, ...(BANK.all[entity] || []).filter(t => t.posted_on).map(t => t.posted_on.slice(0, 7))])].sort().reverse().map(m => `<option value="${m}" ${m === ym ? 'selected' : ''}>${rbLabel(m)}</option>`).join('')}</select></h3></div><div class="panel-b"><label class="row" style="gap:6px;margin-bottom:10px;align-items:center"><input type="checkbox" data-on="bank-reemb" ${BANK.reemb === true ? 'checked' : ''}> Mostrar reembolsos no relatório</label>${tabs}${views[cur][1]()}</div></div>`;
+  const report = `<div class="panel bank-report"><div class="panel-h"><h3 class="row" style="gap:6px;align-items:center;flex-wrap:wrap">Relatório de <select data-on="bank-rmonth" class="input" style="width:auto;font:inherit;font-weight:600;padding:4px 8px">${[...new Set([ym, ...(BANK.all[entity] || []).filter(t => t.posted_on).map(t => t.posted_on.slice(0, 7))])].sort().reverse().map(m => `<option value="${m}" ${m === ym ? 'selected' : ''}>${rbLabel(m)}</option>`).join('')}</select></h3></div><div class="panel-b"><div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px"><div class="seg" data-tip="Período do relatório, terminando no mês escolhido ao lado. Sempre = desde janeiro de 2026">${[['m1', 'Mês'], ['m3', '3 meses'], ['m6', '6 meses'], ['ano', '1 ano'], ['tudo', 'Sempre']].map(([k, l]) => `<button class="${repP === k ? 'on' : ''}" data-act="bank-repp" data-v="${k}">${l}</button>`).join('')}</div>${repP !== 'm1' ? `<div class="seg" data-tip="Total: soma de todos os meses do período. Média: o total dividido pelo número de meses">${[[false, 'Total'], [true, 'Média por mês']].map(([k, l]) => `<button class="${repMedia === k ? 'on' : ''}" data-act="bank-repm" data-v="${k}">${l}</button>`).join('')}</div>` : ''}</div>${repP !== 'm1' ? `<div class="small muted" style="margin-bottom:8px">${repMeses.length === 1 ? rbLabel(repMeses[0]) : `${pfMonthLabel(repMeses[repMeses.length - 1])} a ${pfMonthLabel(repMeses[0])}`} · ${repMeses.length} ${repMeses.length === 1 ? 'mês' : 'meses'}${repP === 'tudo' ? ' · a partir de janeiro de 2026' : ''}${repMedia ? ' · média por mês' : ' · total'}</div>` : ''}<label class="row" style="gap:6px;margin-bottom:10px;align-items:center"><input type="checkbox" data-on="bank-reemb" ${BANK.reemb === true ? 'checked' : ''}> Mostrar reembolsos no relatório</label>${tabs}${views[cur][1]()}</div></div>`;
   const dot = (c) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
   const GREEN = COR_OK, RED = GRAF_CORES[7];
   const fOn = bankFilterOn() || BANK.fOpen;
@@ -673,6 +758,8 @@ CHANGES['bank-month'] = (el) => { BANK.month = el.value; render(); };
 ACTIONS['bank-origin'] = (el) => { BANK.origin = el.dataset.v; render(); };
 ACTIONS['bank-tipo'] = (el) => { BANK.tipos = BANK.tipos || { entrada: true, saida: true, terapia: true, reembolso: true, interno: true }; const k = el.dataset.v; BANK.tipos[k] = BANK.tipos[k] === false; render(); };
 ACTIONS['bank-showt'] = () => { BANK.showT = BANK.showT === false; render(); };
+ACTIONS['bank-repp'] = (el) => { BANK.repP = el.dataset.v; render(); };
+ACTIONS['bank-repm'] = (el) => { BANK.repMedia = el.dataset.v === 'true'; render(); };
 ACTIONS['bank-rep'] = (el) => { BANK.rep = el.dataset.v; render(); };
 ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.dataset.k; const [ent, m] = k.split(':'); const cur = BANK.openM[k] ?? (m === (BANK.month || ymd(new Date()).slice(0, 7)) && ent); BANK.openM[k] = !cur; render(); };
 // Categorias de gasto: as padrão mais as que o Tulio criar.
