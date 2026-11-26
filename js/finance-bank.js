@@ -713,7 +713,7 @@ function bankSummaryHTML(entity) {
     const saldo = Math.round(totIn) - Math.round(tot), sOk = true;   // arredondado como as colunas, para a conta fechar na tela
     const col = (cls, tip, lab, val) => `<span class="bg-c ${cls}" data-tip="${tip}"><span class="bg-l">${lab}</span><span class="bg-v">${val}</span></span>`;
     return `<div class="bank-group">
-      <button class="bank-ghead bank-gcols" data-act="bank-mtoggle" data-k="${entity}:${m}" aria-expanded="${open}"><span class="bg-m">${icon(open ? 'chevD' : 'chevR')}${rbLabel(m)}${m < FIN_INICIO_YM ? ' <span class="tag tg" style="background:var(--warn-soft);color:var(--warn)" data-tip="Antes de jan/2026 não há extrato nem cartão completos. Este mês aparece aqui, mas fica fora das análises e dos gráficos.">Incompleto</span>' : ''}</span>${
+      <button class="bank-ghead bank-gcols" data-act="bank-mtoggle" data-k="${entity}:${m}" aria-expanded="${open}"><span class="bg-m">${icon(open ? 'chevD' : 'chevR')}${rbLabel(m)}${m < FIN_INICIO_YM ? ' <span class="tag tg bg-inc" style="background:var(--warn-soft);color:var(--warn)" data-tip="Antes de jan/2026 não há extrato nem cartão completos. Este mês aparece aqui, mas fica fora das análises e dos gráficos.">Incompleto</span>' : ''}</span>${
         col('', 'Quantidade de lançamentos do mês (sem as transferências internas)', 'Lançamentos', real.length)}${
         col('in', 'Tudo que entrou na PF ou na PJ (o repasse PJ → PF não conta de novo). Só o reembolso de terapia fica de fora', 'Entradas', fmtMoney0(totIn))}${
         col('out', 'Tudo que saiu, menos terapias; estornos abatem', 'Saídas', fmtMoney0(tot))}${

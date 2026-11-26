@@ -1618,6 +1618,10 @@ td.nf-dif { color: var(--warn, #c77700); font-weight: 600; }
 .bank-gcols { display: grid; grid-template-columns: minmax(150px, 1.25fr) repeat(7, minmax(78px, 1fr)); gap: 0 12px; align-items: end; padding: 8px 14px; }
 .bank-gcols .bg-m { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; align-self: center; }
 .bank-gcols .bg-m svg { width: 14px; height: 14px; color: var(--fg-3); }
+/* tag "Incompleto": desce para a linha de baixo, alinhada ao nome do mês (não fica espremida nem cortada) */
+.bank-gcols .bg-m:has(.bg-inc) { flex-wrap: wrap; row-gap: 3px; }
+.bank-gcols .bg-inc { flex-basis: auto; margin-left: 20px; white-space: nowrap; font-size: 10.5px; line-height: 1.5; padding: 0 7px; order: 2; }
+.bank-gcols .bg-m:has(.bg-inc)::after { content: ''; flex-basis: 100%; order: 1; }
 .bank-gcols .bg-c { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; white-space: nowrap; font-weight: 500; min-width: 0; }
 .bank-gcols .bg-l { font-size: 10.5px; letter-spacing: .02em; color: var(--fg-3); }
 .bank-gcols .bg-v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 600; text-align: right; }
