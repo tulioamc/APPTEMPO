@@ -43,6 +43,7 @@ function rbCreateNextMonth() {
 }
 /* Chamado ao abrir o app e de tempos em tempos: cria os meses que faltam até o atual. */
 function ensureMonthSheets() {
+  try { if (typeof rendLembrete === 'function') rendLembrete(); } catch (e) { /* lembrete extra */ }
   const months = rbMonths(); if (!months.length) return;
   const now = ymd(new Date()).slice(0, 7); let guard = 0;
   while (months[0] < now && guard++ < 24) { const t = rbCreateNextMonth(); if (!t) break; months.unshift(t); }

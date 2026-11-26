@@ -51,6 +51,7 @@ const NAV = [
   { id: 'financepf', label: 'Financeiro PF', icon: 'money' },
   { id: 'expenses', label: 'Despesas', icon: 'money', pend: true },
   { id: 'reimb', label: 'Reembolsos', icon: 'layers', pend: true },
+  { id: 'rendimentos', label: 'Rendimentos', icon: 'chart', tip: 'Caixinhas do Nubank: saldo, quanto rende, entra, sai e imposto, mês a mês' },
   { group: 'Filho' },
   { id: 'shared', label: 'Despesas Rafa', icon: 'users' },
   { id: 'rafa', label: 'Dias de Rafa', icon: 'users' },
