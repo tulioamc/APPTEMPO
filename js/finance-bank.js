@@ -770,7 +770,7 @@ const GRANDE_MIN = 300;
 const grandesNotas = () => db.setting('grandesNotas', {}) || {};
 const grandesMercado = () => db.setting('grandesMercado', []) || [];
 /* Fixos saem sozinhos da lista: nome que aparece em 4 meses ou mais (aluguel, escola, plano, imposto…) ou categoria Moradia. */
-const ggKey = (cp) => String(cp || '').replace(/\(.*?\)/g, ' ').replace(/\*/g, ' ').toLowerCase().split(/\s+/).map(w => w.replace(/\d.*$/, '')).filter(Boolean).join(' ');   // "Dm *Dropbox32x5…" e "Dm*Dropbox1k6…" viram o mesmo nome
+const ggKey = (cp) => String(cp || '').replace(/\(.*?\)/g, ' ').toLowerCase().normalize('NFD').replace(/[^a-z]/g, '').slice(0, 9);   // só as letras do começo: "Dm *Dropbox32x5…", "Dm*Dropboxm39…" e "Dm*Dropbox1k6…" viram o mesmo nome
 let _fixosKey = null, _fixosSet = null;
 function bankFixos() {
   const all = BANK.every || []; const key = all.length;
