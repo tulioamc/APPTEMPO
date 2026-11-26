@@ -769,23 +769,52 @@ const subTag = (t) => { const v = txnSubs()[t.id]; return v ? ` <span class="sma
 const GRANDE_MIN = 300;
 const grandesNotas = () => db.setting('grandesNotas', {}) || {};
 const grandesMercado = () => db.setting('grandesMercado', []) || [];
+/* Fixos saem sozinhos da lista: nome que aparece em 4 meses ou mais (aluguel, escola, plano, imposto…) ou categoria Moradia. */
+let _fixosKey = null, _fixosSet = null;
+function bankFixos() {
+  const all = BANK.every || []; const key = all.length;
+  if (_fixosKey === key && _fixosSet) return _fixosSet;
+  const meses = {};
+  all.forEach(t => { if (t.flow !== 'out' || t.scope === 'interna' || !t.counterpart) return; (meses[t.counterpart] = meses[t.counterpart] || new Set()).add((t.posted_on || '').slice(0, 7)); });
+  _fixosSet = new Set(Object.entries(meses).filter(([, v]) => v.size >= 4).map(([k]) => k)); _fixosKey = key;
+  return _fixosSet;
+}
+const grandeOculto = (t) => t.category === 'Moradia' || bankFixos().has(t.counterpart || '') || new Set(grandesMercado()).has(t.counterpart || '');
 function bankGrandesDoMes(real) {
-  const merc = new Set(grandesMercado());
-  return real.filter(t => t.flow === 'out' && !(t.reimb_row_id || t.category === 'Terapia') && Math.abs(Number(t.amount)) >= GRANDE_MIN && !merc.has(t.counterpart || '')).sort((a, b) => Math.abs(Number(b.amount)) - Math.abs(Number(a.amount)));
+  return real.filter(t => t.flow === 'out' && !(t.reimb_row_id || t.category === 'Terapia') && Math.abs(Number(t.amount)) >= GRANDE_MIN && !grandeOculto(t)).sort((a, b) => Math.abs(Number(b.amount)) - Math.abs(Number(a.amount)));
 }
 function bankNotasMesHTML(m, real) {
   const txt = (db.setting('monthNotes', {}) || {})[m] || '';
   const notas = grandesNotas(), lista = bankGrandesDoMes(real);
+  const ocultos = real.filter(t => t.flow === 'out' && !(t.reimb_row_id || t.category === 'Terapia') && Math.abs(Number(t.amount)) >= GRANDE_MIN && grandeOculto(t));
+  const ocNomes = [...new Set(ocultos.map(t => t.counterpart || '—'))].join(', ');
+  const classes = [...new Set(Object.values(notas).map(n => n.classe).filter(Boolean))].sort();
+  const open = (BANK.ggOpen || {})[m] !== false;
   const porClasse = {};
   lista.forEach(t => { const n = notas[t.id]; const c = n ? n.classe : 'Sem explicação'; porClasse[c] = (porClasse[c] || 0) + Math.abs(Number(t.amount)); });
   const resumo = Object.entries(porClasse).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<span class="tag tg" style="${cssTb(c === 'Sem explicação' ? '#C9D1DC' : palColor(c))}">${esc(c)} <span class="mono">${fmtMoney0(v)}</span></span>`).join(' ');
-  const rows = lista.map(t => { const n = notas[t.id]; const cp = t.counterpart || '—';
-    return `<div class="gg-row"><span class="mono small">${fmtDateShort(t.posted_on)}</span><span class="gg-n" title="${esc(cp)}">${esc(cp)}</span><span class="mono small">${fmtMoney0(Math.abs(Number(t.amount)))}</span><span class="small ${n ? '' : 'faint'}">${n ? `${esc(n.nota)} <span class="faint">· ${esc(n.classe)}</span>` : 'Sem explicação ainda'}</span><button class="btn sm ghost" data-act="bank-mercado" data-cp="${esc(t.counterpart || '')}" data-tip="Tira este nome da lista de grandes gastos (ex.: supermercado). Vale para todos os meses.">mercado</button></div>`; }).join('');
+  const rows = lista.map(t => { const n = notas[t.id] || {}; const cp = t.counterpart || '—'; const pess = t.tag || '';
+    return `<div class="gg-row"><span class="mono">${fmtDateShort(t.posted_on)}</span><span class="gg-n" title="${esc(cp)}">${esc(cp)}</span><span class="mono">${fmtMoney0(Math.abs(Number(t.amount)))}</span>
+      <input class="input gg-in" value="${esc(n.nota || '')}" placeholder="O que foi" data-on="gg-nota" data-id="${t.id}" data-tip="Explicação deste gasto. Salva ao sair do campo.">
+      <input class="input gg-in gg-cl" list="gg-classes" value="${esc(n.classe || '')}" placeholder="Classe" data-on="gg-classe" data-id="${t.id}" data-tip="Classe do gasto (Viagem, Saúde, Presente…). Escreva uma nova ou escolha uma já usada.">
+      <select class="input gg-in gg-pe" data-on="gg-pessoa" data-id="${t.id}" data-tip="De quem é o gasto. Rafa entra na divisão com a Amanda; Alice fica separado."><option value="">Eu</option><option value="Rafa" ${pess === 'Rafa' ? 'selected' : ''}>Rafa</option><option value="Alice" ${pess === 'Alice' ? 'selected' : ''}>Alice</option></select>
+      <button class="btn sm ghost gg-bt" data-act="bank-mercado" data-cp="${esc(t.counterpart || '')}" data-tip="Mercado: tira este nome da lista de grandes gastos, em todos os meses.">mercado</button>
+      <button class="btn sm ghost gg-bt" data-act="bank-mercado" data-cp="${esc(t.counterpart || '')}" data-tip="Fixo (aluguel, escola, imposto…): tira este nome da lista, em todos os meses.">fixo</button></div>`; }).join('');
   return `<div class="bank-notas" onclick="event.stopPropagation()">
     <input class="input bn-txt" value="${esc(txt)}" placeholder="Notas do mês: o que explica os gastos (ex.: mês da viagem, material escolar…)" data-on="bank-mnota" data-m="${m}" data-tip="Texto curto sobre este mês. Salva ao sair do campo.">
-    ${lista.length ? `<div class="gg-head small muted" data-tip="Saídas acima de R$ 300 no mês, sem terapias. O botão mercado tira o nome da lista.">Grandes gastos (acima de ${fmtMoney0(GRANDE_MIN)}) · ${resumo}</div>${rows}` : ''}
+    ${lista.length || ocultos.length ? `<div class="gg-head small muted"><button class="btn sm ghost gg-tg" data-act="bank-ggtoggle" data-m="${m}" data-tip="${open ? 'Recolher' : 'Abrir'} a lista de grandes gastos">${icon(open ? 'chevD' : 'chevR')}</button><span data-tip="Saídas acima de R$ 300 no mês, sem terapias e sem os fixos.">Grandes gastos (${lista.length})</span>${resumo}${ocultos.length ? `<span class="faint" data-tip="Ocultos por serem fixos ou mercado: ${esc(ocNomes)}">· ${ocultos.length} ocultos</span>` : ''}</div>` : ''}
+    ${open && lista.length ? `<datalist id="gg-classes">${classes.map(c => `<option value="${esc(c)}">`).join('')}</datalist>${rows}` : ''}
   </div>`;
 }
+const ggSalva = (id, campo, v) => { const all = { ...grandesNotas() }; const cur = all[id] || { nota: '', classe: '' }; all[id] = { ...cur, [campo]: v.trim() }; if (!all[id].nota && !all[id].classe) delete all[id]; db.setSetting('grandesNotas', all); render(); };
+CHANGES['gg-nota'] = (el) => ggSalva(el.dataset.id, 'nota', el.value);
+CHANGES['gg-classe'] = (el) => ggSalva(el.dataset.id, 'classe', el.value);
+CHANGES['gg-pessoa'] = async (el) => {
+  const { error } = await db.adapter.client.from('tempo_bank_txns').update({ tag: el.value || null, updated_at: new Date().toISOString() }).eq('id', el.dataset.id);
+  if (error) return toast('Erro: ' + error.message);
+  await bankLoadTxns(); render();
+};
+ACTIONS['bank-ggtoggle'] = (el) => { BANK.ggOpen = BANK.ggOpen || {}; BANK.ggOpen[el.dataset.m] = BANK.ggOpen[el.dataset.m] === false; render(); };
 CHANGES['bank-mnota'] = (el) => { const all = { ...(db.setting('monthNotes', {}) || {}) }; const v = el.value.trim(); if (v) all[el.dataset.m] = v; else delete all[el.dataset.m]; db.setSetting('monthNotes', all); };
 ACTIONS['bank-mercado'] = (el) => { const cp = el.dataset.cp; if (!cp) return; db.setSetting('grandesMercado', [...new Set([...grandesMercado(), cp])]); toast('“' + cp + '” saiu dos grandes gastos.'); render(); };
 ACTIONS['bank-mtoggle'] = (el) => { BANK.openM = BANK.openM || {}; const k = el.dataset.k; const [ent, m] = k.split(':'); const cur = BANK.openM[k] ?? (m === (BANK.month || ymd(new Date()).slice(0, 7)) && ent); BANK.openM[k] = !cur; render(); };
