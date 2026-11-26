@@ -960,3 +960,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V2.06.202 — Grandes gastos: SulAmérica (plano de saúde) sempre fora da lista.
 - V2.06.203 — Grandes gastos: os botões fixo, mercado e recolher não respondiam (o bloco impedia o clique de chegar ao app); corrigido.
 - V2.06.204 — Grandes gastos: Dropbox, energia (Celpe/Neoenergia) e SulAmérica sempre fora da lista.
+- V2.06.205 — Grandes gastos: Dropbox/assinaturas e DAS/Receita Federal/impostos (contabilidade) sempre fora da lista, por serem fixos.
