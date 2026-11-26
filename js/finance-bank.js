@@ -667,7 +667,7 @@ function bankSummaryHTML(entity) {
       <span class="mono small" style="color:${t.scope === 'interna' ? 'var(--accent)' : t.flow === 'in' ? 'var(--ok)' : 'var(--danger)'}">${dotHTML(t.scope === 'interna' ? '#2563eb' : t.flow === 'in' ? COR_OK : '#d64545', t.scope === 'interna' ? 'Interno' : t.flow === 'in' ? 'Entrada' : 'Saída')}${fmtMoney(Math.abs(Number(t.amount)))}</span>
       <span class="small muted">${bankMethod(t)}</span>
       <span><button class="bank-cat-btn" data-act="bank-biz" data-id="${t.id}" title="Trocar entre PF e PJ">${accTag(eff)}</button></span>
-      <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">${catTag(cat)}${autoCat[k] === cat ? ' <span class="faint small">sugerido</span>' : ''}</button>`
+      <span>${cat ? `<button class="bank-cat-btn" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">${catTag(cat)}${subTag(t)}${autoCat[k] === cat ? ' <span class="faint small">sugerido</span>' : ''}</button>`
         : sug ? `<span class="bank-cat-btn" style="cursor:default">${catTag(sug)} <span class="faint small">sugerido</span></span>`
         : `<button class="btn sm ghost" data-act="bank-cat" data-entity="${t.entity}" data-cp="${esc(k)}" data-flow="${t.flow}">Definir categoria</button>`}${t.tag ? ` <span class="tag tg" style="${cssTb(TAG_COLOR[t.tag] || '#8a8f98')}">${esc(t.tag)}</span>` : ''}</span>
       <span class="small muted bm">${bankRowExtra(t)}</span></div>`;
@@ -763,6 +763,9 @@ ACTIONS['bank-repp'] = (el) => { BANK.repP = el.dataset.v; render(); };
 ACTIONS['bank-repm'] = (el) => { BANK.repMedia = el.dataset.v === 'true'; render(); };
 ACTIONS['bank-rep'] = (el) => { BANK.rep = el.dataset.v; render(); };
 /* Notas do mês e grandes gastos (V2.06.194): texto curto sob a data do mês e lista dos gastos acima de R$ 300 com a explicação guardada. */
+/* Subcategoria por lançamento (V2.06.196): fica em tempo_settings.txnSub {id: 'Livros'} e aparece como "Compras › Livros" na lista; a categoria continua sendo Compras. */
+const txnSubs = () => db.setting('txnSub', {}) || {};
+const subTag = (t) => { const v = txnSubs()[t.id]; return v ? ` <span class="small muted" data-tip="Subcategoria de ${esc(t.category || '')}">› ${esc(v)}</span>` : ''; };
 const GRANDE_MIN = 300;
 const grandesNotas = () => db.setting('grandesNotas', {}) || {};
 const grandesMercado = () => db.setting('grandesMercado', []) || [];
