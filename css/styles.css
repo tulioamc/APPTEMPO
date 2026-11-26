@@ -2500,6 +2500,8 @@ body.pl-foco-on .pl-grade > .pl-bloco:not(.pl-mesma), body.pl-foco-on .pl-grade 
 /* a lista não deixa nada vazar pelas bordas (faixa da Reuniões, linha do deadline);
    deadline no fim da lista ganha espaço embaixo para não encostar na borda arredondada */
 .tk-lista { overflow: hidden; }
+/* dentro da janela (coluna flex), painéis não encolhem: a lista fica inteira e a janela rola (antes cortava as últimas tarefas) */
+.db > .panel, .db > .tk-lista, .db > .tk-novas { flex-shrink: 0; }
 .tk-lista .panel-b:has(> .tk-entrega:last-child) { padding-bottom: 16px; }
 .tk-entrega::before { left: 0 !important; right: 0 !important; }
 .tk-lista .panel-b:has(> .tk-entrega:first-child) { padding-top: 14px; }
