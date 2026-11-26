@@ -16,11 +16,21 @@ const SK_MIN_YM = '2026-01';
 const skBankLoad = () => { if (typeof BANK === 'undefined' || BANK.every || BANK.skPediu || typeof bankLoadTxns !== 'function') return; BANK.skPediu = true; bankLoadTxns().then(() => render()).catch(() => {}); };
 const skTxns = (ym) => (typeof BANK !== 'undefined' && BANK.every || []).filter(t => t.tag === 'Rafa' && t.flow === 'out' && t.scope !== 'interna' && (t.posted_on || '').slice(0, 7) === ym && Number(t.amount) < 0)
   .map(t => ({ id: t.id, name: String(t.counterpart || t.memo || 'Gasto').replace(/\s*\(Transferência enviada\)/i, ''), amount: Math.abs(Number(t.amount)), cat: t.category || '', date: t.posted_on, txn: true }));
-const skPlanRafa = (plan, ym) => {
-  const v = Number(plan && plan.filho) || 0; if (!v || ym < (plan.desde || '2026-10')) return [];
-  const pagou = (typeof BANK !== 'undefined' && BANK.every || []).some(t => t.flow === 'out' && /sul ?am[eé]rica/i.test(t.counterpart || '') && (t.posted_on || '').slice(0, 7) === ym);
-  return pagou ? [{ id: 'plano-rafa', name: 'Plano de saúde (parte do Rafa)', amount: v, cat: 'Saúde', plano: true }] : [];
+/* Plano de saúde (V2.06.195): vale todo mês desde o começo, não só nos meses com pagamento. O valor acompanha a mensalidade real da SulAmérica
+   (última cobrança até o mês, em proporção ao valor de referência plan.base), então um reajuste entra sozinho; sem cobrança lida, usa o valor fixo. */
+const skPlanScale = (plan, ym) => {
+  const base = Number(plan && plan.base) || 0; if (!base) return 1;
+  const cobr = (typeof BANK !== 'undefined' && BANK.every || []).filter(t => t.flow === 'out' && t.scope !== 'interna' && /sul ?am[eé]rica/i.test(t.counterpart || '') && Math.abs(Number(t.amount)) >= 1500)
+    .map(t => ({ m: (t.posted_on || '').slice(0, 7), v: Math.abs(Number(t.amount)) })).sort((a, b) => a.m.localeCompare(b.m));
+  if (!cobr.length) return 1;
+  const ate = cobr.filter(c => c.m <= ym), c = ate.length ? ate[ate.length - 1] : cobr[0];
+  return c.v / base;
 };
+const skPlanRafa = (plan, ym) => {
+  const v = (Number(plan && plan.filho) || 0) * skPlanScale(plan, ym); if (!v || ym < (plan.desde || SK_MIN_YM)) return [];
+  return [{ id: 'plano-rafa', name: 'Plano de saúde (parte do Rafa)', amount: Math.round(v * 100) / 100, cat: 'Saúde', plano: true }];
+};
+const skPlanEla = (plan, ym) => (skElaIn(plan, ym) && ym >= (plan.desde || SK_MIN_YM) ? Math.round((Number(plan.ela) || 0) * skPlanScale(plan, ym) * 100) / 100 : 0);
 const skFixed = (ym) => db.all('tempo_expenses').filter(r => r.month === ym && r.kind === 'out' && r.cat === SK_FIXED_KEY && r.status !== 'Não teve');
 const skIsPlan = (r) => /plano/i.test(r.name || '');
 const skElaIn = (plan, ym) => !plan.elaSaiEm || ym < plan.elaSaiEm;
@@ -53,16 +63,18 @@ const skCalc = (d, ym, noAdj) => {
   const planRows = fixed.filter(skIsPlan), other = fixed.filter(r => !skIsPlan(r));
   const planTotal = planRows.reduce((t, r) => t + (Number(r.amount) || 0), 0);
   const otherSum = other.reduce((t, r) => t + (Number(r.amount) || 0), 0) + m.extras.reduce((t, l) => t + (Number(l.amount) || 0), 0);
-  const amandaPlan = planRows.length ? (skElaIn(plan, ym) ? (Number(plan.ela) || 0) : 0) + (Number(plan.filho) || 0) / 2 : 0;
-  const auto = [...skTxns(ym), ...skPlanRafa(plan, ym)];
+  const planEla = skPlanEla(plan, ym);   // o plano dela é só dela: ela paga integral, sem dividir por 2
+  const amandaPlan = planEla + (planRows.length ? (Number(plan.filho) || 0) / 2 : 0);
+  const auto = [...skTxns(ym), ...(planRows.length ? [] : skPlanRafa(plan, ym))];
   const autoSum = auto.reduce((t, x) => t + x.amount, 0);
   const total = planTotal + otherSum + autoSum;
   const due = (otherSum + autoSum) / 2 + amandaPlan;            // parte da Amanda no mês: metade de tudo do Rafa
   const received = noAdj ? skRecRaw(d, ym) : skRecAdj(d, ym);   // sem valor digitado vale o que a Amanda mandou ("Amanda - Contas Rafa" em Despesas); mês pulado e depois quase o dobro: média
-  return { m, fixed, auto, planRows, planTotal, otherSum, amandaPlan, total, due, received, diff: received - due, has: fixed.length > 0 || auto.length > 0 || m.extras.length > 0 || received > 0 };
+  return { m, fixed, auto, planRows, planEla, planTotal, otherSum, amandaPlan, total, due, received, diff: received - due, has: fixed.length > 0 || auto.length > 0 || m.extras.length > 0 || received > 0 };
 };
-const skMonths = (d) => [...new Set([...Object.keys(d.months), ...db.all('tempo_expenses').filter(r => r.cat === SK_FIXED_KEY).map(r => r.month), ...(typeof BANK !== 'undefined' && BANK.every || []).filter(t => t.tag === 'Rafa' && t.flow === 'out').map(t => (t.posted_on || '').slice(0, 7)).filter(m => m >= SK_MIN_YM)])].filter(Boolean).sort().reverse();
-const skBalance = (d) => skMonths(d).reduce((t, ym) => { const c = skCalc(d, ym); return c.fixed.length || c.auto.length || c.m.extras.length ? t + c.diff : t; }, 0);
+const skRange = (de) => { const a = [], hoje = new Date().toISOString().slice(0, 7); for (let m = de < SK_MIN_YM ? SK_MIN_YM : de; m <= hoje; m = skYmAdd(m, 1)) a.push(m); return a; };
+const skMonths = (d) => [...new Set([...(Number(d.plan && d.plan.filho) ? skRange(d.plan.desde || SK_MIN_YM) : []), ...Object.keys(d.months), ...db.all('tempo_expenses').filter(r => r.cat === SK_FIXED_KEY).map(r => r.month), ...(typeof BANK !== 'undefined' && BANK.every || []).filter(t => t.tag === 'Rafa' && t.flow === 'out').map(t => (t.posted_on || '').slice(0, 7)).filter(m => m >= SK_MIN_YM)])].filter(Boolean).sort().reverse();
+const skBalance = (d) => skMonths(d).filter(ym => ym <= new Date().toISOString().slice(0, 7)).reduce((t, ym) => { const c = skCalc(d, ym); return c.fixed.length || c.auto.length || c.m.extras.length ? t + c.diff : t; }, 0);
 const skStatus = (diff) => {
   if (Math.abs(diff) < 0.005) return '<span class="tag tg">Quites</span>';
   return diff > 0 ? `<span class="tag tg">Você deve a Amanda ${fmtMoney(diff)}</span>` : `<span class="tag tg">Amanda deve a você ${fmtMoney(-diff)}</span>`;
@@ -77,6 +89,7 @@ VIEWS.shared = () => {
   const plan = d.plan;
   const fixedRows = c.fixed.map(r => `<tr><td>${esc(r.name)}${skIsPlan(r) ? ' <span class="small muted">· plano</span>' : ''}</td><td class="mono" style="text-align:right">${fmtMoney(r.amount)}</td><td class="small muted">Fixo · editar em Despesas</td><td></td></tr>`).join('');
   const autoRows = c.auto.map(x => `<tr><td>${esc(x.name)}${x.cat ? ` <span class="small muted">· ${esc(x.cat)}</span>` : ''}</td><td class="mono" style="text-align:right">${fmtMoney(x.amount)}</td><td class="small muted" data-tip="${x.plano ? 'Valor da parte do Rafa no plano, definido em Configuração do plano de saúde' : 'Transação do extrato com a etiqueta Rafa'}">${x.plano ? 'Plano · parte do Rafa' : `Extrato · ${fmtDate(x.date).slice(0, 5)}`}</td><td></td></tr>`).join('');
+  const elaRow = c.planEla ? `<tr><td>Plano de saúde (parte da Amanda) <span class="small muted">· Saúde</span></td><td class="mono" style="text-align:right">${fmtMoney(c.planEla)}</td><td class="small muted" data-tip="Você paga o plano dela e ela devolve. Não divide por 2: entra inteiro na parte da Amanda e não conta nos gastos do filho.">Plano · só dela (integral)</td><td></td></tr>` : '';
   const extraRows = c.m.extras.map(l => `<tr>
     <td><input class="input" value="${esc(l.name || '')}" placeholder="Ex.: dentista, remédio" data-on="sk-extra" data-id="${l.id}" data-k="name"></td>
     <td><input class="input" type="number" step="0.01" min="0" value="${l.amount || ''}" style="text-align:right" data-on="sk-extra" data-id="${l.id}" data-k="amount"></td>
@@ -100,7 +113,7 @@ VIEWS.shared = () => {
     </div>
     <div class="row" style="gap:24px;flex-wrap:wrap;margin-bottom:16px">
       <div><div class="small muted">Gastos do filho no mês</div><div class="mono">${fmtMoney(c.total)}</div></div>
-      <div><div class="small muted">Parte da Amanda</div><div class="mono">${fmtMoney(c.due)}</div><div class="small muted">${c.planRows.length ? `inclui plano ${fmtMoney(c.amandaPlan)}` : ''}</div></div>
+      <div><div class="small muted">Parte da Amanda</div><div class="mono">${fmtMoney(c.due)}</div><div class="small muted">${c.amandaPlan ? `inclui plano ${fmtMoney(c.amandaPlan)}` : ''}</div></div>
       <div><div class="small muted">Amanda transferiu</div><div class="mono">${fmtMoney(c.received)}</div></div>
       <div><div class="small muted">Neste mês</div>${skStatus(c.diff)}</div>
     </div>
@@ -109,7 +122,7 @@ VIEWS.shared = () => {
     <details style="margin:12px 0"><summary class="small">Configuração do plano de saúde</summary><div style="margin-top:10px">${planBox}</div></details>
     <div class="row" style="gap:8px;margin:12px 0"><button class="btn sm" data-act="sk-add">+ Extra do mês</button></div>
     <table class="grid"><thead><tr><th>Descrição</th><th style="text-align:right">Valor pago</th><th>Origem</th><th></th></tr></thead>
-      <tbody>${(fixedRows + autoRows + extraRows) || '<tr><td colspan="4" class="small muted">Nenhum gasto do Rafa neste mês. Entram sozinhos os do extrato com a etiqueta Rafa; fixos em Despesas com a subcategoria Filho; extras aqui.</td></tr>'}</tbody></table>
+      <tbody>${(fixedRows + autoRows + elaRow + extraRows) || '<tr><td colspan="4" class="small muted">Nenhum gasto do Rafa neste mês. Entram sozinhos os do extrato com a etiqueta Rafa; fixos em Despesas com a subcategoria Filho; extras aqui.</td></tr>'}</tbody></table>
     <h3 style="margin:22px 0 8px">Histórico mensal</h3>
     <table class="grid"><thead><tr><th>Mês</th><th style="text-align:right">Gastos</th><th style="text-align:right">Parte da Amanda</th><th style="text-align:right">Recebido</th><th>Diferença</th></tr></thead>
       <tbody>${months || '<tr><td colspan="5" class="small muted">Sem histórico ainda.</td></tr>'}</tbody></table>`;

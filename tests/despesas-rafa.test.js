@@ -27,3 +27,13 @@ test('pagamento normal não é dividido', () => {
   const d = { months: { '2026-08': { received: 1000, extras: [] }, '2026-09': { received: 1000, extras: [] } }, plan: {} };
   assert.equal(m.skCalc(d, '2026-09').received, 1000);
 });
+test('plano: Rafa todo mês (dividido) e Amanda integral, acompanhando a cobrança da SulAmérica', () => {
+  const sul = (d, v) => tx(d, v, { tag: null, counterpart: 'SUL AMERICA', category: 'Saúde' });
+  const m = setup([sul('2026-02-02', 2370.94), sul('2026-10-01', 2651.41)]);
+  const plan = { filho: 566.32, ela: 1042.55, base: 2651.41, desde: '2026-01' };
+  const out = m.skCalc({ months: {}, plan }, '2026-10');        // mês de referência: valores cheios
+  assert.equal(Math.round(out.total * 100), 56632); assert.equal(Math.round(out.due * 100), Math.round((566.32 / 2 + 1042.55) * 100));
+  const fev = m.skCalc({ months: {}, plan }, '2026-03');       // sem pagamento em março: vale a cobrança de fevereiro
+  assert.equal(Math.round(fev.total * 100), Math.round(566.32 * 2370.94 / 2651.41 * 100));
+  assert.ok(fev.planEla > 900 && fev.planEla < 1042);
+});
