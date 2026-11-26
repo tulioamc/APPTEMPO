@@ -240,7 +240,7 @@ ACTIONS['etapa-fim'] = (el) => {
     const r = sbPintar(db.get('tempo_time_entries', a.id) || a, [{ a: iniMs, b: fimMs }], sub.id, `Etapa “${sub.name}” marcada como terminada`);
     db.setSetting('etapaMarca', { ...(db.setting('etapaMarca', {}) || {}), [a.id]: new Date(fimMs).toISOString() });
     const p = prox ? sbSubDe(mae, prox) : null;
-    sbGuardaEtapaAtual(a.id, p ? p.id : null);
+    sbGuardaEtapaAtual(a.id, p ? p.id : null, fimMs);
     ly.close(); db.emit();
     const desfazer = () => {
       if (r) r.desfazer();

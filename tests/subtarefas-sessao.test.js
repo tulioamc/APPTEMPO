@@ -122,7 +122,7 @@ test('terminei às hh:mm (antes de agora): a sessão continua inteira e só a pa
   const agora = new Date(); const horaFim = `${String(Math.max(0, agora.getHours() - 1)).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`;
   const m = load(['js/store.js', 'js/domain.js', 'js/activity.js', 'js/range.js', 'js/sub-programas.js', 'js/subtarefas-sessao.js'], ['db', 'ACTIONS', 'sbSubMs'],
     { ACTIONS: {}, CHANGES: {}, VIEWS: {}, S: {}, toast() {}, render() {}, icon: () => '', $: () => null, $$: () => [], tkProjectLabel: (p) => p.name,
-      openLayer: () => { const v = { '#et-nome': 'Etapa 1', '#et-prox': '', '#et-fim': horaFim }; ly = { close() {}, box: { querySelector: (q) => (q in v ? { value: v[q] } : null), addEventListener: (ev, fn) => { if (ev === 'click') ly.click = fn; } } }; return ly; } });
+      openLayer: () => { const v = { '#et-nome': 'Etapa 1', '#et-prox': 'Etapa 2', '#et-fim': horaFim }; ly = { close() {}, box: { querySelector: (q) => (q in v ? { value: v[q] } : null), addEventListener: (ev, fn) => { if (ev === 'click') ly.click = fn; } } }; return ly; } });
   m.db.data = m.db.empty();
   m.db.insert('tempo_projects', { id: 'p', name: 'P' }, true); m.db.insert('tempo_tasks', { id: 'mae', project_id: 'p', parent_id: null, name: 'M' }, true);
   const ini = Date.now() - 180 * MIN;

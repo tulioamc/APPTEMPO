@@ -58,8 +58,45 @@ function sbAuto(e, now = Date.now()) {
 /* Divisão que vale: a automática por programa, com o que o usuário marcou à mão por cima ("Sem subtarefa" também vale). */
 function sbDivsEf(e, now = Date.now()) {
   const man = sbDivs(e.id), auto = sbAuto(e, now);
-  if (!auto.length) return man;
-  return [...sbAplica(auto, man.map(d => ({ a: d.a, b: d.b })), null), ...man].sort((p, q) => p.a - q.a);
+  const base = !auto.length ? man : [...sbAplica(auto, man.map(d => ({ a: d.a, b: d.b })), null), ...man].sort((p, q) => p.a - q.a);
+  return [...base, ...sbFalta(e, base, now)].sort((p, q) => p.a - q.a);
+}
+/* Etapa corrente (V2.06.190): o tempo trabalhado que nenhum programa nem marcação à mão cobre vai para a subtarefa "atual" daquele momento.
+   Só tem uma subtarefa → é ela, até você alternar. Alternar = clicar em "Tornar atual" numa subtarefa ou "Terminei uma etapa" (próxima).
+   Histórico das trocas por tarefa mãe em tempo_settings 'etapaHist' = { tarefaMãeId: [{ t (ms), sub }] }; o que veio antes da troca fica com a anterior. */
+const sbHist = (maeId) => ((db.setting('etapaHist', {}) || {})[maeId] || []).slice().sort((p, q) => p.t - q.t);
+function sbCorrenteEm(maeId, subs, t) {
+  const h = sbHist(maeId); let id = null;
+  if (!h.length) id = subs.length === 1 ? subs[0].id : null;
+  else h.forEach(x => { if (x.t <= t) id = x.sub; });
+  if (id && !subs.some(x => x.id === id)) id = subs.length === 1 ? subs[0].id : null;
+  return id;
+}
+function sbFalta(e, cobertas, now) {
+  const mae = etapaMae(e); if (!mae) return [];
+  const subs = subtasksOf(mae.id); if (!subs.length || subs.some(x => x.id === e.task_id)) return [];
+  const pts = sbHist(mae.id).map(x => x.t); const cov = actMergeIntervals(cobertas.map(d => ({ a: d.a, b: d.b })));
+  const out = [];
+  sbWork(e, now).forEach(w => {
+    let livres = [w];
+    cov.forEach(c => { livres = livres.flatMap(p => (c.b <= p.a || c.a >= p.b) ? [p] : [...(c.a > p.a ? [{ a: p.a, b: c.a }] : []), ...(c.b < p.b ? [{ a: c.b, b: p.b }] : [])]); });
+    livres.forEach(p => {
+      const cortes = [p.a, ...pts.filter(t => t > p.a && t < p.b), p.b];
+      for (let i = 0; i < cortes.length - 1; i++) {
+        const a = cortes[i], b = cortes[i + 1], sub = sbCorrenteEm(mae.id, subs, a); if (!sub || b <= a) continue;
+        const u = out[out.length - 1]; if (u && u.sub === sub && a - u.b <= 1000) u.b = b; else out.push({ a, b, sub });
+      }
+    });
+  });
+  return out;
+}
+/* Troca a etapa corrente a partir de agora (guarda o ponto de partida quando é a primeira troca). */
+function sbTrocaCorrente(e, subId, quando) {
+  const mae = etapaMae(e); if (!mae || !subId) return;
+  const subs = subtasksOf(mae.id), m = { ...(db.setting('etapaHist', {}) || {}) }; const h = (m[mae.id] || []).slice();
+  if (!h.length) { const ant = sbCorrenteEm(mae.id, subs, 0); if (ant) h.push({ t: 0, sub: ant }); }
+  const ult = h[h.length - 1]; if (ult && ult.sub === subId) return;
+  h.push({ t: quando || Date.now(), sub: subId }); m[mae.id] = h; db.setSetting('etapaHist', m);
 }
 /* Tempo trabalhado de uma subtarefa dentro de sessões (soma em todas as sessões da tarefa). */
 function sbSubMs(subId, now = Date.now()) {
@@ -105,8 +142,9 @@ function sbNormaliza(segs) {
 function sbSubDe(mae, nome) {
   nome = String(nome || '').trim(); if (!nome) return null;
   const subs = subtasksOf(mae.id);
-  return subs.find(s => s.name.trim().toLowerCase() === nome.toLowerCase())
-    || db.insert('tempo_tasks', { project_id: mae.project_id, parent_id: mae.id, name: nome, status_id: mae.status_id, status_inherited: true, deadline: null, notes: 'Criada na sessão', order: subs.length, work_type_id: null, owner: mae.owner || null }, true);
+  const ja = subs.find(s => s.name.trim().toLowerCase() === nome.toLowerCase()); if (ja) return ja;
+  if (subs.length === 1 && !sbHist(mae.id).length) { const m = { ...(db.setting('etapaHist', {}) || {}) }; m[mae.id] = [{ t: 0, sub: subs[0].id }]; db.setSetting('etapaHist', m); }   // a única até agora continua sendo a atual
+  return db.insert('tempo_tasks', { project_id: mae.project_id, parent_id: mae.id, name: nome, status_id: mae.status_id, status_inherited: true, deadline: null, notes: 'Criada na sessão', order: subs.length, work_type_id: null, owner: mae.owner || null }, true);
 }
 
 /* O motor: marca os cortes (ms) com a subtarefa de destino (mae.id = "Sem subtarefa", tira a marcação). O tempo NÃO sai da sessão.
@@ -311,7 +349,8 @@ function sbSecaoHTML(e) {
   const atual = atualId ? subs.find(s => s.id === atualId) : null;
   const btns = `${aberta ? `<button type="button" class="btn sm" data-x="sb-etapa" title="Marca o fim de uma etapa: diz qual terminou e qual é a próxima. O tempo desde a última marca fica marcado como a etapa que terminou. Continua na sessão.">${icon('flag')} Terminei uma etapa</button>` : ''}<button type="button" class="btn sm" data-x="sb-nova" title="Cria uma subtarefa nova de ${esc(mae.name)} sem mexer no tempo">${icon('plus')} Subtarefa</button>`;
   const criar = S.criando ? `<div class="sb-criar"><input type="text" class="input sm" data-sb="nome" placeholder="Nome da subtarefa" autocomplete="off" aria-label="Nome da nova subtarefa"><button type="button" class="btn sm primary" data-x="sb-criar" title="Criar a subtarefa (Enter)">Criar</button><button type="button" class="btn sm ghost" data-x="sb-nova" title="Cancelar">Cancelar</button></div>` : '';
-  const agora = atual && aberta ? `<div class="sb-atual"><span class="small muted">Etapa atual</span><b>${esc(atual.name)}</b><span class="small muted">desde ${fmtTime(etapaInicio(e))}</span></div>` : '';
+  const corId = sbCorrenteEm(mae.id, subs, Date.now()), cor = subs.find(x => x.id === corId);
+  const agora = cor && aberta ? `<div class="sb-atual" data-tip="Etapa atual: o tempo que nenhum programa nem marcação cobre vai para ela, até você alternar (botão “Tornar atual” numa subtarefa) ou usar “Terminei uma etapa”."><span class="small muted">Etapa atual</span><b>${esc(cor.name)}</b>${atual && atual.id === cor.id ? `<span class="small muted">desde ${fmtTime(etapaInicio(e))}</span>` : ''}</div>` : '';
   if (!J) return `<div class="act-sec sb-sec">${cab(btns)}${criar}${agora}<div class="small muted">A sessão ainda não tem tempo registrado.</div></div>`;
   if (fechado) { const marc = sbDivsEf(e).filter(d => subs.some(x => x.id === d.sub)); const t = sbLen(sbInter(sbWork(e), marc)); return `<div class="act-sec sb-sec is-fechado">${cab(btns)}<div class="small muted">${subs.length} ${subs.length === 1 ? 'subtarefa' : 'subtarefas'}${t ? ` · ${fmtDur(t)} marcados nesta sessão` : ''}</div></div>`; }
 
@@ -334,7 +373,7 @@ function sbSecaoHTML(e) {
  const faixa = !subs.length ? '' : `<div class="act-strip sb-strip" ${juntar ? '' : 'data-mode="sub" data-ent="' + esc(e.id) + '" data-t0="' + J.a + '" data-span="' + J.span + '"'} style="position:relative" aria-label="Subtarefas da sessão">${barras}</div>`;
 
   const linha = (key, nome, ms, sub) => `<div class="sb-item${S.dest === key ? ' is-pick' : ''}" style="--tb:${sbCor(mae, key)}">
-      <div class="sb-item-l"><button type="button" class="sb-pick" data-g="${esc(key)}" data-x="sb-dest" data-k="${esc(key)}" data-tip="${esc([`Clique para escolher ${nome} para o trecho`, ...(() => { const l = sbAppsDaChave(fatias, key); return l.length ? [key === 'sem' ? 'Programas sem subtarefa:' : 'Programas nesta subtarefa:', ...l] : [key === 'sem' ? 'Nenhum programa sem subtarefa nesta sessão.' : '']; })()].filter(Boolean).join('\n'))}"><i></i><span class="sb-n">${esc(nome)}</span></button>${sub ? `<button type="button" class="btn sm sb-detbtn" data-x="sb-det" data-k="${esc(key)}" title="Abre a janela da subtarefa: tempo registrado, programas, renomear e apagar">Detalhes</button>` : ''}<span class="mono small sb-t" title="Tempo desta subtarefa marcado nesta sessão">${ms ? fmtDur(ms) : '—'}</span></div>
+      <div class="sb-item-l"><button type="button" class="sb-pick" data-g="${esc(key)}" data-x="sb-dest" data-k="${esc(key)}" data-tip="${esc([`Clique para escolher ${nome} para o trecho`, ...(() => { const l = sbAppsDaChave(fatias, key); return l.length ? [key === 'sem' ? 'Programas sem subtarefa:' : 'Programas nesta subtarefa:', ...l] : [key === 'sem' ? 'Nenhum programa sem subtarefa nesta sessão.' : '']; })()].filter(Boolean).join('\n'))}"><i></i><span class="sb-n">${esc(nome)}</span></button>${sub && aberta ? (key === corId ? `<span class="small muted sb-cur" data-tip="Etapa atual: o tempo sem programa nem marcação vai para ela">● atual</span>` : `<button type="button" class="btn sm ghost sb-detbtn" data-x="sb-atual" data-k="${esc(key)}" title="Torna esta a etapa atual: a partir de agora, o tempo sem programa nem marcação vai para ela">Tornar atual</button>`) : ''}${sub ? `<button type="button" class="btn sm sb-detbtn" data-x="sb-det" data-k="${esc(key)}" title="Abre a janela da subtarefa: tempo registrado, programas, renomear e apagar">Detalhes</button>` : ''}<span class="mono small sb-t" title="Tempo desta subtarefa marcado nesta sessão">${ms ? fmtDur(ms) : '—'}</span></div>
     </div>`;
   const chips = `<div class="sb-lista"><div class="sb-lista-h lbl">Subtarefas</div>${linha('sem', 'Sem subtarefa', msPor.sem || 0, false)}${subs.map(x => linha(x.id, x.name, msPor[x.id] || 0, true)).join('')}</div>`;
 
@@ -433,6 +472,7 @@ function sbClick(ev, ctx) {
   if (x === 'sb-fold') { db.setSetting('sbFechado', !db.setting('sbFechado', false)); sbRefresh(); return true; }
   if (x === 'sb-det') { sbDetalhe(ctx, b.dataset.k); return true; }
   if (x === 'sb-etapa') { ACTIONS['etapa-fim']({ dataset: { id: e.id } }); return true; }
+  if (x === 'sb-atual') { sbTrocaCorrente(e, b.dataset.k); db.emit(); ctx.refresh(); toast('Etapa atual trocada: o tempo sem programa vai para ela a partir de agora'); return true; }
   if (x === 'sb-dest') { S.dest = S.dest === b.dataset.k ? '' : b.dataset.k; sbRefresh(); return true; }
   if (x === 'sb-rm') { S.ranges.splice(Number(b.dataset.i), 1); sbRefresh(); return true; }
   if (x === 'sb-limpar') { S.ranges = []; S.app = ''; sbRefresh(); return true; }
@@ -625,10 +665,11 @@ function sbMover(ctx) {
 
 /* ---------- etapa atual e fim da sessão ---------- */
 function sbEtapaAtual(entryId) { const id = (db.setting('etapaAtual', {}) || {})[entryId]; return id ? db.get('tempo_tasks', id) : null; }
-function sbGuardaEtapaAtual(entryId, subId) {
+function sbGuardaEtapaAtual(entryId, subId, quando) {
   const m = { ...(db.setting('etapaAtual', {}) || {}) };
   if (subId) m[entryId] = subId; else delete m[entryId];
   db.setSetting('etapaAtual', m);
+  if (subId) { const e = db.get('tempo_time_entries', entryId); if (e) sbTrocaCorrente(e, subId, quando); }
 }
 /* Ao encerrar: a etapa que estava rodando fecha sozinha, até o fim da sessão (com "Desfazer"). */
 function etapaFechaAoEncerrar(entryId) {
