@@ -121,7 +121,8 @@ create table if not exists tempo_time_entries (
   created_at timestamptz not null default now(), updated_at timestamptz
 );
 -- no máximo uma sessão ativa/pausada por usuário
-create unique index if not exists one_active_entry on tempo_time_entries(user_id) where state in ('running','paused');
+-- one_active_entry removido (V2.07.02): a troca de projeto deixa a sessão antiga aberta e parada; o app garante que só uma conta tempo.
+drop index if exists one_active_entry;
 
 create table if not exists tempo_payments (
   id uuid primary key default gen_random_uuid(),

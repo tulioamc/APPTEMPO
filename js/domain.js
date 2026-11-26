@@ -241,6 +241,7 @@ function setTaskStatus(t, statusId) {
   if (statusCat(statusId) === 'active') { reopenProjectIfDone(t.project_id); iniciarProjetoSeAFazer(t.project_id); }
   if (statusCat(statusId) === 'done') startDependentTasks(t);
   db.emit();
+  if (statusCat(statusId) === 'done' && typeof perguntaFimProjeto === 'function') setTimeout(() => perguntaFimProjeto(t.project_id), 0);
 }
 /* Fluxo pré-montado de vídeo: cada etapa com seu responsável e as dependências entre elas. */
 const VIDEO_FLOW = [

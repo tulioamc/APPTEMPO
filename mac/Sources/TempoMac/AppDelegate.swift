@@ -337,10 +337,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         case "salvar": salvar.pasta = d["pasta"] as? String; return   // pasta do projeto atual, para o Salvar como
         case "nfReler": notas.reler(); return
         case "aliceProcurar": handleAlice(d); return
+        case "print": handlePrint(); return
         default: break
         }
         guard let title = d["title"] as? String, let body = d["body"] as? String else { return }
         showNotice(title, body)
+    }
+
+    /// Print da página do app (pedido pela janelinha de ajustes, que se esconde antes). Devolve um JPEG em window.TempoPrint.
+    private func handlePrint() {
+        web.takeSnapshot(with: nil) { [weak self] img, _ in
+            guard let self = self else { return }
+            var js = "window.TempoPrint && window.TempoPrint(null)"
+            if let img = img, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+               let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.85]) {
+                js = "window.TempoPrint && window.TempoPrint('data:image/jpeg;base64,\(jpg.base64EncodedString())')"
+            }
+            self.web.evaluateJavaScript(js, completionHandler: nil)
+        }
     }
 
     /// Avisos saem pelo próprio macOS em nome do Tempo (ícone do Tempo; clicar traz o app para frente).

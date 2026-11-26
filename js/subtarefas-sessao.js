@@ -538,7 +538,7 @@ function sbDetalheDados(subId) {
   return { regs, total, apps, sessoes: new Set(regs.map(r => r.sessao.id)).size };
 }
 /* Programas usados nas sessões da tarefa (ainda não associados a esta subtarefa), do que mais ao que menos tempo: as sugestões. */
-function sbSugestoesDe(sub) {
+function sbSugestoesDe(sub, sessaoId) {
   const mae = db.get('tempo_tasks', sub.parent_id); if (!mae || typeof actList !== 'function') return [];
   const subs = subtasksOf(mae.id); const meus = subProgsDe(sub.id);
   const por = {}; const now = Date.now();
@@ -549,16 +549,27 @@ function sbSugestoesDe(sub) {
       const nome = subCanon(r); if (!nome) return;
       const ms = sbLen(sbInter(work, [{ a: SB_T(r.from), b: SB_T(r.to) }])); if (ms <= 0) return;
       const site = typeof isChromeSite === 'function' && isChromeSite(r.app, r.doc);
-      const k = subChave(nome); por[k] = por[k] || { nome, ms: 0, site }; por[k].ms += ms;
+      const k = subChave(nome); por[k] = por[k] || { nome, ms: 0, sessaoMs: 0, site }; por[k].ms += ms;
+      if (sessaoId && e.id === sessaoId) por[k].sessaoMs += ms;
     });
   });
   return Object.values(por).filter(x => x.ms >= 60e3 && !meus.some(n => subMesmo(n, x.nome))).sort((p, q) => q.ms - p.ms).slice(0, 10)
     .map(x => ({ ...x, em: subs.find(o => o.id !== sub.id && subProgsDe(o.id).some(n => subMesmo(n, x.nome))) || null }));
 }
-function sbDetalheHTML(sub) {
+/* Trechos de um programa/site (pelo nome da sugestão) dentro de uma sessão, só na parte trabalhada. */
+function sbTrechosDoNome(e, nome) {
+  const work = sbWork(e); const out = [];
+  actList(e.id).forEach(r => {
+    if (typeof pausaRec === 'function' && pausaRec(r) && !(typeof actWaTrabalho === 'function' && actWaTrabalho(r))) return;
+    const n = subCanon(r); if (!n || !subMesmo(n, nome)) return;
+    out.push(...sbInter(work, [{ a: SB_T(r.from), b: SB_T(r.to) }]));
+  });
+  return actMergeIntervals(out);
+}
+function sbDetalheHTML(sub, sessaoId) {
   const D = sbDetalheDados(sub.id), mae = db.get('tempo_tasks', sub.parent_id);
   const ps = subProgsDe(sub.id); const padrao = subProgsPadrao(sub.id);
-  const maxApp = D.apps.length ? D.apps[0][1] : 1; const sug = sbSugestoesDe(sub);
+  const maxApp = D.apps.length ? D.apps[0][1] : 1; const sug = sbSugestoesDe(sub, sessaoId);
   const dia = (ms) => new Date(ms).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
   const tarefaDe = (e) => db.get('tempo_tasks', e.task_id)?.name || '';
   return `<div class="dh"><h2>Subtarefa${mae ? ` <span class="faint">de ${esc(mae.name)}</span>` : ''}</h2><span class="grow"></span><button class="btn icon ghost" data-sbd="fechar" aria-label="Fechar" title="Fechar">${icon('x')}</button></div>
@@ -571,14 +582,15 @@ function sbDetalheHTML(sub) {
       <div class="sp-chips">${ps.map(n => `<span class="sp-chip" ${padrao.includes(n) ? `data-tip="Automático: tudo de ${esc(n)} vai para esta subtarefa. Clique no × para tirar."` : ''}>${esc(n)}<button type="button" data-sbd="tira" data-n="${esc(n)}" aria-label="Tirar ${esc(n)}" title="Tirar ${esc(n)} desta subtarefa">×</button></span>`).join('') || '<span class="small muted">Nenhum</span>'}
       <select class="sp-add" data-sbd="add" aria-label="Associar um programa ou site" title="Associar um programa ou site a esta subtarefa"><option value="">+ Associar…</option>${subOpcoesHTML(sub.project_id, ps)}</select></div>
       <div class="small muted" style="margin-top:6px">Associar aplica na hora: o tempo do programa ou site nas sessões da tarefa passa a contar aqui (sem tirar da sessão). O que você marcar à mão na barra vale mais; se passar para outra subtarefa, vale a nova.</div></div>
-    ${sug.length ? `<div class="field"><label>Sugestões <span class="faint">(usados nas sessões desta tarefa e ainda não associados)</span></label><div class="sbd-sugs">${sug.map(x => `<div class="sbd-sug-l"><span class="sbd-an">${esc(x.nome)}${x.site ? ' <span class="faint small">site</span>' : ''}</span><b class="mono small" data-tip="Tempo nas sessões desta tarefa">${fmtDur(x.ms)}</b><span class="small muted sbd-sug-em">${x.em ? 'em ' + esc(x.em.name) : ''}</span><button type="button" class="btn sm" data-sbd="assoc" data-n="${esc(x.nome)}" title="${x.em ? `Hoje ${esc(x.nome)} está em “${esc(x.em.name)}”. Se associar aqui, vale esta subtarefa.` : `Associar ${esc(x.nome)} a esta subtarefa: o tempo dele nas sessões já passa a contar aqui`}">Associar</button></div>`).join('')}</div></div>` : ''}
+    ${sug.length ? `<div class="field"><label>Sugestões <span class="faint">(usados nas sessões desta tarefa e ainda não associados)</span></label><div class="sbd-sugs${sessaoId ? ' com-sessao' : ''}">${sessaoId ? `<div class="sbd-sug-l sbd-sug-h"><span></span><span class="small muted" data-tip="Tempo nesta sessão">Sessão</span><span class="small muted" data-tip="Tempo somando todas as sessões da tarefa">Tarefa</span><span></span><span></span></div>` : ''}${sug.map(x => `<div class="sbd-sug-l"><span class="sbd-an">${esc(x.nome)}${x.site ? ' <span class="faint small">site</span>' : ''}${x.em ? ` <span class="small muted">em ${esc(x.em.name)}</span>` : ''}</span>${sessaoId ? `<b class="mono small" data-tip="Tempo de ${esc(x.nome)} nesta sessão">${x.sessaoMs ? fmtDur(x.sessaoMs) : '—'}</b>` : ''}<b class="mono small" data-tip="Tempo de ${esc(x.nome)} em todas as sessões desta tarefa">${fmtDur(x.ms)}</b>${sessaoId ? `<button type="button" class="btn sm" data-sbd="assoc-sessao" data-n="${esc(x.nome)}" ${x.sessaoMs ? '' : 'disabled'} title="Marca só o tempo de ${esc(x.nome)} desta sessão nesta subtarefa. As outras sessões e os próximos registros não mudam.">Associar nesta sessão</button>` : ''}<button type="button" class="btn sm" data-sbd="assoc" data-n="${esc(x.nome)}" title="${x.em ? `Hoje ${esc(x.nome)} está em “${esc(x.em.name)}”. Se associar aqui, vale esta subtarefa em todas as sessões da tarefa.` : `Associar ${esc(x.nome)} a esta subtarefa em todas as sessões da tarefa (e nos próximos registros)`}">${sessaoId ? 'Em todas as sessões' : 'Associar'}</button></div>`).join('')}</div></div>` : ''}
     <div><div class="lbl">Registros</div>${D.regs.length ? `<div class="sbd-regs">${D.regs.slice(0, 40).map(r => `<div class="sbd-reg"><span class="small">${esc(dia(r.a))}</span><span class="mono small muted">${sbHM(r.a)}–${sbHM(r.b)}</span><span class="small muted sbd-rn">${r.propria ? 'sessão própria' : 'dentro de “' + esc(tarefaDe(r.sessao) || 'sessão') + '”'}</span><b class="mono small">${fmtDur(r.ms)}</b></div>`).join('')}${D.regs.length > 40 ? `<div class="small muted">+ ${D.regs.length - 40} trechos mais antigos</div>` : ''}</div>` : '<div class="small muted">Nenhum registro.</div>'}</div>
   </div>
   <div class="df"><button type="button" class="btn danger" data-sbd="apagar" title="Apaga a subtarefa. O tempo continua nas sessões. Dá para desfazer logo depois.">${icon('trash')} Apagar subtarefa</button><span class="grow"></span><button type="button" class="btn" data-sbd="fechar">Fechar</button></div>`;
 }
 function sbDetalhe(ctx, subId) {
   if (!db.get('tempo_tasks', subId)) return;
-  const ly = openLayer({ wide: true, render: () => { const t = db.get('tempo_tasks', subId); return t ? sbDetalheHTML(t) : ''; } });
+  const sessaoId = ctx?.e?.id || null;
+  const ly = openLayer({ wide: true, render: () => { const t = db.get('tempo_tasks', subId); return t ? sbDetalheHTML(t, sessaoId) : ''; } });
   const salvar = () => { const v = ly.box.querySelector('#sbd-nome')?.value; if (sbRenomeia(ctx, subId, v)) ly.refresh(); };
   ly.box.addEventListener('click', async (ev) => {
     const b = ev.target.closest('[data-sbd]'); if (!b) return; const k = b.dataset.sbd;
@@ -586,6 +598,16 @@ function sbDetalhe(ctx, subId) {
     else if (k === 'salvar') salvar();
     else if (k === 'tira') { subTira(subId, b.dataset.n); db.emit(); ly.refresh(); sbRefresh(); }
     else if (k === 'assoc') { subAssocia(subId, b.dataset.n); db.emit(); ly.refresh(); sbRefresh(); }
+    else if (k === 'assoc-sessao') {
+      const e = sessaoId && db.get('tempo_time_entries', sessaoId); if (!e) return;
+      const r = sbPintar(e, sbTrechosDoNome(e, b.dataset.n), subId, '');
+      if (!r) { toast('Nada desse programa nesta sessão'); return; }
+      const sub = db.get('tempo_tasks', subId);
+      const txt = `${fmtDur(r.ms)} de ${b.dataset.n} marcados como ${sub?.name || 'subtarefa'} nesta sessão.`;
+      sbLembraDesfazer(e.id, txt, r.desfazer);
+      ly.refresh(); sbRefresh();
+      toast(txt, { ms: 9000, actions: [{ label: 'Desfazer', run: () => { r.desfazer(); SB_ULT = null; ly.refresh(); sbRefresh(); toast('Desfeito'); } }] });
+    }
     else if (k === 'apagar') { if (await sbApaga(ctx, subId)) { ly.close(); ctx.refresh && ctx.refresh(); } }
   });
   ly.box.addEventListener('change', (ev) => {

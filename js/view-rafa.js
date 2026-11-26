@@ -269,18 +269,22 @@ VIEWS.rafa = () => {
 };
 
 /* Arrastar um dia para cima de outro troca quem fica com o Rafa nos dois (A ↔ T). Horário e nota ficam em cada dia. */
+/* Arrastar um dia para outro: troca as letras. Se o destino está vazio, a letra MUDA de dia (a origem fica vazia), nunca copia.
+   Grava o destino primeiro e a origem depois, conferindo no fim; tem "Desfazer". */
 function rafaTrocar(a, b) {
   if (!a || !b || a === b) return;
-  const ra = rafaDiaDe(a), rb = rafaDiaDe(b);
-  const wa = ra?.who || null, wb = rb?.who || null;
+  const wa = rafaDiaDe(a)?.who || null, wb = rafaDiaDe(b)?.who || null;
   if (wa === wb) return;
-  rafaMarcar(a, { who: wb }); rafaMarcar(b, { who: wa }); db.emit();
-  toast(`Trocado: ${fmtDate(a)} agora ${wb || 'sem marcação'}, ${fmtDate(b)} agora ${wa || 'sem marcação'}.`);
+  rafaMarcar(b, { who: wa }); rafaMarcar(a, { who: wb });
+  if ((rafaDiaDe(a)?.who || null) !== wb) { const r = rafaDiaDe(a); if (r) db.update('tempo_rafa_days', r.id, { who: wb, auto: false }, true); }
+  db.emit();
+  const desfazer = () => { rafaMarcar(a, { who: wa }); rafaMarcar(b, { who: wb }); db.emit(); toast('Desfeito'); };
+  toast(wb ? `Trocado: ${fmtDate(a)} agora ${wb}, ${fmtDate(b)} agora ${wa}.` : `Movido: ${wa} saiu de ${fmtDate(a)} e foi para ${fmtDate(b)}.`, { actions: [{ label: 'Desfazer', run: desfazer }] });
 }
 if (typeof document !== 'undefined' && document.addEventListener) {
   let rfDe = null;
   document.addEventListener('dragstart', (e) => { const c = e.target.closest && e.target.closest('[data-rf-drag]'); if (!c) return; rfDe = c.dataset.rfDrag; try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', rfDe); } catch (x) {} c.classList.add('rf-arrastando'); });
   document.addEventListener('dragover', (e) => { if (!rfDe) return; const c = e.target.closest && e.target.closest('[data-rf-drag]'); if (!c) return; e.preventDefault(); document.querySelectorAll('.rf-alvo').forEach(x => x !== c && x.classList.remove('rf-alvo')); c.classList.add('rf-alvo'); });
-  document.addEventListener('drop', (e) => { if (!rfDe) return; const c = e.target.closest && e.target.closest('[data-rf-drag]'); if (!c) return; e.preventDefault(); const de = rfDe; rfDe = null; rafaTrocar(de, c.dataset.rfDrag); });
+  document.addEventListener('drop', (e) => { if (!rfDe) return; const c = e.target.closest && e.target.closest('[data-rf-drag]'); if (!c) return; e.preventDefault(); e.stopPropagation(); const de = rfDe; rfDe = null; rafaTrocar(de, c.dataset.rfDrag); });
   document.addEventListener('dragend', () => { rfDe = null; document.querySelectorAll('.rf-alvo,.rf-arrastando').forEach(x => x.classList.remove('rf-alvo', 'rf-arrastando')); });
 }

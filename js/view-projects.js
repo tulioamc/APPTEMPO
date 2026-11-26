@@ -31,8 +31,15 @@ const PCOLS = {
   rate:     { label: 'R$/hora efetivo', ico: 'hash', w: 130, money: true, sort: p => effectiveRate(p) || 0, cell: p => { const r = effectiveRate(p); return r ? fmtMoney(r) : ''; } },
   ratewa:   { label: 'R$/hora c/ WhatsApp', ico: 'hash', w: 150, money: true, sort: p => effectiveRateComWa(p) || 0, cell: p => { const r = effectiveRateComWa(p); return r ? `<span data-tip="Orçamento ÷ (horas + WhatsApp fora do cronômetro)">${fmtMoney(r)}</span>` : ''; } },
   notes:    { label: 'Observação', ico: 'text', w: 260, sort: p => p.notes || '', cell: p => esc(p.notes || ''), cls: 'obs', edit: projEdit.notes },
-  created:  { label: 'Criado em', ico: 'cal', w: 110, sort: p => p.created_at, cell: p => fmtDate(p.created_at) }
+  created:  { label: 'Criado em', ico: 'cal', w: 110, sort: p => p.created_at, cell: p => fmtDate(p.created_at) },
+  doneAt:   { label: 'Concluído em', ico: 'cal', w: 120, sort: p => projConcluidoEm(p) || '', cell: p => { const d = projConcluidoEm(p); return d ? `<span data-tip="Dia em que o projeto foi marcado como concluído">${fmtDate(d)}</span>` : ''; } }
 };
+/* Quando o projeto foi concluído: última troca de status para Concluído (histórico); sem histórico, a data guardada. */
+function projConcluidoEm(p) {
+  if (statusCat(p.status_id) !== 'done') return null;
+  const h = db.where('tempo_status_history', x => x.entity === 'project' && x.entity_id === p.id && x.type === 'status' && statusCat(x.to) === 'done').sort((a, b) => b.at.localeCompare(a.at))[0];
+  return h?.at || p.completed_at || null;
+}
 const DEFAULT_PHIDDEN = ['hours','wa','est','rate','ratewa','created'];
 function deadlineCell(p) {
   if (!p.deadline) return '';
@@ -60,7 +67,7 @@ function filterProjects(f) {
     if (f.from && rd < f.from) return false;
     if (f.to && rd > f.to) return false;
     if (f.situ === 'active' && ['done', 'cancelled'].includes(statusCat(p.status_id))) return false;
-    if (f.situ === 'done' && statusCat(p.status_id) !== 'done') return false;
+    if ((f.situ === 'done' || f.situ === 'recentes') && statusCat(p.status_id) !== 'done') return false;
     if (f.situ === 'falta' && (statusCat(p.status_id) === 'cancelled' || statusCat(p.payment_status_id) !== 'open')) return false;
     return true;
   });
@@ -99,27 +106,54 @@ document.addEventListener('mousedown', (e) => {
 ACTIONS['flt-set'] = (el) => { fltState(el.dataset.ns)[el.dataset.k] = el.dataset.v; render(); };
 ACTIONS['flt-clear'] = (el) => { const f = fltState(el.dataset.ns); ['q', 'agency', 'client', 'status', 'pay', 'wt', 'year', 'month', 'from', 'to'].forEach(k => { if (k in f) f[k] = ''; }); render(); };
 
-const SITU_OPTS = [['all', 'Todos'], ['active', 'Ativos'], ['done', 'Concluídos'], ['falta', 'Falta pagamento']];
+const SITU_OPTS = [['all', 'Todos'], ['active', 'Ativos'], ['done', 'Concluídos'], ['recentes', 'Concluídos recentes'], ['falta', 'Falta pagamento']];
+const SITU_TIP = { all: 'Todos os projetos', active: 'Só os que não foram concluídos nem cancelados', done: 'Só os concluídos', recentes: 'Concluídos, do mais recente para o mais antigo, com o dia em que terminaram', falta: 'Projetos com pagamento em aberto' };
 VIEWS.projects = () => {
   const f = S.proj;
   const list = filterProjects(f);
   const views = [['table', 'Tabela', 'table'], ['board', 'Quadro', 'board'], ['list', 'Lista', 'list'], ['cal', 'Calendário', 'cal']];
   let body = '';
   if (!projects().length) body = `<div class="empty">${icon('folder')}<b>Nenhum projeto ainda</b><span>Cadastre um projeto ou importe sua base do Notion.</span><div class="row"><button class="btn primary" data-act="proj-new">${icon('plus')} Novo projeto</button><button class="btn" data-act="go" data-route="import">${icon('upload')} Importar do Notion</button></div></div>`;
+  else if (f.situ === 'recentes') body = projectRecentes(list);
   else if (f.view === 'table') body = projectTable(list);
   else if (f.view === 'board') body = projectBoard(list);
   else if (f.view === 'list') body = projectList(list);
   else body = projectCalendar(list);
   const html = `<div class="panel">
     <div class="panel-h"><div class="seg" role="tablist">${views.map(([v, l, i]) => `<button class="${f.view === v ? 'on' : ''}" data-act="proj-view" data-v="${v}" role="tab">${icon(i)}<span>${l}</span></button>`).join('')}</div>
-    <div class="seg">${SITU_OPTS.map(([v, l]) => `<button class="${f.situ === v ? 'on' : ''}" data-act="flt-set" data-ns="proj" data-k="situ" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="seg">${SITU_OPTS.map(([v, l]) => `<button class="${f.situ === v ? 'on' : ''}" data-act="flt-set" data-ns="proj" data-k="situ" data-v="${v}" data-tip="${SITU_TIP[v]}">${l}</button>`).join('')}</div>
     <span class="grow"></span>${f.view === 'table' ? colsBtn('projects') : ''}</div>
     ${projSemTipoBannerHTML()}${filterBar(f, 'proj', { situ: true })}
     <div class="panel-b tight">${body}</div>
   </div>`;
   return { title: 'Projetos', actions: `<button class="btn primary" data-act="proj-new">${icon('plus')} Novo projeto</button>`, html };
 };
-ACTIONS['proj-view'] = (el) => { S.proj.view = el.dataset.v; render(); };
+ACTIONS['proj-view'] = (el) => { S.proj.view = el.dataset.v; if (S.proj.situ === 'recentes') S.proj.situ = 'done'; render(); };
+/* Concluídos recentes: do mais novo para o mais antigo, agrupados por mês de conclusão, para achar "qual terminou onde". */
+function projectRecentes(list) {
+  const l = list.map(p => ({ p, d: projConcluidoEm(p) })).sort((a, b) => (b.d || '').localeCompare(a.d || ''));
+  if (!l.length) return `<div class="empty">${icon('search')}<b>Nenhum projeto concluído com esses filtros</b></div>`;
+  const grupos = {}; l.forEach(x => { const k = x.d ? x.d.slice(0, 7) : 'sem'; (grupos[k] ||= []).push(x); });
+  const nomeMes = (k) => k === 'sem' ? 'Sem data de conclusão' : (() => { const s = new Date(k + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); })();
+  return `<div class="pr-rec">${Object.entries(grupos).map(([k, xs]) => `<div class="pr-rec-g"><div class="pr-rec-h lbl">${nomeMes(k)} <span class="faint">(${xs.length})</span></div>${xs.map(({ p, d }) => `<div class="pr-rec-l" data-act="proj-open" data-id="${p.id}" data-tip="Abrir o projeto">
+    <span class="mono small muted" data-tip="Concluído em">${d ? fmtDate(d) : '—'}</span><span class="pr-rec-c">${clientTag(clientOf(p))}</span><span class="pr-rec-n">${esc(p.name)}</span><span>${payTag(p, false)}</span><span class="mono small" data-tip="Horas registradas no projeto">${projectMs(p.id) ? fmtH(projectMs(p.id)) : ''}</span></div>`).join('')}</div>`).join('')}</div>`;
+}
+/* Última tarefa do projeto concluída: pergunta como o projeto deve ficar (Concluído ou Aprovação). Pergunta uma vez por fechamento. */
+const PROJ_FIM_PERGUNTADO = new Set();
+async function perguntaFimProjeto(pid) {
+  const p = db.get('tempo_projects', pid); if (!p) return;
+  const tks = db.where('tempo_tasks', t => t.project_id === pid && statusCat(t.status_id) !== 'cancelled');
+  const tudo = tks.length && tks.every(t => statusCat(t.status_id) === 'done');
+  if (!tudo) { PROJ_FIM_PERGUNTADO.delete(pid); return; }
+  const st = db.get('tempo_status_options', p.status_id);
+  if (['done', 'cancelled'].includes(st?.category) || st?.name === 'Aprovação' || PROJ_FIM_PERGUNTADO.has(pid)) return;
+  PROJ_FIM_PERGUNTADO.add(pid);
+  const aprov = statuses('work').find(s => s.name === 'Aprovação'), conc = statuses('work').find(s => s.category === 'done');
+  const op = await escolhaBox({ title: 'Você terminou todas as tarefas', body: `O projeto <b>${esc(p.name)}</b> deve ficar como?`, opcoes: [...(aprov ? [{ id: aprov.id, label: 'Aprovação' }] : []), ...(conc ? [{ id: conc.id, label: 'Concluído' }] : [])] });
+  if (!op) return;
+  const atual = db.get('tempo_projects', pid); if (!atual) return;
+  setProjectStatus(atual, op); db.emit(); toast(`${esc(p.name)}: ${statusName(op)}`);
+}
 
 function projectTable(list) {
   if (!list.length) return `<div class="empty">${icon('search')}<b>Nenhum projeto com esses filtros</b><button class="btn sm" data-act="flt-clear" data-ns="proj">Limpar filtros</button></div>`;

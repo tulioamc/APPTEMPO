@@ -33,7 +33,8 @@ function ajJanelaHTML() {
   <div class="db aj-db">
     <textarea class="input aj-txt" rows="6" placeholder="O que ajustar? Escreva como quiser e cole prints aqui (⌘V)." autofocus>${esc(AJ.texto)}</textarea>
     <div class="aj-imgs">${AJ.imgs.map((d, i) => `<div class="aj-img"><img src="${d}" alt="Print ${i + 1}"><button type="button" class="aj-img-x" data-aj-tira="${i}" aria-label="Tirar este print" title="Tirar este print">×</button></div>`).join('')}
-      <label class="aj-add" title="Anexar imagem do computador">${icon('plus')}<span>Print</span><input type="file" accept="image/*" multiple hidden data-aj-arq></label></div>
+      <button type="button" class="aj-add" data-aj-print title="Tira um print da tela do app que está atrás desta janela e já coloca aqui">${icon('camera')}<span>Print da tela</span></button>
+      <label class="aj-add" title="Anexar imagem do computador">${icon('plus')}<span>Arquivo</span><input type="file" accept="image/*" multiple hidden data-aj-arq></label></div>
     <div class="small muted">Dica: tire o print com ⌃⇧⌘4 (vai para a área de transferência) e aperte ⌃⌥F; o print já entra aqui.</div>
   </div>
   <div class="df"><button class="btn ghost left" data-act="go" data-route="ajustes" title="Ver a fila inteira">Ver a fila</button><button class="btn primary" data-aj-envia title="${AJ.editId ? 'Salvar a alteração (⌘Enter)' : 'Enviar para a fila (⌘Enter)'}">${AJ.editId ? 'Salvar' : 'Enviar para a fila'}</button></div>`;
@@ -54,6 +55,7 @@ function ajAbrir(imgClip) {
   ly.box.addEventListener('click', async (e) => {
     const x = e.target.closest?.('[data-aj-tira]'); if (x) { sync(); AJ.imgs.splice(Number(x.dataset.ajTira), 1); ly.refresh(); return; }
     if (e.target.closest?.('[data-aj-envia]')) { sync(); if (await ajEnviar()) ly.close(); }
+    if (e.target.closest?.('[data-aj-print]')) { sync(); ajPrintTela(ly); }
   });
   ly.box.addEventListener('keydown', async (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); sync(); if (await ajEnviar()) ly.close(); } });
   if (imgClip) ajAddImgs([imgClip], ly);
@@ -71,6 +73,31 @@ async function ajEnviar() {
   AJ.texto = ''; AJ.imgs = []; AJ.lista = null; AJ.editId = null;
   if (S.route === 'ajustes') ajCarregar();
   return true;
+}
+/* Print da tela atual (o que está atrás da janelinha). No app do Mac, a própria janela tira a foto da página (sem pedir nada);
+   no navegador, pede para compartilhar a aba e pega um quadro. A janelinha some durante a foto e volta com o print anexado. */
+let ajPrintEspera = null;
+window.TempoPrint = (dataUrl) => { const f = ajPrintEspera; ajPrintEspera = null; f && f(dataUrl || null); };
+async function ajPrintTela(ly) {
+  const ov = ly.ov; const volta = () => { ov.style.visibility = ''; };
+  ov.style.visibility = 'hidden';
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  let src = null;
+  try {
+    if (window.webkit?.messageHandlers?.tempo) {
+      src = await new Promise((ok) => { ajPrintEspera = ok; window.webkit.messageHandlers.tempo.postMessage({ type: 'print' }); setTimeout(() => { if (ajPrintEspera === ok) { ajPrintEspera = null; ok(null); } }, 5000); });
+    } else if (navigator.mediaDevices?.getDisplayMedia) {
+      const st = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'browser' }, preferCurrentTab: true, audio: false });
+      try {
+        const v = document.createElement('video'); v.srcObject = st; v.muted = true; await v.play();
+        await new Promise(r => setTimeout(r, 250));
+        const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0); src = c.toDataURL('image/png');
+      } finally { st.getTracks().forEach(t => t.stop()); }
+    }
+  } catch (e) { src = null; }
+  volta();
+  if (!src) { toast('Não consegui tirar o print. Use ⌃⇧⌘4 e cole aqui (⌘V).'); return; }
+  ajAddImgs([src], ly);
 }
 window.TempoAjuste = (img) => ajAbrir(typeof img === 'string' && img.startsWith('data:image') ? img : null);
 /* ⌃⌥F dentro do app (no navegador e no Mac; no Mac, de fora do app, quem pega é o atalho global). */

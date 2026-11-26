@@ -2,6 +2,7 @@
    INFRA DE INTERFACE — ícones, modais, toasts, confirmação, ações
    ===================================================================== */
 const ICONS = {
+  camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
   pin: '<path d="M12 16v6M8.5 3h7l-1 5.5 3 3.5h-11l3-3.5z"/>',

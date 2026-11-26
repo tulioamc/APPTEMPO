@@ -198,6 +198,27 @@ ACTIONS['pjc-tk'] = (el) => {
 
 /* Relatórios › Filho (25/11): mês a mês, o que foi gasto com o Rafa, a parte da Amanda, o que ela mandou, a diferença e o
    saldo acumulado, e quantos dias ele ficou com você (Dias de Rafa). Mesmas contas da tela Despesas Rafa. */
+/* Detalhe do mês (clicar na linha ou passar o mouse em Gasto / Recebido): cada gasto e cada entrada da Amanda. */
+const RF_MES_ABERTO = new Set();
+ACTIONS['rf-mes'] = (el) => { const ym = el.dataset.ym; if (RF_MES_ABERTO.has(ym)) RF_MES_ABERTO.delete(ym); else RF_MES_ABERTO.add(ym); render(); };
+function skGastoLista(c) {
+  const l = [];
+  c.fixed.forEach(r => l.push({ nome: r.name || 'Gasto', v: Number(r.amount) || 0, cat: r.cat === SK_FIXED_KEY ? '' : r.cat }));
+  c.m.extras.forEach(r => l.push({ nome: r.name || 'Extra', v: Number(r.amount) || 0, cat: 'extra' }));
+  c.auto.forEach(r => l.push({ nome: r.name, v: r.amount, cat: r.cat || '', dt: r.date || '' }));
+  return l.filter(x => x.v).sort((a, b) => b.v - a.v);
+}
+/* Entradas da Amanda do mês, uma por linha: valor digitado, lançamentos "Recebido" em Despesas ou, sem eles, as transferências do extrato. */
+function skAmandaLista(d, ym) {
+  const m = skMonth(d, ym); let l = [];
+  if (Number(m.received)) l = [{ nome: 'Valor digitado em Despesas Rafa', v: Number(m.received) }];
+  else {
+    l = db.all('tempo_expenses').filter(r => r.month === ym && r.kind === 'in' && /amanda/i.test(r.name || '') && r.status === 'Recebido').map(r => ({ nome: r.name, v: Number(r.amount) || 0, dt: r.paid_on || '' }));
+    if (!l.length) l = (typeof BANK !== 'undefined' && BANK.every || []).filter(t => t.flow === 'in' && t.scope !== 'interna' && /amanda/i.test(t.counterpart || '') && (t.posted_on || '').slice(0, 7) === ym && ym >= SK_MIN_YM)
+      .map(t => ({ nome: t.counterpart || 'Amanda', v: Math.abs(Number(t.amount)), dt: t.posted_on })).sort((a, b) => (a.dt < b.dt ? -1 : 1));
+  }
+  return { l, soma: l.reduce((t, x) => t + x.v, 0) };
+}
 VIEWS.relfilho = () => {
   skBankLoad();
   const d = skData(); const meses = skMonths(d).slice(0, 12);
@@ -217,6 +238,12 @@ VIEWS.relfilho = () => {
   </div>`;
   const tab = linhas.length ? `<div class="panel"><div class="panel-h"><h3>Mês a mês</h3><span class="grow"></span><button class="btn sm ghost" data-act="go" data-route="shared" data-tip="Abrir Despesas Rafa para lançar extras ou o valor recebido">Abrir Despesas Rafa</button></div><div class="panel-b tight"><table class="grid">
     <thead><tr><th>Mês</th><th style="text-align:right">Gasto</th><th style="text-align:right">Parte da Amanda</th><th style="text-align:right">Recebido</th><th style="text-align:right">Diferença</th><th style="text-align:right">Saldo</th><th style="text-align:right" data-tip="Dias T no Dias de Rafa (com você)">Dias com você</th></tr></thead>
-    <tbody>${linhas.map(x => `<tr><td><b>${nomeMes(x.ym)}</b></td><td class="mono" style="text-align:right">${fmtMoney(x.c.total)}</td><td class="mono" style="text-align:right">${fmtMoney(x.c.due)}</td><td class="mono" style="text-align:right">${fmtMoney(x.c.received)}</td><td class="mono" style="text-align:right;color:${x.c.diff < -0.5 ? 'var(--danger)' : 'inherit'}">${fmtMoney(x.c.diff)}</td><td class="mono" style="text-align:right">${fmtMoney(saldoDe[x.ym] ?? 0)}</td><td class="mono" style="text-align:right">${x.dias ?? '—'}</td></tr>`).join('')}</tbody></table></div></div>` : '<div class="empty">Ainda não há despesas do Rafa lançadas.</div>';
+    <tbody>${linhas.map(x => { const ab = RF_MES_ABERTO.has(x.ym), G = skGastoLista(x.c), R = skAmandaLista(d, x.ym);
+      const tipG = `Gasto de ${nomeMes(x.ym)}\n` + (G.length ? G.map(g => `${g.nome}: ${fmtMoney(g.v)}`).join('\n') : 'Nada lançado');
+      const tipR = `Entradas da Amanda em ${nomeMes(x.ym)}\n` + (R.l.length ? R.l.map(r => `${r.dt ? fmtDateShort(r.dt) + ' · ' : ''}${r.nome}: ${fmtMoney(r.v)}`).join('\n') : 'Nenhuma') + (Math.abs(R.soma - x.c.received) > 0.5 ? `\nConta como ${fmtMoney(x.c.received)} (média com o mês sem pagamento)` : '');
+      return `<tr class="rf-mrow${ab ? ' on' : ''}" data-act="rf-mes" data-ym="${x.ym}" style="cursor:pointer" data-tip="${ab ? 'Fechar' : 'Ver'} o detalhe do mês: o que você gastou e o que a Amanda mandou"><td><b>${icon(ab ? 'chevD' : 'chevR')} ${nomeMes(x.ym)}</b></td><td class="mono" style="text-align:right" data-tip="${esc(tipG)}">${fmtMoney(x.c.total)}</td><td class="mono" style="text-align:right">${fmtMoney(x.c.due)}</td><td class="mono" style="text-align:right" data-tip="${esc(tipR)}">${fmtMoney(x.c.received)}</td><td class="mono" style="text-align:right;color:${x.c.diff < -0.5 ? 'var(--danger)' : 'inherit'}">${fmtMoney(x.c.diff)}</td><td class="mono" style="text-align:right">${fmtMoney(saldoDe[x.ym] ?? 0)}</td><td class="mono" style="text-align:right">${x.dias ?? '—'}</td></tr>${ab ? `<tr class="rf-mdet"><td colspan="7"><div class="rf-mdet-g">
+        <div><div class="lbl">O que você gastou</div>${G.length ? G.map(g => `<div class="row between small"><span>${g.dt ? `<span class="mono muted">${fmtDateShort(g.dt)}</span> ` : ''}${esc(g.nome)}${g.cat ? ` <span class="faint">· ${esc(g.cat)}</span>` : ''}</span><span class="mono">${fmtMoney(g.v)}</span></div>`).join('') + `<div class="row between small rf-mdet-t"><b>Total</b><b class="mono">${fmtMoney(x.c.total)}</b></div>` : '<div class="small muted">Nada lançado.</div>'}</div>
+        <div><div class="lbl">Entradas da Amanda</div>${R.l.length ? R.l.map(r => `<div class="row between small"><span>${r.dt ? `<span class="mono muted">${fmtDateShort(r.dt)}</span> ` : ''}${esc(r.nome)}</span><span class="mono">${fmtMoney(r.v)}</span></div>`).join('') + `<div class="row between small rf-mdet-t"><b>Total</b><b class="mono">${fmtMoney(R.soma)}</b></div>${Math.abs(R.soma - x.c.received) > 0.5 ? `<div class="small muted">Na conta vale ${fmtMoney(x.c.received)}: mês pulado e depois quase o dobro, então o valor é dividido entre os meses.</div>` : ''}` : `<div class="small muted">Nenhuma entrada.${x.c.received > 0.5 ? ` Na conta vale ${fmtMoney(x.c.received)} (média com o mês seguinte).` : ''}</div>`}</div>
+      </div></td></tr>` : ''}`; }).join('')}</tbody></table></div></div>` : '<div class="empty">Ainda não há despesas do Rafa lançadas.</div>';
   return { title: 'Gastos e dias do Rafa', html: kpis + tab };
 };

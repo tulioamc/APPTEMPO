@@ -495,7 +495,7 @@ function bankTrendChartHTML(entity, ym) {
   if (!months.length) months = [ym];
   const val = (m, k) => (data[m] || {})[k] || 0;
   const shown = TR_SERIES.filter(([k]) => off[k] !== true);
-  const W = 560, H = 250, L = 52, R = 30, T = 14, B = 28;
+  const W = trLargura(), H = 230, L = 48, R = 24, T = 12, B = 26; trMedeLogo();
   const vs = shown.flatMap(([k]) => months.map(m => val(m, k)));
   let lo = Math.min(0, ...(vs.length ? vs : [0])), hi = Math.max(0, ...(vs.length ? vs : [0]));
   if (hi === lo) hi = lo + 1;
@@ -508,7 +508,7 @@ function bankTrendChartHTML(entity, ym) {
   const xl = months.map((m, i) => `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" class="tr-t">${pfMonthLabel(m)}</text>`).join('');
   const lines = shown.map(([k]) => {
     const pts = months.map((m, i) => `${x(i).toFixed(1)},${y(val(m, k)).toFixed(1)}`);
-    return `<g class="tr-s tr-s-${k}">${months.length > 1 ? `<polyline points="${pts.join(' ')}" fill="none" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` : ''}${months.map((m, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(val(m, k)).toFixed(1)}" r="3" class="tr-pt"/>`).join('')}</g>`;
+    return `<g class="tr-s tr-s-${k}">${months.length > 1 ? `<polyline points="${pts.join(' ')}" fill="none" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round"/>` : ''}${months.map((m, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(val(m, k)).toFixed(1)}" r="2.5" class="tr-pt"/>`).join('')}</g>`;
   }).join('');
   const colW = months.length === 1 ? W - L - R : (W - L - R) / (months.length - 1);
   const cols = months.map((m, i) => {
@@ -537,7 +537,20 @@ function trBandas(xs, A, B, y) {
   }
   return out.map(b => `<path d="${b.d}" fill="${b.pos ? 'var(--tr-ent)' : 'var(--tr-sai)'}" fill-opacity=".16" stroke="none"/>`).join('');
 }
-const trDot = (cx, cy, c) => `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3" fill="color-mix(in srgb, ${c} 28%, var(--surface))" stroke="${c}" stroke-width="1.5"/>`;
+const trDot = (cx, cy, c) => `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="2.5" fill="var(--surface)" stroke="${c}" stroke-width="1.25"/>`;
+/* Os gráficos "Mês a mês" são desenhados na largura real do painel (1 unidade = 1 px), para letra e linha não engrossarem
+   quando o painel é largo. A largura é medida depois de desenhar; se mudou, desenha de novo uma vez. */
+function trLargura() { return Math.max(360, Math.round(BANK.trW || 560)); }
+let trMedeT = null;
+function trMedeLogo() {
+  clearTimeout(trMedeT);
+  trMedeT = setTimeout(() => {
+    const el = document.querySelector('.bank-trend .tr-svg'); if (!el) return;
+    const w = Math.round(el.getBoundingClientRect().width);
+    if (w > 0 && Math.abs(w - trLargura()) > 4) { BANK.trW = w; render(); }
+  }, 0);
+}
+window.addEventListener('resize', () => { if (document.querySelector('.bank-trend')) trMedeLogo(); });
 function bankTrendSaldoHTML(entity, ym, MODO) {
   const P = BANK.trP || 'm6', cur = ymd(new Date()).slice(0, 7), dias = {};
   const data = bankSeriesMes(entity, MODO === 'dia' ? dias : null);
@@ -546,7 +559,7 @@ function bankTrendSaldoHTML(entity, ym, MODO) {
   let months = P === 'tudo' ? all : P === 'ano' ? all.filter(m => m.startsWith(Y)) : all.filter(m => m >= inAddM(ym, P === 'm3' ? -2 : -5) && m <= ym);
   months = months.filter(m => m >= FIN_INICIO_YM); if (!months.length) months = [ym];
   const val = (m, k) => (data[m] || {})[k] || 0;
-  const W = 560, H = 250, L = 52, R = 30, T = 14, B = 28;
+  const W = trLargura(), H = 230, L = 48, R = 24, T = 12, B = 26; trMedeLogo();
   const seg = [['m3', '3 meses'], ['m6', '6 meses'], ['ano', 'Ano'], ['tudo', 'Tudo']].map(([k, l]) => `<button class="${P === k ? 'on' : ''}" data-act="bank-trp" data-v="${k}">${l}</button>`).join('');
   const topo = `<div class="row" style="gap:10px;flex-wrap:wrap;margin-bottom:12px"><div class="seg">${seg}</div>${trModoSeg(MODO)}</div>`;
   let xs, A, Bv, labels, pts = null;
@@ -580,11 +593,11 @@ function bankTrendSaldoHTML(entity, ym, MODO) {
   let corpo, dots, cols;
   const n = xs.length, cw = n === 1 ? W - L - R : (W - L - R) / (n - 1);
   if (MODO === 'dia') {
-    corpo = trBandas(xs, A, Bv, y) + `<path d="${path(A)}" fill="none" stroke="var(--tr-sal)" stroke-width="1.5" stroke-linejoin="round"/>`;
+    corpo = trBandas(xs, A, Bv, y) + `<path d="${path(A)}" fill="none" stroke="var(--tr-sal)" stroke-width="1.25" stroke-linejoin="round"/>`;
     dots = pts.map((p, i) => p.fim ? trDot(xs[i], y(p.v), 'var(--tr-sal)') : '').join('');
     cols = pts.map((p, i) => { const w = Math.max(3, ((xs[i + 1] ?? xs[i] + 6) - (xs[i - 1] ?? xs[i] - 6)) / 2); return `<rect x="${(xs[i] - w / 2).toFixed(1)}" y="${T}" width="${w.toFixed(1)}" height="${H - T - B}" class="tr-hit" data-tip="${esc(p.e ? `${fmtDate(p.dt)} · ${p.e.nome}\n${p.e.v >= 0 ? 'Entrou' : 'Saiu'} ${fmtMoney0(Math.abs(p.e.v))}\nSaldo do mês até aqui: ${fmtMoney0(p.v)}` : `${fmtDate(p.dt)}\nSaldo do mês: ${fmtMoney0(p.v)}`)}"/>`; }).join('');
   } else {
-    corpo = trBandas(xs, A, Bv, y) + `<path d="${path(A)}" fill="none" stroke="var(--tr-ent)" stroke-width="1.5" stroke-linejoin="round"/><path d="${path(Bv)}" fill="none" stroke="var(--tr-sai)" stroke-width="1.5" stroke-linejoin="round"/>`;
+    corpo = trBandas(xs, A, Bv, y) + `<path d="${path(A)}" fill="none" stroke="var(--tr-ent)" stroke-width="1.25" stroke-linejoin="round"/><path d="${path(Bv)}" fill="none" stroke="var(--tr-sai)" stroke-width="1.25" stroke-linejoin="round"/>`;
     dots = months.map((m, i) => trDot(xs[i], y(A[i]), 'var(--tr-ent)') + trDot(xs[i], y(Bv[i]), 'var(--tr-sai)')).join('');
     cols = months.map((m, i) => `<rect x="${(xs[i] - cw / 2).toFixed(1)}" y="${T}" width="${cw.toFixed(1)}" height="${H - T - B}" class="tr-hit" data-tip="${esc(`${rbLabel(m)}\nEntrada: ${fmtMoney0(A[i])}\nSaída: ${fmtMoney0(Bv[i])}\nSaldo: ${fmtMoney0(A[i] - Bv[i])}`)}"/>`).join('');
   }
@@ -813,7 +826,7 @@ function bankNotasMesHTML(m, real) {
       <button class="btn sm ghost gg-bt" data-act="bank-mercado" data-cp="${esc(t.counterpart || '')}" data-tip="Fixo (aluguel, escola, imposto…): tira este nome da lista, em todos os meses.">fixo</button></div>`; }).join('');
   return `<div class="bank-notas">
     ${mnotaHTML(m, txt)}
-    ${lista.length || ocultos.length ? `<div class="gg-head small muted" data-act="bank-ggtoggle" data-m="${m}" style="cursor:pointer" data-tip="${open ? 'Recolher' : 'Abrir'} a lista de grandes gastos"><button class="btn sm ghost gg-tg" data-act="bank-ggtoggle" data-m="${m}" aria-expanded="${open}" data-tip="${open ? 'Recolher' : 'Abrir'} a lista de grandes gastos">${icon(open ? 'chevD' : 'chevR')}</button><span data-tip="Saídas acima de R$ 300 no mês, sem terapias e sem os fixos.">Grandes gastos (${lista.length})</span>${resumo}${ocultos.length ? `<span class="faint" data-tip="Ocultos por serem fixos ou mercado: ${esc(ocNomes)}">· ${ocultos.length} ocultos</span>` : ''}</div>` : ''}
+    ${lista.length || ocultos.length ? `<div class="gg-head small muted" data-act="bank-ggtoggle" data-m="${m}" style="cursor:pointer" data-tip="${open ? 'Recolher' : 'Abrir'} a lista de grandes gastos"><button class="btn sm ghost gg-tg" data-act="bank-ggtoggle" data-m="${m}" aria-expanded="${open}" data-tip="${open ? 'Recolher' : 'Abrir'} a lista de grandes gastos">${icon(open ? 'chevD' : 'chevR')}</button><span class="ex-t" data-tip="Saídas acima de R$ 300 no mês, sem terapias e sem os fixos.">Grandes gastos</span><span data-tip="Quantidade de grandes gastos no mês">(${lista.length})</span>${resumo}${ocultos.length ? `<span class="faint" data-tip="Ocultos por serem fixos ou mercado: ${esc(ocNomes)}">· ${ocultos.length} ocultos</span>` : ''}</div>` : ''}
     ${open && lista.length ? `<datalist id="gg-classes">${classes.map(c => `<option value="${esc(c)}">`).join('')}</datalist>${rows}` : ''}
   </div>`;
 }

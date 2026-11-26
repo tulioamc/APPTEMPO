@@ -617,11 +617,18 @@ ACTIONS["act-fview"] = (el) => {
   if (cur !== 'both') { on.file = cur === 'file'; on.site = cur === 'site'; }
   on[el.dataset.v] = !on[el.dataset.v];
   if (!on.file && !on.site) return;
-  db.setSetting("actFileView2", on.file && on.site ? 'both' : on.file ? 'file' : 'site'); db.emit();
+  db.setSetting("actFileView2", on.file && on.site ? 'both' : on.file ? 'file' : 'site'); db.emit(); actSecRepaint(el);
 };
 /* Setinha de esconder/mostrar a barra e os chips de "Por programa" e "Por arquivo / site" (igual à de Subtarefas). Fica salvo. */
 const actFechado = (k) => !!(db.setting('actFechado', {}) || {})[k];
-ACTIONS["act-fold"] = (el) => { const m = { ...(db.setting('actFechado', {}) || {}) }; m[el.dataset.k] = !m[el.dataset.k]; db.setSetting('actFechado', m); db.emit(); };
+ACTIONS["act-fold"] = (el) => { const m = { ...(db.setting('actFechado', {}) || {}) }; m[el.dataset.k] = !m[el.dataset.k]; db.setSetting('actFechado', m); db.emit(); actSecRepaint(el); };
+/* Dentro de uma janela (ex.: Sessão atual), a tela de baixo se redesenha mas a janela não: redesenha só o bloco de atividade. */
+function actSecRepaint(el) {
+  const box = el?.closest?.('[data-act-sec]'); if (!box || !box.isConnected) return;
+  const e = db.get('tempo_time_entries', box.dataset.actSec); if (!e) return;
+  const t = document.createElement('div'); t.innerHTML = actSectionHTML(e);
+  if (t.firstElementChild) box.replaceWith(t.firstElementChild);
+}
 const actFoldBtn = (k) => `<button type="button" class="btn sm icon ghost sb-fold" data-act="act-fold" data-k="${k}" aria-expanded="${!actFechado(k)}" aria-label="${actFechado(k) ? 'Mostrar' : 'Esconder'} a barra e os menus" data-tip="${actFechado(k) ? 'Mostrar' : 'Esconder'} a barra e os menus">${icon(actFechado(k) ? 'chevR' : 'chevD')}</button>`;
 /* Itens que estão dentro do chip "Outros" (para o balãozinho do hover). */
 function actOthMembersAttr(A) {
@@ -680,7 +687,7 @@ function actSectionHTML(e) {
   const fileSec = `<div class="act-sec"><div class="row between"><span class="row" style="gap:4px;min-width:0">${actFoldBtn('arq')}<span class="lbl">${ACT_FV_LBL[fv]}</span></span><span class="row" style="gap:4px">${fvBtns}</span></div>${actFechado('arq') ? '' : `${actStripHTML(e, file, fv)}${actChipsHTML(file, fv)}`}</div>`;
   const toggle = actForaToggleHTML([e], true);
   const secP = `<div class="act-sec"><div class="row between"><span class="row" style="gap:4px;min-width:0">${actFoldBtn('prog')}<span class="lbl">Por programa</span></span></div>${actFechado('prog') ? '' : `${actStripHTML(e, prog, 'program')}${actChipsHTML(prog, 'program').replace(/<\/div>$/, (actHidePausas() ? '' : actUnspecChipHTML(actUnspecMs([e]), [e])) + '</div>')}`}</div>`;
-  return `<div class="stack" style="gap:8px">${toggle}${actSelBarHTML(e.id)}${secP}${fileSec}${actSemParado() ? '' : `<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div>`}<span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
+  return `<div class="stack" style="gap:8px" data-act-sec="${esc(e.id)}">${toggle}${actSelBarHTML(e.id)}${secP}${fileSec}${actSemParado() ? '' : `<div class="act-sec"><div class="row between"><span class="lbl">Pausas</span></div>${pauseChipsHTML(e)}</div>`}<span class="small muted">Passe o mouse para ver o tempo. Faixa hachurada = pausa. Clique num arquivo para desfazer, juntar versões ou mover para outro projeto.</span></div>`;
 }
 
 /* Log discreto no fim do formulário da sessão: cada registro de atividade (programa e arquivo) e cada pausa, por horário.
