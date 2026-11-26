@@ -10,35 +10,73 @@ const skId = () => Math.random().toString(36).slice(2, 10);
 const skData = () => { const d = db.setting('sharedKid', null) || {}; return { months: d.months || {}, plan: d.plan || {} }; };
 const skSave = (d) => db.setSetting('sharedKid', d);
 const skMonth = (d, ym) => d.months[ym] || { received: 0, extras: [] };
+/* Gastos do Rafa que vêm sozinhos do extrato (V2.06.191): transações de saída com a etiqueta "Rafa" (escola, dentista, remédios…) e a parte do Rafa no plano
+   (valor em plan.filho, a partir de plan.desde, nos meses em que há pagamento da SulAmérica). Entram em "Despesas Rafa" e na conta da Amanda (metade). */
+const SK_MIN_YM = '2026-01';
+const skBankLoad = () => { if (typeof BANK === 'undefined' || BANK.every || BANK.skPediu || typeof bankLoadTxns !== 'function') return; BANK.skPediu = true; bankLoadTxns().then(() => render()).catch(() => {}); };
+const skTxns = (ym) => (typeof BANK !== 'undefined' && BANK.every || []).filter(t => t.tag === 'Rafa' && t.flow === 'out' && t.scope !== 'interna' && (t.posted_on || '').slice(0, 7) === ym && Number(t.amount) < 0)
+  .map(t => ({ id: t.id, name: String(t.counterpart || t.memo || 'Gasto').replace(/\s*\(Transferência enviada\)/i, ''), amount: Math.abs(Number(t.amount)), cat: t.category || '', date: t.posted_on, txn: true }));
+const skPlanRafa = (plan, ym) => {
+  const v = Number(plan && plan.filho) || 0; if (!v || ym < (plan.desde || '2026-10')) return [];
+  const pagou = (typeof BANK !== 'undefined' && BANK.every || []).some(t => t.flow === 'out' && /sul ?am[eé]rica/i.test(t.counterpart || '') && (t.posted_on || '').slice(0, 7) === ym);
+  return pagou ? [{ id: 'plano-rafa', name: 'Plano de saúde (parte do Rafa)', amount: v, cat: 'Saúde', plano: true }] : [];
+};
 const skFixed = (ym) => db.all('tempo_expenses').filter(r => r.month === ym && r.kind === 'out' && r.cat === SK_FIXED_KEY && r.status !== 'Não teve');
 const skIsPlan = (r) => /plano/i.test(r.name || '');
 const skElaIn = (plan, ym) => !plan.elaSaiEm || ym < plan.elaSaiEm;
-const skCalc = (d, ym) => {
+/* Mês sem pagamento da Amanda e, no seguinte, quase o dobro (ou mais): o valor é dividido (média) entre os meses em questão. */
+const skYmAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number); const x = new Date(y, m - 1 + n, 1); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`; };
+const skRecRaw = (d, ym) => {
+  const m = skMonth(d, ym);
+  return Number(m.received) || db.all('tempo_expenses').filter(r => r.month === ym && r.kind === 'in' && /amanda/i.test(r.name || '') && r.status !== 'Não teve').reduce((t, r) => t + (Number(r.amount) || 0), 0);
+};
+function skRecAdj(d, ym) {
+  const raw = skRecRaw(d, ym), hoje = new Date().toISOString().slice(0, 7);
+  const dueDe = (y) => skCalc(d, y, true).due;
+  const dobra = (r, meses) => r >= (1 + 0.8 * (meses.length - 1)) * (meses.reduce((t, y) => t + dueDe(y), 0) / meses.length);   // "quase o dobro" com 1 mês de falta
+  if (raw > 0) {   // mês que pagou: olha para trás
+    const gap = []; for (let i = 1; i <= 6; i++) { const y = skYmAdd(ym, -i); if (skRecRaw(d, y) > 0 || dueDe(y) <= 0) break; gap.push(y); }
+    if (gap.length && dobra(raw, [ym, ...gap])) return raw / (gap.length + 1);
+    return raw;
+  }
+  if (ym >= hoje || dueDe(ym) <= 0) return raw;
+  let k = 0, p = null; for (let i = 1; i <= 6; i++) { const y = skYmAdd(ym, i); if (y > hoje) break; if (skRecRaw(d, y) > 0) { p = y; k = i; break; } }   // mês sem pagamento: olha para frente
+  if (!p) return raw;
+  const grupo = [p]; for (let i = 1; i < k; i++) grupo.push(skYmAdd(p, -i));
+  const r = skRecRaw(d, p); if (!dobra(r, [...grupo, ym])) return raw;
+  const gapAll = []; for (let i = 1; i <= k; i++) gapAll.push(skYmAdd(p, -i)); if (!gapAll.includes(ym)) return raw;
+  return r / (gapAll.length + 1);
+}
+const skCalc = (d, ym, noAdj) => {
   const m = skMonth(d, ym), plan = d.plan || {};
   const fixed = skFixed(ym);
   const planRows = fixed.filter(skIsPlan), other = fixed.filter(r => !skIsPlan(r));
   const planTotal = planRows.reduce((t, r) => t + (Number(r.amount) || 0), 0);
   const otherSum = other.reduce((t, r) => t + (Number(r.amount) || 0), 0) + m.extras.reduce((t, l) => t + (Number(l.amount) || 0), 0);
   const amandaPlan = planRows.length ? (skElaIn(plan, ym) ? (Number(plan.ela) || 0) : 0) + (Number(plan.filho) || 0) / 2 : 0;
-  const total = planTotal + otherSum;
-  const due = otherSum / 2 + amandaPlan;            // parte da Amanda no mês
-  const received = Number(m.received) || 0;
-  return { m, fixed, planRows, planTotal, otherSum, amandaPlan, total, due, received, diff: received - due, has: fixed.length > 0 || m.extras.length > 0 || received > 0 };
+  const auto = [...skTxns(ym), ...skPlanRafa(plan, ym)];
+  const autoSum = auto.reduce((t, x) => t + x.amount, 0);
+  const total = planTotal + otherSum + autoSum;
+  const due = (otherSum + autoSum) / 2 + amandaPlan;            // parte da Amanda no mês: metade de tudo do Rafa
+  const received = noAdj ? skRecRaw(d, ym) : skRecAdj(d, ym);   // sem valor digitado vale o que a Amanda mandou ("Amanda - Contas Rafa" em Despesas); mês pulado e depois quase o dobro: média
+  return { m, fixed, auto, planRows, planTotal, otherSum, amandaPlan, total, due, received, diff: received - due, has: fixed.length > 0 || auto.length > 0 || m.extras.length > 0 || received > 0 };
 };
-const skMonths = (d) => [...new Set([...Object.keys(d.months), ...db.all('tempo_expenses').filter(r => r.cat === SK_FIXED_KEY).map(r => r.month)])].filter(Boolean).sort().reverse();
-const skBalance = (d) => skMonths(d).reduce((t, ym) => { const c = skCalc(d, ym); return c.fixed.length || c.m.extras.length ? t + c.diff : t; }, 0);
+const skMonths = (d) => [...new Set([...Object.keys(d.months), ...db.all('tempo_expenses').filter(r => r.cat === SK_FIXED_KEY).map(r => r.month), ...(typeof BANK !== 'undefined' && BANK.every || []).filter(t => t.tag === 'Rafa' && t.flow === 'out').map(t => (t.posted_on || '').slice(0, 7)).filter(m => m >= SK_MIN_YM)])].filter(Boolean).sort().reverse();
+const skBalance = (d) => skMonths(d).reduce((t, ym) => { const c = skCalc(d, ym); return c.fixed.length || c.auto.length || c.m.extras.length ? t + c.diff : t; }, 0);
 const skStatus = (diff) => {
   if (Math.abs(diff) < 0.005) return '<span class="tag tg">Quites</span>';
   return diff > 0 ? `<span class="tag tg">Você deve a Amanda ${fmtMoney(diff)}</span>` : `<span class="tag tg">Amanda deve a você ${fmtMoney(-diff)}</span>`;
 };
 
 VIEWS.shared = () => {
+  skBankLoad();
   const d = skData();
   const ym = SK.month || ymd(new Date()).slice(0, 7); SK.month = ym;
   const c = skCalc(d, ym);
   const bal = skBalance(d);
   const plan = d.plan;
   const fixedRows = c.fixed.map(r => `<tr><td>${esc(r.name)}${skIsPlan(r) ? ' <span class="small muted">· plano</span>' : ''}</td><td class="mono" style="text-align:right">${fmtMoney(r.amount)}</td><td class="small muted">Fixo · editar em Despesas</td><td></td></tr>`).join('');
+  const autoRows = c.auto.map(x => `<tr><td>${esc(x.name)}${x.cat ? ` <span class="small muted">· ${esc(x.cat)}</span>` : ''}</td><td class="mono" style="text-align:right">${fmtMoney(x.amount)}</td><td class="small muted" data-tip="${x.plano ? 'Valor da parte do Rafa no plano, definido em Configuração do plano de saúde' : 'Transação do extrato com a etiqueta Rafa'}">${x.plano ? 'Plano · parte do Rafa' : `Extrato · ${fmtDate(x.date).slice(0, 5)}`}</td><td></td></tr>`).join('');
   const extraRows = c.m.extras.map(l => `<tr>
     <td><input class="input" value="${esc(l.name || '')}" placeholder="Ex.: dentista, remédio" data-on="sk-extra" data-id="${l.id}" data-k="name"></td>
     <td><input class="input" type="number" step="0.01" min="0" value="${l.amount || ''}" style="text-align:right" data-on="sk-extra" data-id="${l.id}" data-k="amount"></td>
@@ -71,7 +109,7 @@ VIEWS.shared = () => {
     <details style="margin:12px 0"><summary class="small">Configuração do plano de saúde</summary><div style="margin-top:10px">${planBox}</div></details>
     <div class="row" style="gap:8px;margin:12px 0"><button class="btn sm" data-act="sk-add">+ Extra do mês</button></div>
     <table class="grid"><thead><tr><th>Descrição</th><th style="text-align:right">Valor pago</th><th>Origem</th><th></th></tr></thead>
-      <tbody>${(fixedRows + extraRows) || '<tr><td colspan="4" class="small muted">Nenhum gasto neste mês. Lance os fixos em Despesas com a subcategoria Filho.</td></tr>'}</tbody></table>
+      <tbody>${(fixedRows + autoRows + extraRows) || '<tr><td colspan="4" class="small muted">Nenhum gasto do Rafa neste mês. Entram sozinhos os do extrato com a etiqueta Rafa; fixos em Despesas com a subcategoria Filho; extras aqui.</td></tr>'}</tbody></table>
     <h3 style="margin:22px 0 8px">Histórico mensal</h3>
     <table class="grid"><thead><tr><th>Mês</th><th style="text-align:right">Gastos</th><th style="text-align:right">Parte da Amanda</th><th style="text-align:right">Recebido</th><th>Diferença</th></tr></thead>
       <tbody>${months || '<tr><td colspan="5" class="small muted">Sem histórico ainda.</td></tr>'}</tbody></table>`;
@@ -144,12 +182,13 @@ ACTIONS['pjc-tk'] = (el) => {
 /* Relatórios › Filho (25/11): mês a mês, o que foi gasto com o Rafa, a parte da Amanda, o que ela mandou, a diferença e o
    saldo acumulado, e quantos dias ele ficou com você (Dias de Rafa). Mesmas contas da tela Despesas Rafa. */
 VIEWS.relfilho = () => {
+  skBankLoad();
   const d = skData(); const meses = skMonths(d).slice(0, 12);
   const nomeMes = (ym) => { const s = new Date(ym + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); };
   const diasT = (ym) => { if (typeof rafaQuem !== 'function') return null; const [y, m] = ym.split('-').map(Number); let n = 0; const fim = new Date(y, m, 0).getDate(); for (let i = 1; i <= fim; i++) if (rafaQuem(`${ym}-${String(i).padStart(2, '0')}`) === 'T') n++; return n; };
   const linhas = meses.map(ym => ({ ym, c: skCalc(d, ym), dias: diasT(ym) })).filter(x => x.c.has);
   const ant = [...linhas].reverse(); let saldo = 0; const saldoDe = {};
-  ant.forEach(x => { if (x.c.fixed.length || x.c.m.extras.length) saldo += x.c.diff; saldoDe[x.ym] = saldo; });
+  ant.forEach(x => { if (x.c.fixed.length || x.c.auto.length || x.c.m.extras.length) saldo += x.c.diff; saldoDe[x.ym] = saldo; });
   const soma = (k) => linhas.reduce((t, x) => t + (x.c[k] || 0), 0);
   const n = linhas.length || 1; const ano = String(new Date().getFullYear());
   const doAno = linhas.filter(x => x.ym.startsWith(ano));
