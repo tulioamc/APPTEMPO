@@ -75,11 +75,10 @@ html.v3 .seg { border-radius: 999px; padding: 4px; background: var(--surface-2);
 html.v3 .seg button { border-radius: 999px; padding: 6px 14px; }
 html.v3 .seg button.on { box-shadow: none; }
 html.v3 .tag { border-radius: 999px; padding: 3px 10px; }
-/* chips de cliente: sigla da agência + cliente juntos numa pílula partida ([BR][LEVE]) */
-html.v3 .ctag { gap: 2px; }
-html.v3 .ctag .tag.abbr { border-radius: 999px 5px 5px 999px; padding: 3px 7px 3px 10px; }
-html.v3 .ctag .tag:not(.abbr) { border-radius: 5px 999px 999px 5px; padding: 3px 11px 3px 8px; }
-html.v3 .ctag .tag:only-child { border-radius: 999px; padding: 3px 11px; }
+/* chips de cliente: sigla da agência + cliente, duas pílulas inteiras lado a lado ([EU] [TAILANDIA]) */
+html.v3 .ctag { gap: 4px; }
+html.v3 .ctag .tag { border-radius: 999px; padding: 3px 11px; font-weight: 700; }
+html.v3 .ctag .tag.abbr { padding: 3px 9px; }
 
 /* cronômetro: cartão lilás; Pausar em preto, Encerrar em branco com texto vermelho, o resto translúcido */
 html.v3 .timer-card { background: var(--v3-lilas); border: 0; border-radius: 30px; }
