@@ -75,7 +75,11 @@ html.v3 .seg { border-radius: 999px; padding: 4px; background: var(--surface-2);
 html.v3 .seg button { border-radius: 999px; padding: 6px 14px; }
 html.v3 .seg button.on { box-shadow: none; }
 html.v3 .tag { border-radius: 999px; padding: 3px 10px; }
-html.v3 .tag.abbr { border-radius: 8px; }
+/* chips de cliente: sigla da agência + cliente juntos numa pílula partida ([BR][LEVE]) */
+html.v3 .ctag { gap: 2px; }
+html.v3 .ctag .tag.abbr { border-radius: 999px 5px 5px 999px; padding: 3px 7px 3px 10px; }
+html.v3 .ctag .tag:not(.abbr) { border-radius: 5px 999px 999px 5px; padding: 3px 11px 3px 8px; }
+html.v3 .ctag .tag:only-child { border-radius: 999px; padding: 3px 11px; }
 
 /* cronômetro: cartão lilás; Pausar em preto, Encerrar em branco com texto vermelho, o resto translúcido */
 html.v3 .timer-card { background: var(--v3-lilas); border: 0; border-radius: 30px; }
@@ -105,6 +109,10 @@ html.v3 .dh, html.v3 .df { border-color: var(--surface-2); }
   html.v3 .main { border-radius: 0; min-height: 100vh; }
   html.v3 .sidebar { top: 0; height: 100%; border-radius: 0 24px 24px 0; }
 }
+
+/* Calendário: dias em cartões brancos arredondados, blocos com cantos macios */
+html.v3 .pl-grade { border: 0; border-radius: 18px; background-color: var(--surface); }
+html.v3 .pl-bloco { border-radius: 11px; padding: 5px 8px; }
 
 /* Calendário: bloco puxado "voa" levemente na diagonal, com sombra embaixo (usa as propriedades rotate/scale,
    que somam com o transform que o arraste já usa) */
