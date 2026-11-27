@@ -30,11 +30,12 @@ html.v3 .page-title { font-size: 1.7em; font-weight: 600; letter-spacing: -.02em
 html.v3 .sidebar { background: var(--v3-shell); border-right: 0; color: #D9D9D9; top: 10px; height: calc(100vh - 20px); padding-inline: 12px; }
 html.v3 .brand-name { color: #fff; }
 html.v3 .brand-sub, html.v3 .nav-group { color: #8A8A86; }
-html.v3 .nav-btn { color: #CFCFCF; border-radius: 999px; padding-inline: 12px; }
-html.v3 .nav-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
-html.v3 .nav-btn.active { background: #fff; color: #121212; }
-html.v3 .nav-btn .count { color: #8A8A86; }
-html.v3 .nav-btn.active .count { color: #5D5D5D; }
+html.v3 .nav-btn { border-radius: 999px; padding-inline: 12px; }
+html.v3 .sidebar .nav-btn { color: #CFCFCF; }
+html.v3 .sidebar .nav-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+html.v3 .sidebar .nav-btn.active { background: #fff; color: #121212; }
+html.v3 .sidebar .nav-btn .count { color: #8A8A86; }
+html.v3 .sidebar .nav-btn.active .count { color: #5D5D5D; }
 html.v3 .sidebar .btn { background: rgba(255,255,255,.08); color: #E6E6E6; }
 html.v3 .sidebar .btn:hover { background: rgba(255,255,255,.14); }
 html.v3 .sidebar .faint, html.v3 .sidebar .muted, html.v3 .sidebar .small { color: #9A9A96; }
@@ -80,22 +81,38 @@ html.v3 .ctag { gap: 4px; }
 html.v3 .ctag .tag { border-radius: 999px; padding: 3px 11px; font-weight: 700; }
 html.v3 .ctag .tag.abbr { padding: 3px 9px; }
 
-/* cronômetro: cartão lilás; Pausar em preto, Encerrar em branco com texto vermelho, o resto translúcido */
-html.v3 .timer-card { background: var(--v3-lilas); border: 0; border-radius: 30px; }
+/* cronômetro (igual ao desenho): cartão lilás; estado em pílula branca com ponto vermelho; HORA e MINUTO grandes, segundo menor;
+   botões em duas colunas: Pausar preto, Encerrar branco com texto vermelho, etapa/trocar brancos, o resto branco translúcido */
+html.v3 .timer-card { background: var(--v3-lilas); border: 0; border-radius: 30px; padding: 24px; gap: 14px; container-type: inline-size; }
 html.v3 .timer-card.running { border: 0; }
-html.v3 .timer-card .btn { background: color-mix(in srgb, var(--surface) 58%, transparent); }
-html.v3 .timer-card .btn:hover { background: var(--surface); }
+html.v3 .timer-card .timer-state { background: var(--surface); border-radius: 999px; padding: 7px 14px; align-self: flex-start; text-transform: none; letter-spacing: 0; font-size: .95em; font-weight: 600; color: var(--fg); }
+html.v3 .timer-card .timer-state .dot.live { background: #E5484D; box-shadow: 0 0 0 3px color-mix(in srgb, #E5484D 22%, transparent); }
+html.v3 .timer-card .timer-digits { font-size: clamp(36px, 19cqw, 70px); font-weight: 600; letter-spacing: -.03em; }
+html.v3 .timer-card .timer-digits .sec { font-size: .52em; letter-spacing: -.01em; margin-left: .06em; color: color-mix(in srgb, var(--fg) 52%, var(--v3-lilas)); }
+html.v3 .timer-card .timer-path { color: color-mix(in srgb, var(--fg) 72%, var(--v3-lilas)); font-size: .95em; gap: 6px 8px; }
+html.v3 .timer-card .timer-path b { color: var(--fg); }
+html.v3 .timer-actions.grade { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+html.v3 .timer-card .btn { background: var(--surface); min-height: 0; padding: 10px 12px; font-size: .93em; justify-content: center; white-space: nowrap; gap: 8px; }
+html.v3 .timer-card .btn svg { width: 15px; height: 15px; }
+html.v3 .timer-card .btn:hover { background: color-mix(in srgb, var(--surface) 80%, var(--v3-lilas)); }
 html.v3 .timer-card .btn.primary, html.v3 .timer-card [data-act="ts-pause"] { background: var(--fg); color: var(--bg); }
-html.v3 .timer-card .btn.danger { background: var(--surface); }
-html.v3 .timer-card .timer-state { background: var(--surface); border-radius: 999px; padding: 6px 14px; align-self: flex-start; }
+html.v3 .timer-card .btn.primary:hover, html.v3 .timer-card [data-act="ts-pause"]:hover { background: color-mix(in srgb, var(--fg) 86%, var(--bg)); }
+html.v3 .timer-card .btn.danger { box-shadow: none; }
+html.v3 .timer-card .timer-actions.linha1 { gap: 8px; }
+html.v3 .timer-card .recent .btn { padding: 7px 14px; }
+
+/* tela inicial: proporções do desenho — cronômetro mais largo (botões em 2 colunas), resumo do dia mais estreito, To-do com mais espaço */
+html.v3 .ts-hero { grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr); gap: 20px; }
+html.v3 .home-grid { grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); gap: 20px; }
+@media (max-width: 1100px) { html.v3 .ts-hero, html.v3 .home-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* painel da direita: To-do em amarelo-manteiga, Avisos em azul-céu, conteúdo em caixas brancas translúcidas */
 html.v3 .side-panel .card { border-radius: 28px; padding: 16px; }
 html.v3 .side-panel .card:has(.todo-list) { background: var(--v3-manteiga); }
 html.v3 .side-panel .card:has(.side-notice), html.v3 .side-panel .card:has([data-route="notices"]) { background: var(--v3-ceu); }
-html.v3 .side-panel .todo-list { background: color-mix(in srgb, var(--surface) 62%, transparent); border-radius: 20px; padding: 4px 14px; }
+html.v3 .side-panel .todo-list { background: color-mix(in srgb, var(--surface) 52%, transparent); border-radius: 20px; padding: 4px 14px; }
 html.v3 .side-panel .todo:last-child { border-bottom: 0; }
-html.v3 .side-notice { border: 0; border-radius: 20px; background: color-mix(in srgb, var(--surface) 62%, transparent); }
+html.v3 .side-notice { border: 0; border-radius: 20px; background: color-mix(in srgb, var(--surface) 52%, transparent); }
 
 /* janelas e gavetas */
 html.v3 .modal { border-radius: 28px; }
@@ -118,3 +135,104 @@ html.v3 .pl-bloco { border-radius: 11px; padding: 5px 8px; }
 html.v3 [data-dg] { transition: rotate .14s ease, scale .14s ease, box-shadow .14s ease; }
 html.v3 [data-dg].arrastando:not(.pl-dg-orig), html.v3 .pl-dg-fly { rotate: -3deg; scale: 1.04; box-shadow: 0 22px 34px -14px rgba(15,15,16,.45), 0 4px 10px rgba(15,15,16,.12) !important; opacity: 1 !important; z-index: 50 !important; }
 html.v3 [data-dg].arrastando.pl-dg-orig { rotate: none; scale: none; }
+
+/* =====================================================================
+   ACABAMENTO (V3.00.03) — o resto do app no mesmo visual. Só aparência: nenhum botão ou informação muda de lugar.
+   ===================================================================== */
+
+/* cor de destaque: o azul padrão (cobalto) vira tinta preta com realce lilás; escolher outra cor em Configurações › Aparência continua valendo */
+html.v3[data-accent="cobalto"] { --accent: #121212; --accent-fg: #FFFFFF; --accent-soft: var(--v3-lilas); --accent-line: color-mix(in srgb, var(--fg) 24%, var(--surface)); }
+@media (prefers-color-scheme: dark) {
+  html.v3[data-accent="cobalto"]:not([data-theme="light"]) { --accent: #F3F3F1; --accent-fg: #121212; --accent-soft: var(--v3-lilas); --accent-line: color-mix(in srgb, var(--fg) 30%, var(--surface)); }
+}
+html.v3[data-theme="dark"][data-accent="cobalto"] { --accent: #F3F3F1; --accent-fg: #121212; --accent-soft: var(--v3-lilas); --accent-line: color-mix(in srgb, var(--fg) 30%, var(--surface)); }
+html.v3 .brand-mark { background: #fff; color: var(--v3-shell); border-radius: 12px; }
+html.v3 .login-brand { color: var(--fg); }
+
+/* avisos de página (amarelo-manteiga; informativo em lilás; erro em pêssego) */
+html.v3 .banner { border: 0; border-radius: 22px; padding: 12px 18px; background: var(--v3-manteiga); }
+html.v3 .banner.info { background: var(--v3-lilas); }
+html.v3 .banner.danger { background: var(--v3-pessego); }
+html.v3 .toast { border-radius: 22px; padding: 12px 18px; box-shadow: 0 20px 40px -16px rgba(15,15,16,.55); }
+html.v3 .toast.rem { border: 0; }
+
+/* abas que quebram em duas linhas não viram uma cápsula gorda; abas sublinhadas viram pílulas */
+html.v3 .seg { border-radius: 22px; }
+html.v3 .tabs { border-bottom: 0; gap: 6px; padding: 12px 18px 4px; background: transparent; }
+html.v3 .tabs button { border-radius: 999px; border-bottom: 0; margin: 0; padding: 6px 14px; }
+html.v3 .tabs button:hover { background: var(--surface-2); }
+html.v3 .tabs button.on { background: var(--fg); color: var(--bg); }
+
+/* tabelas: linhas suaves, sem divisória vertical, realce lilás ao passar o mouse, rodapé com respiro */
+html.v3 table.grid th, html.v3 table.grid td { border-bottom-color: var(--surface-2); }
+html.v3 table.grid td + td, html.v3 table.grid th + th { border-left: 0; }
+html.v3 table.grid th { color: var(--fg-3); font-weight: 500; }
+html.v3 table.grid tbody tr:hover td { background: color-mix(in srgb, var(--v3-lilas) 32%, var(--surface)); }
+html.v3 table.grid.static tbody tr:hover td { background: transparent; }
+html.v3 table.grid tfoot td { padding-block: 12px 16px; }
+html.v3 .table-wrap { padding-bottom: 4px; }
+html.v3 .entry, html.v3 .bank-row, html.v3 .bank-head { border-bottom-color: var(--surface-2); }
+html.v3 .entry-head { border-bottom-color: var(--surface-2); }
+html.v3 .entry:hover { background: color-mix(in srgb, var(--v3-lilas) 32%, var(--surface)); }
+
+/* botão × solto (To-do): redondo e discreto */
+html.v3 .icon-btn { border: 0; background: transparent; color: var(--fg-3); width: 28px; height: 28px; border-radius: 50%; display: inline-grid; place-items: center; padding: 0; font-size: 1.1em; line-height: 1; cursor: pointer; }
+html.v3 .icon-btn:hover { background: var(--surface-2); color: var(--fg); }
+/* To-do do painel da direita: o nome ganha a largura toda e o cliente/projeto desce para a linha de baixo */
+html.v3 .side-panel .todo-list { padding: 2px 10px; }
+html.v3 .side-panel .todo { flex-wrap: wrap; row-gap: 0; }
+html.v3 .side-panel .todo .todo-title { flex: 1 1 100px; min-width: 0; }
+html.v3 .side-panel .todo .todo-lig { order: 9; flex: 1 1 100%; padding-left: 24px; margin-top: -2px; }
+
+/* janelas e gavetas: topo lilás, sem linha dura; menus e popovers bem arredondados */
+html.v3 .overlay { backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+html.v3 .modal > .dh:first-child { background: var(--v3-lilas); border-bottom: 0; border-radius: 28px 28px 0 0; padding: 16px 22px; }
+html.v3 .drawer .dh:first-child { background: var(--v3-lilas); border-bottom: 0; padding: 16px 22px; }
+html.v3 .modal .df { border-top: 0; border-radius: 0 0 28px 28px; padding-inline: 22px; }
+html.v3 .modal .db { padding: 20px 22px; }
+html.v3 .ctxmenu, html.v3 .combo-pop, html.v3 .colmenu, html.v3 .pl-pop, html.v3 .vh-pop, html.v3 .colorpop { border-radius: 20px; border-color: transparent; box-shadow: 0 24px 48px -20px rgba(15,15,16,.38), 0 2px 8px rgba(15,15,16,.08); }
+html.v3 .popt, html.v3 .colmenu .ci, html.v3 .ctxi { border-radius: 12px; }
+html.v3 .popt.on { background: var(--v3-lilas); color: var(--fg); }
+html.v3 .picker { border-radius: 20px; border-color: var(--surface-3); }
+
+/* cartões e caixas */
+html.v3 .kcol { border-radius: 24px; background: var(--surface-2); }
+html.v3 .kcard { border: 0; border-radius: 18px; box-shadow: 0 1px 2px rgba(15,15,16,.05), 0 10px 20px -14px rgba(15,15,16,.25); }
+html.v3 .pjc { border-color: var(--surface-3); border-radius: 20px; }
+html.v3 .pm-card, html.v3 .ap-card, html.v3 .rem-card, html.v3 .cmp-card, html.v3 .an-kpi, html.v3 .log-card { border-radius: 20px; border-color: var(--surface-3); }
+html.v3 .pm-card.ok { border-color: var(--ok); }
+html.v3 .ap-card.ap-fixo { background: var(--v3-lilas); border-color: transparent; }
+html.v3 .import-drop { border-radius: 24px; }
+html.v3 .empty > svg { width: 48px; height: 48px; padding: 12px; border-radius: 50%; background: var(--v3-lilas); color: var(--fg); }
+html.v3 .login-wrap { background: var(--v3-shell); }
+html.v3 .login-card { border: 0; border-radius: 32px; padding: 30px; }
+html.v3 .login-field input { border: 0; border-radius: 999px; background: var(--surface-2); padding: 11px 16px; }
+
+/* barras e gráficos: pontas redondas */
+html.v3 .bar-track, html.v3 .bar-fill, html.v3 .hb-track, html.v3 .hb-fill, html.v3 .pjc-bar, html.v3 .pjc-bar i, html.v3 .meta-bar { border-radius: 999px; }
+html.v3 .pf-bar { border-radius: 12px 12px 6px 6px; }
+
+/* Dias de Rafa */
+html.v3 .rf-cell { border-radius: 16px; border-color: var(--surface-3); }
+html.v3 .rf-cell.rf-out { border: 0; }
+
+/* tela inicial: cartões na altura do conteúdo, projetos ativos mais largos, chips que encolhem com reticências em vez de cortar */
+html.v3 .ts-hero { align-items: start; }
+html.v3 .ap-grid, html.v3 .pjc-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+html.v3 .pjc-grid { padding: 14px; }
+html.v3 .pjc-l2 { flex-wrap: wrap; row-gap: 6px; }
+html.v3 .pjc-acoes > :first-child { white-space: nowrap; }
+html.v3 .ctag { min-width: 0; max-width: 100%; }
+html.v3 .ctag .tag:not(.abbr) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.v3 .hj-panel .hj-l { grid-template-columns: 18px 44px minmax(0, 1fr) minmax(136px, auto) 110px 30px; }
+html.v3 .grp-caret { border: 0; border-radius: 50%; background: var(--surface-2); }
+html.v3 .grp-caret:hover { background: var(--surface-3); }
+html.v3 .ts-hero .panel-h { flex-wrap: wrap; row-gap: 4px; }
+html.v3 .ts-hero .seg button { padding: 6px 11px; }
+
+/* botões e campos que ficam em cima de cores (To-do, Avisos, aviso de página, cronômetro, topo lilás das janelas) são BRANCOS; o cinza só vale em fundo branco */
+html.v3 :is(.side-panel .card, .banner, .kpi, .modal > .dh, .drawer .dh, .ap-card.ap-fixo) .btn:not(.primary):not(.solid) { background: var(--surface); }
+html.v3 :is(.side-panel .card, .banner, .kpi, .modal > .dh, .drawer .dh, .ap-card.ap-fixo) .btn:not(.primary):not(.solid):hover { background: color-mix(in srgb, var(--surface) 78%, var(--surface-3)); }
+html.v3 .side-panel .todo .btn, html.v3 .side-panel .todo .btn:hover { background: transparent; }
+html.v3 :is(.side-panel .card, .banner, .timer-card) .input:not(textarea), html.v3 :is(.side-panel .card, .banner, .timer-card) select.input { background: var(--surface); }
+html.v3 :is(.side-panel .card, .banner, .timer-card) .input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 14%, transparent); }
