@@ -319,3 +319,21 @@ html.v3 .sidebar .data-mode { color: #B5B5B1; font-size: 11px; line-height: 1.7;
 html.v3 .sidebar .data-mode .btn { background: rgba(255,255,255,.14); color: #fff; min-height: 0; padding: 3px 10px; font-size: 11px; text-decoration: none; display: inline-flex; margin-left: 2px; }
 html.v3 .sidebar .data-mode .btn:hover { background: #fff; color: #121212; }
 html.v3 .sidebar .btn.primary { background: #fff; color: #121212; }
+
+/* chips dos programas/arquivos: pílula branca, letra preta, com uma bolinha na cor da categoria (liga o chip à barra) */
+html.v3 .act-chip.act-chip { background: var(--surface); color: #121212; display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+html.v3 .act-chip.act-chip::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; background: var(--tb); vertical-align: middle; position: relative; top: -1px; }
+html.v3 .act-chip.act-chip.on, html.v3 .act-sec.focus .act-chip.act-chip.on { background: var(--surface); box-shadow: 0 0 0 2px var(--fg); }
+html.v3 .panel .act-chip.act-chip:not(.on) { background: var(--surface-2); }
+
+/* To-do: checkbox redondo, play e × do mesmo tamanho, sem contorno; linhas brancas */
+html.v3 .todo input[type=checkbox] { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; flex: none; margin: 0; border: 0; border-radius: 50%; background-color: var(--surface-2); background-repeat: no-repeat; background-position: center; background-size: 12px; cursor: pointer; }
+html.v3 .side-panel .todo input[type=checkbox] { background-color: #fff; }
+html.v3 .todo input[type=checkbox]:checked { background-color: var(--fg); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7'/%3E%3C/svg%3E"); }
+html.v3 .todo .btn.icon, html.v3 .side-panel .todo .btn.icon { width: 20px; height: 20px; min-width: 20px; min-height: 0; padding: 0; border-radius: 50%; flex: none; background: var(--surface-2); }
+html.v3 .side-panel .todo .btn.icon, html.v3 .side-panel .todo .btn.icon:hover { background: #fff; }
+html.v3 .todo .btn.icon svg { width: 9px; height: 9px; }
+html.v3 .side-panel .todo { border-bottom: 1px solid #fff; }
+html.v3 .side-panel .todo:last-child { border-bottom: 0; }
+html.v3 .todo-dayh { border: 0; background: #fff; border-radius: 999px; padding: 3px 12px; }
+html.v3 .panel .todo-dayh { background: var(--surface-2); }
