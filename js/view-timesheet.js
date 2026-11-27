@@ -87,7 +87,7 @@ VIEWS.timesheet = () => {
         <button class="btn" data-act="corte-sessao" data-id="${a.id}" title="Cortar, mover e trocar a tarefa dos trechos da sessão">${icon('scissors')} Ajustar tempo</button>
         <button class="btn" data-act="ts-log-start" data-id="${a.id}" title="Puxa o início da sessão para trás, usando a atividade do log">Início pelo log</button>
         ${focoBtnHTML()}
-        <button class="btn" data-act="ts-edit" data-id="${a.id}" title="Abre a janela completa da sessão">${icon('edit')} Abrir sessão atual</button>
+        <button class="btn" data-act="ts-edit" data-id="${a.id}" title="Abre a janela completa da sessão">${icon('edit')} Sessão atual</button>
       </div>
       ${typeof etapasHTML === 'function' ? etapasHTML(a) : ''}
       ${sessionSumHTML(a)}

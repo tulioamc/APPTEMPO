@@ -91,7 +91,7 @@ html.v3 .timer-card .timer-digits { font-size: clamp(40px, 21cqw, 84px); font-we
 html.v3 .timer-card .timer-digits .sec { font-size: .52em; letter-spacing: -.01em; margin-left: .06em; color: color-mix(in srgb, var(--fg) 52%, var(--v3-lilas)); }
 html.v3 .timer-card .timer-path { color: color-mix(in srgb, var(--fg) 72%, var(--v3-lilas)); font-size: .95em; gap: 6px 8px; }
 html.v3 .timer-card .timer-path b { color: var(--fg); }
-html.v3 .timer-actions.grade { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+html.v3 .timer-actions.grade { grid-template-columns: repeat(2, minmax(max-content, 1fr)); gap: 8px; }
 html.v3 .timer-card .btn { background: var(--surface); min-height: 0; padding: 10px 12px; font-size: .93em; justify-content: center; white-space: nowrap; gap: 8px; }
 html.v3 .timer-card .btn svg { width: 15px; height: 15px; }
 html.v3 .timer-card .btn:hover { background: color-mix(in srgb, var(--surface) 80%, var(--v3-lilas)); }
