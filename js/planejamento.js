@@ -521,11 +521,15 @@ function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0
   PL_ALT_AGORA = alt;
   // largura aproximada da coluna (px), para a regra do texto dos to-dos: Dia = 1/3 da área (3 faixas); Semana = 1/7
   try { const W = Math.max(600, (window.innerWidth || 1400) - 300); PL_COLW_AGORA = unico ? W / 3 : W / 7; } catch (e) { PL_COLW_AGORA = 160; }
-  const itens = planoFaixas(planoJuntaAgenda(planoRegistro15(planoItensDoDia(dia, porDia))), unico, dia).map(x => {
+  const lista = planoFaixas(planoJuntaAgenda(planoRegistro15(planoItensDoDia(dia, porDia))), unico, dia);
+  // Registros repetidos (27/11): só o primeiro bloco de cada projeto/tarefa no dia mostra o texto; os outros ficam só com a cor (o texto volta no hover)
+  const primeiro = {}; lista.forEach(x => { if (x.k !== 'feito' || !x.f) return; const k = (x.f.pid || '') + '|' + (x.f.tid || ''); if (!primeiro[k] || x.a < primeiro[k].a) primeiro[k] = x; });
+  const itens = lista.map(x => {
     let h; try { h = planoItemHTML(x, dia, { alt, unico }); } catch (e) { console.error('Calendário: item com problema', x?.k, e); PLANO.itensRuins = (PLANO.itensRuins || 0) + 1; return ''; }
     if (x._choque) h = h.replace('class="', 'class="choque ').replace('data-tip="', 'data-tip="⚠ Bate no horário com outro item.&#10;');
     if (x._z) h = h.replace('style="', `style="z-index:${2 + x._z};`);
     if (x._sobre) h = h.replace('class="', 'class="pl-sobre ');
+    if (x.k === 'feito' && x.f && primeiro[(x.f.pid || '') + '|' + (x.f.tid || '')] !== x) h = h.replace('class="', 'class="pl-rep ');
     const sk = x.k === 'plano' ? `p:${dia}:${x.bl.tid || x.bl.pid}:${x.bl.ini.toFixed(2)}` : x.k === 'todo' ? 't:' + x.e.id : '';
     if (sk && PLANO.sel.has(sk)) h = h.replace('class="', 'class="pl-sel ');
     return h.replace(/^<div /, `<div data-fk="${esc(x._fk || '')}" data-lane="${x._lane ?? ''}" data-sk="${esc(sk)}" `);
@@ -1357,3 +1361,15 @@ if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') 
   new MutationObserver(() => { if (!raf) raf = requestAnimationFrame(igualar); }).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('resize', () => { if (!raf) raf = requestAnimationFrame(igualar); });
 })();
+
+/* Hover num registro: esmaece o que não é do mesmo projeto e mostra o texto dos blocos repetidos dele */
+if (typeof document !== 'undefined') {
+  const limpa = () => document.querySelectorAll('.pl-foco').forEach(g => { g.classList.remove('pl-foco'); g.querySelectorAll('.pl-foco-on').forEach(x => x.classList.remove('pl-foco-on')); });
+  document.addEventListener('mouseover', (ev) => {
+    const f = ev.target.closest && ev.target.closest('.pl-grade > .pl-feito');
+    if (!f) { limpa(); return; }
+    const sc = f.closest('.pl-scroll') || f.closest('.pl-grade'); if (!sc || (sc.classList.contains('pl-foco') && f.classList.contains('pl-foco-on'))) return;
+    limpa(); const pid = f.dataset.pid || '';
+    sc.classList.add('pl-foco'); sc.querySelectorAll('.pl-grade > .pl-feito').forEach(x => { if ((x.dataset.pid || '') === pid) x.classList.add('pl-foco-on'); });
+  });
+}

@@ -403,3 +403,14 @@ html.v3 .pl-grade .pl-cli, html.v3 .plg-nome .pl-cli { vertical-align: text-bott
 html.v3 .pl-cab .pl-rafa-i, html.v3 .pl-todo-ck { width: 16px !important; height: 16px !important; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 html.v3 .pl-cab .pl-rafa-i svg, html.v3 .pl-todo-ck svg, html.v3 .pl-todo-ck.on svg { width: 11px !important; height: 11px !important; stroke-width: 3; color: #121212; }
 html.v3 .pl-grade > .pl-fixo.apertado { padding: 1px 10px !important; display: flex; align-items: center; }   /* rotina curta (ex.: almoço): menos margem para o texto caber */
+
+/* Calendário: registro repetido = só a cor; no hover, o projeto todo aparece escrito e o resto esmaece */
+html.v3 .pl-grade > .pl-feito.pl-rep:not(.pl-foco-on) .pl-tx, html.v3 .pl-grade > .pl-feito.pl-rep:not(.pl-foco-on) .pl-feito-ag { visibility: hidden; }
+html.v3 .pl-foco .pl-grade > :not(.pl-foco-on):not(.pl-agora):not(.pl-livre) { opacity: .28; transition: opacity .12s; }
+html.v3 .pl-foco .pl-grade > .pl-foco-on { opacity: 1; }
+html.v3 .pl-grade.pl-foco > :not(.pl-foco-on):not(.pl-agora):not(.pl-livre) { opacity: .28; }
+
+/* Sessão: faixa "agência › cliente › projeto" vira pílula, e o botão Alterar fica branco (contrasta com o cinza da pílula) */
+html.v3 .subtle-box:has(> .timer-path) { border-radius: 999px; padding: 6px 6px 6px 8px; align-items: center; }
+html.v3 .subtle-box .btn:not(.primary):not(.solid) { background: var(--surface); }
+html.v3 .subtle-box .btn:not(.primary):not(.solid):hover { background: var(--fg); color: var(--surface); }

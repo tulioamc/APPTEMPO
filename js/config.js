@@ -10,4 +10,4 @@ window.TEMPO_CFG = {
 const FIN_INICIO = '2026-01-01', FIN_INICIO_YM = '2026-01';
 
 /* versão exibida no rodapé da barra lateral; aumentar a cada publicação */
-const APP_VERSION = 'V3.00.22';
+const APP_VERSION = 'V3.00.23';
