@@ -86,8 +86,8 @@ html.v3 .ctag .tag.abbr { padding: 3px 9px; }
 html.v3 .timer-card { background: var(--v3-lilas); border: 0; border-radius: 28px; padding: 22px; gap: 12px; font-size: 13px; container-type: inline-size; }
 html.v3 .timer-card.running { border: 0; }
 html.v3 .timer-card .timer-state { background: var(--surface); border-radius: 999px; padding: 7px 14px; align-self: flex-start; text-transform: none; letter-spacing: 0; font-size: .95em; font-weight: 600; color: var(--fg); }
-html.v3 .timer-card .timer-state .dot.live { background: #E5484D; box-shadow: 0 0 0 3px color-mix(in srgb, #E5484D 22%, transparent); }
-html.v3 .timer-card .timer-digits { font-size: clamp(36px, 17cqw, 64px); font-weight: 600; letter-spacing: -.03em; }
+html.v3 .timer-card .timer-state .dot, html.v3 .timer-card .timer-state .dot.live { background: #E5484D; box-shadow: none; animation: none; }
+html.v3 .timer-card .timer-digits { font-size: clamp(40px, 21cqw, 84px); font-weight: 600; letter-spacing: -.03em; }
 html.v3 .timer-card .timer-digits .sec { font-size: .52em; letter-spacing: -.01em; margin-left: .06em; color: color-mix(in srgb, var(--fg) 52%, var(--v3-lilas)); }
 html.v3 .timer-card .timer-path { color: color-mix(in srgb, var(--fg) 72%, var(--v3-lilas)); font-size: .95em; gap: 6px 8px; }
 html.v3 .timer-card .timer-path b { color: var(--fg); }
@@ -102,7 +102,7 @@ html.v3 .timer-card .timer-actions.linha1 { gap: 8px; }
 html.v3 .timer-card .recent .btn { padding: 7px 14px; }
 
 /* tela inicial: proporções do desenho — cronômetro mais largo (botões em 2 colunas), resumo do dia mais estreito, To-do com mais espaço */
-html.v3 .ts-hero { grid-template-columns: minmax(0, 1.15fr) minmax(0, .9fr); gap: 20px; }
+html.v3 .ts-hero { grid-template-columns: minmax(340px, 410px) minmax(0, 1fr); gap: 20px; }
 html.v3 .home-grid { grid-template-columns: minmax(0, 1fr) minmax(380px, 480px); gap: 20px; }
 @media (max-width: 1100px) { html.v3 .ts-hero, html.v3 .home-grid { grid-template-columns: minmax(0, 1fr); } }
 

@@ -984,3 +984,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V3.00.09 — Boxes brancos voltam a aparecer para quem usa um tema salvo em Aparência: o tema deixava o fundo igual à caixa (por isso o box sumia). No visual novo o tema não mexe mais em fundo, caixas, linhas e cor do texto (a cor de destaque continua a do tema).
 - V3.00.10 — Menu lateral: miniatura do registro de tempo e rodapé (Sincronizado/Em memória, versão e botão Atualizar) agora legíveis sobre o fundo escuro, com texto claro.
 - V3.00.11 — To-do: checkbox redondo, play e × do mesmo tamanho (redondos), sem contorno e com linhas brancas no painel colorido. Chips de programas/arquivos: pílula clara com letra preta e uma bolinha na cor da categoria (cinza bem claro quando está sobre caixa branca).
+- V3.00.12 — Cronômetro: cartão mais estreito (largura fixa de cerca de 400px, o Relatório ocupa o resto), HORA e MINUTO maiores, e o "Registrando" com uma única bolinha vermelha.
