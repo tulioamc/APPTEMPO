@@ -133,7 +133,9 @@ html.v3 .pl-bloco { border-radius: 11px; padding: 5px 8px; }
 /* Calendário: bloco puxado "voa" levemente na diagonal, com sombra embaixo (usa as propriedades rotate/scale,
    que somam com o transform que o arraste já usa) */
 html.v3 [data-dg] { transition: rotate .14s ease, scale .14s ease, box-shadow .14s ease; }
-html.v3 [data-dg].arrastando:not(.pl-dg-orig), html.v3 .pl-dg-fly { rotate: -3deg; scale: 1.04; box-shadow: 0 22px 34px -14px rgba(15,15,16,.45), 0 4px 10px rgba(15,15,16,.12) !important; opacity: 1 !important; z-index: 50 !important; }
+html.v3 [data-dg].arrastando:not(.pl-dg-orig), html.v3 .pl-dg-fly { box-shadow: 0 22px 34px -14px rgba(15,15,16,.45), 0 4px 10px rgba(15,15,16,.12) !important; opacity: 1 !important; z-index: 50 !important; }
+/* só inclina enquanto o mouse se mexe ao mover o bloco (parou de mexer, volta reto para encaixar); esticar/encolher nunca inclina */
+html.v3 [data-dg].arrastando.pl-gira:not(.pl-dg-orig), html.v3 .pl-dg-fly.pl-gira { rotate: -3deg; scale: 1.04; }
 html.v3 [data-dg].arrastando.pl-dg-orig { rotate: none; scale: none; }
 
 /* =====================================================================
@@ -271,7 +273,8 @@ html.v3 .side-panel .todo-list { grid-template-columns: minmax(0, 1fr); }
 /* ===== Calendário: tudo que tem contorno é PLANEJADO; quando é feito, fica cheio e sem contorno ===== */
 /* registro (feito): cor cheia do cliente, sem contorno e sem quadradinho; texto preto em cor clara, branco em cor escura */
 html.v3 .pl-grade > .pl-feito { background: var(--fc) !important; color: var(--ct, #121212) !important; border: 0 !important; box-shadow: none !important; border-radius: 10px !important; }
-html.v3 .pl-grade > .pl-feito .pl-tx b, html.v3 .pl-grade > .pl-feito .pl-tx em { color: var(--ct, #121212) !important; }
+html.v3 .pl-grade > .pl-feito, html.v3 .pl-grade > .pl-feito .pl-tx b, html.v3 .pl-grade > .pl-feito .pl-tx em { color: #121212 !important; color: oklch(from var(--fc) clamp(0, (0.66 - l) * 1000, 1) 0 0) !important; }
+html.v3 .pl-grade > .pl-feito .pl-tx em { opacity: .85; }
 html.v3 .pl-grade > .pl-feito .pl-tx b::before { display: none !important; }
 /* planejado: cor pastel com contorno na cor do cliente/projeto */
 html.v3 .pl-grade > .pl-bloco, html.v3 .pl-grade > .pl-bloco.cc, html.v3 .pl-grade > .pl-bloco.cc.auto { background: color-mix(in oklab, var(--fc) 20%, var(--surface)) !important; color: var(--fg) !important; border: 1.5px solid color-mix(in oklab, var(--fc) 80%, transparent) !important; box-shadow: none !important; border-radius: 10px !important; }
@@ -284,3 +287,25 @@ html.v3 .pl-grade .pl-cli::after { content: " ·"; font-weight: 400; opacity: .6
 html.v3 .pl-grade > .pl-evento.todo { background: var(--surface) !important; border: 1.5px solid var(--fg) !important; color: var(--fg) !important; border-radius: 10px !important; }
 html.v3 .pl-grade > .pl-evento.todo.feito { background: var(--fg) !important; color: var(--surface) !important; border: 0 !important; opacity: 1; text-decoration: none; }
 html.v3 .pl-grade > .pl-fixo, html.v3 .pl-grade > .pl-fixo.fundo { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--fg) 40%, transparent) !important; border-radius: 10px !important; }
+
+/* cinza só em botão sobre fundo branco; sobre cor, o botão é branco (e escurece para preto ao passar o mouse) */
+html.v3 :is(.side-panel .card, .banner, .kpi, .modal > .dh, .drawer .dh, .ap-card.ap-fixo, .timer-card) .btn:not(.primary):not(.solid):hover { background: var(--fg); color: var(--surface); }
+html.v3 :is(.side-panel .card, .banner, .kpi, .modal > .dh, .drawer .dh, .ap-card.ap-fixo, .timer-card) .btn:not(.primary):not(.solid):hover svg { color: var(--surface); }
+html.v3 .timer-card .btn:hover { background: var(--fg); color: var(--surface); }
+html.v3 .timer-card .btn.danger:hover { color: #FFB4B0; }
+/* × do To-do: bolinha preta por padrão */
+html.v3 .todo .icon-btn { background: var(--fg); color: var(--surface); width: 20px; height: 20px; font-size: 13px; }
+html.v3 .todo .icon-btn:hover { background: color-mix(in srgb, var(--fg) 72%, var(--surface)); color: var(--surface); }
+html.v3 .side-panel .todo .icon-btn { width: 20px; height: 20px; }
+
+/* Calendário: cabeçalho dos dias organizado (nada passa para cima do vizinho; textos numa linha) */
+html.v3 .pl-scroll .pl-cab { height: 78px; justify-content: flex-end; gap: 3px; overflow: hidden; }
+html.v3 .pl-cab-l1 { flex-wrap: nowrap; justify-content: space-between; gap: 6px; min-width: 0; }
+html.v3 .pl-cab-l1 .pl-cab-dia { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.v3 .pl-cab .pl-rf, html.v3 .pl-cab .pl-mc-chips > * { flex: none; min-height: 0 !important; padding: 2px 8px !important; font-size: 11px !important; line-height: 1.2; border-radius: 999px !important; white-space: nowrap; }
+html.v3 .pl-cab-l2 { flex-wrap: nowrap; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 11.5px; }
+html.v3 .pl-cab-l2 > * { flex: none; white-space: nowrap; }
+html.v3 .pl-cab-l2 .small { overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+html.v3 .pl-cab .pl-fixdia, html.v3 .pl-cab .pl-reorg { min-height: 0 !important; width: 22px; height: 22px; padding: 0 !important; border-radius: 50%; }
+html.v3 .pl-cab .pl-pvr { padding: 1px 7px; border-radius: 999px; }
+html.v3 .pl-cab-vazio { height: 78px; }

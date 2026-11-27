@@ -1048,6 +1048,10 @@ ACTIONS['pl-encaixar'] = (el) => {
     if (d.modo === 'move' && mexeu) { d.el.style.pointerEvents = 'none'; const c = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-pl-col]'); d.colAlvo = c || d.col0; }
     if (!mexeu && Math.hypot(dx, dy) < 4) return;
     if (!mexeu) { mexeu = true; d.el.classList.add('arrastando'); document.body.classList.add('pl-arrastando'); try { window.getSelection()?.removeAllRanges(); } catch (_) { /* ok */ } tip = document.createElement('div'); tip.className = 'pl-dg-tip'; document.body.appendChild(tip); }
+    if (d.modo === 'move') { // inclina só enquanto o mouse se mexe; parado, volta reto para encaixar
+      const gira = (on) => [d.el, d.fly].forEach(o => o && o.classList.toggle('pl-gira', on));
+      d.gira = gira; gira(true); clearTimeout(d.tGira); d.tGira = setTimeout(() => gira(false), 110);
+    }
     const [a, b] = calc(d, dy);
     d.el.style.top = (a * PL_ALT) + 'px'; d.el.style.height = Math.max(10, (b - a) * PL_ALT - 2) + 'px';
     // Fora do próprio dia (ex.: no Mês, ou levando para outro dia), o bloco "flutua" com o mouse até onde for solto (24/11)
@@ -1077,7 +1081,7 @@ ACTIONS['pl-encaixar'] = (el) => {
     if (d.kind === 'plano' && !d.grupo.length && typeof planoPrevia === 'function') planoPrevia(d, e, a, b);
   });
   document.addEventListener('pointerup', async (e) => {
-    if (!d) return; const x = d; d = null; if (tip) { tip.remove(); tip = null; }
+    if (!d) return; const x = d; d = null; clearTimeout(x.tGira); x.el.classList.remove('pl-gira'); if (tip) { tip.remove(); tip = null; }
     if (x.fly) { (x.flyW || x.fly).remove(); x.fly = null; x.flyW = null; } x.el.classList.remove('pl-dg-orig'); document.body.classList.remove('pl-arrastando');
     if (typeof planoPreviaFim === 'function') planoPreviaFim();
     x.alt = e.altKey; x.meta = e.metaKey;
