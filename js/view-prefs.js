@@ -330,7 +330,11 @@ const THEME_KEYS = Object.keys(themeVars({ accent: '#000000', bg: '#FFFFFF', fg:
 function applyThemeVars() {
   const root = document.documentElement; const t = themePreview || activeThemeOf();
   if (!t) { THEME_KEYS.forEach(k => root.style.removeProperty(k)); return; }
-  const v = themeVars(t); THEME_KEYS.forEach(k => root.style.setProperty(k, v[k]));
+  const v = themeVars(t);
+  // no visual v3 o fundo é cinza e os boxes são brancos: o tema não mexe nessas cores (senão o box some, porque o tema põe fundo = caixa)
+  const SUPERF = ['--bg', '--surface', '--surface-2', '--surface-3', '--line', '--line-strong', '--fg', '--fg-2', '--fg-3'];
+  const v3 = root.classList.contains('v3');
+  THEME_KEYS.forEach(k => { if (v3 && SUPERF.includes(k)) root.style.removeProperty(k); else root.style.setProperty(k, v[k]); });
 }
 const fontFamilyOf = (k) => {
   if (FONTS[k]) return FONTS[k][1];
