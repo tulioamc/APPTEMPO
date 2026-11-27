@@ -755,12 +755,12 @@ function bankSummaryHTML(entity) {
   const nSel = Object.keys(BANK.sel || {}).length;
   const selBar = nSel ? `<div class="row" style="gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;padding:8px 12px;background:var(--surface-2);border-radius:10px"><b class="small">${nSel} selecionado(s)</b><button class="btn sm primary" data-act="bank-bulk-cat">Mudar categoria</button><button class="btn sm danger" data-act="bank-bulk-del">Excluir</button><button class="btn sm ghost" data-act="bank-bulk-clear">Limpar seleção</button></div>` : '';
   return `${bar}${selBar}<div class="kpis">
-    <div class="kpi"><span class="k">${dot(GREEN)}Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas, sem reembolsos</span></div>
-    <div class="kpi"><span class="k">${dot(RED)}Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">${entity === 'pf' ? 'PF + PJ, sem terapias' : 'só PJ, sem terapias'}</span></div>
-    <div class="kpi"><span class="k">${dot(GREEN)}Reembolsos recebidos</span><span class="v">${fmtMoney0(reimbIn)}</span><span class="s">plano de saúde</span></div>
-    <div class="kpi"><span class="k">${dot(RED)}Terapias pagas</span><span class="v">${fmtMoney0(ther)}</span><span class="s">pagas pelo PF</span></div>
-    <div class="kpi"><span class="k">Sobra</span><span class="v">${fmtMoney0(ent + sai)}</span><span class="s">entradas − saídas</span></div>
-    ${cartao ? `<div class="kpi"><span class="k">Fatura do cartão</span><span class="v">${fmtMoney0(cartao)}</span><span class="s">paga · conta uma vez, pelos itens</span></div>` : ''}
+    <div class="kpi tom-pos"><span class="k">${dot(GREEN)}Entradas</span><span class="v">${fmtMoney0(ent)}</span><span class="s">externas, sem reembolsos</span></div>
+    <div class="kpi tom-neg"><span class="k">${dot(RED)}Saídas</span><span class="v">${fmtMoney0(Math.abs(sai))}</span><span class="s">${entity === 'pf' ? 'PF + PJ, sem terapias' : 'só PJ, sem terapias'}</span></div>
+    <div class="kpi tom-neu"><span class="k">${dot(GREEN)}Reembolsos recebidos</span><span class="v">${fmtMoney0(reimbIn)}</span><span class="s">plano de saúde</span></div>
+    <div class="kpi tom-cinza"><span class="k">${dot(RED)}Terapias pagas</span><span class="v">${fmtMoney0(ther)}</span><span class="s">pagas pelo PF</span></div>
+    <div class="kpi ${ent + sai > 0 ? 'tom-pos' : ent + sai < 0 ? 'tom-neg' : 'tom-cinza'}"><span class="k">Sobra</span><span class="v">${fmtMoney0(ent + sai)}</span><span class="s">entradas − saídas</span></div>
+    ${cartao ? `<div class="kpi tom-cinza"><span class="k">Fatura do cartão</span><span class="v">${fmtMoney0(cartao)}</span><span class="s">paga · conta uma vez, pelos itens</span></div>` : ''}
   </div>
   <div class="bank-layout">
     <div class="panel bank-list"><div class="panel-h"><h3>Saídas</h3><span class="small muted">${entity === 'pf' ? 'PF e PJ' : 'só PJ'} · por mês</span><span class="grow"></span><span class="row" style="gap:4px;align-items:center"><button class="btn sm ghost" data-act="bank-mprev" title="Mês anterior">‹</button><button class="btn sm" data-act="bank-mnow" style="min-width:150px">${rbLabel(ym)}</button><button class="btn sm ghost" data-act="bank-mnext" title="Próximo mês">›</button></span><button class="btn sm ${BANK.cmp ? 'on' : ''}" data-act="bank-cmp" style="margin-left:6px">${BANK.cmp ? 'Voltar ao mês' : 'Comparar meses'}</button><button class="btn sm ${fOn ? 'on' : ''}" data-act="bank-f-toggle" style="margin-left:6px">${icon('search')} Filtrar${bankFilterOn() ? ' · ativo' : ''}</button></div>

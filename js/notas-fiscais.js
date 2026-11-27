@@ -282,7 +282,7 @@ VIEWS.notas = () => {
   const kpis = `<div class="kpis">
     <div class="kpi"><span class="k">Emitidas ${ano === 'todos' ? '' : 'em ' + ano}</span><span class="v">${fmtMoney0(soma(val))}</span><span class="s">${mediaTxt ? mediaTxt + ' · ' : ''}${val.length} válidas · ${lista.length - val.length} canceladas/substituídas</span></div>
     <div class="kpi"><span class="k">Este mês</span><span class="v">${fmtMoney0(soma(mesAtual))}</span><span class="s">${mesAtual.length} nota(s)${mediaTxt ? ' · ' + mediaTxt + (vsMedia != null && mesAtual.length ? ` (${vsMedia >= 0 ? '+' : ''}${vsMedia}%)` : '') : ''}</span></div>
-    <div class="kpi"><span class="k">Ainda sem pagamento</span><span class="v">${fmtMoney0(soma(aReceber))}</span><span class="s">${aReceber.length} nota(s)</span></div></div>`;
+    <div class="kpi ${aReceber.length ? 'tom-warn' : 'tom-cinza'}"><span class="k">Ainda sem pagamento</span><span class="v">${fmtMoney0(soma(aReceber))}</span><span class="s">${aReceber.length} nota(s)</span></div></div>`;
   const ms = nfMesesSimples().filter(m => ano === 'todos' || m.ym.startsWith(ano));
   const simples = ms.length ? `<table class="grid static compact"><thead><tr><th>Mês</th><th class="money">Notas válidas</th><th class="money">Declarado no Simples</th><th class="money">Diferença</th><th class="money">DAS</th><th class="money">% de imposto</th></tr></thead><tbody>${ms.map(m => {
     const dif = m.declarado == null ? null : m.declarado - m.notas;

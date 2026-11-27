@@ -115,21 +115,23 @@ VIEWS.shared = () => {
       <input type="month" class="input" style="width:170px" value="${ym}" data-on="sk-month" aria-label="Mês">
       <span class="small muted">Saldo acumulado: ${skStatus(bal)}</span>
     </div>
-    <div class="row" style="gap:24px;flex-wrap:wrap;margin-bottom:16px">
-      <div><div class="small muted">Gastos do filho no mês</div><div class="mono">${fmtMoney(c.total)}</div></div>
-      <div><div class="small muted">Parte da Amanda</div><div class="mono">${fmtMoney(c.due)}</div><div class="small muted">${c.amandaPlan ? `inclui plano ${fmtMoney(c.amandaPlan)}` : ''}</div></div>
-      <div><div class="small muted">Amanda transferiu</div><div class="mono">${fmtMoney(c.received)}</div></div>
-      <div><div class="small muted">Neste mês</div>${skStatus(c.diff)}</div>
+    <div class="kpis" style="margin-bottom:16px">
+      <div class="kpi tom-neu"><span class="k">Gastos do filho no mês</span><span class="v">${fmtMoney(c.total)}</span></div>
+      <div class="kpi tom-cinza"><span class="k">Parte da Amanda</span><span class="v">${fmtMoney(c.due)}</span><span class="s">${c.amandaPlan ? `inclui plano ${fmtMoney(c.amandaPlan)}` : ''}</span></div>
+      <div class="kpi tom-cinza"><span class="k">Amanda transferiu</span><span class="v">${fmtMoney(c.received)}</span></div>
+      <div class="kpi ${Math.abs(c.diff) < 0.005 ? 'tom-pos' : 'tom-warn'}"><span class="k">Neste mês</span><span class="v" style="font-size:1em">${skStatus(c.diff)}</span></div>
     </div>
+    <div class="panel"><div class="panel-b stack" style="gap:10px">
     <div class="field"><span class="lbl">Valor fixo recebido da Amanda neste mês</span>
       <input type="number" step="0.01" min="0" class="input" style="width:200px" value="${c.m.received || ''}" data-on="sk-recv" aria-label="Recebido"></div>
     <details style="margin:12px 0"><summary class="small">Configuração do plano de saúde</summary><div style="margin-top:10px">${planBox}</div></details>
     <div class="row" style="gap:8px;margin:12px 0"><button class="btn sm" data-act="sk-add">+ Extra do mês</button></div>
     <table class="grid"><thead><tr><th>Descrição</th><th style="text-align:right">Valor pago</th><th>Origem</th><th></th></tr></thead>
       <tbody>${(fixedRows + autoRows + elaRow + extraRows) || '<tr><td colspan="4" class="small muted">Nenhum gasto do Rafa neste mês. Entram sozinhos os do extrato com a etiqueta Rafa; fixos em Despesas com a subcategoria Filho; extras aqui.</td></tr>'}</tbody></table>
-    <h3 style="margin:22px 0 8px">Histórico mensal</h3>
+    </div></div>
+    <div class="panel" style="margin-top:14px"><div class="panel-h"><h3>Histórico mensal</h3></div><div class="panel-b">
     <table class="grid"><thead><tr><th>Mês</th><th style="text-align:right">Gastos</th><th style="text-align:right">Parte da Amanda</th><th style="text-align:right">Recebido</th><th>Diferença</th></tr></thead>
-      <tbody>${months || '<tr><td colspan="5" class="small muted">Sem histórico ainda.</td></tr>'}</tbody></table>`;
+      <tbody>${months || '<tr><td colspan="5" class="small muted">Sem histórico ainda.</td></tr>'}</tbody></table></div></div>`;
   return { title: 'Despesas do filho', actions: '', html };
 };
 

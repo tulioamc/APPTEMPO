@@ -95,8 +95,8 @@ html.v3 .timer-actions.grade { grid-template-columns: repeat(2, minmax(max-conte
 html.v3 .timer-card .btn { background: var(--surface); min-height: 0; padding: 10px 12px; font-size: .93em; justify-content: center; white-space: nowrap; gap: 8px; }
 html.v3 .timer-card .btn svg { width: 15px; height: 15px; }
 html.v3 .timer-card .btn:hover { background: color-mix(in srgb, var(--surface) 80%, var(--v3-lilas)); }
-html.v3 .timer-card .btn.primary, html.v3 .timer-card [data-act="ts-pause"] { background: var(--fg); color: var(--bg); }
-html.v3 .timer-card .btn.primary:hover, html.v3 .timer-card [data-act="ts-pause"]:hover { background: color-mix(in srgb, var(--fg) 86%, var(--bg)); }
+html.v3 .timer-card .btn.primary, html.v3 .timer-card [data-act="ts-pause"] { background: var(--fg) !important; color: var(--bg) !important; }
+html.v3 .timer-card .btn.primary:hover, html.v3 .timer-card [data-act="ts-pause"]:hover { background: color-mix(in srgb, var(--fg) 86%, var(--bg)) !important; }
 html.v3 .timer-card .btn.danger { box-shadow: none; }
 html.v3 .timer-card .timer-actions.linha1 { gap: 8px; }
 html.v3 .timer-card .recent .btn { padding: 7px 14px; }
@@ -414,3 +414,49 @@ html.v3 .pl-grade.pl-foco > :not(.pl-foco-on):not(.pl-agora):not(.pl-livre) { op
 html.v3 .subtle-box:has(> .timer-path) { border-radius: 999px; padding: 6px 6px 6px 8px; align-items: center; }
 html.v3 .subtle-box .btn:not(.primary):not(.solid) { background: var(--surface); }
 html.v3 .subtle-box .btn:not(.primary):not(.solid):hover { background: var(--fg); color: var(--surface); }
+
+/* ===== Revisão geral V3 (27/11) ===== */
+/* seções em card (Produtividade, análises): box branco */
+html.v3 .content section.card { background: var(--surface); padding: 20px 22px; border-radius: 26px; }
+/* colunas verticais (Portfólio): canto arredondado, não pílula inteira (vira bolha) */
+html.v3 .meta-bar { border-radius: 14px; background: var(--surface-2); max-width: 64px; }
+/* cards dentro de box branco: cinza claro, sem contorno; linhas internas brancas */
+html.v3 .pjc, html.v3 .cor-proj, html.v3 .cmp-card, html.v3 .pm-card { border: 0 !important; background: var(--surface-2); border-radius: 18px !important; box-shadow: none; }
+html.v3 .pjc:hover, html.v3 .cor-proj:hover { box-shadow: none; background: color-mix(in srgb, var(--surface-2) 80%, var(--fg) 4%); }
+html.v3 .ap-fixo .pjc { background: var(--surface); }
+html.v3 .cor-body { border-top: 2px solid var(--surface) !important; }
+html.v3 .cor-body .grp-kids { background: transparent; }
+html.v3 .cor-body .cor-task + .cor-task, html.v3 .cor-body .grp-kids .entry + .entry { border-top: 1px solid var(--surface); }
+html.v3 .cor-proj .grp-caret { border: 0; background: var(--surface); }
+/* metas: conquistada = verde (cor de sentido), sem contorno; desafio com o mesmo verde um pouco mais forte */
+html.v3 .pm-card.ok { background: var(--v3-menta); }
+html.v3 .pm-card.pm-desafio.ok { background: color-mix(in srgb, var(--v3-menta) 80%, #7CD992); }
+/* etapas dentro do cronômetro (lilás): box branco sem contorno */
+html.v3 .et-box { border: 0 !important; background: var(--surface); border-radius: 18px; }
+
+/* botões: branco sobre fundo cinza/cores, cinza só sobre branco (regra V3) */
+html.v3 .content .btn:not(.primary):not(.solid):not(.ghost):not(.on):not(.seg *) { background: var(--surface); }
+html.v3 :is(.panel, .content section.card, .modal, .drawer, .ex-mes-box) .btn:not(.primary):not(.solid):not(.ghost):not(.on):not(.seg *) { background: var(--surface-2); }
+html.v3 body :is(.side-panel .card, .banner, .kpi, .modal > .dh, .drawer .dh, .ap-card.ap-fixo, .timer-card, .pjc, .cor-proj, .cmp-card, .pm-card, .et-box, .subtle-box, .notice, .todo-rel) .btn:not(.primary):not(.solid):not(.ghost):not(.on):not(.seg *) { background: var(--surface); }
+html.v3 .content .btn:not(.primary):not(.solid):not(.ghost):not(.on):not(.seg *):hover { background: var(--fg); color: var(--surface); }
+html.v3 .pjc-acoes { border-top-color: var(--surface); }
+/* KPIs: o 4º da fileira era transparente com tracejado (sumia sem contorno) → branco; tons de sentido valem em qualquer KPI */
+html.v3 .kpis > .kpi:nth-child(4n+4), html.v3 .kpi-row > .kpi:nth-child(4n+4) { background: var(--surface); }
+html.v3 .kpis > .kpi.tom-pos, html.v3 .kpi.tom-pos { background: var(--v3-menta); }
+html.v3 .kpis > .kpi.tom-neg, html.v3 .kpi.tom-neg { background: var(--v3-pessego); }
+html.v3 .kpis > .kpi.tom-neu, html.v3 .kpi.tom-neu { background: var(--v3-ceu); }
+html.v3 .kpis > .kpi.tom-warn, html.v3 .kpi.tom-warn { background: var(--v3-manteiga); }
+html.v3 .kpis > .kpi.tom-cinza, html.v3 .kpi.tom-cinza { background: var(--surface); }
+/* Avisos: cada aviso num box branco (antes ficavam soltos no fundo cinza, separados por linha) */
+html.v3 .notice-row { background: var(--surface); border: 0; border-radius: 22px; padding: 14px 18px; margin-bottom: 8px; }
+html.v3 .notice-row .btn:not(.primary):not(.solid):not(.ghost):not(.on) { background: var(--surface-2); }
+html.v3 .notice-row .btn:not(.primary):not(.solid):not(.ghost):not(.on):hover { background: var(--fg); color: var(--surface); }
+/* Dias de Rafa: dias em cinza claro, sem contorno (o tracejado continua só no que o app preencheu sozinho) */
+html.v3 .rf-cell { border-color: transparent; background: var(--surface-2); border-radius: 14px; }
+html.v3 .rf-cell.rf-we { background: color-mix(in srgb, var(--surface-2) 70%, var(--line)); }
+html.v3 .rf-cell.rf-auto { border: 1.5px dashed var(--line-strong); }
+html.v3 .rf-cell:hover { border-color: transparent; background: color-mix(in srgb, var(--surface-2) 80%, var(--fg) 6%); }
+html.v3 .rf-cell.rf-out { background: transparent; }
+/* Time Sheet: To-do/Avisos ocupam no máx. 1/3, sobrando espaço para o relatório não espremer em telas menores */
+html.v3 .home-grid { grid-template-columns: minmax(0, 1fr) minmax(320px, 32%); }
+html.v3 .ts-hero { grid-template-columns: minmax(330px, 410px) minmax(300px, 1fr); }
