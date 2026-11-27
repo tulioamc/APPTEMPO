@@ -497,7 +497,7 @@ html.v3 .pl-grade > .pl-feito, html.v3 .pl-grade > .pl-bloco { padding: 6px 9px 
   html.v3 .pl-grade .pl-cli { display: table !important; margin: 0 0 3px !important; }
 }
 /* rotinas (tarefas diárias) por cima do registro e com o texto afastado do canto esquerdo */
-html.v3 .pl-grade > .pl-fixo { z-index: 40 !important; padding-left: 12px !important; }
+html.v3 .pl-grade > .pl-fixo { padding-left: 12px !important; }
 /* cronômetro: tarefa fora da pílula, embaixo, em letra grande (a pílula fica só com agência/cliente/projeto) */
 html.v3 .timer-card .timer-path .timer-proj { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 html.v3 .timer-card .timer-tarefa { font-size: 1.15em; font-weight: 700; line-height: 1.25; margin: -2px 2px 0; }
@@ -521,3 +521,10 @@ html.v3 .rf-mdet-ela { margin-top: 10px; padding-top: 8px; border-top: 1px dashe
 /* dica com gráfico (Gastos PF): fundo branco, o gráfico não some mais no lilás */
 html.v3 .strip-tip.tip-graf { background: var(--surface) !important; color: var(--fg); border-color: var(--line) !important; }
 html.v3 .timer-card .timer-actions.linha1 .btn > svg { display: none; }   /* ícone invisível empurrava o texto para a direita */
+/* bloco com um to-do/rotina passando por cima: o texto fica só na parte livre (quebra linha em vez de ficar coberto) */
+html.v3 .pl-grade > [style*="--txf"] .pl-tx { max-width: calc(var(--txf) - 6px); }
+html.v3 .pl-grade > [style*="--txf"] .pl-tx b, html.v3 .pl-grade > [style*="--txf"] .pl-tx em { white-space: normal; overflow-wrap: anywhere; }
+/* arrastar no Calendário: o bloco "voa" com sombra embaixo (uma regra de cor dos blocos apagava a sombra) */
+html.v3 .pl-grade > [data-dg].arrastando:not(.pl-dg-orig), html.v3 body .pl-dg-fly { box-shadow: 0 22px 34px -14px rgba(15,15,16,.45), 0 4px 10px rgba(15,15,16,.12) !important; }
+html.v3 body .notice-row .btn:not(.primary):not(.solid):not(.ghost):not(.on):not(.seg *) { background: var(--surface-2); }
+html.v3 body .notice-row .btn:not(.primary):not(.solid):not(.ghost):not(.on):not(.seg *):hover { background: var(--fg); color: var(--surface); }

@@ -271,7 +271,7 @@ function planoItensDoDia(dia, porDia) {
   // 3 ou mais to-dos no mesmo horário viram um bloco só ("7 to-dos"), com a lista no hover
   const porHora = {}; evs.filter(e => e.origem === 'todo').forEach(e => { (porHora[e.ini + '|' + e.fim] ||= []).push(e); });
   evs.forEach(e => {
-    if (e.origem === 'todo') { const g = porHora[e.ini + '|' + e.fim]; if (g.length >= 3) { if (g[0] === e) it.push({ k: 'todos', a: e.ini, b: e.fim, lista: g }); return; } }
+    if (e.origem === 'todo') { const g = porHora[e.ini + '|' + e.fim]; if (g.length >= (db.setting('planoModo', 'semana') === 'dia' ? 3 : 2)) { /* na semana a coluna é estreita: 2 to-dos no mesmo horário já viram um bloco só */ if (g[0] === e) it.push({ k: 'todos', a: e.ini, b: e.fim, lista: g }); return; } }
     it.push({ k: e.origem === 'todo' ? 'todo' : 'evento', a: e.ini, b: e.fim, e });
   });
   planoFeitosDoDia(dia).forEach(f => it.push({ k: 'feito', a: f.ini, b: f.fim, f }));
@@ -332,14 +332,15 @@ function planoCascata(itens) {
   // 25/11: to-dos e rotina maleável ficam POR CIMA (fundo translúcido), ocupando parte do bloco de baixo (planoSobrepor).
   const fundo = itens.filter(x => x.k === 'fixo' && !planoSobreTipo(x)); fundo.forEach(x => { x._left = 0; x._w = 100; x._fundo = true; x._z = 0; });
   const ord = planoFaixasLivre(itens.filter(x => x.k !== 'fixo' && !planoSobreTipo(x)));
-  ord.forEach((x, k) => { x._left = x._l * (100 / x._n) * PL_CALHA; x._w = 100 / x._n * PL_CALHA; x._nivel = 0; x._z = k + 1; });
+  ord.forEach((x, k) => { x._left = x._l * (100 / x._n) * PL_CALHA; x._w = 100 / x._n * PL_CALHA; x._nivel = 0; x._z = k + 1; x._txtFrac = undefined; });
   return [...fundo, ...ord, ...planoSobrepor(itens.filter(planoSobreTipo), ord)];
 }
 /* Itens que ficam por cima dos outros, com fundo translúcido e contorno inteiro: to-dos e rotina maleável
    (a fixada, inegociável, continua de fundo). */
 /* Como no Google Agenda: os blocos de baixo deixam uma calha à direita (7%), por onde os de cima passam e se destacam. */
 const PL_CALHA = 0.93;
-const planoSobreTipo = (x) => x.k === 'todo' || x.k === 'todos' || (x.k === 'fixo' && x.m && x.m.pin === false);
+// 27/11: toda rotina (fixa ou flexível) fica por cima do registro e desvia do texto dele, em vez de ficar no fundo coberta
+const planoSobreTipo = (x) => x.k === 'todo' || x.k === 'todos' || x.k === 'fixo';
 let PL_ALT_AGORA = null, PL_COLW_AGORA = null;   // altura de 1 h na grade que está sendo desenhada (para saber quanto ocupa o texto de um bloco)
 /* Regra (25/11): o item de cima entra um pouco recuado (o bloco de baixo continua aparecendo na esquerda) e pode cobrir
    o corpo do bloco de baixo. Se ele cair em cima do TEXTO de outro:
@@ -362,7 +363,12 @@ function planoSobrepor(over, base) {
     viz.forEach(p => {
       const zona = p._sobre ? (p.k === 'fixo' ? tH : tH1) : tH;
       if (!(x.a < p.a + zona - 1e-9 && fimX > p.a + 1e-9)) return;   // não encosta no texto dele
-      if (!p._sobre) { left = Math.max(left, (p._left ?? 0) + (p._w ?? 100) * 0.5); return; }
+      if (!p._sobre) {
+        left = Math.max(left, (p._left ?? 0) + (p._w ?? 100) * 0.5);
+        // o texto do bloco de baixo fica só na parte livre, à esquerda de quem passa por cima (nada escrito fica coberto)
+        p._txtFrac = Math.min(p._txtFrac ?? 1, Math.max(0.3, (left - (p._left ?? 0)) / (p._w ?? 100)));
+        return;
+      }
       const fimTxt = (p._left ?? 0) + Math.min(p._w ?? 100, larguraTxt(p)) + 2;
       if (100 - fimTxt >= Math.max(28, Math.min(40, larguraTxt(x)))) left = Math.max(left, fimTxt);
       else divide = p;
@@ -388,7 +394,7 @@ function planoFaixas(itens0, unico = true, dia = '') {
   const W = 100 / 3; const out = [];
   lanes.forEach((ls, li) => {
     const base = planoFaixasLivre(ls.filter(x => !planoSobreTipo(x)));
-    base.forEach(x => { x._left = x._l * (100 / x._n) * PL_CALHA; x._w = 100 / x._n * PL_CALHA; });
+    base.forEach(x => { x._left = x._l * (100 / x._n) * PL_CALHA; x._w = 100 / x._n * PL_CALHA; x._txtFrac = undefined; });
     const over = planoSobrepor(ls.filter(planoSobreTipo), base);
     [...base, ...over].forEach(x => {
       x._left = li * W + (x._left ?? 0) * W / 100; x._w = (x._w ?? 100) * W / 100;
@@ -422,7 +428,7 @@ const PL_PUX = '<i class="dg-t" title="Puxe para mudar o começo"></i><i class="
 function planoItemHTML(x, dia, { alt, unico, auto }) {
   const y = x.a * alt, h = (x.b - x.a) * alt;
   const pos = `top:${y}px;height:${Math.max(x.k === 'feito' ? 3 : 14, h - (x.k === 'feito' ? 1 : 2))}px;left:calc(${(x._left ?? 0).toFixed(3)}% + 1px);width:calc(${(x._w ?? 100).toFixed(3)}% - 3px)`;
-  const curto = h < 30;
+  const curto = h < 46;   /* 27/11: com o respiro novo, a 2ª linha só cabe a partir de ~46 px */
   if (x._marc) {   // to-do na Semana: marcador pequeno na borda direita (bolinha e hora; nome no hover)
     const l = x.k === 'todos' ? x.lista : [x.e]; const feito = l.every(e => e.feito);
     return `<div class="pl-marc${feito ? ' feito' : ''}" style="top:${y}px"${l.length === 1 ? ` data-act="todo-modal" data-id="${l[0].id}"` : ''} data-tip="${esc(`${l.length > 1 ? l.length + ' to-dos às ' : 'To-do às '}${planoHora(x.a)}\n` + l.map(e => (e.feito ? '✓ ' : '• ') + e.titulo).join('\n'))}"><i></i>${l.length > 1 ? l.length + ' · ' : ''}${planoHora(x.a)}</div>`;
@@ -449,7 +455,7 @@ function planoItemHTML(x, dia, { alt, unico, auto }) {
     // registrado no mesmo desenho do planejado (chip do cliente · tarefa / projeto · hora · duração), na cor do cliente
     const cc = cl ? hexOf(cl.color || 'gray') : planoCor(f.pid); const ct = typeof textOn === 'function' ? textOn(cc) : '#fff';
     const nome = tk ? tk.name : pr?.name || 'Sem projeto';
-    return `<div class="pl-feito cli${x.agenda ? ' com-agenda' : ''}" data-pid="${esc(f.pid || '')}" data-tid="${esc(f.tid || '')}" style="${pos};--fc:${cc};--cc:${cc};--ct:${ct}" data-tip="${esc(`Registrado: ${tk ? tk.name + ' · ' : ''}${pr?.name || 'Sem projeto'}${cl ? '\n' + cl.name : ''}\n${planoHora(f.ini)}–${planoHora(f.fim)} · ${fmtH(f.ms)} trabalhado${x.agenda ? '\n' + x.agenda.map(e => `Agenda: ${e.titulo} (${planoHora(e.ini)}–${planoHora(e.fim)})`).join('\n') : ''}`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"${f.tid ? ` data-tab="tasks" data-tk="${f.tid}"` : ''}` : ''}>${h >= 12 ? `<span class="pl-tx"><b>${planoCliChip(pr)}${esc(nome)}</b>${!curto ? `<em>${tk && pr ? esc(pr.name) + ' · ' : ''}${planoHora(f.ini)} · ${fmtH(f.ms)}${unico && cl ? ' · ' + esc(cl.name) : ''}${x.agenda ? ' · ' + esc(x.agenda[0].titulo) : ''}</em>` : ''}</span>` : ''}${x.agenda ? `<span class="pl-feito-ag">${icon('calendar')}</span>` : ''}</div>`; }
+    return `<div class="pl-feito cli${x.agenda ? ' com-agenda' : ''}" data-pid="${esc(f.pid || '')}" data-tid="${esc(f.tid || '')}" style="${pos};--fc:${cc};--cc:${cc};--ct:${ct}" data-tip="${esc(`Registrado: ${tk ? tk.name + ' · ' : ''}${pr?.name || 'Sem projeto'}${cl ? '\n' + cl.name : ''}\n${planoHora(f.ini)}–${planoHora(f.fim)} · ${fmtH(f.ms)} trabalhado${x.agenda ? '\n' + x.agenda.map(e => `Agenda: ${e.titulo} (${planoHora(e.ini)}–${planoHora(e.fim)})`).join('\n') : ''}`)}"${f.pid ? ` data-act="proj-open" data-id="${f.pid}"${f.tid ? ` data-tab="tasks" data-tk="${f.tid}"` : ''}` : ''}>${h >= 24 ? `<span class="pl-tx"><b>${planoCliChip(pr)}${esc(nome)}</b>${!curto ? `<em>${tk && pr ? esc(pr.name) + ' · ' : ''}${planoHora(f.ini)} · ${fmtH(f.ms)}${unico && cl ? ' · ' + esc(cl.name) : ''}${x.agenda ? ' · ' + esc(x.agenda[0].titulo) : ''}</em>` : ''}</span>` : ''}${x.agenda ? `<span class="pl-feito-ag">${icon('calendar')}</span>` : ''}</div>`; }
   const b = x.bl; const p = db.get('tempo_projects', b.pid); const c = planoCor(b.pid);
   // "Cor do cliente": o texto segue a cor de texto definida no cliente (senão, preto ou branco pela leitura) e o chip fica invertido
   // "Cor do cliente" fica sempre ligado (27/11): o botão saiu
@@ -530,6 +536,7 @@ function planoColHTML(dia, porDia, { alt = PL_ALT, unico = false, linhasTopo = 0
     if (x._choque) h = h.replace('class="', 'class="choque ').replace('data-tip="', 'data-tip="⚠ Bate no horário com outro item.&#10;');
     if (x._z) h = h.replace('style="', `style="z-index:${2 + x._z};`);
     if (x._sobre) h = h.replace('class="', 'class="pl-sobre ');
+    if (x._txtFrac && x._txtFrac < 0.99) h = h.replace('style="', `style="--txf:${(x._txtFrac * 100).toFixed(1)}%;`);
     if (x.k === 'feito' && x.f && primeiro[(x.f.pid || '') + '|' + (x.f.tid || '')] !== x) h = h.replace('class="', 'class="pl-rep ');
     const sk = x.k === 'plano' ? `p:${dia}:${x.bl.tid || x.bl.pid}:${x.bl.ini.toFixed(2)}` : x.k === 'todo' ? 't:' + x.e.id : '';
     if (sk && PLANO.sel.has(sk)) h = h.replace('class="', 'class="pl-sel ');

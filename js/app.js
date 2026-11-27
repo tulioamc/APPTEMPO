@@ -159,6 +159,8 @@ function restoreScroll(k) {
   window.scrollTo(0, k.win);
 }
 function render() {
+  /* 27/11: com um bloco sendo arrastado no Calendário, redesenhar a tela no meio cortava o arrasto (sumia a animação); espera soltar */
+  if (document.body && document.body.classList.contains('pl-arrastando')) { clearTimeout(render.adiado); render.adiado = setTimeout(render, 250); return; }
   try { faixaCoresAplicar(); } catch (e) { /* antes do activity.js carregar */ }
   if (S.route === 'relatorios') S.route = relTab(db.setting('relTab', '')) ? db.setting('relTab', '') : 'productivity';
   const view = VIEWS[S.route] || VIEWS.timesheet;
