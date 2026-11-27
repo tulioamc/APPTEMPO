@@ -325,9 +325,9 @@ html.v3 .sidebar .data-mode .btn:hover { background: #fff; color: #121212; }
 html.v3 .sidebar .btn.primary { background: #fff; color: #121212; }
 
 /* chips dos gráficos: pílula na cor da categoria/cliente, letra preta/branca pelo contraste; a sigla do cliente (e o "+N") vai numa mini-pílula branca com letra preta */
-html.v3 .act-chip.act-chip { background: var(--tb); color: #121212; color: oklch(from var(--tb) clamp(0, (0.66 - l) * 1000, 1) 0 0); display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top; font-weight: 600; }
+html.v3 .act-chip.act-chip { background: var(--tb); color: #121212; color: oklch(from var(--tb) clamp(0, (0.66 - l) * 1000, 1) 0 0); display: inline-block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top; font-weight: 500; }
 html.v3 .act-chip.act-chip::before { content: none; }
-html.v3 .act-chip.act-chip .faint { opacity: 1; font-weight: 800; }
+html.v3 .act-chip.act-chip .faint { opacity: 1; font-weight: 800; margin-left: 6px; }
 html.v3 .act-chip.act-chip.on, html.v3 .act-sec.focus .act-chip.act-chip.on { background: var(--tb); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--fg); }
 html.v3 .act-chip.act-chip-cli { padding-left: 4px; }
 html.v3 .act-chip .act-sig, html.v3 .act-chip .act-more { display: inline-block; background: #fff; color: #121212; border-radius: 999px; padding: 1px 8px; margin-right: 2px; font-size: .86em; font-weight: 800; line-height: 1.35; }
