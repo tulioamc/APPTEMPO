@@ -80,6 +80,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                 enviar(nil)
             }
         }
+        monitor.onReuniao = { [weak self] comecou, quando in
+            self?.enqueue("reportReuniao", [comecou, self?.iso(quando) ?? ""])
+        }
         monitor.onIdle = { [weak self] from, to in
             self?.enqueue("reportIdle", [self?.iso(from) ?? "", self?.iso(to) ?? "", NSNull()])
         }

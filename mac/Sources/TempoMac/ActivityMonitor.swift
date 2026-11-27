@@ -15,6 +15,8 @@ struct Context: Equatable {
 final class ActivityMonitor {
     var onSegment: ((Date, Date, Context) -> Void)?
     var onIdle: ((Date, Date) -> Void)?
+    /// Chamada começou (true) ou terminou (false), com a hora em que aconteceu.
+    var onReuniao: ((Bool, Date) -> Void)?
     /// Tempo com o computador dormindo (tampa fechada): é um motivo de pausa próprio.
     var onSleepEnd: ((Date, Date) -> Void)?
     /// Ao abrir o app: intervalo entre o último uso registrado (app fechado, Mac desligado ou dormindo sem o app)
@@ -96,6 +98,11 @@ final class ActivityMonitor {
     /// Apps e sites onde ficar de mãos paradas com o microfone ligado é reunião.
     private static let appsDeReuniao: Set<String> = ["com.google.Chrome", "com.apple.Safari", "company.thebrowser.Browser", "us.zoom.xos", "com.microsoft.teams", "com.microsoft.teams2", "com.apple.FaceTime", "net.whatsapp.WhatsApp", "desktop.WhatsApp", "com.hnc.Discord", "com.tinyspeck.slackmacgap"]
     private var emReuniao = false
+    /// Apps que são a própria chamada (com microfone ligado, estar aberto já é reunião).
+    private static let appsDeChamada: Set<String> = ["us.zoom.xos", "com.microsoft.teams", "com.microsoft.teams2", "com.apple.FaceTime"]
+    private var naChamada = false
+    private var chamadaSim = 0, chamadaNao = 0
+    private var chamadaDesde: Date? = nil
 
     func tick() {
         let now = Date()
@@ -104,7 +111,13 @@ final class ActivityMonitor {
         // na frente), o tempo vira "Reunião"; usando outro programa durante a chamada, conta o programa normalmente.
         let mic = Self.microfoneEmUso()
         let frente = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-        emReuniao = mic && (idle >= idleLimit || Self.appsDeReuniao.contains(frente))
+        // Chamada de verdade (Meet/Zoom/Teams aberto e microfone ligado): tudo é reunião, qualquer app que esteja na frente.
+        let chamadaAgora = mic && (chamadaNoChrome() != nil || NSWorkspace.shared.runningApplications.contains { Self.appsDeChamada.contains($0.bundleIdentifier ?? "") })
+        if chamadaAgora { chamadaSim += 1; chamadaNao = 0; if chamadaDesde == nil { chamadaDesde = now } } else { chamadaNao += 1; chamadaSim = 0 }
+        if !naChamada && chamadaSim >= 2 { naChamada = true; onReuniao?(true, chamadaDesde ?? now) }          // 2 leituras seguidas (~20 s)
+        if naChamada && chamadaNao >= 6 { naChamada = false; onReuniao?(false, now.addingTimeInterval(-60)); chamadaDesde = nil }   // 1 min sem chamada
+        if !chamadaAgora && !naChamada { chamadaDesde = nil }
+        emReuniao = naChamada || (mic && (idle >= idleLimit || Self.appsDeReuniao.contains(frente)))
         if mic { idle = 0 }
         if now.timeIntervalSince(lastSaved) >= 60 {   // grava o último uso no máximo uma vez por minuto
             lastSaved = now

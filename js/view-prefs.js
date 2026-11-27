@@ -47,6 +47,7 @@ function prefAppearance() {
   </div></div>`;
 }
 ACTIONS.set = (el) => { let v = el.dataset.v; if (['radius', 'fontSize', 'rowPad', 'rowPadFin'].includes(el.dataset.k)) v = Number(v); db.setSetting(el.dataset.k, v); };
+CHANGES['set-bool'] = (el) => { db.setSetting(el.dataset.k, !!el.checked); };
 CHANGES.set = (el) => { let v = el.value; if (['radius', 'fontSize', 'rowPad', 'rowPadFin', 'idleMinutes'].includes(el.dataset.k)) v = Math.max(0, Number(v) || 0); db.setSetting(el.dataset.k, v); };
 
 function optionRows(list, kind) {
@@ -207,6 +208,7 @@ ACTIONS['rem-perm'] = async () => { try { const p = await Notification.requestPe
 function prefTimesheet() {
   return `<div class="panel"><div class="panel-h"><h3>Detecção de inatividade</h3></div><div class="panel-b stack">
     <div class="field"><label for="pf-idle">Sugerir pausa quando ficar parado por mais de (minutos)</label><input id="pf-idle" type="number" min="1" step="1" class="input" style="width:120px" value="${db.setting('idleMinutes', 5)}" data-on="set" data-k="idleMinutes"><span class="hint">Cada intervalo vira uma sugestão no Time Sheet com Aceitar / Encerrar / Ignorar. Nada é alterado sem você confirmar.</span></div>
+    <label class="check" data-tip="Com o app do Mac: microfone ligado e Meet, Zoom ou Teams aberto começa a gravar na tarefa Reuniões do projeto (o do evento da agenda, se o nome bater; senão o atual ou o último). Na chamada, tudo conta como reunião, qualquer app na frente. Quando acaba, encerra e volta para o que estava rodando."><input type="checkbox" ${db.setting('reuniaoAuto', true) !== false ? 'checked' : ''} data-on="set-bool" data-k="reuniaoAuto"> Gravar reunião sozinho quando eu entrar numa chamada (Meet, Zoom, Teams)</label>
     <div class="stack small" style="gap:6px"><b>De onde vem a detecção</b>
       <div class="row"><span class="dot live"></span>Computador suspenso ou app fechado — sempre ativo.</div>
       <div class="row"><span class="dot ${idleDetector ? 'live' : ''}"></span>Mouse e teclado parados (Chrome/Edge no Mac) — ${idleDetector ? 'ativo' : `<button class="btn sm" data-act="idle-on">Ativar</button>`}</div>

@@ -277,6 +277,8 @@ window.TempoBridge = {
     catch (e) { console.warn('reportIdle', e); }
   },
   reportActivity: (seg) => suggestActivity(seg),
+  // chamada (Meet/Zoom/Teams com microfone) começou ou terminou: grava a reunião sozinho
+  reportReuniao: (comecou, quando) => { try { if (comecou) reuniaoComecou(quando); else reuniaoTerminou(quando); } catch (e) { console.warn('reportReuniao', e); } },
   reportWhatsApp: (linhas) => waReport(linhas),
   // conversas: última recebida/enviada, resposta média e mensagens enviadas (para o celular rotular pausas)
   reportWhatsAppConversas: (d) => waReportConversas(d),
