@@ -309,3 +309,13 @@ html.v3 .pl-cab-l2 .small { overflow: hidden; text-overflow: ellipsis; flex: 0 1
 html.v3 .pl-cab .pl-fixdia, html.v3 .pl-cab .pl-reorg { min-height: 0 !important; width: 22px; height: 22px; padding: 0 !important; border-radius: 50%; }
 html.v3 .pl-cab .pl-pvr { padding: 1px 7px; border-radius: 999px; }
 html.v3 .pl-cab-vazio { height: 78px; }
+
+/* menu lateral (escuro): miniatura do registro e rodapé legíveis, com texto claro sobre o fundo escuro */
+html.v3 .sidebar .mini-timer { background: rgba(255,255,255,.12); border: 0; border-radius: 20px; padding: 12px 14px; color: #fff; }
+html.v3 .sidebar .mini-timer:hover { background: rgba(255,255,255,.18); }
+html.v3 .sidebar .mini-timer .t { color: #fff; font-size: 1.35em; }
+html.v3 .sidebar .mini-timer .small, html.v3 .sidebar .mini-timer .muted { color: #D4D4D0; }
+html.v3 .sidebar .data-mode { color: #B5B5B1; font-size: 11px; line-height: 1.7; display: block; }
+html.v3 .sidebar .data-mode .btn { background: rgba(255,255,255,.14); color: #fff; min-height: 0; padding: 3px 10px; font-size: 11px; text-decoration: none; display: inline-flex; margin-left: 2px; }
+html.v3 .sidebar .data-mode .btn:hover { background: #fff; color: #121212; }
+html.v3 .sidebar .btn.primary { background: #fff; color: #121212; }
