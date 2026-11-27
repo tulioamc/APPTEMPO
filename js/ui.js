@@ -224,3 +224,10 @@ function emDiasApply(el) { const n = parseInt(el.value, 10); if (Number.isFinite
 document.addEventListener('click', (e) => { const b = e.target.closest('[data-dias]'); if (b) { e.preventDefault(); emDiasSet(b, Number(b.dataset.dias)); } });
 document.addEventListener('change', (e) => { const el = e.target.closest && e.target.closest('[data-dias-n]'); if (el) emDiasApply(el); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-dias-n]')) { e.preventDefault(); emDiasApply(e.target); } });
+
+/* Campo de data: clicar em qualquer lugar dele abre o calendariozinho (antes só abria no ícone; na tabela de Projetos nem aparecia) */
+if (typeof document !== 'undefined') {
+  const abrePicker = (ev) => { const el = ev.target; if (!el || el.tagName !== 'INPUT' || !/^(date|datetime-local|month|time)$/.test(el.type) || el.disabled || el.readOnly) return; try { el.showPicker && el.showPicker(); } catch (e) { /* sem gesto do usuário: ignora */ } };
+  document.addEventListener('click', abrePicker, true);
+  document.addEventListener('focusin', (ev) => { if (/^(date|datetime-local)$/.test(ev.target?.type || '')) abrePicker(ev); }, true);
+}

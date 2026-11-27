@@ -250,6 +250,15 @@ function nfMesesSimples() {
   const meses = [...new Set([...Object.keys(rec), ...Object.keys(notas)])].sort().reverse();
   return meses.map(ym => { const d = das[ym] ?? dasPago(ym); const r = rec[ym] ?? null; return { ym, declarado: r, notas: notas[ym] || 0, das: d, pct: d && r ? d / r * 100 : null, fonteDas: das[ym] != null ? 'declaração' : d != null ? 'pago' : null }; });
 }
+/* Imposto real: DAS ÷ receita declarada nos últimos 3 meses que têm os dois (para o orçamento ter uma noção real da nota) */
+function nfMediaImposto3m() {
+  const ms = nfMesesSimples().filter(m => m.das && m.declarado).slice(0, 3);
+  if (!ms.length) return null;
+  const das = ms.reduce((t, m) => t + Number(m.das), 0), rec = ms.reduce((t, m) => t + Number(m.declarado), 0);
+  return rec ? { pct: das / rec * 100, meses: ms.map(m => m.ym) } : null;
+}
+const NF_EDITA = new Set();   // notas com agência/cliente abertos para trocar (o resto mostra só os chips)
+ACTIONS['nf-edita'] = (el) => { const id = el.dataset.id; if (NF_EDITA.has(id)) NF_EDITA.delete(id); else NF_EDITA.add(id); render(); };
 function nfFaltando() {
   const out = [];
   ['nacional'].forEach(serie => {   // a série de Recife é antiga e já resolvida: só a nacional conta
@@ -296,7 +305,7 @@ VIEWS.notas = () => {
     return `<tr class="${nfValida(n) ? '' : 'nf-off'}">
       <td>${nfChip(n)}${n.serie === 'municipal' ? ' <span class="faint small">Recife</span>' : ''}</td>
       <td>${fmtDate(n.emitida_em)}</td>
-      <td class="nf-tom"><div class="row" style="gap:4px;flex-wrap:nowrap"><select class="input sm" data-on="nf-ag" data-id="${n.id}" aria-label="Agência">${opts(ags, n.agency_id)}</select><select class="input sm" data-on="nf-cl" data-id="${n.id}" aria-label="Cliente">${opts(cls, n.client_id)}</select></div><div class="small faint nf-cut" title="${esc(n.tomador_nome || '')}">${esc(n.tomador_nome || '')}</div></td>
+      <td class="nf-tom"><div class="row" style="gap:4px;flex-wrap:nowrap">${NF_EDITA.has(n.id) || (!n.agency_id && !n.client_id) ? `<select class="input sm" data-on="nf-ag" data-id="${n.id}" aria-label="Agência">${opts(ags, n.agency_id)}</select><select class="input sm" data-on="nf-cl" data-id="${n.id}" aria-label="Cliente">${opts(cls, n.client_id)}</select>${NF_EDITA.has(n.id) ? `<button type="button" class="btn sm icon ghost" data-act="nf-edita" data-id="${n.id}" data-tip="Pronto: voltar a mostrar os chips">${icon('check')}</button>` : ''}` : `${(() => { const c = n.client_id && db.get('tempo_clients', n.client_id); const a = n.agency_id && db.get('tempo_agencies', n.agency_id); return c ? clientTag(c) : a ? `<span class="ctag"><span class="tag tg abbr" style="${cssTb(a.color)}" title="${esc(a.name)}">${esc(agencyAbbr(a) || a.name)}</span></span>` : ''; })()}<button type="button" class="btn sm icon ghost" data-act="nf-edita" data-id="${n.id}" data-tip="Trocar a agência ou o cliente desta nota">${icon('edit')}</button>`}</div><div class="small faint nf-cut" title="${esc(n.tomador_nome || '')}">${esc(n.tomador_nome || '')}</div></td>
       <td class="money">${fmtMoney(n.valor)}</td>
       <td class="small nf-cut" title="${esc(n.descricao || '')}">${esc(n.descricao || '')}</td>
       <td><select class="input sm" data-on="nf-st" data-id="${n.id}" aria-label="Situação"><option value="" ${!n.status_manual ? 'selected' : ''}>${esc(nfStLabel({ ...n, status_manual: null }))} (auto)</option><option value="valida" ${n.status_manual === 'valida' ? 'selected' : ''}>Válida</option><option value="paga" ${n.status_manual === 'paga' ? 'selected' : ''}>Paga</option><option value="cancelada" ${n.status_manual === 'cancelada' ? 'selected' : ''}>Cancelada</option><option value="substituida" ${n.status_manual === 'substituida' ? 'selected' : ''}>Substituída</option></select></td>

@@ -63,7 +63,11 @@ function usageData() { const { a, b } = usagePeriod(); return usageDataRange(a, 
 /* Fatias: os maiores (até "top") e o resto agrupado em "Demais" (com as partes guardadas em "subs"). */
 function usageSegs(groups, top) {
   const shown = groups.slice(0, top); const rest = groups.slice(top);
-  const segs = shown.map(g => ({ id: g.id, label: g.label || g.id, ms: g.ms, color: g.color || palColor(g.label || g.id) }));
+  // dica: no programa, os arquivos/páginas em que mais ficou (ex.: os PSDs mais usados no Photoshop)
+  const topArq = (g) => { const m = new Map(); (g.items || []).forEach(i => { const n = String(i.doc || i.title || i.url || '').trim(); if (!n) return; m.set(n, (m.get(n) || 0) + (i.ms || 0)); });
+    const l = [...m.entries()].sort((a, b) => b[1] - a[1]); if (!l.length) return '';
+    return `\nMais usados:\n${l.slice(0, 8).map(([n, ms]) => `${typeof shortName === 'function' ? shortName(n, 48) : n} · ${fmtDur(ms)}`).join('\n')}${l.length > 8 ? `\n+${l.length - 8} outros` : ''}`; };
+  const segs = shown.map(g => ({ id: g.id, label: g.label || g.id, ms: g.ms, color: g.color || palColor(g.label || g.id), tip: `${g.label || g.id} · ${fmtDur(g.ms)}${topArq(g)}` }));
   const restMs = rest.reduce((s, g) => s + g.ms, 0);
   if (restMs > 0) segs.push({
     id: '_rest', label: `Demais (${rest.length})`, ms: restMs, color: '#CBD5E1',
@@ -112,7 +116,7 @@ function usageDonutHTML(segs, base) {
 /* Legenda em chips (como na timesheet): passar o mouse acende o trecho correspondente no gráfico. */
 function usageLegendHTML(segs, base) {
   const scale = Math.max(base, 1);
-  return `<div class="act-chips usage-legend">${segs.map(s => `<span class="act-chip" data-hk="${esc(s.id)}" data-hkv="${s.ms}" style="--tb:${esc(s.color)}" title="${esc(s.tip || s.label)}"><i></i>${esc(s.label)} <span class="faint">${usePctTxt(usePct(s.ms, scale))} · ${fmtDur(s.ms)}</span></span>`).join('')}</div>`;
+  return `<div class="act-chips usage-legend">${segs.map(s => `<span class="act-chip" data-hk="${esc(s.id)}" data-hkv="${s.ms}" style="--tb:${esc(s.color)}" data-tip="${esc(s.tip || s.label)}"><i></i>${esc(s.label)} <span class="faint">${usePctTxt(usePct(s.ms, scale))} · ${fmtDur(s.ms)}</span></span>`).join('')}</div>`;
 }
 function usageChartHTML(kind, groups, base, pauseMs = 0) {
   const top = USE.showAll[kind] ? groups.length : USE_TOP[kind];

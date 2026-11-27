@@ -28,8 +28,14 @@ function timerPathHTML(sel) {
   const pj = db.get('tempo_projects', sel.project_id);
   const c = db.get('tempo_clients', sel.client_id) || (pj ? clientOf(pj) : null);
   if (!c) return pathHTML(selPath(sel));
-  const rest = [pj?.name, db.get('tempo_tasks', sel.task_id)?.name, db.get('tempo_tasks', sel.sub_id)?.name].filter(Boolean);
-  return clientTag(c) + (rest.length ? pathHTML(rest) : '');
+  // 27/11: na pílula só agência, cliente e projeto; a tarefa (e a subtarefa) vem embaixo, fora da pílula (timerTarefaHTML)
+  return clientTag(c) + (pj ? `<span class="timer-proj">${esc(pj.name)}</span>` : '');
+}
+function timerTarefaHTML(sel) {
+  const pj = db.get('tempo_projects', sel.project_id); const c = db.get('tempo_clients', sel.client_id) || (pj ? clientOf(pj) : null);
+  if (!c) return '';
+  const t = [db.get('tempo_tasks', sel.task_id)?.name, db.get('tempo_tasks', sel.sub_id)?.name].filter(Boolean);
+  return t.length ? `<div class="timer-tarefa">${pathHTML(t)}</div>` : '';
 }
 function pathHTML(parts) { return parts.length ? parts.map((x, i) => i === parts.length - 1 ? `<b>${esc(x)}</b>` : `<span>${esc(x)}</span><span class="sep">›</span>`).join('') : '<span class="faint">Sessão avulsa, sem projeto</span>'; }
 function entrySel(e) { const t = db.get('tempo_tasks', e.task_id); return { agency_id: e.agency_id || '', client_id: e.client_id || '', project_id: e.project_id || '', task_id: t?.parent_id ? t.parent_id : (t?.id || ''), sub_id: t?.parent_id ? t.id : '' }; }
@@ -78,7 +84,7 @@ VIEWS.timesheet = () => {
     timer = `<div class="timer-card ${a.state === 'running' ? 'running' : ''}">
       <div class="row between"><span class="timer-state"><span class="dot ${a.state === 'running' ? 'live' : 'paused'}"></span>${a.state === 'running' ? 'Registrando' : 'Pausado'} · desde ${fmtTime(entryStart(a))}</span>${wtTag(a.work_type_id)}</div>
       <div class="timer-digits" data-tick="${a.id}" data-fmt="big">${bigClock(entryMs(a))}</div>
-      <div class="timer-path">${timerPathHTML(sel)}</div>${hjProximaLinha(a)}
+      <div class="timer-path">${timerPathHTML(sel)}</div>${timerTarefaHTML(sel)}${hjProximaLinha(a)}
       <div class="timer-actions grade">
         ${a.state === 'running' ? `<button class="btn" data-act="ts-pause" title="Pausa o cronômetro">${icon('pause')} Pausar</button>` : `<button class="btn primary" data-act="ts-resume" title="Retoma o cronômetro">${icon('play')} Retomar</button>`}
         <button class="btn danger" data-act="ts-stop" title="Encerra a sessão">${icon('stop')} Encerrar</button>
@@ -568,7 +574,15 @@ ACTIONS['gap-log'] = (el) => {
 
 /* ---------- seletor hierárquico ---------- */
 function pickerHTML(sel, q = '') {
-  const col = (title, items, key, cur, extra = '') => `<div class="pcol"><div class="pcol-h">${title}</div><div class="pcol-b">${extra}${items.length ? items.map(x => `<button type="button" class="popt ${cur === x.id ? 'on' : ''}" data-act="pk" data-k="${key}" data-v="${x.id}">${x.color ? `<span class="cdot fill" style="--tb:${hexOf(x.color)}"></span>` : ''}<span class="n">${esc(x.name)}</span></button>`).join('') : `<span class="faint small" style="padding:6px 8px">${x_empty(key, sel)}</span>`}</div></div>`;
+  const opt = (x, key, cur) => `<button type="button" class="popt ${cur === x.id ? 'on' : ''}" data-act="pk" data-k="${key}" data-v="${x.id}">${x.color ? `<span class="cdot fill" style="--tb:${hexOf(x.color)}"></span>` : ''}<span class="n">${esc(x.name)}</span></button>`;
+  // 27/11: no topo de Agência, Cliente e Projeto, os usados no último mês (mais recente primeiro); depois uma linha e todos em ordem alfabética
+  const usoRec = (() => { const lim = Date.now() - 31 * 864e5, u = {}; db.all('tempo_time_entries').forEach(e => { const t = new Date(e.segments?.[0]?.s || 0).getTime(); if (t < lim) return; ['agency_id', 'client_id', 'project_id'].forEach(k => { if (e[k] && (!u[e[k]] || u[e[k]] < t)) u[e[k]] = t; }); }); return u; })();
+  const col = (title, items, key, cur, extra = '') => {
+    const alfa = ['agency_id', 'client_id', 'project_id'].includes(key) ? items.slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR')) : items;   // tarefas mantêm a ordem das etapas
+    const rec = ['agency_id', 'client_id', 'project_id'].includes(key) ? items.filter(x => usoRec[x.id]).sort((a, b) => usoRec[b.id] - usoRec[a.id]) : [];
+    const lista = rec.length && rec.length < items.length ? `<span class="pcol-sub">Recentes</span>${rec.map(x => opt(x, key, cur)).join('')}<span class="pcol-sep" aria-hidden="true"></span>${alfa.map(x => opt(x, key, cur)).join('')}` : alfa.map(x => opt(x, key, cur)).join('');
+    return `<div class="pcol"><div class="pcol-h">${title}</div><div class="pcol-b">${extra}${items.length ? lista : `<span class="faint small" style="padding:6px 8px">${x_empty(key, sel)}</span>`}</div></div>`;
+  };
   const ags = agencies();
   const cls = sel.agency_id ? clients(sel.agency_id) : clients();
   const situ = db.setting('pkSitu', 'active') === 'all' ? 'all' : 'active';

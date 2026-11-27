@@ -460,3 +460,63 @@ html.v3 .rf-cell.rf-out { background: transparent; }
 /* Time Sheet: To-do/Avisos ocupam no máx. 1/3, sobrando espaço para o relatório não espremer em telas menores */
 html.v3 .home-grid { grid-template-columns: minmax(0, 1fr) minmax(320px, 32%); }
 html.v3 .ts-hero { grid-template-columns: minmax(330px, 410px) minmax(300px, 1fr); }
+
+/* Orçamento: Porte e Mercado com a mesma largura; multiplicador sozinho à direita */
+.pm-linha { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.pm-linha > .seg { display: flex; width: 100%; }
+.pm-linha > .seg > button { flex: 1; justify-content: center; }
+.pm-linha > .pm-mult { justify-self: end; white-space: nowrap; }
+
+/* números: sem as setinhas de cima/baixo (ficavam por cima do texto nos campos estreitos); setas do teclado continuam funcionando */
+html.v3 input[type=number]::-webkit-inner-spin-button, html.v3 input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+html.v3 input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+/* Orçamento: cada entrega em cinza claro sem contorno (campos brancos); linha fina antes de prazo/desconto; "+ Etapa" alinhado com as etapas */
+html.v3 .qf-grupo { border: 0; background: var(--surface-2); border-radius: 20px; padding: 12px 14px; }
+html.v3 .qf-grupo .input { background: var(--surface); }
+html.v3 .qf-grupo .qf-gpz { border-top: 1px solid var(--line-strong, #d6d6d2); padding-top: 10px; margin-top: 4px; }
+html.v3 .qf-grupo [data-add] { margin-left: 24px; }
+/* chip da agência (sigla) igual ao do cliente: mesma fonte, tamanho, peso, altura e centralização */
+html.v3 .ctag .tag.abbr { font-family: inherit; font-size: .86em; font-weight: 700; letter-spacing: normal; line-height: 1.5; padding: 3px 11px; display: inline-flex; align-items: center; }
+html.v3 .ctag .tag { display: inline-flex; align-items: center; }
+/* Financeiro: botão de abrir/recolher o extrato e os grandes gastos = bolinha (virava uma pílula esticada) */
+html.v3 .gg-tg.btn { width: 22px !important; height: 22px; min-width: 22px; min-height: 0; padding: 0 !important; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; background: var(--surface-2) !important; }
+html.v3 .gg-tg.btn svg { width: 12px; height: 12px; }
+/* Dias de Rafa: espaço entre as semanas igual ao espaço entre os dias */
+html.v3 .rf-row + .rf-row, html.v3 .rf-head + .rf-row { margin-top: 4px; }
+html.v3 .rf-row { row-gap: 4px; }
+/* Topo da página (fundo cinza): seletor de período e botões (pausar, sincronizar) brancos, para não sumirem */
+html.v3 .topbar .input, html.v3 .topbar select.input { background-color: var(--surface); border: 0; }
+html.v3 .topbar .btn:not(.primary):not(.solid):not(.menu-btn) { background: var(--surface); }
+html.v3 .topbar .btn:not(.primary):not(.solid):not(.menu-btn):hover { background: var(--fg); color: var(--surface); }
+/* campos soltos no fundo cinza (fora de box): brancos */
+html.v3 .content > .row .input, html.v3 .content > .row select.input, html.v3 .ex-controls .input { background-color: var(--surface); }
+
+/* Calendário: texto dos blocos mais longe das bordas; bloco estreito (metade da coluna ou menos) põe o cliente numa linha e o nome embaixo */
+html.v3 .pl-grade > .pl-feito, html.v3 .pl-grade > .pl-bloco { padding: 6px 9px !important; container-type: inline-size; }
+@container (max-width: 120px) {
+  html.v3 .pl-grade .pl-cli { display: table !important; margin: 0 0 3px !important; }
+}
+/* rotinas (tarefas diárias) por cima do registro e com o texto afastado do canto esquerdo */
+html.v3 .pl-grade > .pl-fixo { z-index: 40 !important; padding-left: 12px !important; }
+/* cronômetro: tarefa fora da pílula, embaixo, em letra grande (a pílula fica só com agência/cliente/projeto) */
+html.v3 .timer-card .timer-path .timer-proj { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+html.v3 .timer-card .timer-tarefa { font-size: 1.15em; font-weight: 700; line-height: 1.25; margin: -2px 2px 0; }
+html.v3 .timer-card .timer-tarefa .sep { margin: 0 5px; opacity: .5; font-weight: 400; }
+html.v3 .timer-card .timer-tarefa span:not(.sep) { font-weight: 500; }
+/* botões do cronômetro: texto centralizado, mesmo espaço dos dois lados */
+html.v3 .timer-card .timer-actions .btn { justify-content: center; text-align: center; }
+/* "Continuar de onde parou": quebra em linhas em vez de cortar */
+html.v3 .timer-card .recent { display: flex; flex-wrap: wrap; gap: 6px; overflow: visible; }
+html.v3 .timer-card .recent .btn { max-width: 100%; min-width: 0; }
+/* cronômetro e relatório lado a lado com a mesma altura (alinhados por baixo) */
+html.v3 .ts-hero { align-items: stretch; }
+html.v3 .ts-hero > .timer-card { height: auto; align-self: stretch; }
+/* lista de sessões: "em andamento" / "N sessões" sem a bolinha */
+html.v3 .entry .what .tag.pill::before { display: none; }
+/* seletor de projeto: recentes no topo, uma linha, depois todos em ordem alfabética */
+.pcol-sub { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-3); padding: 6px 8px 2px; }
+.pcol-sep { display: block; height: 1px; background: var(--line-strong, #d6d6d2); margin: 6px 8px; }
+html.v3 .picker { border: 0; background: var(--surface-2); border-radius: 18px; }
+html.v3 .rf-mdet-ela { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line-strong, #d6d6d2); }
+/* dica com gráfico (Gastos PF): fundo branco, o gráfico não some mais no lilás */
+html.v3 .strip-tip.tip-graf { background: var(--surface) !important; color: var(--fg); border-color: var(--line) !important; }
