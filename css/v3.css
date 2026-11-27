@@ -399,3 +399,7 @@ html.v3 input[type=checkbox]:checked { background-repeat: no-repeat; background-
 html.v3 .pl-grade > .pl-fixo { padding: 6px 10px !important; }
 html.v3 .pl-grade > .pl-fixo svg { width: 10px !important; height: 10px !important; margin-right: 3px; vertical-align: -1px; }
 html.v3 .pl-grade .pl-cli, html.v3 .plg-nome .pl-cli { vertical-align: text-bottom !important; position: relative; top: 1px; }   /* chip do cliente alinhado com o nome */
+/* uma só bolinha de check em todo o calendário (Rafa e to-do): 16px, check fino desenhado igual */
+html.v3 .pl-cab .pl-rafa-i, html.v3 .pl-todo-ck { width: 16px !important; height: 16px !important; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+html.v3 .pl-cab .pl-rafa-i svg, html.v3 .pl-todo-ck svg, html.v3 .pl-todo-ck.on svg { width: 11px !important; height: 11px !important; stroke-width: 3; color: #121212; }
+html.v3 .pl-grade > .pl-fixo.apertado { padding: 1px 10px !important; display: flex; align-items: center; }   /* rotina curta (ex.: almoço): menos margem para o texto caber */
