@@ -989,3 +989,4 @@ Estado ao fim da conversa V2.04 (site em V2.04.16). Detalhes de cada versão nas
 - V3.00.14 — Cronômetro: agência, cliente e projeto dentro de uma única pílula branca, com os chips nas próprias cores (o do cliente volta a ser colorido), como no desenho.
 - V3.00.15 — Chips dos gráficos (Relatório do Time Sheet e demais): voltam a ser pílulas na cor do cliente/categoria; só a sigla do cliente (e o "+N" da pausa) fica numa mini-pílula branca com letra preta, como no desenho.
 - V3.00.16 — Chips de todos os gráficos de registro (Time Sheet, relatório do período, dia, produtividade, uso): nome com peso normal e tempo em negrito, mais respiro entre os dois, como no desenho.
+- V3.00.17 — Relatório do Time Sheet: "Por projeto (bruto do período)" agora começa fechado e só abre quando você abrir (e continua como você deixou enquanto a tela se atualiza); barras e chips dessa seção herdam a cor do cliente. To-do: o × agora é bolinha branca com × preto.

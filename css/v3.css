@@ -298,8 +298,8 @@ html.v3 :is(.side-panel .card, .banner, .kpi, .modal > .dh, .drawer .dh, .ap-car
 html.v3 .timer-card .btn:hover { background: var(--fg); color: var(--surface); }
 html.v3 .timer-card .btn.danger:hover { color: #FFB4B0; }
 /* × do To-do: bolinha preta por padrão */
-html.v3 .todo .icon-btn { background: var(--fg); color: var(--surface); width: 20px; height: 20px; font-size: 13px; }
-html.v3 .todo .icon-btn:hover { background: color-mix(in srgb, var(--fg) 72%, var(--surface)); color: var(--surface); }
+html.v3 .todo .icon-btn { background: #fff; color: #121212; width: 20px; height: 20px; font-size: 13px; }
+html.v3 .todo .icon-btn:hover { background: var(--surface-2); color: #121212; }
 html.v3 .side-panel .todo .icon-btn { width: 20px; height: 20px; }
 
 /* Calendário: cabeçalho dos dias organizado (nada passa para cima do vizinho; textos numa linha) */

@@ -89,6 +89,13 @@ function pauseBucketsOf(items) {
 const pauseBucketChip = (b) => `<span class="act-chip act-chip-total" data-hl="pk:${b.kind}" style="--tb:${b.color}" data-tip="${esc((b.kind === 'whatsapp' && (b.detail || []).length ? 'Conversas que mais tomaram tempo\n' : '') + (b.detail || []).join('\n'))}"><i></i>${b.kind === 'other' ? `Pausa <span class="act-more">+${b.n}</span>` : esc(b.label)} <span class="faint">${fmtDur(b.ms)}</span></span>`;
 
 /* Caixa "Relatório do Time Sheet". */
+/* "Por projeto" começa fechado e só abre quando o Tulio pedir; a tela é redesenhada de tempos em tempos, então lembramos o que ele abriu. */
+const REP_ABERTOS = new Set();
+document.addEventListener('toggle', (e) => {
+  const d = e.target; if (!d || !d.dataset || !d.dataset.rep) return;
+  if (d.open) REP_ABERTOS.add(d.dataset.rep); else REP_ABERTOS.delete(d.dataset.rep);
+}, true);
+
 /* Aglomerado: uma barra por projeto e outra por tarefa, somando o tempo bruto do período (início ao fim, com pausas). */
 function porProjetoHTML(es) {
   const proj = new Map(), tar = new Map();
@@ -96,7 +103,9 @@ function porProjetoHTML(es) {
     const ep = entryPath(e); const bruto = entryBruIntervals(e).reduce((s, [a, b]) => s + (b - a), 0);
     if (!bruto) return;
     const pk = ep.project ? ep.project.name : 'Sem projeto';
-    const g = proj.get(pk) || { label: pk, ms: 0, color: hexOf(ep.project?.color || 'gray') }; g.ms += bruto; proj.set(pk, g);
+    const cli = ep.project ? clientOf(ep.project) : null;
+    const g = proj.get(pk) || { label: pk, ms: 0, color: hexOf((cli && cli.color) || (ep.project && agOfProject(ep.project)?.color) || 'gray') };   // cor herdada do cliente
+    g.ms += bruto; proj.set(pk, g);
     const tk = ep.task ? `${pk} · ${ep.task.name}` : `${pk} · sem tarefa`;
     const t = tar.get(tk) || { label: tk, ms: 0, color: g.color }; t.ms += bruto; tar.set(tk, t);
   });
@@ -104,7 +113,7 @@ function porProjetoHTML(es) {
   const pl = lista(proj); if (!pl.length) return '';
   const total = pl.reduce((s, x) => s + x.v, 0);
   const tl = lista(tar);
-  return `<details class="rep-det" open style="border-top:1px solid var(--line);padding-top:8px">
+  return `<details class="rep-det" data-rep="porprojeto"${REP_ABERTOS.has("porprojeto") ? " open" : ""} style="border-top:1px solid var(--line);padding-top:8px">
     <summary style="cursor:pointer;font-weight:600"><span class="lbl" style="display:inline">Por projeto (bruto do período)</span> <span class="mono small muted">${fmtDur(total)}</span></summary>
     <div class="stack" style="gap:6px;margin-top:10px">${stdBarsHTML(pl, fmtDur, total)}
       ${tl.length > 1 ? `<details class="rep-more"><summary class="small muted" style="cursor:pointer;padding:4px 0">Por tarefa (${tl.length})</summary><div style="margin-top:6px">${stdBarsHTML(tl, fmtDur, total)}</div></details>` : ''}
