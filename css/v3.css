@@ -255,8 +255,6 @@ html.v3 .act-strip .act-moved { line-height: 18px; font-size: 9px; }
 /* cronômetro: chip do cliente em branco sobre o cartão lilás (a agência segue colorida) */
 html.v3 .timer-card .timer-path .ctag .tag:not(.abbr) { background: var(--surface); color: var(--fg); }
 
-/* Calendário: chip do cliente em pílula, no mesmo padrão dos outros chips */
-html.v3 .pl-cli { border-radius: 999px !important; padding: 1px 8px !important; font-weight: 700; margin-right: 6px; vertical-align: middle; font-size: .8em !important; }
 
 /* caixas sem contorno; a diferença é pela cor: positivo verde, neutro azul ou cinza, atenção amarelo, negativo vermelho */
 html.v3 .panel, html.v3 .card, html.v3 .kpi, html.v3 .todo-rel { border: 0 !important; box-shadow: none; }
@@ -269,3 +267,20 @@ html.v3 .todo-kpi.tom-warn { background: var(--v3-manteiga); }
 html.v3 .todo-kpi.tom-neg { background: var(--v3-pessego); }
 html.v3 .todo-bars span { background: #7CD992; border-radius: 10px; }
 html.v3 .side-panel .todo-list { grid-template-columns: minmax(0, 1fr); }
+
+/* ===== Calendário: tudo que tem contorno é PLANEJADO; quando é feito, fica cheio e sem contorno ===== */
+/* registro (feito): cor cheia do cliente, sem contorno e sem quadradinho; texto preto em cor clara, branco em cor escura */
+html.v3 .pl-grade > .pl-feito { background: var(--fc) !important; color: var(--ct, #121212) !important; border: 0 !important; box-shadow: none !important; border-radius: 10px !important; }
+html.v3 .pl-grade > .pl-feito .pl-tx b, html.v3 .pl-grade > .pl-feito .pl-tx em { color: var(--ct, #121212) !important; }
+html.v3 .pl-grade > .pl-feito .pl-tx b::before { display: none !important; }
+/* planejado: cor pastel com contorno na cor do cliente/projeto */
+html.v3 .pl-grade > .pl-bloco, html.v3 .pl-grade > .pl-bloco.cc, html.v3 .pl-grade > .pl-bloco.cc.auto { background: color-mix(in oklab, var(--fc) 20%, var(--surface)) !important; color: var(--fg) !important; border: 1.5px solid color-mix(in oklab, var(--fc) 80%, transparent) !important; box-shadow: none !important; border-radius: 10px !important; }
+html.v3 .pl-grade > .pl-bloco .pl-tx b, html.v3 .pl-grade > .pl-bloco .pl-tx em, html.v3 .pl-grade > .pl-bloco.cc .pl-tx b, html.v3 .pl-grade > .pl-bloco.cc .pl-tx em { color: var(--fg) !important; }
+html.v3 .pl-grade > .pl-bloco.late { border-color: var(--danger) !important; box-shadow: none !important; }
+/* nome do cliente solto, sem o quadradinho do chip, dentro dos blocos */
+html.v3 .pl-grade .pl-cli { background: transparent !important; color: inherit !important; padding: 0 !important; margin: 0 4px 0 0 !important; box-shadow: none !important; border-radius: 0 !important; font-size: 1em !important; font-weight: 700; }
+html.v3 .pl-grade .pl-cli::after { content: " ·"; font-weight: 400; opacity: .6; }
+/* to-do e rotinas: contorno (são planejados); to-do feito: cheio e sem contorno */
+html.v3 .pl-grade > .pl-evento.todo { background: var(--surface) !important; border: 1.5px solid var(--fg) !important; color: var(--fg) !important; border-radius: 10px !important; }
+html.v3 .pl-grade > .pl-evento.todo.feito { background: var(--fg) !important; color: var(--surface) !important; border: 0 !important; opacity: 1; text-decoration: none; }
+html.v3 .pl-grade > .pl-fixo, html.v3 .pl-grade > .pl-fixo.fundo { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--fg) 40%, transparent) !important; border-radius: 10px !important; }
