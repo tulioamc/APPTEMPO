@@ -1,3 +1,14 @@
+/* To-do do painel da direita: tudo numa linha só (nome + detalhes pequenos); o nome só quebra se for muito grande */
+html.v3 .side-panel .todo-list { padding: 2px 10px; }
+html.v3 .side-panel .todo { flex-wrap: nowrap; gap: 8px; padding: 6px 0; font-size: 12.5px; }
+html.v3 .side-panel .todo .todo-title { flex: 1 1 0; min-width: 72px; line-height: 1.25; }
+html.v3 .side-panel .todo .todo-meta { display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; overflow: hidden; }
+html.v3 .side-panel .todo .todo-meta .todo-due { font-size: 11px; font-family: inherit; color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; }
+html.v3 .side-panel .todo .todo-meta .todo-due.late { color: var(--danger); }
+html.v3 .side-panel .todo .todo-lig { order: 0; flex: 0 1 auto; max-width: 84px; padding: 0; margin: 0; text-transform: uppercase; letter-spacing: .02em; font-weight: 600; }
+html.v3 .side-panel .todo .btn.icon { width: 26px; height: 26px; min-width: 26px; padding: 0; flex: none; }
+html.v3 .side-panel .todo .icon-btn { width: 22px; height: 22px; flex: none; }
+
 /* =====================================================================
    VISUAL V3 (27/11/2026) — camada por cima do styles.css. Só muda o visual (cores, formas, botões, arredondado);
    nenhuma informação muda de lugar. Vale quando <html> tem a classe "v3" (padrão). Para voltar ao visual v2:
@@ -6,7 +17,7 @@
 html.v3 {
   --v3-shell: #0F0F10;
   --v3-lilas: #E9D4FA; --v3-ceu: #D6EEF9; --v3-menta: #CDEFD4; --v3-manteiga: #FBE7A6; --v3-pessego: #FFE2DE;
-  --bg: #F3F3F1; --surface: #FFFFFF; --surface-2: #EFEFEC; --surface-3: #E6E6E3;
+  --bg: #EDEDEA; --surface: #FFFFFF; --surface-2: #EFEFEC; --surface-3: #E6E6E3;
   --line: #E9E9E5; --line-strong: #D8D8D3;
   --fg: #121212; --fg-2: #5D5D5D; --fg-3: #8A8A86;
   --radius: 24px; --radius-sm: 12px;
@@ -41,7 +52,7 @@ html.v3 .sidebar .btn:hover { background: rgba(255,255,255,.14); }
 html.v3 .sidebar .faint, html.v3 .sidebar .muted, html.v3 .sidebar .small { color: #9A9A96; }
 
 /* painéis e cartões: sem borda, bem arredondados */
-html.v3 .panel, html.v3 .kpi, html.v3 .card { border: 0; border-radius: 26px; }
+html.v3 .panel, html.v3 .kpi, html.v3 .card { border: 0; border-radius: 26px; box-shadow: 0 0 0 1px rgba(15,15,16,.05), 0 1px 3px rgba(15,15,16,.04); }
 html.v3 .panel-h { border-bottom-color: var(--surface-2); padding: 16px 22px; }
 html.v3 .panel-h h2, html.v3 .panel-h h3 { font-weight: 600; font-size: 1.05em; }
 html.v3 .panel-b { padding: 18px 22px; }
@@ -83,11 +94,11 @@ html.v3 .ctag .tag.abbr { padding: 3px 9px; }
 
 /* cronômetro (igual ao desenho): cartão lilás; estado em pílula branca com ponto vermelho; HORA e MINUTO grandes, segundo menor;
    botões em duas colunas: Pausar preto, Encerrar branco com texto vermelho, etapa/trocar brancos, o resto branco translúcido */
-html.v3 .timer-card { background: var(--v3-lilas); border: 0; border-radius: 30px; padding: 24px; gap: 14px; container-type: inline-size; }
+html.v3 .timer-card { background: var(--v3-lilas); border: 0; border-radius: 28px; padding: 22px; gap: 12px; font-size: 13px; container-type: inline-size; }
 html.v3 .timer-card.running { border: 0; }
 html.v3 .timer-card .timer-state { background: var(--surface); border-radius: 999px; padding: 7px 14px; align-self: flex-start; text-transform: none; letter-spacing: 0; font-size: .95em; font-weight: 600; color: var(--fg); }
 html.v3 .timer-card .timer-state .dot.live { background: #E5484D; box-shadow: 0 0 0 3px color-mix(in srgb, #E5484D 22%, transparent); }
-html.v3 .timer-card .timer-digits { font-size: clamp(36px, 19cqw, 70px); font-weight: 600; letter-spacing: -.03em; }
+html.v3 .timer-card .timer-digits { font-size: clamp(36px, 17cqw, 64px); font-weight: 600; letter-spacing: -.03em; }
 html.v3 .timer-card .timer-digits .sec { font-size: .52em; letter-spacing: -.01em; margin-left: .06em; color: color-mix(in srgb, var(--fg) 52%, var(--v3-lilas)); }
 html.v3 .timer-card .timer-path { color: color-mix(in srgb, var(--fg) 72%, var(--v3-lilas)); font-size: .95em; gap: 6px 8px; }
 html.v3 .timer-card .timer-path b { color: var(--fg); }
@@ -102,8 +113,8 @@ html.v3 .timer-card .timer-actions.linha1 { gap: 8px; }
 html.v3 .timer-card .recent .btn { padding: 7px 14px; }
 
 /* tela inicial: proporções do desenho — cronômetro mais largo (botões em 2 colunas), resumo do dia mais estreito, To-do com mais espaço */
-html.v3 .ts-hero { grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr); gap: 20px; }
-html.v3 .home-grid { grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); gap: 20px; }
+html.v3 .ts-hero { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 20px; }
+html.v3 .home-grid { grid-template-columns: minmax(0, 1fr) minmax(340px, 430px); gap: 20px; }
 @media (max-width: 1100px) { html.v3 .ts-hero, html.v3 .home-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* painel da direita: To-do em amarelo-manteiga, Avisos em azul-céu, conteúdo em caixas brancas translúcidas */
@@ -246,3 +257,9 @@ html.v3 .act-chip.act-chip.on, html.v3 .act-sec.focus .act-chip.act-chip.on { ba
 html.v3 .act-chip.act-chip:hover { filter: brightness(.96); }
 html.v3 .act-strip { height: 13px; border-radius: 999px; }
 html.v3 .act-strip .act-moved { line-height: 13px; font-size: 9px; }
+
+/* cronômetro: chip do cliente em branco sobre o cartão lilás (a agência segue colorida) */
+html.v3 .timer-card .timer-path .ctag .tag:not(.abbr) { background: var(--surface); color: var(--fg); }
+
+/* Calendário: chip do cliente em pílula, no mesmo padrão dos outros chips */
+html.v3 .pl-cli { border-radius: 999px !important; padding: 1px 8px !important; font-weight: 700; margin-right: 6px; vertical-align: middle; font-size: .8em !important; }

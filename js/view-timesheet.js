@@ -291,7 +291,7 @@ ACTIONS['ts-switch'] = () => {
       </div>`,
     onMount: (ly) => {
       const proj = ly.box.querySelector('#sw-proj'), task = ly.box.querySelector('#sw-task');
-      proj.addEventListener('change', () => { const ts = proj.value ? db.where('tempo_tasks', t => t.project_id === proj.value) : []; task.innerHTML = `<option value="">Sem tarefa</option>${ts.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}`; task.disabled = !proj.value; });
+      proj.addEventListener('change', () => { const ts = proj.value ? db.where('tempo_tasks', t => t.project_id === proj.value && !t.parent_id) : []; task.innerHTML = `<option value="">Sem tarefa</option>${ts.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}`; task.disabled = !proj.value; });
       ly.box.addEventListener('click', (ev) => { const b = ev.target.closest('[data-x="sw-ok"]'); if (!b) return; if (!proj.value) return toast('Escolha um projeto.'); const p = db.get('tempo_projects', proj.value); ly.close(); switchTo(p, task.value || null); });
     },
   });
