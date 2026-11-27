@@ -236,3 +236,13 @@ html.v3 :is(.side-panel .card, .banner, .kpi, .modal > .dh, .drawer .dh, .ap-car
 html.v3 .side-panel .todo .btn, html.v3 .side-panel .todo .btn:hover { background: transparent; }
 html.v3 :is(.side-panel .card, .banner, .timer-card) .input:not(textarea), html.v3 :is(.side-panel .card, .banner, .timer-card) select.input { background: var(--surface); }
 html.v3 :is(.side-panel .card, .banner, .timer-card) .input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 14%, transparent); }
+
+/* chips de programa/arquivo/site (Time Sheet › Por programa, Uso de programas): pílula cheia na cor, sem contorno e sem quadradinho,
+   igual aos chips de agência/cliente; o texto é preto em fundo claro e branco em fundo escuro; a barra tem metade da altura */
+html.v3 .act-chip.act-chip { border: 0; border-radius: 999px; padding: 3px 11px; font-weight: 700; background: var(--tb); color: #121212; color: oklch(from var(--tb) clamp(0, (0.66 - l) * 1000, 1) 0 0); }
+html.v3 .act-chip.act-chip i { display: none; }
+html.v3 .act-chip.act-chip .faint { color: inherit; opacity: .72; font-weight: 600; }
+html.v3 .act-chip.act-chip.on, html.v3 .act-sec.focus .act-chip.act-chip.on { background: var(--tb); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--fg); }
+html.v3 .act-chip.act-chip:hover { filter: brightness(.96); }
+html.v3 .act-strip { height: 13px; border-radius: 999px; }
+html.v3 .act-strip .act-moved { line-height: 13px; font-size: 9px; }
