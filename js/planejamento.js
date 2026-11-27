@@ -1342,3 +1342,18 @@ if (typeof document !== 'undefined' && document.addEventListener) {
   document.addEventListener('gesturechange', (e) => { if (g0 == null) return; e.preventDefault(); zoom((g0 * e.scale) / PLG_W, e.clientX || 0); });
   document.addEventListener('gestureend', () => { g0 = null; });
 }
+
+/* Topo dos dias (27/11): a altura acompanha o dia mais cheio da semana (todos iguais, para a grade continuar alinhada) */
+(() => {
+  let raf = 0;
+  const igualar = () => { raf = 0;
+    document.querySelectorAll('.pl-scroll').forEach(sc => {
+      const cabs = [...sc.querySelectorAll('.pl-cab:not(.pl-cab-vazio)')]; if (!cabs.length) return;
+      sc.style.setProperty('--pl-cab-h', 'auto');
+      const h = Math.max(96, ...cabs.map(c => { c.style.height = 'auto'; const v = c.scrollHeight; c.style.height = ''; return v; }));
+      sc.style.setProperty('--pl-cab-h', h + 'px');
+    });
+  };
+  new MutationObserver(() => { if (!raf) raf = requestAnimationFrame(igualar); }).observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener('resize', () => { if (!raf) raf = requestAnimationFrame(igualar); });
+})();

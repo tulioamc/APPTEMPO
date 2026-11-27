@@ -379,8 +379,16 @@ html.v3 .pl-cab .pl-cap { margin-top: auto; flex: none; }
 html.v3 .tk.aberta { background: var(--surface); }
 html.v3 .tk-lista .tk + .tk { border-top: 1px solid var(--surface-2); }
 html.v3 .pl-scroll .pl-cab > * { flex: none; }
-html.v3 .pl-scroll .pl-cab > .pl-cap { margin-top: auto; }
+html.v3 .pl-scroll .pl-cab > .pl-cap { margin-top: auto; margin-bottom: 2px; }
 html.v3 .pl-cab-l2 { align-content: flex-start; }
 html.v3 .pl-scroll .pl-cab, html.v3 .pl-scroll .pl-cab-vazio { height: 150px; }
 html.v3 .pl-cab .pl-pvr { font-size: 10px; padding: 0 6px; line-height: 16px; }
 html.v3 .pl-scroll .pl-cab { gap: 4px; padding-bottom: 4px; }
+/* topo dos dias mais baixo (27/11): Rafa na mesma linha do plano quando cabe; data nunca é cortada (os chips é que quebram linha) */
+html.v3 .pl-scroll .pl-cab, html.v3 .pl-scroll .pl-cab-vazio { height: 106px; }
+html.v3 .pl-cab-l1 .pl-cab-dia { flex: none; overflow: visible; }
+html.v3 .pl-cab .pl-mc-chips { flex: 0 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end; row-gap: 2px; }
+html.v3 .pl-cab .pl-rafa { height: 20px; font-size: 11.5px; }
+html.v3 .pl-cab .pl-rafa-i { width: 14px; height: 14px; font-size: 11px; }
+html.v3 .pl-scroll .pl-cab, html.v3 .pl-scroll .pl-cab-vazio { height: var(--pl-cab-h, 96px); }
+html.v3 .pl-cab-l2 > :empty { display: none; }   /* o texto vazio do plano empurrava o Rafa para a direita */
