@@ -19,10 +19,12 @@ const TABLES = [
 ];
 
 /* Retrato do banco só das tabelas que vieram: a que falhou fica sem assinatura e é lida de novo na próxima atualização. */
-function sigLidas(sig, snap) {
+function sigLidas(sig, snap, pedidas = TABLES) {
   if (!sig) return sig;
   const out = { ...sig };
-  Object.keys(out).forEach(t => { if (TABLES.includes(t) && !snap[t]) delete out[t]; });
+  // só esquece a assinatura da tabela que foi pedida e não veio (27/11: antes esquecia também as que nem foram pedidas
+  // por não terem mudado, e a atualização seguinte baixava TODAS as tabelas de novo)
+  Object.keys(out).forEach(t => { if (pedidas.includes(t) && !snap[t]) delete out[t]; });
   return out;
 }
 
@@ -109,10 +111,25 @@ const db = {
       const sig = this.adapter.syncState ? await this.adapter.syncState() : null;
       const tables = sig && this.sig ? TABLES.filter(t => sig[t] !== this.sig[t]) : TABLES;
       if (!tables.length) { this.loaded = true; return; }
-      const snap = this.adapter.fetchTables ? await this.adapter.fetchTables(tables) : await this.adapter.loadAll(); if (!snap) return;
+      // 27/11: tabela que só ganhou/alterou linhas → baixa só essas linhas e junta; se o total não bater (algo foi apagado), baixa a tabela inteira
+      const parcial = {}, inteiras = [];
+      if (sig && this.sig && this.adapter.fetchSince) {
+        await Promise.all(tables.map(async t => {
+          const [nAnt, eAnt] = String(this.sig[t] || '').split('|'); const [nNovo] = String(sig[t] || '').split('|');
+          if (!eAnt || !Array.isArray(this.data[t]) || this.data[t].length !== Number(nAnt)) { inteiras.push(t); return; }
+          try {
+            const novas = await this.adapter.fetchSince(t, new Date(Number(eAnt) * 1000 - 1000).toISOString());
+            const m = new Map(this.data[t].map(r => [r.id, r])); novas.forEach(r => m.set(r.id, r));
+            const junto = [...m.values()];
+            if (junto.length !== Number(nNovo)) inteiras.push(t); else parcial[t] = junto;
+          } catch (e) { inteiras.push(t); }
+        }));
+      } else inteiras.push(...tables);
+      const cheio = inteiras.length ? (this.adapter.fetchTables ? await this.adapter.fetchTables(inteiras) : await this.adapter.loadAll()) : {}; if (!cheio) return;
+      const snap = { ...cheio, ...parcial };
       // se alguém gravou durante a busca, o retrato do servidor pode ser antigo: descarta e deixa para a próxima
       if ((this.writes || 0) !== seq || this.pending > 0 || this.unsent()) return;
-      tables.forEach(t => { if (snap[t]) this.data[t] = snap[t]; }); if (sig) this.sig = sigLidas(sig, snap); this.loaded = true; this.saveCache(); this.emit();
+      tables.forEach(t => { if (snap[t]) this.data[t] = snap[t]; }); if (sig) this.sig = sigLidas(sig, snap, tables); this.loaded = true; this.saveCache(); this.emit();
     } catch (e) { /* sem rede: tenta de novo na próxima vez */ }
   },
   subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },

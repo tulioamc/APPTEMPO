@@ -123,7 +123,7 @@ ACTIONS['aj-edita'] = (el) => {
 };
 ACTIONS['aj-feito'] = async (el) => {
   const cli = ajCli(); if (!cli) return; const feito = el.dataset.v === '1';
-  await cli.from('tempo_ajustes').update(feito ? { status: 'feito', feito_em: new Date().toISOString(), feito_versao: APP_VERSION } : { status: 'aberto', feito_em: null, feito_versao: null }).eq('id', el.dataset.id);
+  await cli.from('tempo_ajustes').update(feito ? { status: 'feito', feito_em: new Date().toISOString(), feito_versao: APP_VERSION, imagens: [] } : { status: 'aberto', feito_em: null, feito_versao: null }).eq('id', el.dataset.id);
   ajCarregar();
 };
 ACTIONS['aj-apaga'] = async (el) => {

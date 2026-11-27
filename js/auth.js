@@ -150,6 +150,18 @@ class SupabaseAdapter {
     return out;
   }
   loadAll() { return this.fetchTables(TABLES); }
+  /* Só as linhas criadas ou alteradas desde um momento (27/11: baixar a tabela inteira a cada mudança estourava a cota de tráfego do Supabase). */
+  async fetchSince(t, iso) {
+    let rows = [], from = 0; const step = 1000;
+    for (;;) {
+      const { data, error } = await this.client.from(t).select('*').or(`updated_at.gte.${iso},created_at.gte.${iso}`).order('id', { ascending: true }).range(from, from + step - 1);
+      if (error) throw new Error(`${t}: ${error.message}`);
+      rows = rows.concat(data || []);
+      if (!data || data.length < step) break;
+      from += step;
+    }
+    return rows.map(r => this.unpack(t, r));
+  }
   /* Retrato leve do banco: por tabela, "quantidade|última alteração". Serve para baixar só o que mudou. */
   async syncState() {
     try { const { data, error } = await this.client.rpc('tempo_sync_state'); return error || !data ? null : data; }
