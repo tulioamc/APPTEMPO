@@ -483,7 +483,17 @@ function logSuggestions(day, after = null) {
     if (seen.has(k)) return; seen.add(k);
     out.push({ iso: r.from, label: `Usou ${k} pela primeira vez` });
   });
-  return out.slice(0, 12);
+  // reuniões: cada vez que entrou numa chamada (Meet, Zoom, Teams), com o nome da chamada; vêm primeiro na lista do horário
+  const ehChamada = (r) => /reuni|meet\.google|^meet\b|google meet|zoom|teams|facetime|whereby/i.test(`${r.doc || ''} ${r.app || ''}`);
+  const nomeChamada = (r) => { const t = `${r.doc || ''} ${r.app || ''}`; return /zoom/i.test(t) ? 'Zoom' : /teams/i.test(t) ? 'Teams' : /facetime/i.test(t) ? 'FaceTime' : 'Meet'; };
+  let fimUlt = 0;
+  recs.filter(ehChamada).forEach(r => {
+    const a = new Date(r.from).getTime();
+    if (a - fimUlt > 5 * 60e3) out.push({ iso: r.from, label: `Iniciou o ${nomeChamada(r)} (reunião)`, reuniao: true });
+    fimUlt = Math.max(fimUlt, new Date(r.to).getTime());
+  });
+  out.sort((x, y) => new Date(x.iso) - new Date(y.iso) || (y.reuniao ? 1 : 0) - (x.reuniao ? 1 : 0));
+  return out.slice(0, 14);
 }
 function openForgotModal() {
   if (activeEntry()) return toast('Já existe uma sessão ativa. Use "Início pelo log" para puxar o início.');
@@ -503,7 +513,7 @@ function openStartPicker({ day, title, hint = '', before = null, excludeId = nul
   const l = openLayer({ html: `<div class="dh"><h2>${esc(title)}</h2><span class="grow"></span><button class="btn icon ghost" data-act="close-layer" aria-label="Fechar">${icon('x')}</button></div>
     <div class="db"><div class="stack" style="gap:8px">
       <span class="small muted">${after ? `Sugestões do log desde o fim da última sessão (${hmOf(new Date(after).toISOString())}).` : `Sugestões do log de atividade de ${esc(fmtDate(today))}.`} Marque uma para começar a partir dali, ou digite a hora.</span>
-      ${sugs.length ? sugs.map(x => `<label class="row" style="gap:10px;align-items:center;padding:4px 0"><input type="checkbox" data-fg="${new Date(x.iso).getTime()}"><span class="mono small">${hmOf(x.iso)}</span><span>${esc(x.label)}</span></label>`).join('') : '<div class="empty small">Sem sugestões de registro neste dia.</div>'}
+      ${sugs.length ? sugs.map(x => `<label class="row" style="gap:10px;align-items:center;padding:4px 0"><input type="checkbox" data-fg="${new Date(x.iso).getTime()}"><span class="mono small">${hmOf(x.iso)}</span><span${x.reuniao ? ' style="font-weight:600"' : ''}>${x.reuniao ? `${icon('users', 'ico')} ` : ''}${esc(x.label)}</span></label>`).join('') : '<div class="empty small">Sem sugestões de registro neste dia.</div>'}
       <div class="row" style="gap:8px;align-items:center"><span class="small">Ou hora manual</span><input id="fg-hora" class="input sm mono" placeholder="hh:mm" inputmode="numeric" style="width:90px"></div>
     </div></div>
     <div class="df"><span class="left small muted">${esc(hint)}</span><button class="btn" data-act="close-layer">Cancelar</button><button class="btn primary" data-fg-go>Continuar</button></div>` });
