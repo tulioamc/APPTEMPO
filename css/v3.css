@@ -1,0 +1,113 @@
+/* =====================================================================
+   VISUAL V3 (27/11/2026) — camada por cima do styles.css. Só muda o visual (cores, formas, botões, arredondado);
+   nenhuma informação muda de lugar. Vale quando <html> tem a classe "v3" (padrão). Para voltar ao visual v2:
+   Configurações › Visual › v2 (fica salvo neste aparelho). Apagar este arquivo também volta tudo ao v2.
+   ===================================================================== */
+html.v3 {
+  --v3-shell: #0F0F10;
+  --v3-lilas: #E9D4FA; --v3-ceu: #D6EEF9; --v3-menta: #CDEFD4; --v3-manteiga: #FBE7A6; --v3-pessego: #FFE2DE;
+  --bg: #F3F3F1; --surface: #FFFFFF; --surface-2: #EFEFEC; --surface-3: #E6E6E3;
+  --line: #E9E9E5; --line-strong: #D8D8D3;
+  --fg: #121212; --fg-2: #5D5D5D; --fg-3: #8A8A86;
+  --radius: 24px; --radius-sm: 12px;
+  --shadow: 0 2px 6px rgba(15,15,16,.05), 0 24px 48px -24px rgba(15,15,16,.22);
+}
+@media (prefers-color-scheme: dark) {
+  html.v3:not([data-theme="light"]) { --v3-shell: #050506; --bg: #16171B; --surface: #1F2026; --surface-2: #2A2B32; --surface-3: #33353D; --line: #2C2E35; --line-strong: #3A3C45;
+    --v3-lilas: #352A45; --v3-ceu: #1F3140; --v3-menta: #1E3526; --v3-manteiga: #3B341C; --v3-pessego: #402523; }
+}
+html.v3[data-theme="dark"] { --v3-shell: #050506; --bg: #16171B; --surface: #1F2026; --surface-2: #2A2B32; --surface-3: #33353D; --line: #2C2E35; --line-strong: #3A3C45;
+  --v3-lilas: #352A45; --v3-ceu: #1F3140; --v3-menta: #1E3526; --v3-manteiga: #3B341C; --v3-pessego: #402523; }
+
+/* moldura preta + folha clara arredondada */
+html.v3 body { background: var(--v3-shell); }
+html.v3 .app { padding: 10px 10px 10px 0; min-height: 100vh; }
+html.v3 .main { background: var(--bg); border-radius: 32px; overflow: clip; min-height: calc(100vh - 20px); }
+html.v3 .topbar { background: color-mix(in srgb, var(--bg) 90%, transparent); border-bottom: 0; padding-block: 20px 14px; }
+html.v3 .page-title { font-size: 1.7em; font-weight: 600; letter-spacing: -.02em; }
+
+/* barra lateral escura, tela aberta numa pílula branca */
+html.v3 .sidebar { background: var(--v3-shell); border-right: 0; color: #D9D9D9; top: 10px; height: calc(100vh - 20px); padding-inline: 12px; }
+html.v3 .brand-name { color: #fff; }
+html.v3 .brand-sub, html.v3 .nav-group { color: #8A8A86; }
+html.v3 .nav-btn { color: #CFCFCF; border-radius: 999px; padding-inline: 12px; }
+html.v3 .nav-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+html.v3 .nav-btn.active { background: #fff; color: #121212; }
+html.v3 .nav-btn .count { color: #8A8A86; }
+html.v3 .nav-btn.active .count { color: #5D5D5D; }
+html.v3 .sidebar .btn { background: rgba(255,255,255,.08); color: #E6E6E6; }
+html.v3 .sidebar .btn:hover { background: rgba(255,255,255,.14); }
+html.v3 .sidebar .faint, html.v3 .sidebar .muted, html.v3 .sidebar .small { color: #9A9A96; }
+
+/* painéis e cartões: sem borda, bem arredondados */
+html.v3 .panel, html.v3 .kpi, html.v3 .card { border: 0; border-radius: 26px; }
+html.v3 .panel-h { border-bottom-color: var(--surface-2); padding: 16px 22px; }
+html.v3 .panel-h h2, html.v3 .panel-h h3 { font-weight: 600; font-size: 1.05em; }
+html.v3 .panel-b { padding: 18px 22px; }
+html.v3 .panel-b.tight { padding: 0; }
+html.v3 .kpi { padding: 16px 18px; }
+html.v3 .kpis > .kpi:nth-child(4n+1), html.v3 .kpi-row > .kpi:nth-child(4n+1) { background: var(--v3-ceu); }
+html.v3 .kpis > .kpi:nth-child(4n+2), html.v3 .kpi-row > .kpi:nth-child(4n+2) { background: var(--v3-menta); }
+html.v3 .kpis > .kpi:nth-child(4n+3), html.v3 .kpi-row > .kpi:nth-child(4n+3) { background: var(--v3-lilas); }
+html.v3 .kpis > .kpi:nth-child(4n+4), html.v3 .kpi-row > .kpi:nth-child(4n+4) { background: transparent; border: 2px dashed var(--line-strong); }
+html.v3 .kpi .k { text-transform: none; letter-spacing: 0; font-size: .82em; color: var(--fg-2); font-weight: 500; }
+html.v3 .kpi .v { font-size: 1.6em; letter-spacing: -.02em; }
+
+/* botões em pílula: principal preto, os outros cinza-claro, ícones redondos */
+html.v3 .btn { border-radius: 999px; border-color: transparent; background: var(--surface-2); padding: 8px 16px; min-height: 38px; }
+html.v3 .btn:hover { background: var(--surface-3); }
+html.v3 .btn.primary { background: var(--fg); color: var(--bg); border-color: transparent; }
+html.v3 .btn.primary:hover { filter: none; background: color-mix(in srgb, var(--fg) 85%, var(--bg)); }
+html.v3 .btn.danger { background: var(--surface); color: var(--danger); border-color: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 30%, transparent); }
+html.v3 .btn.danger.solid { background: var(--danger); color: #fff; box-shadow: none; }
+html.v3 .btn.ghost { background: transparent; }
+html.v3 .btn.ghost:hover { background: var(--surface-2); }
+html.v3 .btn.ghost:not(.icon) { background: var(--surface-2); border-color: transparent; }
+html.v3 .btn.sm { min-height: 30px; padding: 4px 12px; }
+html.v3 .btn.icon { border-radius: 50%; min-width: 38px; padding: 6px; }
+html.v3 .btn.sm.icon { min-width: 30px; }
+
+/* campos, seletores e etiquetas */
+html.v3 .input:not(textarea), html.v3 select.input { border-radius: 999px; background: var(--surface-2); border-color: transparent; padding-inline: 14px; }
+html.v3 textarea.input { border-radius: 18px; background: var(--surface-2); border-color: transparent; }
+html.v3 .input:focus { background: var(--surface); border-color: var(--fg); box-shadow: 0 0 0 3px var(--surface-3); }
+html.v3 .seg { border-radius: 999px; padding: 4px; background: var(--surface-2); }
+html.v3 .seg button { border-radius: 999px; padding: 6px 14px; }
+html.v3 .seg button.on { box-shadow: none; }
+html.v3 .tag { border-radius: 999px; padding: 3px 10px; }
+html.v3 .tag.abbr { border-radius: 8px; }
+
+/* cronômetro: cartão lilás; Pausar em preto, Encerrar em branco com texto vermelho, o resto translúcido */
+html.v3 .timer-card { background: var(--v3-lilas); border: 0; border-radius: 30px; }
+html.v3 .timer-card.running { border: 0; }
+html.v3 .timer-card .btn { background: color-mix(in srgb, var(--surface) 58%, transparent); }
+html.v3 .timer-card .btn:hover { background: var(--surface); }
+html.v3 .timer-card .btn.primary, html.v3 .timer-card [data-act="ts-pause"] { background: var(--fg); color: var(--bg); }
+html.v3 .timer-card .btn.danger { background: var(--surface); }
+html.v3 .timer-card .timer-state { background: var(--surface); border-radius: 999px; padding: 6px 14px; align-self: flex-start; }
+
+/* painel da direita: To-do em amarelo-manteiga, Avisos em azul-céu, conteúdo em caixas brancas translúcidas */
+html.v3 .side-panel .card { border-radius: 28px; padding: 16px; }
+html.v3 .side-panel .card:has(.todo-list) { background: var(--v3-manteiga); }
+html.v3 .side-panel .card:has(.side-notice), html.v3 .side-panel .card:has([data-route="notices"]) { background: var(--v3-ceu); }
+html.v3 .side-panel .todo-list { background: color-mix(in srgb, var(--surface) 62%, transparent); border-radius: 20px; padding: 4px 14px; }
+html.v3 .side-panel .todo:last-child { border-bottom: 0; }
+html.v3 .side-notice { border: 0; border-radius: 20px; background: color-mix(in srgb, var(--surface) 62%, transparent); }
+
+/* janelas e gavetas */
+html.v3 .modal { border-radius: 28px; }
+html.v3 .drawer { border-radius: 28px 0 0 28px; overflow: hidden; }
+html.v3 .dh, html.v3 .df { border-color: var(--surface-2); }
+
+/* celular: sem moldura, menu escuro por cima */
+@media (max-width: 860px) {
+  html.v3 .app { padding: 0; }
+  html.v3 .main { border-radius: 0; min-height: 100vh; }
+  html.v3 .sidebar { top: 0; height: 100%; border-radius: 0 24px 24px 0; }
+}
+
+/* Calendário: bloco puxado "voa" levemente na diagonal, com sombra embaixo (usa as propriedades rotate/scale,
+   que somam com o transform que o arraste já usa) */
+html.v3 [data-dg] { transition: rotate .14s ease, scale .14s ease, box-shadow .14s ease; }
+html.v3 [data-dg].arrastando:not(.pl-dg-orig), html.v3 .pl-dg-fly { rotate: -3deg; scale: 1.04; box-shadow: 0 22px 34px -14px rgba(15,15,16,.45), 0 4px 10px rgba(15,15,16,.12) !important; opacity: 1 !important; z-index: 50 !important; }
+html.v3 [data-dg].arrastando.pl-dg-orig { rotate: none; scale: none; }

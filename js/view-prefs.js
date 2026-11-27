@@ -31,6 +31,7 @@ function prefAppearance() {
   const th = db.setting('theme', 'system'), ac = db.setting('accent', 'cobalto'), fo = db.setting('font', 'sonoma'), fs = db.setting('fontSize', 14), rd = db.setting('radius', DEFAULT_RADIUS), rp = db.setting('rowPad', 3), rf = db.setting('rowPadFin', 0);
   return `<div class="panel"><div class="panel-h"><h3>Tema</h3></div><div class="panel-b stack">
     <div class="seg">${[['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Escuro']].map(([k, l]) => `<button class="${th === k ? 'on' : ''}" data-act="set" data-k="theme" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap"><span class="small muted">Visual</span><div class="seg">${[['v3', 'V3 (novo)'], ['v2', 'V2 (antigo)']].map(([k, l]) => `<button class="${visualAtual() === k ? 'on' : ''}" data-act="visual" data-v="${k}" data-tip="${k === 'v3' ? 'Visual novo: moldura escura, cartões arredondados, botões em pílula' : 'Volta ao visual da versão 2 (só neste aparelho)'}">${l}</button>`).join('')}</div></div>
     <div class="field"><span class="lbl">Cor de destaque</span><div class="row">${Object.entries(ACCENTS).map(([k, [c]]) => `<button class="swatch ${ac === k ? 'on' : ''}" style="background:${c};width:30px;height:30px" data-act="set" data-k="accent" data-v="${k}" title="${k}" aria-label="${k}"></button>`).join('')}</div></div>
   </div></div>
   <div class="panel"><div class="panel-h"><h3>Texto</h3></div><div class="panel-b stack">
@@ -306,6 +307,9 @@ function prefIntegrations() {
 }
 
 /* ---------- temas: destaque, fundo e texto + fonte própria, salvos com nome ---------- */
+/* Visual V3 × V2: fica no aparelho (localStorage), vale na hora, sem recarregar. */
+const visualAtual = () => { try { return localStorage.getItem('tempo-visual') === 'v2' ? 'v2' : 'v3'; } catch (e) { return 'v3'; } };
+ACTIONS['visual'] = (el) => { const v = el.dataset.v === 'v2' ? 'v2' : 'v3'; try { localStorage.setItem('tempo-visual', v); } catch (e) {} document.documentElement.classList.toggle('v3', v === 'v3'); render(); toast(v === 'v3' ? 'Visual V3 ligado' : 'Voltou para o visual V2'); };
 let themeDraft = null;     // rascunho do editor de tema (não salvo)
 let themePreview = null;   // prévia ao vivo enquanto se escolhe as cores
 const loadedFonts = new Set();
