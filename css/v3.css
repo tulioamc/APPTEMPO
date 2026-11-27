@@ -353,3 +353,34 @@ html.v3 .pl-evento.todo.feito input[type=checkbox]:checked { background-color: #
 html.v3 .pl-todo-ck { width: 15px; height: 15px; border: 0; border-radius: 50%; background: rgba(18,18,18,.14); }
 html.v3 .pl-todo-ck.on { background: #fff; }
 html.v3 .pl-todo-ck.on svg { color: #121212; width: 10px; height: 10px; }
+
+/* Calendário semanal — topo dos dias (27/11, desenho do Tulio): data grande "30.11" com o dia da semana embaixo, chips no alto à direita, linha fina separando os dias */
+html.v3 .pl-scroll .pl-cab { height: 116px; justify-content: flex-start; gap: 6px; padding: 2px 10px 0; border-left: 1.5px solid var(--line); box-sizing: border-box; overflow: hidden; }
+html.v3 .pl-scroll .pl-cab-vazio { height: 116px; border-left: 0; }
+html.v3 .pl-cab-l1 { align-items: flex-start; justify-content: space-between; min-height: 0; }
+html.v3 .pl-cab-dia { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; font-size: 1em !important; text-transform: none; color: var(--fg); }
+html.v3 .pl-cab-num { font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: -.01em; }
+html.v3 .pl-cab-wd { font-size: 12.5px; font-weight: 500; line-height: 1.1; }
+html.v3 .pl-dia.hoje .pl-cab-dia, html.v3 .pl-dia.hoje .pl-cab-dia .pl-cab-wd { color: var(--fg); }
+html.v3 .pl-cab .pl-mc-chips { display: inline-flex; align-items: center; gap: 2px; margin: 2px 0 0; flex: none; }
+html.v3 .pl-cab .pl-mc-chips > * { height: 20px; padding: 0 7px !important; font-size: 11px !important; font-weight: 800; display: inline-flex; align-items: center; }
+html.v3 .pl-cab-l2 { min-height: 20px; gap: 5px 7px; font-size: 12.5px; flex-wrap: wrap !important; overflow: hidden; }
+html.v3 .pl-cab-l2 .small { font-size: 12.5px; color: var(--fg-2); }
+html.v3 .pl-cab .pl-fixdia, html.v3 .pl-cab .pl-reorg { width: 18px; height: 18px; background: var(--surface-2); color: var(--fg-2); border: 0; display: inline-flex; align-items: center; justify-content: center; }
+html.v3 .pl-cab .pl-fixdia svg { width: 12px; height: 12px; }
+html.v3 .pl-cab .pl-fixdia.on { background: var(--fg); color: var(--surface); }
+html.v3 .pl-cab .pl-rafa { min-height: 0 !important; height: 22px; padding: 0 3px 0 10px !important; gap: 6px; border-radius: 999px; background: var(--fg) !important; color: var(--surface) !important; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; border: 0; }
+html.v3 .pl-cab .pl-rafa-i { width: 16px; height: 16px; border-radius: 50%; background: var(--surface); color: var(--fg); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; line-height: 1; }
+html.v3 .pl-cab .pl-notas { margin: 0; gap: 2px; }
+html.v3 .pl-cab .pl-notas .pl-mc-tag { font-size: 10px !important; line-height: 16px; padding: 0 8px; border-radius: 999px; color: #121212 !important; font-weight: 600; }
+html.v3 .pl-cab .pl-cap { margin-top: auto; flex: none; }
+
+/* Tarefas do projeto: a tarefa aberta continua dentro do box branco (antes ficava cinza, igual ao fundo, e o box sumia) */
+html.v3 .tk.aberta { background: var(--surface); }
+html.v3 .tk-lista .tk + .tk { border-top: 1px solid var(--surface-2); }
+html.v3 .pl-scroll .pl-cab > * { flex: none; }
+html.v3 .pl-scroll .pl-cab > .pl-cap { margin-top: auto; }
+html.v3 .pl-cab-l2 { align-content: flex-start; }
+html.v3 .pl-scroll .pl-cab, html.v3 .pl-scroll .pl-cab-vazio { height: 150px; }
+html.v3 .pl-cab .pl-pvr { font-size: 10px; padding: 0 6px; line-height: 16px; }
+html.v3 .pl-scroll .pl-cab { gap: 4px; padding-bottom: 4px; }

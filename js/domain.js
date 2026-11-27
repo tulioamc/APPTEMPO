@@ -94,6 +94,13 @@ function reuniaoTarefa(pid, criar = false) {
 }
 function reunioesVincular() {
   let n = 0;
+  // Tarefa criada à mão com o nome "Reunião"/"Reuniões" vira a tarefa fixa de reuniões do projeto (27/11): tipo de trabalho Reunião, sem prazo nem previsto
+  const wtR = db.all('tempo_work_types').find(w => /reuni/i.test(w.name || ''));
+  db.where('tempo_tasks', t => !t.parent_id && t.tipo !== 'reuniao' && /^\s*reuni(ão|ao|ões|oes)\s*$/i.test(t.name || '')
+    && !db.where('tempo_tasks', x => x.project_id === t.project_id && x.tipo === 'reuniao').length).forEach(t => {
+    db.update('tempo_tasks', t.id, { tipo: 'reuniao', work_type_id: wtR?.id || t.work_type_id || null, deadline: null, est_min: null }, true); n++;
+    if (wtR) db.where('tempo_time_entries', e => e.task_id === t.id && e.work_type_id !== wtR.id).forEach(e => db.update('tempo_time_entries', e.id, { work_type_id: wtR.id }, true));
+  });
   db.where('tempo_time_entries', e => e.project_id && !e.task_id && ehReuniaoWt(e.work_type_id)).forEach(e => {
     const t = reuniaoTarefa(e.project_id, true); if (!t) return;
     db.update('tempo_time_entries', e.id, { task_id: t.id }, true); n++;
