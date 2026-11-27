@@ -520,3 +520,4 @@ html.v3 .picker { border: 0; background: var(--surface-2); border-radius: 18px; 
 html.v3 .rf-mdet-ela { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line-strong, #d6d6d2); }
 /* dica com gráfico (Gastos PF): fundo branco, o gráfico não some mais no lilás */
 html.v3 .strip-tip.tip-graf { background: var(--surface) !important; color: var(--fg); border-color: var(--line) !important; }
+html.v3 .timer-card .timer-actions.linha1 .btn > svg { display: none; }   /* ícone invisível empurrava o texto para a direita */
