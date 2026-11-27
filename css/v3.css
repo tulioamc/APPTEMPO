@@ -255,7 +255,11 @@ html.v3 .act-strip, html.v3 .day-strip { height: 18px !important; border-radius:
 html.v3 .act-strip .act-moved { line-height: 18px; font-size: 9px; }
 
 /* cronômetro: chip do cliente em branco sobre o cartão lilás (a agência segue colorida) */
-html.v3 .timer-card .timer-path .ctag .tag:not(.abbr) { background: var(--surface); color: var(--fg); }
+/* agência · cliente · projeto dentro de uma pílula branca única; os chips mantêm as próprias cores */
+html.v3 .timer-card .timer-path { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; align-self: flex-start; max-width: 100%; box-sizing: border-box; background: var(--surface); border-radius: 26px; padding: 5px 16px 5px 5px; color: var(--fg); font-size: 1.02em; }
+html.v3 .timer-card .timer-path .ctag { gap: 4px; }
+html.v3 .timer-card .timer-path .ctag .tag { padding: 4px 12px; font-size: 13px; line-height: 1.2; }
+html.v3 .timer-card .timer-path .ctag .tag.abbr { padding: 4px 11px; }
 
 
 /* caixas sem contorno; a diferença é pela cor: positivo verde, neutro azul ou cinza, atenção amarelo, negativo vermelho */
