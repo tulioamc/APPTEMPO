@@ -1381,3 +1381,12 @@ if (typeof document !== 'undefined') {
     sc.classList.add('pl-foco'); sc.querySelectorAll('.pl-grade > .pl-feito').forEach(x => { if ((x.dataset.pid || '') === pid) x.classList.add('pl-foco-on'); });
   });
 }
+
+/* Clicar num bloco do Calendário traz ele para a frente (27/11): assim dá para esticar/mover um bloco coberto por uma rotina */
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', (ev) => {
+    const alvo = ev.target.closest && ev.target.closest('.pl-grade > [data-dg]');
+    document.querySelectorAll('.pl-grade > .pl-frente').forEach(x => { if (x !== alvo) x.classList.remove('pl-frente'); });
+    if (alvo) alvo.classList.add('pl-frente');
+  }, true);
+}

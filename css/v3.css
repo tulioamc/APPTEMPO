@@ -528,3 +528,6 @@ html.v3 .pl-grade > [style*="--txf"] .pl-tx b, html.v3 .pl-grade > [style*="--tx
 html.v3 .pl-grade > [data-dg].arrastando:not(.pl-dg-orig), html.v3 body .pl-dg-fly { box-shadow: 0 22px 34px -14px rgba(15,15,16,.45), 0 4px 10px rgba(15,15,16,.12) !important; }
 html.v3 body .notice-row .btn:not(.primary):not(.solid):not(.ghost):not(.on):not(.seg *) { background: var(--surface-2); }
 html.v3 body .notice-row .btn:not(.primary):not(.solid):not(.ghost):not(.on):not(.seg *):hover { background: var(--fg); color: var(--surface); }
+
+/* Bloco clicado vai para a frente (27/11) — fica acima das rotinas e dos outros blocos até clicar em outro */
+html.v3 .pl-grade > .pl-frente:not(.pl-prazo) { z-index: 80 !important; }
